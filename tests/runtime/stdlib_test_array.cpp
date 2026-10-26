@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <string>
 
+#include "common/resource_limits.hpp"
 #include "stdlib_test_helpers.hpp"
 
 static void test_array_all() {
@@ -805,6 +806,18 @@ static void test_array_windows_invalid_size() {
     ASSERT_RESULT_FAILURE(eval("Array.windows([1, 2, 3], -2)"));
 }
 
+static void test_array_windows_caps_total_elements() {
+    // Regression: windows checked only window_count (never above the input
+    // length) against the limit, but the output holds window_count × size
+    // elements — ~L²/4 for size ≈ L/2.
+    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(10)};
+
+    // 6 elements, size 3 → 4 windows × 3 = 12 elements > 10.
+    ASSERT_RESULT_FAILURE(eval("Array.windows([1, 2, 3, 4, 5, 6], 3)"));
+    // 4 elements, size 2 → 3 windows × 2 = 6 elements, within the limit.
+    ASSERT_RESULT_SUCCESS(eval("Array.windows([1, 2, 3, 4], 2)"));
+}
+
 static void test_array_sum_overflow_promotes_to_number() {
     // Summing past INT64_MAX must promote to a number (double) rather than
     // wrapping around — mirrors Luma's integer-overflow-promotes-to-number rule.
@@ -1073,6 +1086,7 @@ int main() {
     RUN(test_array_transpose);
     RUN(test_array_transpose_errors);
     RUN(test_array_windows_invalid_size);
+    RUN(test_array_windows_caps_total_elements);
     RUN(test_array_sum_overflow_promotes_to_number);
     RUN(test_array_rotate_wraps);
     RUN(test_array_unique_preserves_order);

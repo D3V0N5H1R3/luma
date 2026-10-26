@@ -21,8 +21,14 @@
 *.sh            text eol=lf
 scripts/git-hooks/* text eol=lf
 
+# ── Fuzz corpus seeds (byte-exact, never normalised) ──
+# Seeds are raw fuzzer inputs: a CRLF in a CSV, HTTP, or LSP/DAP-framing seed
+# is the point of the seed, so `text=auto` must never rewrite it to LF.
+fuzz/corpus/** -text
+
 # ── Binary files (no line-ending conversion, no diff) ──
 *.a     binary
+*.bin   binary
 *.dll   binary
 *.dylib binary
 *.exe   binary
@@ -45,11 +51,17 @@ scripts/git-hooks/* text eol=lf
 *.zip   binary
 
 # ── Linguist overrides (GitHub language stats) ──
-examples/**     linguist-documentation
-extensions/**   linguist-vendored
-external/**     linguist-vendored
-fuzz/corpus/**  linguist-generated
-instructions/** linguist-documentation
+# The editor extensions are first-party code and count towards the stats; their
+# generated tree-sitter files are marked in the grammar's own .gitattributes,
+# and the files emitted by extensions/shared/generate-*.py are marked here.
+# Fuzz seeds are hand-written, so they are excluded from the stats (vendored)
+# without collapsing their diffs in pull requests (as generated would).
+examples/**                    linguist-documentation
+extensions/*/src/generated/**  linguist-generated
+extensions/zed/KEYBINDINGS.md  linguist-generated
+external/**                    linguist-vendored
+fuzz/corpus/**                 linguist-vendored
+instructions/**                linguist-documentation
 
 # ── Archive exclusions (git archive / GitHub source tarballs) ──
 # Trim development-only trees from generated source tarballs (e.g. GitHub's

@@ -310,6 +310,7 @@ function void main() {
     string s = "hello" |> String.uppercase()
     integer d = 0xFF
     integer e = 0b1010
+    integer f = 0o755
 }
 "#,
         );
@@ -428,6 +429,7 @@ function void main() {
 (string_escape) @string.escape
 (interpolation "${" @string.special "}" @string.special)
 (hex_literal) @number
+(octal_literal) @number
 (binary_literal) @number
 (float_literal) @number
 (integer_literal) @number
@@ -489,6 +491,26 @@ function void main() {
     #[test]
     fn highlight_captures_number() {
         let names = highlights_capture_names("integer x = 42\n");
+        assert!(
+            names.contains(&"number".to_string()),
+            "expected 'number' in {names:?}"
+        );
+    }
+
+    #[test]
+    fn octal_literal_parses_as_single_node() {
+        for code in ["integer x = 0o755\n", "integer x = 0O17\n"] {
+            let mut parser = make_parser();
+            let tree = parser.parse(code, None).unwrap();
+            let root = tree.root_node();
+            assert!(!root.has_error(), "parse error: {}", root.to_sexp());
+            assert!(
+                root.to_sexp().contains("(octal_literal)"),
+                "expected an octal_literal node in {}",
+                root.to_sexp()
+            );
+        }
+        let names = highlights_capture_names("integer x = 0o755\n");
         assert!(
             names.contains(&"number".to_string()),
             "expected 'number' in {names:?}"

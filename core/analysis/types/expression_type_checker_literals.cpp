@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <format>
+#include <vector>
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/expression.hpp"
@@ -91,28 +92,51 @@ TypeInfo ExpressionTypeChecker::visit_variable(const VariableExpression& expr) {
     return TypeInfo::make(TypeInfo::Kind::Unknown);
 }
 
+TypeInfo ExpressionTypeChecker::widest_literal_type(const std::vector<TypeInfo>& types) {
+    auto widest = types.front();
+
+    for (std::size_t i{1}; i < types.size(); ++i) {
+        if (!tc_.is_assignable(widest, types[i]) && tc_.is_assignable(types[i], widest)) {
+            widest = types[i];
+        }
+    }
+
+    return widest;
+}
+
 TypeInfo ExpressionTypeChecker::visit_array_literal(const ArrayLiteralExpression& expr) {
     if (expr.elements.empty()) {
         return TypeInfo::make_array(TypeInfo::make(TypeInfo::Kind::StdlibAny));
     }
 
-    const auto first_type = infer_expression_type(*expr.elements[0]);
+    std::vector<TypeInfo> element_types;
+    element_types.reserve(expr.elements.size());
+
+    for (const auto& element : expr.elements) {
+        element_types.push_back(infer_expression_type(*element));
+    }
+
+    const auto unified_type = widest_literal_type(element_types);
 
     for (std::size_t i{1}; i < expr.elements.size(); ++i) {
-        const auto elem_type = infer_expression_type(*expr.elements[i]);
-
-        if (!tc_.is_assignable(first_type, elem_type)) {
+        if (!tc_.is_assignable(unified_type, element_types[i])) {
             tc_.error(std::format("array elements must have the same type: first is "
                                   "'{}', element {} is '{}'",
-                                  first_type.to_string(), i + 1, elem_type.to_string()),
+                                  element_types[0].to_string(), i + 1,
+                                  element_types[i].to_string()),
                       expr.elements[i]->location,
-                      "all array elements must be the same type — convert elements or use separate "
-                      "arrays",
+                      "all array elements must be the same type — convert elements or use "
+                      "separate arrays",
                       DiagnosticCode::IncompatibleTypes);
         }
     }
 
-    return TypeInfo::make_array(first_type);
+    for (std::size_t i{0}; i < expr.elements.size(); ++i) {
+        type_check_helpers::mark_numeric_widening(tc_, *expr.elements[i], unified_type,
+                                                  element_types[i]);
+    }
+
+    return TypeInfo::make_array(unified_type);
 }
 
 TypeInfo ExpressionTypeChecker::visit_dictionary_literal(const DictionaryLiteralExpression& expr) {
@@ -135,23 +159,33 @@ TypeInfo ExpressionTypeChecker::visit_dictionary_literal(const DictionaryLiteral
         }
     }
 
-    const auto first_val_type = infer_expression_type(*expr.entries[0].value);
+    std::vector<TypeInfo> value_types;
+    value_types.reserve(expr.entries.size());
+
+    for (const auto& entry : expr.entries) {
+        value_types.push_back(infer_expression_type(*entry.value));
+    }
+
+    const auto unified_type = widest_literal_type(value_types);
 
     for (std::size_t i{1}; i < expr.entries.size(); ++i) {
-        const auto val_type = infer_expression_type(*expr.entries[i].value);
-
-        if (!tc_.is_assignable(first_val_type, val_type)) {
+        if (!tc_.is_assignable(unified_type, value_types[i])) {
             tc_.error(std::format("dictionary values must have the same type: "
                                   "first is '{}', entry {} is '{}'",
-                                  first_val_type.to_string(), i + 1, val_type.to_string()),
+                                  value_types[0].to_string(), i + 1, value_types[i].to_string()),
                       expr.entries[i].value->location,
-                      "all dictionary values must be the same type — convert values or split into "
-                      "separate dictionaries",
+                      "all dictionary values must be the same type — convert values or split "
+                      "into separate dictionaries",
                       DiagnosticCode::IncompatibleTypes);
         }
     }
 
-    return TypeInfo::make_dict(first_val_type);
+    for (std::size_t i{0}; i < expr.entries.size(); ++i) {
+        type_check_helpers::mark_numeric_widening(tc_, *expr.entries[i].value, unified_type,
+                                                  value_types[i]);
+    }
+
+    return TypeInfo::make_dict(unified_type);
 }
 
 TypeInfo ExpressionTypeChecker::visit_tuple_literal(const TupleLiteralExpression& expr) {

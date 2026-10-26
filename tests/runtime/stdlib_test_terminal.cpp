@@ -5,6 +5,7 @@
 
 #include "runtime/stdlib/io/terminal_input_common.hpp"
 #include "runtime/stdlib/io/terminal_key_decoder.hpp"
+#include "runtime/stdlib/io/terminal_module_internal.hpp"
 #include "stdlib_test_helpers.hpp"
 
 static void test_terminal_bold() {
@@ -925,7 +926,58 @@ static void test_terminal_read_line_drains_to_failure() {
     ASSERT_TRUE(v.as_bool());
 }
 
+// ─── Sandbox gating and exit-time restore ───
+
+static void test_terminal_sandbox_withholds_console_input() {
+    // --box promises no reads from the interactive console: the input and
+    // input-mode functions are withheld, while the output-only surface, the
+    // state queries and the always-safe disable_* restores remain.
+    const auto env = luma::test::make_std_env(/*sandbox=*/true);
+
+    for (const char* const name :
+         {"Terminal.enable_raw_mode", "Terminal.enable_mouse", "Terminal.read_key",
+          "Terminal.read_key_timeout", "Terminal.get_input", "Terminal.read_line",
+          "Terminal.get_cursor_position"}) {
+        ASSERT_FALSE(env->has(name));
+        ASSERT_THROWS_WITH_MESSAGE(env->get(name, SourceLocation{}), "sandbox mode");
+    }
+
+    for (const char* const name :
+         {"Terminal.bold", "Terminal.move_to", "Terminal.clear_screen", "Terminal.disable_raw_mode",
+          "Terminal.disable_mouse", "Terminal.is_in_raw_mode", "Terminal.size",
+          "Terminal.test_start"}) {
+        ASSERT_TRUE(env->has(name));
+    }
+
+    // Outside the sandbox the full surface is registered.
+    const auto full = luma::test::make_std_env();
+    ASSERT_TRUE(full->has("Terminal.read_key"));
+    ASSERT_TRUE(full->has("Terminal.get_cursor_position"));
+}
+
+static void test_terminal_restore_state_leaves_raw_and_mouse_mode() {
+    // restore_terminal_state is the std::atexit hook registered by
+    // enable_raw_mode; it must clear raw mode and mouse reporting.
+    (void)eval(R"(
+        Terminal.test_start([])
+        Terminal.enable_raw_mode()
+        Terminal.enable_mouse()
+    )");
+
+    ASSERT_TRUE(eval("Terminal.is_in_raw_mode()").as_bool());
+    ASSERT_TRUE(eval("Terminal.is_mouse_enabled()").as_bool());
+
+    luma::terminal_internal::restore_terminal_state();
+
+    ASSERT_FALSE(eval("Terminal.is_in_raw_mode()").as_bool());
+    ASSERT_FALSE(eval("Terminal.is_mouse_enabled()").as_bool());
+
+    (void)eval("Terminal.test_stop()");
+}
+
 int main() {
+    RUN(test_terminal_sandbox_withholds_console_input);
+    RUN(test_terminal_restore_state_leaves_raw_and_mouse_mode);
     RUN(test_terminal_bold);
     RUN(test_terminal_color);
     RUN(test_terminal_color_invalid);

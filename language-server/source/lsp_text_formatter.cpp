@@ -223,13 +223,13 @@ constexpr std::array<std::pair<char, char>, 11> two_char_operators{{
 
 // Determine whether `trimmed` starts with a continuation keyword that
 // causes the indent level to decrease before writing the line and
-// increase again afterwards (e.g. else, catch, finally, case).
+// increase again afterwards (e.g. else, catch, finally).  `case` is not one:
+// a match arm sits inside the match's braces and carries its own braces.
 [[nodiscard]] bool is_continuation_keyword(const std::string& trimmed) {
     return trimmed.starts_with("else ") || trimmed == "else" || trimmed.starts_with("else{") ||
            trimmed.starts_with("catch ") || trimmed == "catch" || trimmed.starts_with("catch(") ||
            trimmed.starts_with("catch{") || trimmed.starts_with("finally ") ||
-           trimmed == "finally" || trimmed.starts_with("finally{") ||
-           trimmed.starts_with("case ") || trimmed == "case";
+           trimmed == "finally" || trimmed.starts_with("finally{");
 }
 
 // Compute the indent adjustment to apply before writing a line.

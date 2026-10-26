@@ -19,7 +19,7 @@ Diagnose and fix a bug in the Luma interpreter. Follow a structured approach:
     - Include Resolver (`core/runtime/include/`) — wrong file resolution or missing deduplication?
     - Type Checker (`core/analysis/types/`) — wrong type error or missed validation?
     - Linter (`core/analysis/linter/`) — false positive/negative warning?
-    - Compiler (`core/runtime/compiler/`) — incorrect bytecode generation, or wrong variable/slot resolution? (Live variable→slot resolution is done here by `VariableResolver`; the standalone `core/analysis/resolver/` `NameResolver` is not wired into the run path.)
+    - Compiler (`core/runtime/compiler/`) — incorrect bytecode generation, or wrong variable/slot resolution? (Variable→slot resolution is done here by `VariableResolver`.)
     - Optimizer (`core/runtime/compiler/optimizer.*`) — unsound transformation or value-block stack-slot corruption?
     - VM (`core/runtime/vm/`) — incorrect execution, stack corruption, or wrong dispatch?
     - Standard Library (`core/runtime/stdlib/`, a runtime concern — not a pipeline phase) — wrong built-in function behaviour?
@@ -36,12 +36,12 @@ Diagnose and fix a bug in the Luma interpreter. Follow a structured approach:
 
 Verify incrementally as you work — don't wait until the end to discover a cascade of failures.
 
-| After… | Run | Why |
-|---------|-----|-----|
-| Writing the fix | `cmake --build --preset default` (compile only) | Catches typos, missing includes, type errors immediately |
-| Compiling cleanly | The **single most-relevant test** (e.g. `ctest -R stdlib_test_string`) | Confirms the fix works in isolation |
-| Targeted test passes | `ctest --preset default` (full C++ suite) | Catches regressions in other subsystems |
-| Full suite passes | `build/Release/luma --strict --test <feature-test>.luma` | Validates the Luma-level behaviour |
+| After…               | Run                                                                    | Why                                                      |
+| -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------- |
+| Writing the fix      | `cmake --build --preset default` (compile only)                        | Catches typos, missing includes, type errors immediately |
+| Compiling cleanly    | The **single most-relevant test** (e.g. `ctest -R stdlib_test_string`) | Confirms the fix works in isolation                      |
+| Targeted test passes | `ctest --preset default` (full C++ suite)                              | Catches regressions in other subsystems                  |
+| Full suite passes    | `build/Release/luma --strict --test <feature-test>.luma`               | Validates the Luma-level behaviour                       |
 
 If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
 

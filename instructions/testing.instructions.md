@@ -60,6 +60,8 @@ Available assertion macros:
 - `ASSERT_TRUE(cond)` — fails if `cond` is false.
 - `ASSERT_FALSE(cond)` — fails if `cond` is true.
 - `ASSERT_THROWS(expr)` — fails if `expr` does not throw.
+- `ASSERT_THROWS_AS(expr, ExceptionType)` — fails unless `expr` throws `ExceptionType` (or a type derived from it).
+- `ASSERT_THROWS_WITH_MESSAGE(expr, expected_substr)` — fails unless `expr` throws an exception whose message contains `expected_substr`.
 - `ASSERT_LT(a, b)` — fails if `a >= b`.
 - `ASSERT_LE(a, b)` — fails if `a > b`.
 - `ASSERT_GT(a, b)` — fails if `a <= b`.
@@ -124,10 +126,10 @@ Follow this layout for every C++ test file:
 
 1. **File comment** — single line describing the scope (e.g., `// Lexer unit tests.`).
 2. **Includes** — standard library first, then project headers, then `test_framework.hpp`.
-3. **`using namespace luma;`** — permitted in test files only.
+3. `using namespace luma;` — permitted in test files only.
 4. **Helper functions** — pipeline shortcuts like `lex()`, `parse()`, `eval()`, `run()`.
 5. **Test functions** — one `static void` function per test, named `test_<feature>`.
-6. **`main()`** — registers tests with `RUN(test_name)`, returns `SUMMARY()`. Alternatively, use `LUMA_TEST(name)` for auto-registration and `LUMA_RUN_ALL()` in `main()`.
+6. `main()` — registers tests with `RUN(test_name)`, returns `SUMMARY()`. Alternatively, use `LUMA_TEST(name)` for auto-registration and `LUMA_RUN_ALL()` in `main()`.
 
 ### Auto-Registration (Alternative)
 
@@ -195,19 +197,12 @@ static void test_division_by_zero() {
 }
 ```
 
-For more specific exception type checking:
+For more specific checks, assert the exception type or message:
 
 ```cpp
 static void test_division_by_zero() {
-    bool threw = false;
-
-    try {
-        eval("1 / 0");
-    } catch (const RuntimeError&) {
-        threw = true;
-    }
-
-    ASSERT_TRUE(threw);
+    ASSERT_THROWS_AS(eval("1 / 0"), RuntimeError);
+    ASSERT_THROWS_WITH_MESSAGE(eval("1 / 0"), "division by zero");
 }
 ```
 
@@ -346,7 +341,6 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 | ---------------------------- | -------------------------------------------- |
 | `fuzz_lexer`                 | Tokenisation of arbitrary input              |
 | `fuzz_parser`                | AST construction from token stream           |
-| `fuzz_resolver`              | Name resolution and slot assignment          |
 | `fuzz_type_checker`          | Static type checking                         |
 | `fuzz_linter`                | Post-type-check lint pass                    |
 | `fuzz_compiler`              | Bytecode compilation from valid ASTs         |
@@ -360,6 +354,7 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 | `fuzz_csv`                   | RFC 4180 CSV parse with round-trip oracle    |
 | `fuzz_xml`                   | `Xml.deserialize` with round-trip oracle     |
 | `fuzz_datetime`              | ISO-8601 parse with round-trip oracle        |
+| `fuzz_decimal`               | `Decimal` parse with canonical-text oracle   |
 | `fuzz_protocol`              | Content-Length message framing               |
 | `fuzz_compression`           | deflate/gzip/RLE decode round-trip oracle    |
 | `fuzz_encoder`               | Base64/URL decode round-trip oracle          |

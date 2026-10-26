@@ -62,15 +62,20 @@ class TypeAnnotationParser;
 // ParseFailure is NOT an error-reporting mechanism.  It carries no diagnostic
 // data — the structured Diagnostic (with error code, source spans, hints, and
 // fix suggestions) is emitted via DiagnosticEmitter *before* the throw.  The
-// exception exists only to unwind the call stack to the top-level parse()
-// loop, which catches it and calls synchronize() to skip past the error site.
+// exception exists only to unwind the call stack to the nearest recovery
+// point, which catches it and skips past the error site.
 //
 // Control-flow contract:
 //   1. Parser detects an unrecoverable syntax error.
 //   2. Parser emits a Diagnostic via emit_error() / syntax_error().
-//   3. Parser throws ParseFailure to unwind to parse().
-//   4. parse() catches ParseFailure and calls synchronize().
-//   5. Parsing resumes from the next statement/declaration boundary.
+//   3. Parser throws ParseFailure to unwind to the nearest recovery point.
+//   4. Recovery points are the innermost enclosing statement list: a block
+//      body, a namespace body, a match-arm list or a choice-variant list
+//      (each catches ParseFailure and calls synchronize_in_block()), and
+//      finally the top-level parse() loop (which calls synchronize()).
+//   5. Parsing resumes at the next statement/member boundary INSIDE the same
+//      block, so an error deep in a function body does not cascade into
+//      bogus errors for the rest of the function or namespace.
 //
 // This replaces the legacy SyntaxError exception, which bundled message,
 // location, and hint into the exception object.
@@ -135,9 +140,16 @@ private:
 
     // Shadows DiagnosticEmitter::emit_error() intentionally: supports an
     // optional end location for multi-character span highlighting, which
-    // the base class single-location API does not provide.
+    // the base class single-location API does not provide.  When `start` is
+    // a token's (end-position) location and no `end` is given, the primary
+    // span is widened to that token's full source extent so the caret points
+    // at the token's first character.
     void emit_error(std::string_view message, const SourceLocation& start,
                     std::string_view hint = "", std::optional<SourceLocation> end = std::nullopt);
+
+    // The token whose (end-position) `location` equals `loc`, if any.  Tokens
+    // are ordered by location, so this is a binary search.
+    [[nodiscard]] const Token* find_token_ending_at(const SourceLocation& loc) const;
 
     // Emit a structured syntax error diagnostic and throw ParseFailure
     // to unwind to the parse() error-recovery loop.  All error context
@@ -169,15 +181,48 @@ private:
     [[nodiscard]] bool consume_if(TokenType type);
 
     // Recoverable expect — reports the error as a diagnostic and
-    // attempts to continue parsing instead of throwing.  Returns
-    // true if recovery succeeded (the token was consumed or
-    // synthesised), false if recovery failed and the caller should
-    // bail out.  Use for non-critical structural tokens like closing
-    // delimiters where the parser can make forward progress.
-    bool recover_expect(TokenType type);
+    // attempts to continue parsing instead of throwing.  The token is either
+    // consumed, skipped-to, or treated as inserted; when no local recovery
+    // applies the call unwinds with ParseFailure like expect() (the
+    // diagnostic is already emitted).  Use for non-critical structural tokens
+    // like closing delimiters where the parser can make forward progress.
+    void recover_expect(TokenType type);
 
     // Skip tokens until a likely statement or declaration boundary.
     void synchronize();
+
+    // Delimiters opened by the failed block item and still unclosed at the
+    // error.  A ParseFailure often unwinds from inside a multi-line call,
+    // array or record literal, so block recovery must first skip to that
+    // construct's closer: resuming at the next line would treat the rest of
+    // the construct as new statements, and a record literal's '}' as the end
+    // of the block.
+    struct OpenDelimiters {
+        int braces{0};
+        int groups{0}; // parentheses, brackets and string interpolations
+    };
+
+    [[nodiscard]] OpenDelimiters unclosed_delimiters_since(int item_start) const;
+
+    // Block-local recovery after a ParseFailure inside a `{ ... }` statement
+    // or member list.  Skips the broken construct (starting at `item_start`)
+    // while tracking nested delimiters and stops at (without consuming)
+    // either the enclosing block's closing '}' or the first token that starts
+    // a new line and can begin the next item of the given kind.
+    enum class BlockItem {
+        Statement,   // function/loop/branch bodies
+        MatchArm,    // `case` / `else` / `success` / `failure` arms
+        Declaration, // namespace members
+        Variant,     // choice variants
+    };
+    void synchronize_in_block(BlockItem item, int item_start);
+    [[nodiscard]] bool can_start_block_item(BlockItem item) const;
+
+    // Runs `parse_one` for each element of a brace-delimited list until the
+    // closing '}' (not consumed), recovering locally from syntax errors via
+    // synchronize_in_block().  Once the error cap is reached the failure is
+    // rethrown so parsing stops promptly.
+    template <typename ParseOne> void parse_block_items(BlockItem item, ParseOne&& parse_one);
 
     // Returns true if the current token looks like it could start a
     // new statement or declaration (used for error recovery).
@@ -197,10 +242,12 @@ private:
     //          implicitly inserted).
     //     Falls back to returning false when none apply.
     //
-    //   synchronize()
+    //   synchronize() / synchronize_in_block()
     //     Called after catching ParseFailure.  Advances past the error
-    //     site, respecting delimiter nesting (braces/parens/brackets),
-    //     and stops at the next statement or declaration boundary.
+    //     site, respecting delimiter nesting (braces/parens/brackets —
+    //     for synchronize_in_block() including delimiters the failed item
+    //     opened before the error), and stops at the next statement or
+    //     declaration boundary.
     //
     //   looks_like_statement_start()
     //     Heuristic: returns true if the current token is a type keyword,
@@ -338,8 +385,8 @@ private:
     // Expects `open` token, calls fn(), then recover_expects `close` token.
     // Works for both value-returning and void lambdas.
     template <typename Fn>
-    auto parse_bracketed(TokenType open, TokenType close,
-                         Fn&& fn) -> decltype(std::forward<Fn>(fn)());
+    auto parse_bracketed(TokenType open, TokenType close, Fn&& fn)
+        -> decltype(std::forward<Fn>(fn)());
 
     // Parses a non-empty comma-separated sequence, appending elements to `out`.
     // Precondition: at least one element is expected (caller must verify the
@@ -445,9 +492,7 @@ private:
                          "simplify the expression or split it into smaller parts");
         }
 
-        return ScopeGuard{[this] {
-            --depth_;
-        }};
+        return ScopeGuard{[this] { --depth_; }};
     }
 
     // ====================================================================
@@ -470,8 +515,8 @@ private:
 // Expects `open` token, calls fn(), then recover_expects `close` token.
 // Works for both value-returning and void lambdas.
 template <typename Fn>
-auto Parser::parse_bracketed(TokenType open, TokenType close,
-                             Fn&& fn) -> decltype(std::forward<Fn>(fn)()) {
+auto Parser::parse_bracketed(TokenType open, TokenType close, Fn&& fn)
+    -> decltype(std::forward<Fn>(fn)()) {
     expect(open);
     if constexpr (std::is_void_v<decltype(std::forward<Fn>(fn)())>) {
         std::forward<Fn>(fn)();
@@ -480,6 +525,22 @@ auto Parser::parse_bracketed(TokenType open, TokenType close,
         auto result = std::forward<Fn>(fn)();
         recover_expect(close);
         return result;
+    }
+}
+
+template <typename ParseOne> void Parser::parse_block_items(BlockItem item, ParseOne&& parse_one) {
+    while (!check(TokenType::RightBrace) && !is_at_end()) {
+        const int item_start = token_pos_;
+
+        try {
+            parse_one();
+        } catch (const ParseFailure&) {
+            if (diagnostics().size() >= k_max_parse_errors) {
+                throw;
+            }
+
+            synchronize_in_block(item, item_start);
+        }
     }
 }
 

@@ -1,13 +1,18 @@
-# Run PSScriptAnalyzer over every first-party PowerShell script.
-#
-# Discovers all tracked *.ps1 / *.psm1 files, analyzes them with the repo's
-# PSScriptAnalyzerSettings.psd1, prints a findings table, and exits non-zero
-# when any blocking issue (ParseError, Error, or Warning) is found.
-#
-# Used by the PowerShell CI gate (.github/workflows/ci-powershell.yml) and
-# runnable by hand from anywhere:
-#
-#     pwsh -File scripts/run_psscriptanalyzer.ps1
+#Requires -Version 7.2
+
+<#
+.SYNOPSIS
+    Run PSScriptAnalyzer over every first-party PowerShell script.
+
+.DESCRIPTION
+    Discovers all tracked *.ps1 / *.psm1 files, analyzes them with the repo's
+    PSScriptAnalyzerSettings.psd1, prints a findings table, and exits non-zero
+    when any blocking issue (ParseError, Error, or Warning) is found. Used by
+    the PowerShell CI gate (.github/workflows/ci-powershell.yml).
+
+.EXAMPLE
+    pwsh -File scripts/run_psscriptanalyzer.ps1
+#>
 
 [CmdletBinding()]
 param()
@@ -15,6 +20,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Keep in sync with the PSScriptAnalyzer pin in .devcontainer/devcontainer.json.
 $RequiredVersion = '1.25.0'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $SettingsPath = Join-Path -Path $RepoRoot -ChildPath 'PSScriptAnalyzerSettings.psd1'

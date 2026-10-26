@@ -134,14 +134,15 @@ static void test_rule_find_by_code_first() {
 }
 
 static void test_rule_find_by_code_last() {
-    // UnusedInclude (5016 / W0016) is the highest lint code and must remain
-    // inside the code-index window — a regression guard for R05.
+    // BooleanLiteralComparison (5017 / W0017) is the highest lint code and must
+    // remain inside the code-index window — a regression guard for R05.
     const auto& reg = lint_rule_registry();
 
-    const auto* rule = reg.find_by_code(DiagnosticCode::UnusedInclude);
+    const auto* rule = reg.find_by_code(DiagnosticCode::BooleanLiteralComparison);
 
     ASSERT_TRUE(rule != nullptr);
-    ASSERT_EQ(rule->id, std::string_view{"W0016"});
+    ASSERT_EQ(rule->id, std::string_view{"W0017"});
+    ASSERT_EQ(rule->name, std::string_view{"boolean-literal-comparison"});
 }
 
 static void test_rule_find_by_code_all_builtins_indexable() {

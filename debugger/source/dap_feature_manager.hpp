@@ -50,10 +50,10 @@ enum class Feature : int {
     InvalidatedEvent,
     ValueFormattingOptions,
     StepInTargets,
-    Count_, // sentinel — must be last
+    Count, // sentinel — must be last
 };
 
-inline constexpr int kFeatureCount = static_cast<int>(Feature::Count_);
+inline constexpr int kFeatureCount = static_cast<int>(Feature::Count);
 
 // ─── Client capabilities ───
 // Subset of the initialize-request arguments that describe what the
@@ -112,9 +112,7 @@ public:
     [[nodiscard]] JsonValue build_capabilities_json() const {
         JsonValue::ObjectType obj;
 
-        const auto set = [&](const char* key, Feature f) {
-            obj[key] = JsonValue(is_enabled(f));
-        };
+        const auto set = [&](const char* key, Feature f) { obj[key] = JsonValue(is_enabled(f)); };
 
         // ─── Breakpoints ───
         set("supportsConditionalBreakpoints", Feature::ConditionalBreakpoints);
@@ -225,9 +223,7 @@ private:
         // Start with all features disabled.
         features_.fill(false);
 
-        const auto enable = [this](Feature f) {
-            features_[static_cast<int>(f)] = true;
-        };
+        const auto enable = [this](Feature f) { features_[static_cast<int>(f)] = true; };
 
         // Features the server always provides.
         enable(Feature::ConfigurationDone);

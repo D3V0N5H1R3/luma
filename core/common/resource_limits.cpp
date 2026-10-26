@@ -3,6 +3,7 @@
 #include <cctype>
 #include <charconv>
 #include <concepts>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -39,14 +40,37 @@ template <std::integral T> [[nodiscard]] bool parse_value(const char* str, T& ta
     return true;
 }
 
-template <typename T> void read_env(const char* name, T& target) {
+// Read LUMA_LIMIT_<NAME> into `target`, enforcing the range [1, ceiling].
+// A malformed or zero value is ignored (the default is kept) and a value above
+// the ceiling is clamped to it; both cases print a warning to stderr.
+template <typename T> void read_env(const char* name, T& target, std::uint64_t ceiling) {
     const auto val = safe_getenv(name);
 
-    if (val.has_value() && !val->empty()) {
-        if (!parse_value(val->c_str(), target)) {
-            std::cerr << "luma: ignoring invalid value for " << name << ": '" << *val << "'\n";
-        }
+    if (!val.has_value() || val->empty()) {
+        return;
     }
+
+    T parsed{};
+
+    if (!parse_value(val->c_str(), parsed)) {
+        std::cerr << "luma: ignoring invalid value for " << name << ": '" << *val << "'\n";
+        return;
+    }
+
+    if (parsed < 1) {
+        std::cerr << "luma: ignoring out-of-range value for " << name << ": '" << *val
+                  << "' (must be between 1 and " << ceiling << ")\n";
+        return;
+    }
+
+    // parse_value rejects negatives, so the widening comparison is exact.
+    if (static_cast<std::uint64_t>(parsed) > ceiling) {
+        std::cerr << "luma: clamping " << name << " from " << *val << " to its maximum of "
+                  << ceiling << "\n";
+        parsed = static_cast<T>(ceiling);
+    }
+
+    target = parsed;
 }
 
 // Convert a field name like "max_array_size" to "LUMA_LIMIT_MAX_ARRAY_SIZE".
@@ -61,7 +85,8 @@ std::string make_env_name(const char* field_name) {
 } // namespace
 
 void ResourceLimits::init_from_env() {
-#define READ_LIMIT(type, name) read_env(make_env_name(#name).c_str(), name);
+#define READ_LIMIT(type, name, ceiling)                                                            \
+    read_env(make_env_name(#name).c_str(), name, static_cast<std::uint64_t>(ceiling));
     LUMA_RESOURCE_LIMITS_X(READ_LIMIT)
 #undef READ_LIMIT
 }

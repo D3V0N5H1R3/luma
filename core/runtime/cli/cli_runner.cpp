@@ -25,10 +25,15 @@
 
 #include <filesystem>
 #include <iostream>
+#include <optional>
+#include <utility>
+#include <vector>
 
+#include "analysis/source/source_manager.hpp"
 #include "runtime/compiler/bytecode_serializer.hpp"
 #include "runtime/compiler/compilation_cache.hpp"
 #include "runtime/compiler/compile_result.hpp"
+#include "runtime/compiler/source_dependency.hpp"
 #include "runtime/interpreter/reference_leak_tracker.hpp"
 #include "runtime/stdlib/common/stdlib_registry.hpp"
 #include "runtime/stdlib/system/process_module.hpp"
@@ -48,27 +53,38 @@ constexpr std::uint64_t k_hash_mix_golden_ratio = 0x9e3779b97f4a7c15ULL;
     return source_hash ^ (static_cast<std::uint64_t>(optimize_level) * k_hash_mix_golden_ratio);
 }
 
+// Bytecode loaded from the on-disk cache, plus the included files it was
+// compiled from, so a hit can be promoted into the in-memory cache.
+struct DiskCacheHit {
+    CompileArtifact artifact;
+    std::vector<SourceDependency> dependencies;
+};
+
 // Attempt to load compiled bytecode from the on-disk cache.
-// Returns a CompileArtifact on a hit, or nullopt on a miss or validation failure.
-[[nodiscard]] std::optional<CompileArtifact>
+// Returns the bytecode on a hit, or nullopt on a miss, a validation failure,
+// or when any included file has changed since the cache was written.
+[[nodiscard]] std::optional<DiskCacheHit>
 try_load_from_disk_cache(const std::filesystem::path& cache_file, std::uint64_t cache_key) {
     auto disk = BytecodeSerializer::read_file(cache_file, cache_key);
 
-    if (!disk) {
+    if (!disk || !are_source_dependencies_current(disk->dependencies)) {
         return std::nullopt;
     }
 
-    CompileArtifact artifact;
-    artifact.top_level = std::move(disk->top_level);
-    artifact.functions = std::move(disk->functions);
-    return artifact;
+    DiskCacheHit hit;
+    hit.artifact.top_level = std::move(disk->top_level);
+    hit.artifact.functions = std::move(disk->functions);
+    hit.dependencies = std::move(disk->dependencies);
+    return hit;
 }
 
 // Persist compiled bytecode to the on-disk cache.
 // Emits a warning to stderr if the write fails.
 void save_to_disk_cache(const std::filesystem::path& cache_file, const CompiledFunction& top_level,
-                        const std::vector<CompiledFunction>& functions, std::uint64_t cache_key) {
-    if (!BytecodeSerializer::write_file(cache_file, top_level, functions, cache_key)) {
+                        const std::vector<CompiledFunction>& functions, std::uint64_t cache_key,
+                        const std::vector<SourceDependency>& dependencies) {
+    if (!BytecodeSerializer::write_file(cache_file, top_level, functions, cache_key,
+                                        /*timestamp=*/0, dependencies)) {
         std::cerr << "Warning: failed to write bytecode cache to " << cache_file << "\n";
     }
 }
@@ -128,14 +144,19 @@ int run_file(const std::string& path, const RunOptions& options, CompilationCach
     return with_error_handling([&path, &options, &cache](SourceManager& source_manager) {
         // Load source text so the cache can hash it for invalidation.
         const auto& source_file = source_manager.load(path);
-        const CompilationCache::Options cache_opts{
-            options.optimize_level != OptimizationLevel::None, false};
+        const CompilationCache::Options cache_opts{.optimization_level = options.optimize_level,
+                                                   .debug_info = false};
 
-        // Strict mode treats warnings as errors, but cached artifacts record no
-        // warnings — serving one would skip check_strict_warnings() and let a
-        // program that should fail (exit 2) run and exit 0.  Force the full
-        // compile path whenever strict is requested so warnings are re-checked.
-        if (!options.strict) {
+        // Both caches are bypassed when a flag must act on a fresh compile:
+        //   --strict treats warnings as errors, but cached artifacts record no
+        //     warnings — serving one would skip check_strict_warnings() and let
+        //     a program that should fail (exit 2) run and exit 0.
+        //   --verify checks the bytecode before execution; a cache hit (notably
+        //     a tampered .lumc whose header still matches the source hash)
+        //     would otherwise run without ever being verified.
+        const bool use_caches = !options.strict && !options.verify;
+
+        if (use_caches) {
             if (auto cached = cache.get(path, source_file.text, cache_opts)) {
                 return execute_bytecode(cached->top_level, cached->functions, options.args,
                                         options.sandbox);
@@ -145,13 +166,14 @@ int run_file(const std::string& path, const RunOptions& options, CompilationCach
         // Disk cache — survives across process restarts.
         const auto raw_hash = BytecodeSerializer::hash_source(source_file.text);
         const auto cache_key = compute_cache_key(raw_hash, options.optimize_level);
-        const auto cache_file = BytecodeSerializer::cache_path_for(path);
+        // `path` is UTF-8 (and decodes, since load() above succeeded).
+        const auto cache_file = BytecodeSerializer::cache_path_for(path_from_utf8(path));
 
-        if (!options.strict) {
-            if (auto cr = try_load_from_disk_cache(cache_file, cache_key)) {
-                cache.put(path, source_file.text, *cr, cache_opts);
-                return execute_bytecode(cr->top_level, cr->functions, options.args,
-                                        options.sandbox);
+        if (use_caches) {
+            if (auto hit = try_load_from_disk_cache(cache_file, cache_key)) {
+                cache.put(path, source_file.text, hit->artifact, cache_opts, hit->dependencies);
+                return execute_bytecode(hit->artifact.top_level, hit->artifact.functions,
+                                        options.args, options.sandbox);
             }
         }
 
@@ -165,9 +187,13 @@ int run_file(const std::string& path, const RunOptions& options, CompilationCach
 
         const auto* compile_result = extract_compile_result(outcome.artifact);
 
-        cache.put(path, source_file.text, *compile_result, cache_opts);
+        // The caches key on the entry point's text alone; recording every
+        // included file lets them detect an edited include.
+        auto dependencies = collect_source_dependencies(source_manager, source_file.file_id);
+
         save_to_disk_cache(cache_file, compile_result->top_level, compile_result->functions,
-                           cache_key);
+                           cache_key, dependencies);
+        cache.put(path, source_file.text, *compile_result, cache_opts, std::move(dependencies));
 
         return execute_bytecode(compile_result->top_level, compile_result->functions, options.args,
                                 options.sandbox);

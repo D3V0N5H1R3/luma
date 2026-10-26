@@ -8,6 +8,7 @@
 //   - handle_await, handle_task_scope_begin (new)
 //   - handle_for_iter_init, handle_print, handle_assert (new)
 
+#include <chrono>
 #include <format>
 #include <future>
 #include <iostream>
@@ -20,8 +21,10 @@
 #include "analysis/errors/error.hpp"
 #include "common/overflow.hpp"
 #include "common/resource_limits.hpp"
+#include "common/scope_guard.hpp"
 #include "common/utf8.hpp"
 #include "common/utf8_iterator.hpp"
+#include "runtime/concurrency/task_completion.hpp"
 #include "runtime/concurrency/task_scope.hpp"
 #include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/runtime_exceptions.hpp"
@@ -42,6 +45,10 @@ namespace {
 // Shorthand aliases for use within this translation unit.
 constexpr auto k_iter_state_iterable = VMConstants::k_iter_state_iterable;
 constexpr auto k_iter_state_index = VMConstants::k_iter_state_index;
+
+// How often an await inside a spawned task re-checks the task's own
+// cancellation token while the awaited task is still running.
+constexpr auto k_await_cancel_poll_interval = std::chrono::milliseconds{10};
 
 /// Throws BytecodeError if callee is neither a native function nor a compiled function.
 void validate_spawn_callable(const Value& callee) {
@@ -138,13 +145,27 @@ void VM::prepare_spawn_environment(VM& task_vm, const DebugCallbacks& debug_cbs,
 void VM::build_spawn_future(VM& task_vm, std::shared_ptr<std::promise<Value>>& promise,
                             Value& callee, std::vector<Value>& args, SourceLocation loc,
                             const std::shared_ptr<CancellationToken>& cancel_token) {
+    // Publish the task's token for natives that block (Channel waits) and give
+    // the task VM its own copy for the loop/call/await cancellation points.
     const auto* prev_cancel = detail::active_cancel_token;
     detail::active_cancel_token = cancel_token ? &cancel_token : nullptr;
+    task_vm.cancel_token_ = cancel_token;
 
     try {
         auto result = execute_spawned_callable(task_vm, callee, args, loc);
         detail::active_cancel_token = prev_cancel;
         promise->set_value(std::move(result));
+    } catch (const std::runtime_error&) {
+        detail::active_cancel_token = prev_cancel;
+        // Safety net: a task that fails while its token is cancelled ended
+        // because of the cancellation (for example an error raised by cleanup
+        // code during the unwind).  Report it as cancelled — classified when
+        // the task ends, not when it is joined, so a later Task.cancel cannot
+        // hide a genuine failure — so task_scope, await, and the Task.* waits
+        // treat it as a cancellation rather than a failure.
+        promise->set_exception(cancel_token && cancel_token->is_cancelled()
+                                   ? std::make_exception_ptr(CancelledException{"task cancelled"})
+                                   : std::current_exception());
     } catch (...) {
         detail::active_cancel_token = prev_cancel;
         promise->set_exception(std::current_exception());
@@ -160,11 +181,24 @@ auto VM::create_spawn_callable(
     // VM (and its compiled_fns vector) is destroyed. The pointer is therefore
     // guaranteed to remain valid for the entire lifetime of this lambda.
     const std::vector<CompiledFunction>* compiled_fns, EnvPtr env,
-    std::shared_ptr<CancellationToken> cancel_token, ThreadPool& pool_ref, DebugCallbacks debug_cbs,
-    int task_id) -> std::function<void()> {
+    std::shared_ptr<CancellationToken> cancel_token, std::shared_ptr<TaskCompletion> completion,
+    ThreadPool& pool_ref, DebugCallbacks debug_cbs, int task_id) -> std::function<void()> {
     return [promise = std::move(promise), callee = std::move(callable), args = std::move(args),
-            compiled_fns, env = std::move(env), cancel_token = std::move(cancel_token), &pool_ref,
-            loc, debug_cbs = std::move(debug_cbs), task_id]() mutable {
+            compiled_fns, env = std::move(env), cancel_token = std::move(cancel_token),
+            completion = std::move(completion), &pool_ref, loc, debug_cbs = std::move(debug_cbs),
+            task_id]() mutable {
+        // Declared first so it runs last: every path below satisfies the
+        // promise before this wakes waiters such as Task.race.
+        const ScopeGuard notify_completion{[&completion] { completion->mark_complete(); }};
+
+        // The thread-local "current task_scope" belongs to whatever ran on
+        // this worker before; a task starts outside any scope and must leave
+        // the thread as it found it.
+        auto* const outer_scope = VMTaskManager::current_scope;
+        VMTaskManager::current_scope = nullptr;
+        const ScopeGuard restore_scope{
+            [outer_scope] { VMTaskManager::current_scope = outer_scope; }};
+
         try {
             if (cancel_token && cancel_token->is_cancelled()) {
                 // No task VM is constructed on this early-out path, so there is
@@ -232,18 +266,30 @@ void VM::handle_spawn() {
     auto promise = std::make_shared<std::promise<Value>>();
     auto future = promise->get_future().share();
 
-    auto cancel_token =
-        (VMTaskManager::current_scope != nullptr) ? VMTaskManager::current_scope->token() : nullptr;
+    // Every task owns its own token, so Task.cancel(t) cancels only `t`.  The
+    // token's parent is the enclosing task_scope's token (cancel_all() reaches
+    // every child) or, for a spawn outside any scope inside a task, that
+    // task's own token (cancelling a task reaches what it spawned).
+    std::shared_ptr<const CancellationToken> parent_token;
+
+    if (VMTaskManager::current_scope != nullptr) {
+        parent_token = VMTaskManager::current_scope->token();
+    } else {
+        parent_token = cancel_token_;
+    }
+
+    auto cancel_token = std::make_shared<CancellationToken>(std::move(parent_token));
+    auto completion = std::make_shared<TaskCompletion>();
     auto task_id = task_manager_.next_task_id.fetch_add(1);
 
     // THREAD_SAFETY: Captures a consistent snapshot of debug callbacks under
     // shared_lock; safe to move into spawned task.
     auto debug_cbs_copy = debug_.copy_all();
     pool().enqueue(create_spawn_callable(promise, std::move(callee), std::move(args), loc,
-                                         compiled_functions_, global_env_, cancel_token, pool(),
-                                         std::move(debug_cbs_copy), task_id));
+                                         compiled_functions_, spawn_environment(), cancel_token,
+                                         completion, pool(), std::move(debug_cbs_copy), task_id));
 
-    auto task = std::make_shared<TaskValue>(std::move(future), cancel_token);
+    auto task = std::make_shared<TaskValue>(std::move(future), cancel_token, std::move(completion));
 
     if (VMTaskManager::current_scope != nullptr) {
         VMTaskManager::current_scope->add_child(task);
@@ -255,11 +301,10 @@ void VM::handle_spawn() {
 // ─────────── Await ───────────
 
 void VM::handle_await() {
-    // Cooperative cancellation check.
-    if ((detail::active_cancel_token != nullptr) &&
-        (*detail::active_cancel_token)->is_cancelled()) {
-        runtime_error(vm_errors::task_cancelled);
-    }
+    // Cooperative cancellation check.  Throw CancelledException (not a plain
+    // RuntimeError) so task_scope's join recognises a deliberately cancelled
+    // task instead of reporting it as a failure.
+    check_cancellation();
 
     auto task_val = pop();
 
@@ -273,13 +318,25 @@ void VM::handle_await() {
         runtime_error(vm_errors::await_consumed_task);
     }
 
+    // Waiting blocks on other pool work: let the pool compensate if this VM
+    // runs on a worker.  A cancelled task stops waiting at its next poll.
+    const ThreadPool::BlockingRegion blocking;
+
+    if (cancel_token_ != nullptr) {
+        while (task->future.wait_for(k_await_cancel_poll_interval) != std::future_status::ready) {
+            check_cancellation();
+        }
+    }
+
     push(task->future.get());
 }
 
 // ─────────── Task scope ───────────
 
 void VM::handle_task_scope_begin() {
-    auto scope = std::make_unique<TaskScope>(VMTaskManager::current_scope);
+    // Chain the scope's token to this VM's task token, so cancelling the task
+    // running this code also cancels the scope's children.
+    auto scope = std::make_unique<TaskScope>(VMTaskManager::current_scope, cancel_token_);
     VMTaskManager::current_scope = scope.get();
     task_manager_.task_scopes.push_back(std::move(scope));
 }
@@ -303,7 +360,11 @@ void VM::retire_task_scope(TaskScope* scope) {
 }
 
 void VM::handle_task_scope_end() {
-    if (task_manager_.task_scopes.empty() || (VMTaskManager::current_scope == nullptr)) {
+    // The innermost scope this VM opened must also be the thread's current
+    // scope; anything else means scope bookkeeping was corrupted (or the
+    // bytecode is malformed), and joining the wrong scope would orphan tasks.
+    if (task_manager_.task_scopes.empty() ||
+        (VMTaskManager::current_scope != task_manager_.task_scopes.back().get())) {
         runtime_error(vm_errors::task_scope_end_without_begin);
     }
 
@@ -602,7 +663,8 @@ void VM::handle_assert() {
     auto arg_count = read_byte();
 
     if (arg_count >= 1) {
-        std::string message = "Assertion failed";
+        // Matches the documented runtime error (User Manual §29).
+        std::string message = "assertion failed";
 
         // Stack order: the compiler pushes `condition` first, then `message`.
         // `message` is therefore on top of the stack (popped first).

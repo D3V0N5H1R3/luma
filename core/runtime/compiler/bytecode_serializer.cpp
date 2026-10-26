@@ -6,12 +6,15 @@
 #include <fstream>
 
 #include "common/hash.hpp"
+#include "common/path_utils.hpp"
 #include "runtime/compiler/compiler_limits.hpp"
 #include "runtime/compiler/verifier.hpp"
 
 // Bytecode serialization format:
 //   Header: magic bytes (4), format version (u32), flags (u32),
 //           source hash (u64), timestamp (u64)
+//   Dependency count (u32), then per dependency: path (length-prefixed
+//   string), content hash (u64)
 //   Function count (u32): total number of functions including the top-level
 //   Functions (repeated):
 //     name (length-prefixed string), arity (u16), required_arity (u16),
@@ -142,6 +145,8 @@ void BytecodeSerializer::serialize_chunk(Writer& w, const Chunk& chunk) {
         w.write_u32(static_cast<std::uint32_t>(loc.file_id));
         w.write_u32(static_cast<std::uint32_t>(loc.line));
         w.write_u32(static_cast<std::uint32_t>(loc.column));
+        w.write_u32(static_cast<std::uint32_t>(loc.start_line));
+        w.write_u32(static_cast<std::uint32_t>(loc.start_column));
     }
 
     // Names.
@@ -225,11 +230,16 @@ bool BytecodeSerializer::deserialize_chunk(Reader& r, Chunk& chunk) {
                 auto file_id = static_cast<int>(r.read_u32());
                 auto line = static_cast<int>(r.read_u32());
                 auto column = static_cast<int>(r.read_u32());
+                auto start_line = static_cast<int>(r.read_u32());
+                auto start_column = static_cast<int>(r.read_u32());
                 if (r.error()) {
                     return false;
                 }
-                chunk.source_map.append(
-                    offset, SourceLocation{.file_id = file_id, .line = line, .column = column});
+                chunk.source_map.append(offset, SourceLocation{.file_id = file_id,
+                                                               .line = line,
+                                                               .column = column,
+                                                               .start_line = start_line,
+                                                               .start_column = start_column});
                 return true;
             })) {
         return false;
@@ -264,15 +274,15 @@ bool BytecodeSerializer::deserialize_chunk(Reader& r, Chunk& chunk) {
 
 // Bit flags for the per-function flags byte in the serialized format.
 enum class SerializedFunctionFlags : std::uint8_t {
-    is_main = 0x01,
-    is_test = 0x02,
-    is_verified = 0x04,
+    IsMain = 0x01,
+    IsTest = 0x02,
+    IsVerified = 0x04,
 };
 
 // Bit flags for the per-upvalue flags byte in the serialized format.
 enum class SerializedUpvalueFlags : std::uint8_t {
-    is_local = 0x01,
-    is_mutable = 0x02,
+    IsLocal = 0x01,
+    IsMutable = 0x02,
 };
 
 void BytecodeSerializer::serialize_function(Writer& w, const CompiledFunction& func) {
@@ -284,13 +294,13 @@ void BytecodeSerializer::serialize_function(Writer& w, const CompiledFunction& f
     // Flags byte: bit 0 = is_main, bit 1 = is_test, bit 2 = is_verified.
     std::uint8_t flags = 0;
     if (func.is_main) {
-        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::is_main);
+        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::IsMain);
     }
     if (func.is_test) {
-        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::is_test);
+        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::IsTest);
     }
     if (func.is_verified()) {
-        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::is_verified);
+        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::IsVerified);
     }
     w.write_u8(flags);
 
@@ -317,8 +327,8 @@ void BytecodeSerializer::serialize_function(Writer& w, const CompiledFunction& f
     for (const auto& uv : func.upvalues) {
         w.write_u16(uv.index);
         std::uint8_t uv_flags =
-            (uv.is_local ? static_cast<std::uint8_t>(SerializedUpvalueFlags::is_local) : 0) |
-            (uv.is_mutable ? static_cast<std::uint8_t>(SerializedUpvalueFlags::is_mutable) : 0);
+            (uv.is_local ? static_cast<std::uint8_t>(SerializedUpvalueFlags::IsLocal) : 0) |
+            (uv.is_mutable ? static_cast<std::uint8_t>(SerializedUpvalueFlags::IsMutable) : 0);
         w.write_u8(uv_flags);
     }
 
@@ -337,10 +347,10 @@ std::optional<CompiledFunction> BytecodeSerializer::deserialize_function(Reader&
     func.upvalue_count = static_cast<int>(r.read_u16());
 
     auto flags = r.read_u8();
-    func.is_main = (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::is_main)) != 0;
-    func.is_test = (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::is_test)) != 0;
-    func.set_is_verified(
-        (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::is_verified)) != 0);
+    func.is_main = (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::IsMain)) != 0;
+    func.is_test = (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::IsTest)) != 0;
+    func.set_is_verified((flags & static_cast<std::uint8_t>(SerializedFunctionFlags::IsVerified)) !=
+                         0);
 
     if (r.error()) {
         return std::nullopt;
@@ -418,9 +428,9 @@ std::optional<CompiledFunction> BytecodeSerializer::deserialize_function(Reader&
         CompiledFunction::Upvalue uv;
         uv.index = r.read_u16();
         auto uv_flags = r.read_u8();
-        uv.is_local = (uv_flags & static_cast<std::uint8_t>(SerializedUpvalueFlags::is_local)) != 0;
+        uv.is_local = (uv_flags & static_cast<std::uint8_t>(SerializedUpvalueFlags::IsLocal)) != 0;
         uv.is_mutable =
-            (uv_flags & static_cast<std::uint8_t>(SerializedUpvalueFlags::is_mutable)) != 0;
+            (uv_flags & static_cast<std::uint8_t>(SerializedUpvalueFlags::IsMutable)) != 0;
         func.upvalues.push_back(uv);
     }
 
@@ -452,7 +462,8 @@ std::optional<CompiledFunction> BytecodeSerializer::deserialize_function(Reader&
 std::vector<std::uint8_t>
 BytecodeSerializer::serialize(const CompiledFunction& top_level,
                               const std::vector<CompiledFunction>& functions,
-                              std::uint64_t source_hash, std::uint64_t timestamp) {
+                              std::uint64_t source_hash, std::uint64_t timestamp,
+                              std::span<const SourceDependency> dependencies) {
     Writer w;
 
     // Header.
@@ -461,6 +472,14 @@ BytecodeSerializer::serialize(const CompiledFunction& top_level,
     w.write_u32(0); // flags
     w.write_u64(source_hash);
     w.write_u64(timestamp);
+
+    // Dependency table.
+    w.write_u32(static_cast<std::uint32_t>(dependencies.size()));
+
+    for (const auto& dependency : dependencies) {
+        w.write_string(dependency.path);
+        w.write_u64(dependency.content_hash);
+    }
 
     // Function count (top_level + functions).
     w.write_u32(static_cast<std::uint32_t>(1 + functions.size()));
@@ -513,6 +532,33 @@ DeserializeResult BytecodeSerializer::deserialize(const std::vector<std::uint8_t
                 .detail = "bytecode_serializer: expected version " +
                           std::to_string(k_bytecode_format_version) + ", got " +
                           std::to_string(result.header.version)};
+    }
+
+    // Read the dependency table.  The count comes from untrusted bytes, so it
+    // is bounded both absolutely and by the remaining input before reserving.
+    const auto dependency_count = r.read_u32();
+    if (r.error() || dependency_count > SerializerLimits::k_max_dependency_count ||
+        !r.has_remaining(static_cast<std::size_t>(dependency_count) *
+                         SerializerLimits::k_min_dependency_bytes)) {
+        return {.bytecode = {},
+                .error = DeserializeError::BadDependencyTable,
+                .detail = "bytecode_serializer: invalid dependency count " +
+                          std::to_string(dependency_count)};
+    }
+
+    result.dependencies.reserve(dependency_count);
+    for (std::uint32_t i = 0; i < dependency_count; ++i) {
+        SourceDependency dependency;
+        dependency.path = r.read_string();
+        dependency.content_hash = r.read_u64();
+
+        if (r.error()) {
+            return {.bytecode = {},
+                    .error = DeserializeError::BadDependencyTable,
+                    .detail = "bytecode_serializer: corrupt dependency " + std::to_string(i)};
+        }
+
+        result.dependencies.push_back(std::move(dependency));
     }
 
     // Read functions.
@@ -587,8 +633,9 @@ DeserializeResult BytecodeSerializer::deserialize(const std::vector<std::uint8_t
 bool BytecodeSerializer::write_file(const std::filesystem::path& path,
                                     const CompiledFunction& top_level,
                                     const std::vector<CompiledFunction>& functions,
-                                    std::uint64_t source_hash, std::uint64_t timestamp) {
-    auto data = serialize(top_level, functions, source_hash, timestamp);
+                                    std::uint64_t source_hash, std::uint64_t timestamp,
+                                    std::span<const SourceDependency> dependencies) {
+    auto data = serialize(top_level, functions, source_hash, timestamp, dependencies);
 
     std::ofstream file(path, std::ios::binary);
     if (!file) {
@@ -606,7 +653,7 @@ DeserializeResult BytecodeSerializer::read_file(const std::filesystem::path& pat
     if (!file) {
         return {.bytecode = {},
                 .error = DeserializeError::FileNotFound,
-                .detail = "bytecode_serializer: file not found: " + path.string()};
+                .detail = "bytecode_serializer: file not found: " + path_to_utf8(path)};
     }
 
     auto size = file.tellg();
@@ -624,7 +671,7 @@ DeserializeResult BytecodeSerializer::read_file(const std::filesystem::path& pat
     if (!file.good()) {
         return {.bytecode = {},
                 .error = DeserializeError::FileReadFailed,
-                .detail = "bytecode_serializer: file read failed: " + path.string()};
+                .detail = "bytecode_serializer: file read failed: " + path_to_utf8(path)};
     }
 
     auto result = deserialize(data);

@@ -13,12 +13,9 @@ inline constexpr unsigned char k_utf8_ascii_max = 0x80;
 inline constexpr unsigned char k_utf8_leading_byte_min = 0xC0;
 
 // ─── UTF-8 byte masks ───
-// Named constants for the leading-byte mask values used to classify
-// multi-byte UTF-8 sequences (RFC 3629 §3).
+// Mask selecting the two high bits that identify a continuation byte
+// (10xxxxxx, RFC 3629 §3).
 constexpr unsigned char k_utf8_2byte_mask = 0xC0;
-constexpr unsigned char k_utf8_3byte_mask = 0xE0;
-constexpr unsigned char k_utf8_4byte_mask = 0xF0;
-constexpr unsigned char k_utf8_5byte_mask = 0xF8;
 
 // ─── UTF-8 helpers ───
 // Shared between the string module, the VM, and any other
@@ -29,53 +26,135 @@ constexpr unsigned char k_utf8_5byte_mask = 0xF8;
     return (b & k_utf8_2byte_mask) == 0x80;
 }
 
-// Leading-byte classification for multi-byte UTF-8 sequences.
-[[nodiscard]] constexpr bool is_2byte_utf8(std::uint8_t b) noexcept {
-    return (b & k_utf8_3byte_mask) == k_utf8_2byte_mask;
-}
+// U+FFFD REPLACEMENT CHARACTER — the codepoint reported for any byte that does
+// not start a well-formed UTF-8 sequence.
+inline constexpr std::uint32_t k_utf8_replacement_char = 0xFFFD;
 
-[[nodiscard]] constexpr bool is_3byte_utf8(std::uint8_t b) noexcept {
-    return (b & k_utf8_4byte_mask) == k_utf8_3byte_mask;
-}
-
-[[nodiscard]] constexpr bool is_4byte_utf8(std::uint8_t b) noexcept {
-    return (b & k_utf8_5byte_mask) == k_utf8_4byte_mask;
-}
-
-// Return the byte length of the UTF-8 codepoint starting at `byte`.
+// Return the byte length of the UTF-8 sequence announced by lead byte `byte`.
+//
+// Only lead bytes that can start a well-formed sequence (RFC 3629 §4) report
+// a multi-byte length: C2–DF → 2, E0–EF → 3, F0–F4 → 4.  ASCII, bare
+// continuation bytes (80–BF), the overlong-only leads C0/C1, and F5–FF all
+// report 1.  This looks at the lead byte alone; when the following bytes are
+// available prefer utf8_decode(), whose length also accounts for malformed
+// or truncated continuation bytes.
 [[nodiscard]] constexpr int utf8_codepoint_len(std::uint8_t byte) noexcept {
-    if (byte < 0x80) {
-        return 1;
-    }
-    if (is_2byte_utf8(byte)) {
+    if (byte >= 0xC2 && byte <= 0xDF) {
         return 2;
     }
-    if (is_3byte_utf8(byte)) {
+    if (byte >= 0xE0 && byte <= 0xEF) {
         return 3;
     }
-    if (is_4byte_utf8(byte)) {
+    if (byte >= 0xF0 && byte <= 0xF4) {
         return 4;
     }
 
-    return 1; // Invalid leading byte — treat as single byte.
+    return 1; // ASCII or an invalid leading byte — treat as single byte.
 }
 
-// Count the number of Unicode codepoints in a UTF-8 string.  Continuation
-// bytes (10xxxxxx) are not counted, so the result is the codepoint length —
-// the value editors use for column/character positions, not the byte length.
-// Malformed lead bytes advance by one, so the loop always terminates.
+// A decoded codepoint and the number of bytes it occupied.
+struct Utf8Decoded {
+    std::uint32_t codepoint;
+    std::size_t length;
+};
+
+// Strictly decode the UTF-8 sequence starting at byte `pos` of `s` (RFC 3629
+// §4, Unicode Table 3-7).  Accepts std::string, std::string_view, or any
+// contiguous container with size() and operator[] returning a char-like type.
+//
+// Any ill-formed sequence — a bare continuation byte, a C0/C1 or F5–FF lead,
+// an overlong form, a UTF-16 surrogate (U+D800–U+DFFF), a value above
+// U+10FFFF, a missing continuation byte, or a sequence truncated by the end
+// of the input — decodes as {U+FFFD, 1}, so a caller that advances by
+// `length` resynchronises on the very next byte and never skips valid text.
+// `length` never extends past s.size(); when `pos >= s.size()` the result
+// is {U+FFFD, 0}.
+template <typename StringLike>
+[[nodiscard]] constexpr Utf8Decoded utf8_decode(const StringLike& s, std::size_t pos) noexcept {
+    constexpr Utf8Decoded k_invalid{.codepoint = k_utf8_replacement_char, .length = 1};
+
+    if (pos >= s.size()) {
+        return {.codepoint = k_utf8_replacement_char, .length = 0};
+    }
+
+    const auto byte_at = [&s, pos](std::size_t offset) {
+        return static_cast<std::uint8_t>(s[pos + offset]);
+    };
+    const std::uint8_t lead = byte_at(0);
+
+    if (lead < 0x80) {
+        return {.codepoint = lead, .length = 1};
+    }
+
+    const auto len = static_cast<std::size_t>(utf8_codepoint_len(lead));
+
+    if (len == 1 || pos + len > s.size()) {
+        return k_invalid;
+    }
+
+    // The second byte's valid range depends on the lead byte; this is what
+    // rules out overlong forms (E0, F0), surrogates (ED), and values above
+    // U+10FFFF (F4).  Every other continuation byte is the plain 80–BF range.
+    std::uint8_t second_min = 0x80;
+    std::uint8_t second_max = 0xBF;
+
+    if (lead == 0xE0) {
+        second_min = 0xA0;
+    } else if (lead == 0xED) {
+        second_max = 0x9F;
+    } else if (lead == 0xF0) {
+        second_min = 0x90;
+    } else if (lead == 0xF4) {
+        second_max = 0x8F;
+    }
+
+    const std::uint8_t second = byte_at(1);
+
+    if (second < second_min || second > second_max) {
+        return k_invalid;
+    }
+
+    for (std::size_t k = 2; k < len; ++k) {
+        if (!is_utf8_continuation(byte_at(k))) {
+            return k_invalid;
+        }
+    }
+
+    constexpr std::uint8_t k_payload_mask = 0x3F;
+    std::uint32_t cp = 0;
+
+    if (len == 2) {
+        cp = static_cast<std::uint32_t>(lead & 0x1F);
+    } else if (len == 3) {
+        cp = static_cast<std::uint32_t>(lead & 0x0F);
+    } else {
+        cp = static_cast<std::uint32_t>(lead & 0x07);
+    }
+
+    for (std::size_t k = 1; k < len; ++k) {
+        cp = (cp << 6) | static_cast<std::uint32_t>(byte_at(k) & k_payload_mask);
+    }
+
+    return {.codepoint = cp, .length = len};
+}
+
+// Count the number of Unicode codepoints in a UTF-8 string — the value
+// editors use for column/character positions, not the byte length.  Steps by
+// utf8_decode() lengths, so every ill-formed byte counts as one codepoint
+// (exactly as UTF8Iterator sees it) and the loop always terminates.
 [[nodiscard]] inline constexpr int utf8_codepoint_count(std::string_view s) noexcept {
     int count{0};
-    for (std::size_t pos{0}; pos < s.size();
-         pos += static_cast<std::size_t>(utf8_codepoint_len(static_cast<std::uint8_t>(s[pos])))) {
+    for (std::size_t pos{0}; pos < s.size(); pos += utf8_decode(s, pos).length) {
         ++count;
     }
     return count;
 }
 
 // Return the byte length of the codepoint at position `pos` in `s`.
+// Agrees with utf8_decode(): ill-formed or truncated sequences are 1 byte,
+// and the result never extends past s.size() (0 when `pos >= s.size()`).
 [[nodiscard]] inline std::size_t utf8_advance(const std::string& s, std::size_t pos) noexcept {
-    return static_cast<std::size_t>(utf8_codepoint_len(static_cast<std::uint8_t>(s[pos])));
+    return utf8_decode(s, pos).length;
 }
 
 // Extract the single UTF-8 character (as a std::string) at byte position `pos`.
@@ -84,61 +163,17 @@ constexpr unsigned char k_utf8_5byte_mask = 0xF8;
         return {};
     }
 
-    const auto len = utf8_advance(s, pos);
-
-    if (pos + len > s.size()) {
-        return s.substr(pos);
-    }
-
-    return s.substr(pos, len);
-}
-
-// Extract the continuation-byte payload at `s[pos + offset]`.
-// Accepts std::string, std::string_view, or any contiguous container with
-// operator[] returning a char-like type.
-template <typename StringLike>
-[[nodiscard]] inline std::uint32_t utf8_cont(const StringLike& s, std::size_t pos,
-                                             std::size_t offset) {
-    return static_cast<std::uint8_t>(s[pos + offset]) & 0x3F;
+    return s.substr(pos, utf8_advance(s, pos));
 }
 
 // Decode the Unicode codepoint at byte position `pos` in `s`.
 // Accepts std::string, std::string_view, or any contiguous container.
 //
-// Returns the raw byte value for invalid sequences, treating them as
-// single-byte characters.  This matches the "replacement" strategy used
-// by most text editors and avoids throwing on malformed input.  A sequence
-// is invalid when it is truncated (not enough bytes remain) or when any
-// expected continuation byte is not a genuine 10xxxxxx continuation.
+// Returns U+FFFD (REPLACEMENT CHARACTER) for any ill-formed sequence — see
+// utf8_decode(), which also reports how many bytes the codepoint occupied.
 template <typename StringLike>
 [[nodiscard]] inline std::uint32_t utf8_decode_at(const StringLike& s, std::size_t pos) {
-    const auto byte = static_cast<std::uint8_t>(s[pos]);
-
-    if (byte < 0x80) {
-        return byte;
-    }
-
-    // Whether the byte at `s[pos + offset]` is a genuine continuation byte.
-    // Only called after the caller has confirmed that index is in bounds.
-    const auto continues = [&s, pos](std::size_t offset) {
-        return is_utf8_continuation(static_cast<unsigned char>(s[pos + offset]));
-    };
-
-    if (is_2byte_utf8(byte) && pos + 1 < s.size() && continues(1)) {
-        return (static_cast<std::uint32_t>(byte & 0x1F) << 6) | utf8_cont(s, pos, 1);
-    }
-
-    if (is_3byte_utf8(byte) && pos + 2 < s.size() && continues(1) && continues(2)) {
-        return (static_cast<std::uint32_t>(byte & 0x0F) << 12) | (utf8_cont(s, pos, 1) << 6) |
-               utf8_cont(s, pos, 2);
-    }
-
-    if (is_4byte_utf8(byte) && pos + 3 < s.size() && continues(1) && continues(2) && continues(3)) {
-        return (static_cast<std::uint32_t>(byte & 0x07) << 18) | (utf8_cont(s, pos, 1) << 12) |
-               (utf8_cont(s, pos, 2) << 6) | utf8_cont(s, pos, 3);
-    }
-
-    return byte;
+    return utf8_decode(s, pos).codepoint;
 }
 
 // Combine a UTF-16 surrogate pair into a single Unicode codepoint.

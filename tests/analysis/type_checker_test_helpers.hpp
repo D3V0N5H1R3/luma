@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "analysis/diagnostics/diagnostic.hpp"
+#include "analysis/linter/linter.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "test_parse_helper.hpp"
 
@@ -41,6 +42,28 @@ static std::vector<Diagnostic> check_warnings(const std::string& source,
     return checker.get_warnings();
 }
 
+// Warnings from the type checker followed by the linter, mirroring the
+// pipeline's TypeCheckerPass → LintPass order. The linter owns the
+// variable-usage rules (unused, never-mutated, shadowed, self-assignment).
+[[maybe_unused]] static std::vector<Diagnostic>
+check_warnings_with_lint(const std::string& source) {
+    const auto program = parse(source);
+
+    TypeChecker checker;
+
+    [[maybe_unused]] const auto errors = checker.check(program);
+
+    auto warnings = checker.get_warnings();
+
+    Linter linter;
+
+    for (auto& lint_warning : linter.lint(program)) {
+        warnings.push_back(std::move(lint_warning));
+    }
+
+    return warnings;
+}
+
 [[maybe_unused]] static bool has_warnings(const std::string& source) {
     return !check_warnings(source).empty();
 }
@@ -60,6 +83,15 @@ static std::vector<Diagnostic> check_warnings(const std::string& source,
 // Stronger than fails(): pins the diagnostic identity.
 [[maybe_unused]] static bool fails_with(const std::string& source, DiagnosticCode code) {
     return has_code(check(source), code);
+}
+
+// True if type-checking `source` fails with a diagnostic whose message
+// contains `fragment` — pins the rule for diagnostics that carry no code.
+[[maybe_unused]] static bool fails_with_message(const std::string& source,
+                                                const std::string& fragment) {
+    return std::ranges::any_of(check(source), [&fragment](const Diagnostic& d) {
+        return d.message.find(fragment) != std::string::npos;
+    });
 }
 
 #endif // LUMA_TYPE_CHECKER_TEST_HELPERS_HPP

@@ -1800,6 +1800,335 @@ static void test_precedence_parentheses_override() {
     ASSERT_EQ(as_binary(*root.left).op, TokenType::Plus);
 }
 
+// ─── Newline rule, member access, error recovery, diagnostics ───
+
+static const FunctionDeclaration& first_function(const Program& program) {
+    return static_cast<const FunctionDeclaration&>(*program.declarations.at(0));
+}
+
+static void test_newline_paren_starts_new_statement() {
+    // Regression: `cfg.total` followed by a line starting with '(' was parsed as
+    // the call `cfg.total(string k, ...)`.
+    const auto source = std::string{"function void f() {\n"
+                                    "    integer t = cfg.total\n"
+                                    "    (string k, integer v) = pair\n"
+                                    "}\n"};
+
+    ASSERT_TRUE(parse_errors(source).empty());
+
+    const auto program = parse(source);
+    const auto& body = first_function(program).body;
+
+    ASSERT_EQ(body.size(), 2U);
+    ASSERT_EQ(body[1]->kind, StatementKind::TupleDestructuring);
+}
+
+static void test_newline_paren_after_call_or_index_starts_new_statement() {
+    // A '(' that starts a line begins a new statement after any callable
+    // expression kind: a plain variable (formerly swallowed as the call
+    // `b(integer c, ...)`), a call result, an index and a parenthesised
+    // lambda.  Field access is covered by test_newline_paren_starts_new_statement.
+    const auto program = parse("integer a = b\n(integer c, integer d) = pair\n"
+                               "integer e = f(1)\n(integer g, integer h) = pair\n"
+                               "integer i = items[0]\n(integer j, integer k) = pair\n"
+                               "function(integer) -> integer l = ((integer x) -> x + 1)\n"
+                               "(integer m, integer n) = pair\n");
+
+    ASSERT_TRUE(parse_errors("integer a = b\n(integer c, integer d) = pair\n").empty());
+    ASSERT_EQ(program.statements.size(), 8U);
+
+    for (std::size_t index = 0; index < program.statements.size(); index += 2) {
+        ASSERT_EQ(program.statements[index]->kind, StatementKind::VariableDeclaration);
+        ASSERT_EQ(program.statements[index + 1]->kind, StatementKind::TupleDestructuring);
+    }
+
+    const auto initializer_kind = [&](std::size_t index) {
+        return static_cast<const VariableDeclStatement&>(*program.statements[index])
+            .initializer->kind;
+    };
+
+    ASSERT_EQ(initializer_kind(0), ExpressionKind::Variable);
+    ASSERT_EQ(initializer_kind(2), ExpressionKind::Call);
+    ASSERT_EQ(initializer_kind(4), ExpressionKind::IndexAccess);
+    ASSERT_EQ(initializer_kind(6), ExpressionKind::Lambda);
+}
+
+static void test_newline_bracket_starts_new_statement() {
+    // A '[' on a new line is an array literal, not an index into `b`.
+    const auto program = parse("integer a = b\n[1, 2] |> print()\n");
+
+    ASSERT_EQ(program.statements.size(), 2U);
+    ASSERT_EQ(first_initializer(program).kind, ExpressionKind::Variable);
+}
+
+static void test_same_line_call_and_multiline_binary_still_continue() {
+    const auto program = parse("integer a = f(1)(2)[0]\n"
+                               "integer b = 1\n"
+                               "    + 2\n"
+                               "integer c = 3\n"
+                               "    |> g()\n");
+
+    ASSERT_EQ(program.statements.size(), 3U);
+    ASSERT_EQ(first_initializer(program).kind, ExpressionKind::IndexAccess);
+
+    const auto& b = static_cast<const VariableDeclStatement&>(*program.statements[1]);
+    ASSERT_EQ(b.initializer->kind, ExpressionKind::Binary);
+
+    const auto& c = static_cast<const VariableDeclStatement&>(*program.statements[2]);
+    ASSERT_EQ(c.initializer->kind, ExpressionKind::Pipe);
+}
+
+static void test_nested_tuple_member_access() {
+    // Regression: `t.0.1` produced a single field named "0.1".
+    const auto program = parse("integer x = t.0.1");
+    const auto& outer = static_cast<const FieldAccessExpression&>(first_initializer(program));
+
+    ASSERT_EQ(outer.field_name, std::string{"1"});
+    ASSERT_EQ(outer.object->kind, ExpressionKind::FieldAccess);
+    ASSERT_EQ(static_cast<const FieldAccessExpression&>(*outer.object).field_name,
+              std::string{"0"});
+}
+
+static void test_field_name_must_be_name_token() {
+    // Regression: the check used the lexeme, so a string or annotation was accepted.
+    ASSERT_FALSE(parse_errors("string s = obj.\"name\"").empty());
+    ASSERT_FALSE(parse_errors("string s = obj.@main").empty());
+    ASSERT_TRUE(parse_errors("integer n = obj.with").empty());
+}
+
+static void test_recovery_stays_inside_function_body() {
+    // Regression: an error in a body unwound to top level, after which the
+    // function's closing '}' produced a cascading "unexpected token" error.
+    const auto source = std::string{"function void f() {\n"
+                                    "    integer x = = 5\n"
+                                    "    integer y = 2\n"
+                                    "}\n"
+                                    "function void g() {\n"
+                                    "}\n"};
+
+    ASSERT_EQ(parse_errors(source).size(), 1U);
+
+    const auto program = parse(source);
+
+    ASSERT_EQ(program.declarations.size(), 2U);
+    ASSERT_EQ(first_function(program).body.size(), 1U);
+}
+
+static void test_recovery_stays_inside_namespace() {
+    // Regression: the remaining `internal` members raised "'internal' keyword is
+    // only allowed inside a namespace".
+    const auto errors = parse_errors("namespace N {\n"
+                                     "    function void a() {\n"
+                                     "        integer x = = 1\n"
+                                     "    }\n"
+                                     "    internal function integer = 2\n"
+                                     "    internal function void b() {\n"
+                                     "    }\n"
+                                     "}\n");
+
+    ASSERT_EQ(errors.size(), 2U);
+
+    for (const auto& error : errors) {
+        ASSERT_TRUE(error.message.find("only allowed inside a namespace") == std::string::npos);
+    }
+}
+
+static void test_recovery_inside_match_arms() {
+    const auto source = std::string{"match x {\n"
+                                    "    case + { }\n"
+                                    "    case 2 { }\n"
+                                    "    else { }\n"
+                                    "}\n"};
+
+    ASSERT_EQ(parse_errors(source).size(), 1U);
+
+    const auto program = parse(source);
+    const auto& match = static_cast<const MatchStatement&>(*program.statements.at(0));
+
+    ASSERT_EQ(match.arms.size(), 2U);
+}
+
+// The (start) lines of the syntax errors in `source`, comma-separated in
+// emission order, e.g. "7,11".
+static std::string error_lines(const std::string& source) {
+    std::string lines;
+
+    for (const auto& error : parse_errors(source)) {
+        if (!lines.empty()) {
+            lines += ',';
+        }
+
+        lines += std::to_string(error.primary_location().line);
+    }
+
+    return lines;
+}
+
+static void test_recovery_skips_rest_of_multiline_call() {
+    // Regression: block recovery started at depth 0 although the failing
+    // statement had already opened `add(`, so `4)` was re-parsed as new
+    // statements ("unexpected ')'").  Only the real errors remain: the `+*`
+    // and the incomplete `"x" +` (reported at the closing '}').
+    const auto source = std::string{"function integer add(integer x, integer y, integer z) {\n"
+                                    "    return x + y + z\n"
+                                    "}\n"
+                                    "@main\n"
+                                    "function void main() {\n"
+                                    "    integer a = add(1,\n"
+                                    "        2 +* 3,\n"
+                                    "        4)\n"
+                                    "    print(\"after\")\n"
+                                    "    integer b = \"x\" +\n"
+                                    "}\n"};
+
+    ASSERT_EQ(error_lines(source), std::string{"7,11"});
+
+    const auto program = parse(source);
+    const auto& main_body =
+        static_cast<const FunctionDeclaration&>(*program.declarations.at(1)).body;
+
+    ASSERT_EQ(program.declarations.size(), 2U);
+    ASSERT_EQ(main_body.size(), 1U);
+    ASSERT_EQ(main_body[0]->kind, StatementKind::Expression);
+}
+
+static void test_recovery_skips_rest_of_record_literal() {
+    // Regression: the record literal's '}' was taken as the end of the
+    // function body, so the remaining statements and the real closing '}'
+    // cascaded into "unexpected token '}'".
+    const auto source = std::string{"record Point { integer x, integer y }\n"
+                                    "@main\n"
+                                    "function void main() {\n"
+                                    "    Point p = Point {\n"
+                                    "        x = 1 +* 2,\n"
+                                    "        y = 3\n"
+                                    "    }\n"
+                                    "    print(p)\n"
+                                    "    integer q = 5\n"
+                                    "    print(q)\n"
+                                    "}\n"};
+
+    ASSERT_EQ(error_lines(source), std::string{"5"});
+
+    const auto program = parse(source);
+
+    ASSERT_EQ(program.declarations.size(), 2U);
+    ASSERT_TRUE(program.statements.empty());
+    ASSERT_EQ(static_cast<const FunctionDeclaration&>(*program.declarations.at(1)).body.size(), 3U);
+}
+
+static void test_recovery_skips_rest_of_array_literal() {
+    // Regression: `3,` and the closing ']' of the array literal raised errors.
+    const auto source = std::string{"@main\n"
+                                    "function void main() {\n"
+                                    "    array<integer> xs = [\n"
+                                    "        1 +* 2,\n"
+                                    "        3,\n"
+                                    "        4\n"
+                                    "    ]\n"
+                                    "    print(xs)\n"
+                                    "}\n"};
+
+    ASSERT_EQ(error_lines(source), std::string{"4"});
+    ASSERT_EQ(first_function(parse(source)).body.size(), 1U);
+}
+
+static void test_recovery_skips_rest_of_nested_open_constructs() {
+    // An optional index `?[`, a call inside an array and a record literal
+    // inside a call are all skipped to their closers.  A closer that ends an
+    // inner construct the parser had already recovered (the missing ')' of
+    // `g(1` closed by ']') does not leave that construct counted as open.
+    const auto source = std::string{"function void f() {\n"
+                                    "    integer a = xs?[\n"
+                                    "        1 +* 2\n"
+                                    "    ]\n"
+                                    "    integer b = h([g(1, 2],\n"
+                                    "        Point {\n"
+                                    "            x = +*,\n"
+                                    "        })\n"
+                                    "    integer c = [g(1] +* 2\n"
+                                    "    print(c)\n"
+                                    "}\n"};
+
+    // Line 5 reports the missing ')' of `g(1, 2` and line 9 both the missing
+    // ')' of `g(1` and the `+*`; nothing is reported for a closer.
+    ASSERT_EQ(error_lines(source), std::string{"3,5,7,9,9"});
+
+    const auto program = parse(source);
+    const auto& body = first_function(program).body;
+
+    ASSERT_EQ(body.size(), 1U);
+    ASSERT_EQ(body[0]->kind, StatementKind::Expression);
+}
+
+static void test_recovery_unclosed_construct_stops_at_block_end() {
+    // A construct that is never closed must not swallow the block's '}' (or
+    // the following function), and recovery still terminates at end of file.
+    const auto source = std::string{"function void f() {\n"
+                                    "    integer a = add(1 +* 2\n"
+                                    "    print(1)\n"
+                                    "}\n"
+                                    "function void g() {\n"
+                                    "}\n"};
+
+    ASSERT_EQ(error_lines(source), std::string{"2"});
+    ASSERT_EQ(parse(source).declarations.size(), 2U);
+
+    ASSERT_FALSE(
+        parse_errors("function void f() {\n    integer a = add(1,\n        2 +* 3,\n").empty());
+    ASSERT_FALSE(parse_errors("function void f() {\n    integer a = [\n        1 +* 2,\n").empty());
+}
+
+static void test_recovery_inside_choice_variants() {
+    const auto source = std::string{"choice Shape {\n"
+                                    "    Circle(number)\n"
+                                    "    Square(number side)\n"
+                                    "}\n"};
+
+    ASSERT_EQ(parse_errors(source).size(), 1U);
+
+    const auto program = parse(source);
+    const auto& choice = static_cast<const ChoiceDeclaration&>(*program.declarations.at(0));
+
+    ASSERT_EQ(choice.variants.size(), 1U);
+    ASSERT_EQ(choice.variants[0].name, std::string{"Square"});
+}
+
+static void test_annotation_before_non_function_message() {
+    // Regression: this check sat after parse_function_decl() and could never fire.
+    const auto errors = parse_errors("@main\nrecord X {\n    integer x\n}\n");
+
+    ASSERT_FALSE(errors.empty());
+    ASSERT_TRUE(errors[0].message.find("expected a function declaration after annotation") !=
+                std::string::npos);
+}
+
+static void test_try_without_handler_hint_uses_real_syntax() {
+    const auto errors = parse_errors("try {\n}\n");
+
+    ASSERT_FALSE(errors.empty());
+    ASSERT_TRUE(errors[0].hint.has_value());
+    ASSERT_TRUE(errors[0].hint->find("catch(err)") != std::string::npos);
+}
+
+static void test_syntax_error_span_starts_at_token() {
+    // Token locations mark one past the token; the diagnostic must cover the
+    // offending token itself so the caret points at its first character.
+    const auto errors = parse_errors("integer x = )");
+
+    ASSERT_FALSE(errors.empty());
+    ASSERT_EQ(errors[0].primary_location().column, 13);
+    ASSERT_EQ(errors[0].spans.at(0).end.column, 14);
+}
+
+static void test_comparison_with_uppercase_name_is_not_generic() {
+    // The generic-argument lookahead stops at tokens that cannot be in a type.
+    const auto program = parse("boolean r = MAX < x + 1\ninteger y = 2\n");
+
+    ASSERT_EQ(program.statements.size(), 2U);
+    ASSERT_EQ(as_binary(first_initializer(program)).op, TokenType::Less);
+}
+
 int main() {
     RUN(test_empty_program);
     RUN(test_variable_declaration);
@@ -1946,6 +2275,27 @@ int main() {
     RUN(test_pipe_chain_left_associative);
     RUN(test_mixed_pipe_error_pipe_left_associative);
     RUN(test_precedence_parentheses_override);
+
+    // Newline rule, member access, block-local recovery, diagnostics.
+    RUN(test_newline_paren_starts_new_statement);
+    RUN(test_newline_paren_after_call_or_index_starts_new_statement);
+    RUN(test_newline_bracket_starts_new_statement);
+    RUN(test_same_line_call_and_multiline_binary_still_continue);
+    RUN(test_nested_tuple_member_access);
+    RUN(test_field_name_must_be_name_token);
+    RUN(test_recovery_stays_inside_function_body);
+    RUN(test_recovery_stays_inside_namespace);
+    RUN(test_recovery_inside_match_arms);
+    RUN(test_recovery_skips_rest_of_multiline_call);
+    RUN(test_recovery_skips_rest_of_record_literal);
+    RUN(test_recovery_skips_rest_of_array_literal);
+    RUN(test_recovery_skips_rest_of_nested_open_constructs);
+    RUN(test_recovery_unclosed_construct_stops_at_block_end);
+    RUN(test_recovery_inside_choice_variants);
+    RUN(test_annotation_before_non_function_message);
+    RUN(test_try_without_handler_hint_uses_real_syntax);
+    RUN(test_syntax_error_span_starts_at_token);
+    RUN(test_comparison_with_uppercase_name_is_not_generic);
 
     return SUMMARY();
 }

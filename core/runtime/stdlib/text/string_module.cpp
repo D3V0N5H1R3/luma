@@ -129,12 +129,13 @@ enum class TrimSide {
     }
 }
 
-// Split `s` on runs of ASCII whitespace, emitting no empty tokens (leading,
-// trailing, and repeated whitespace are collapsed).  Shared by
-// String.split_whitespace / words / word_count.
-[[nodiscard]] std::vector<std::string> split_whitespace_impl(const std::string& s) {
-    std::vector<std::string> tokens{};
-
+// Visit each run of non-ASCII-whitespace in `s` (leading, trailing, and
+// repeated whitespace are collapsed, so no empty token is produced).  The
+// visitor receives each token as a string_view into `s`, so callers decide
+// whether to allocate — String.word_count only counts, and
+// String.split_whitespace / words check the array limit *before* allocating
+// each token rather than after materialising every one.
+template <typename Visitor> void for_each_whitespace_token(std::string_view s, Visitor&& visit) {
     std::size_t i{0};
     const std::size_t n = s.size();
 
@@ -150,11 +151,49 @@ enum class TrimSide {
         }
 
         if (i > start) {
-            tokens.push_back(s.substr(start, i - start));
+            visit(s.substr(start, i - start));
         }
     }
+}
 
-    return tokens;
+// Shared body for String.split_whitespace / words: build the token array,
+// enforcing max_array_size as each token is produced.
+[[nodiscard]] Value split_whitespace_impl(std::string_view s, std::string_view function_name,
+                                          SourceLocation loc) {
+    auto arr = std::make_shared<ArrayValue>();
+
+    for_each_whitespace_token(s, [&](std::string_view token) {
+        if (arr->elements->size() >= ResourceLimits::max_array_size) {
+            throw RuntimeError{
+                error_msg("String", function_name, "result exceeds maximum array size"), loc};
+        }
+
+        arr->elements->push_back(Value{std::string{token}});
+    });
+
+    return Value{std::move(arr)};
+}
+
+// Clamp a codepoint-derived byte offset to the string size.  utf8_byte_offset
+// trusts each lead byte's declared sequence length, so a string ending in a
+// truncated multi-byte sequence (e.g. String.from_bytes([97, 226])) can yield
+// an offset past size() — std::string::insert/erase/replace would then throw
+// std::out_of_range ("invalid string position").
+[[nodiscard]] std::size_t clamped_byte_offset(const std::string& s, std::int64_t codepoint_index) {
+    return std::min(utf8_byte_offset(s, codepoint_index), s.size());
+}
+
+// Throw when replacing `removed` bytes of `s` with `added` bytes would exceed
+// max_string_size.  Overflow-safe: `removed <= s.size()` and each operand is
+// at most max_string_size (strings are bounded at creation).
+void ensure_edit_within_limit(std::size_t base_size, std::size_t removed, std::size_t added,
+                              std::string_view function_name, SourceLocation loc) {
+    const auto kept = base_size - removed;
+
+    if (added > ResourceLimits::max_string_size - std::min(kept, ResourceLimits::max_string_size)) {
+        throw RuntimeError{error_msg("String", function_name, "result exceeds maximum string size"),
+                           loc, "the resulting string would be too large"};
+    }
 }
 
 // Validate a codepoint range [start, end) against a string of `cp_count`
@@ -217,7 +256,7 @@ std::string apply_padding(const std::string& input, const std::string& fill,
     // the concatenation is already the requested width — no trimming needed.
     auto fill_str = build_cycled_fill(fill, target_width - cp_len);
 
-    if (direction == PaddingDirection::start) {
+    if (direction == PaddingDirection::Start) {
         fill_str += input;
         return fill_str;
     }
@@ -384,54 +423,60 @@ void register_string_ns(const EnvPtr& env) {
 
         .func("contains", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          return Value{s.find(args[1].as_string()) != std::string::npos};
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& sub = expect_string(args[1], "String.contains", loc);
+
+                          return Value{s.find(sub) != std::string::npos};
                       })
 
         .func("equals_ignore_case", 2)
         .extract_body(expect_string,
-                      [](const auto& a, const Args& args, SourceLocation) -> Value {
-                          return Value{ascii_iequals(a, args[1].as_string())};
+                      [](const auto& a, const Args& args, SourceLocation loc) -> Value {
+                          return Value{ascii_iequals(
+                              a, expect_string(args[1], "String.equals_ignore_case", loc))};
                       })
 
         .func("contains_ignore_case", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          return Value{ascii_icontains(s, args[1].as_string())};
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          return Value{ascii_icontains(
+                              s, expect_string(args[1], "String.contains_ignore_case", loc))};
                       })
 
         .func("starts_with", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto& prefix = args[1].as_string();
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& prefix = expect_string(args[1], "String.starts_with", loc);
 
                           return Value{s.starts_with(prefix)};
                       })
 
         .func("ends_with", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto& suffix = args[1].as_string();
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& suffix = expect_string(args[1], "String.ends_with", loc);
 
                           return Value{s.ends_with(suffix)};
                       })
 
         .func("index_of", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          return find_index(s, args[1].as_string(), /*from_end=*/false);
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          return find_index(s, expect_string(args[1], "String.index_of", loc),
+                                            /*from_end=*/false);
                       })
 
         .func("last_index_of", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          return find_index(s, args[1].as_string(), /*from_end=*/true);
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          return find_index(s, expect_string(args[1], "String.last_index_of", loc),
+                                            /*from_end=*/true);
                       })
 
         .func("count", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto& sub = args[1].as_string();
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& sub = expect_string(args[1], "String.count", loc);
 
                           if (sub.empty()) {
                               return Value{std::int64_t{0}};
@@ -451,21 +496,25 @@ void register_string_ns(const EnvPtr& env) {
 
         .func("replace", 3)
         .extract_body(expect_string,
-                      [](const auto& self, const Args& args, SourceLocation) -> Value {
-                          auto s = self;
-
-                          const auto& from = args[1].as_string();
-                          const auto& to = args[2].as_string();
+                      [](const auto& self, const Args& args, SourceLocation loc) -> Value {
+                          const auto& from = expect_string(args[1], "String.replace", loc);
+                          const auto& to = expect_string(args[2], "String.replace", loc);
 
                           if (from.empty()) {
-                              return Value{std::move(s)};
+                              return Value{self};
                           }
 
-                          const auto pos = s.find(from);
+                          const auto pos = self.find(from);
 
-                          if (pos != std::string::npos) {
-                              s.replace(pos, from.size(), to);
+                          if (pos == std::string::npos) {
+                              return Value{self};
                           }
+
+                          ensure_edit_within_limit(self.size(), from.size(), to.size(), "replace",
+                                                   loc);
+
+                          auto s = self;
+                          s.replace(pos, from.size(), to);
 
                           return Value{std::move(s)};
                       })
@@ -473,8 +522,8 @@ void register_string_ns(const EnvPtr& env) {
         .func("replace_all", 3)
         .extract_body(expect_string,
                       [](const auto& self, const Args& args, SourceLocation loc) -> Value {
-                          const auto& from = args[1].as_string();
-                          const auto& to = args[2].as_string();
+                          const auto& from = expect_string(args[1], "String.replace_all", loc);
+                          const auto& to = expect_string(args[2], "String.replace_all", loc);
 
                           if (from.empty()) {
                               return Value{self};
@@ -520,11 +569,18 @@ void register_string_ns(const EnvPtr& env) {
         .func("pad_left", 3)
         .extract_body(expect_string,
                       [](const auto& self, const Args& args, SourceLocation loc) -> Value {
-                          (void)expect_string(args[2], "String.pad_left", loc);
+                          const auto raw_width = expect_integer(args[1], "String.pad_left", loc);
+                          const auto& fill = expect_string(args[2], "String.pad_left", loc);
 
-                          const auto width = static_cast<std::size_t>(
-                              expect_integer(args[1], "String.pad_left", loc));
-                          const auto& fill = args[2].as_string();
+                          // Check the sign before the size_t cast — a negative width
+                          // would otherwise wrap to a huge value and be misreported as
+                          // "width exceeds maximum" (matches String.center).
+                          if (raw_width < 0) {
+                              return make_failure_value(
+                                  error_msg("String", "pad_left", "width must not be negative"));
+                          }
+
+                          const auto width = static_cast<std::size_t>(raw_width);
 
                           if (fill.empty()) {
                               return make_success_value(Value{self});
@@ -536,17 +592,21 @@ void register_string_ns(const EnvPtr& env) {
                           }
 
                           return make_success_value(
-                              Value{apply_padding(self, fill, width, PaddingDirection::start)});
+                              Value{apply_padding(self, fill, width, PaddingDirection::Start)});
                       })
 
         .func("pad_right", 3)
         .extract_body(expect_string,
                       [](const auto& self, const Args& args, SourceLocation loc) -> Value {
-                          (void)expect_string(args[2], "String.pad_right", loc);
+                          const auto raw_width = expect_integer(args[1], "String.pad_right", loc);
+                          const auto& fill = expect_string(args[2], "String.pad_right", loc);
 
-                          const auto width = static_cast<std::size_t>(
-                              expect_integer(args[1], "String.pad_right", loc));
-                          const auto& fill = args[2].as_string();
+                          if (raw_width < 0) {
+                              return make_failure_value(
+                                  error_msg("String", "pad_right", "width must not be negative"));
+                          }
+
+                          const auto width = static_cast<std::size_t>(raw_width);
 
                           if (fill.empty()) {
                               return make_success_value(Value{self});
@@ -558,58 +618,38 @@ void register_string_ns(const EnvPtr& env) {
                           }
 
                           return make_success_value(
-                              Value{apply_padding(self, fill, width, PaddingDirection::end)});
+                              Value{apply_padding(self, fill, width, PaddingDirection::End)});
                       })
 
         .func("split_whitespace", 1)
         .extract_body(expect_string,
                       [](const auto& s, const Args&, SourceLocation loc) -> Value {
-                          auto arr = std::make_shared<ArrayValue>();
-
-                          for (auto& token : split_whitespace_impl(s)) {
-                              if (arr->elements->size() >= ResourceLimits::max_array_size) {
-                                  throw RuntimeError{error_msg("String", "split_whitespace",
-                                                               "result exceeds maximum array size"),
-                                                     loc};
-                              }
-
-                              arr->elements->push_back(Value{std::move(token)});
-                          }
-
-                          return Value{std::move(arr)};
+                          return split_whitespace_impl(s, "split_whitespace", loc);
                       })
 
         // String.words is an alias of String.split_whitespace.
         .func("words", 1)
         .extract_body(expect_string,
                       [](const auto& s, const Args&, SourceLocation loc) -> Value {
-                          auto arr = std::make_shared<ArrayValue>();
-
-                          for (auto& token : split_whitespace_impl(s)) {
-                              if (arr->elements->size() >= ResourceLimits::max_array_size) {
-                                  throw RuntimeError{error_msg("String", "words",
-                                                               "result exceeds maximum array size"),
-                                                     loc};
-                              }
-
-                              arr->elements->push_back(Value{std::move(token)});
-                          }
-
-                          return Value{std::move(arr)};
+                          return split_whitespace_impl(s, "words", loc);
                       })
 
         .func("word_count", 1)
         .extract_body(expect_string,
                       [](const auto& s, const Args&, SourceLocation) -> Value {
-                          return Value{static_cast<std::int64_t>(split_whitespace_impl(s).size())};
+                          // Count tokens without allocating any of them.
+                          std::int64_t count{0};
+
+                          for_each_whitespace_token(s, [&count](std::string_view) { ++count; });
+
+                          return Value{count};
                       })
 
         .func("insert", 3)
         .extract_body(expect_string,
                       [](const auto& s, const Args& args, SourceLocation loc) -> Value {
-                          (void)expect_string(args[2], "String.insert", loc);
-
                           const auto index = expect_integer(args[1], "String.insert", loc);
+                          const auto& text = expect_string(args[2], "String.insert", loc);
                           const auto cp_count = utf8_count(s);
 
                           if (index < 0 || index > cp_count) {
@@ -617,10 +657,12 @@ void register_string_ns(const EnvPtr& env) {
                                   index, static_cast<std::size_t>(cp_count)));
                           }
 
-                          const auto byte_pos = utf8_byte_offset(s, index);
+                          ensure_edit_within_limit(s.size(), 0, text.size(), "insert", loc);
+
+                          const auto byte_pos = clamped_byte_offset(s, index);
 
                           std::string result = s;
-                          result.insert(byte_pos, args[2].as_string());
+                          result.insert(byte_pos, text);
 
                           return make_success_value(Value{std::move(result)});
                       })
@@ -636,8 +678,8 @@ void register_string_ns(const EnvPtr& env) {
                               return make_failure_value(std::move(*err));
                           }
 
-                          const auto byte_start = utf8_byte_offset(s, start);
-                          const auto byte_end = utf8_byte_offset(s, end);
+                          const auto byte_start = clamped_byte_offset(s, start);
+                          const auto byte_end = clamped_byte_offset(s, end);
 
                           std::string result = s;
                           result.erase(byte_start, byte_end - byte_start);
@@ -648,7 +690,7 @@ void register_string_ns(const EnvPtr& env) {
         .func("replace_range", 4)
         .extract_body(expect_string,
                       [](const auto& s, const Args& args, SourceLocation loc) -> Value {
-                          (void)expect_string(args[3], "String.replace_range", loc);
+                          const auto& text = expect_string(args[3], "String.replace_range", loc);
 
                           const auto cp_count = utf8_count(s);
                           const auto start = expect_integer(args[1], "String.replace_range", loc);
@@ -658,29 +700,32 @@ void register_string_ns(const EnvPtr& env) {
                               return make_failure_value(std::move(*err));
                           }
 
-                          const auto byte_start = utf8_byte_offset(s, start);
-                          const auto byte_end = utf8_byte_offset(s, end);
+                          const auto byte_start = clamped_byte_offset(s, start);
+                          const auto byte_end = clamped_byte_offset(s, end);
+
+                          ensure_edit_within_limit(s.size(), byte_end - byte_start, text.size(),
+                                                   "replace_range", loc);
 
                           std::string result = s;
-                          result.replace(byte_start, byte_end - byte_start, args[3].as_string());
+                          result.replace(byte_start, byte_end - byte_start, text);
 
                           return make_success_value(Value{std::move(result)});
                       })
 
         .func("starts_with_any", 2)
-        .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
-                          const auto& prefixes =
-                              expect_array(args[1], "String.starts_with_any", loc);
+        .extract_body(
+            expect_string,
+            [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                const auto& prefixes = expect_array(args[1], "String.starts_with_any", loc);
 
-                          for (const auto& elem : *prefixes->elements) {
-                              if (s.starts_with(elem.as_string())) {
-                                  return Value{true};
-                              }
-                          }
+                for (const auto& elem : *prefixes->elements) {
+                    if (s.starts_with(expect_string(elem, "String.starts_with_any", loc))) {
+                        return Value{true};
+                    }
+                }
 
-                          return Value{false};
-                      })
+                return Value{false};
+            })
 
         .func("ends_with_any", 2)
         .extract_body(expect_string,
@@ -688,7 +733,7 @@ void register_string_ns(const EnvPtr& env) {
                           const auto& suffixes = expect_array(args[1], "String.ends_with_any", loc);
 
                           for (const auto& elem : *suffixes->elements) {
-                              if (s.ends_with(elem.as_string())) {
+                              if (s.ends_with(expect_string(elem, "String.ends_with_any", loc))) {
                                   return Value{true};
                               }
                           }

@@ -23,6 +23,7 @@
 #include "runtime/interpreter/value.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_error_messages.hpp"
+#include "runtime/vm/vm_types.hpp"
 
 namespace luma {
 
@@ -134,7 +135,13 @@ namespace luma {
     X(SetLocalPop,     op_set_local_pop)             \
     X(GetLocalReturn,  op_get_local_return)          \
     X(IntToNumber,     op_int_to_number)             \
+    X(WidenNumber,     op_widen_number)              \
     X(Clone,           op_clone)                    \
+    X(UniqueLocal,     op_unique_local)              \
+    X(UniqueUpvalue,   op_unique_upvalue)            \
+    X(UniqueGlobal,    op_unique_global)             \
+    X(GetFieldUnique,  op_get_field_unique)          \
+    X(IndexGetUnique,  op_index_get_unique)          \
     X(EndModule,       op_end_module)
 // clang-format on
 
@@ -326,21 +333,24 @@ void VM::op_modulo() {
 void VM::op_negate() {
     validate_stack_depth(1, "Negate");
     auto& top = *(stack_.top - 1);
-    handle_unary_numeric(top, safe_negate, [](double n) -> Value { return Value{-n}; }, "Negate");
+    handle_unary_numeric(
+        top, checked_negate, [](double n) -> Value { return Value{-n}; }, "Negate", "negation");
 }
 
 void VM::op_increment() {
     validate_stack_depth(1, "Increment");
     auto& top = *(stack_.top - 1);
     handle_unary_numeric(
-        top, safe_increment, [](double n) -> Value { return Value{n + 1.0}; }, "Increment");
+        top, checked_increment, [](double n) -> Value { return Value{n + 1.0}; }, "Increment",
+        "increment");
 }
 
 void VM::op_decrement() {
     validate_stack_depth(1, "Decrement");
     auto& top = *(stack_.top - 1);
     handle_unary_numeric(
-        top, safe_decrement, [](double n) -> Value { return Value{n - 1.0}; }, "Decrement");
+        top, checked_decrement, [](double n) -> Value { return Value{n - 1.0}; }, "Decrement",
+        "decrement");
 }
 
 // ─── Comparison ───────────────────────────────────────────────────────────────
@@ -587,7 +597,13 @@ void VM::op_tail_call() {
 
 void VM::complete_return(Value result, std::size_t callee_slot_offset) {
     stack_.frames.pop_back();
-    stack_.top = stack_.base + callee_slot_offset;
+    // Destroy the callee's slots (locals and temporaries) now, not when they
+    // are next overwritten — see VMStack::truncate_to.
+    stack_.truncate_to(callee_slot_offset);
+    // A try block in the returning frame that was left without Op::TryEnd
+    // (only possible in crafted bytecode) must not outlive its frame: its
+    // catch_ip points into the returned function's code.
+    exception_handler_.discard_frames_from(stack_.frames.size());
     if (stack_.frames.size() <= base_depth_) {
         dispatch_return_value_ = std::move(result);
     } else {
@@ -628,8 +644,20 @@ void VM::op_try_end() {
 }
 
 void VM::op_rethrow() {
-    auto error_msg = pop();
-    runtime_error(error_msg.is_string() ? error_msg.as_string() : error_msg.to_string());
+    auto error_value = pop();
+
+    // The cleanup handler is done: end its cancellation shield, if it had one
+    // (its error value sat in the slot just popped).
+    exception_handler_.end_cancel_shields_from(stack_.frames.size() - 1, stack_size());
+
+    // A cancellation that unwound into this `finally` keeps propagating as a
+    // cancellation, so task_scope and await still see a cancelled task rather
+    // than a failure.
+    if (is_cancellation_marker(error_value)) {
+        throw CancelledException{"task cancelled"};
+    }
+
+    runtime_error(error_value.is_string() ? error_value.as_string() : error_value.to_string());
 }
 
 // ─── Match ────────────────────────────────────────────────────────────────────
@@ -707,7 +735,8 @@ void VM::op_increment_local() {
     auto slot = read_u16();
     auto& val = get_local_slot(cf, slot);
     handle_unary_numeric(
-        val, safe_increment, [](double n) -> Value { return Value{n + 1.0}; }, "Increment");
+        val, checked_increment, [](double n) -> Value { return Value{n + 1.0}; }, "Increment",
+        "increment");
 }
 
 void VM::op_decrement_local() {
@@ -715,7 +744,8 @@ void VM::op_decrement_local() {
     auto slot = read_u16();
     auto& val = get_local_slot(cf, slot);
     handle_unary_numeric(
-        val, safe_decrement, [](double n) -> Value { return Value{n - 1.0}; }, "Decrement");
+        val, checked_decrement, [](double n) -> Value { return Value{n - 1.0}; }, "Decrement",
+        "decrement");
 }
 
 void VM::op_set_local_pop() {
@@ -741,10 +771,58 @@ void VM::op_int_to_number() {
     }
 }
 
+void VM::op_widen_number() {
+    const auto name_idx = read_u16();
+    const auto& type_pattern = checked_name(name_idx);
+    validate_stack_depth(1, "WidenNumber");
+    auto& top = *(stack_.top - 1);
+    top = NumericWidener::widen(std::move(top), type_pattern);
+}
+
 void VM::op_clone() {
     validate_stack_depth(1, "Clone");
     auto& top = *(stack_.top - 1);
     top = top.deep_copy();
+}
+
+// ─── Copy-on-write for in-place mutation ──────────────────────────────────────
+// Each op makes the storage of the root variable of an assignment target
+// exclusive before the write path reads it, so the write cannot reach a value
+// another variable still holds (see Value::make_exclusive).
+
+void VM::op_unique_local() {
+    auto& cf = stack_.frames.back();
+    auto slot = read_u16();
+    get_local_slot(cf, slot).make_exclusive();
+}
+
+void VM::op_unique_global() {
+    auto name_idx = read_u16();
+    const auto& name = checked_name(name_idx);
+
+    // UniqueGlobal precedes an in-place write to the global (`g[i] = v`,
+    // `g.field = v`), so it is a global write too.
+    reject_global_write_in_task(name);
+    ++globals_version_; // Invalidates the cached task snapshot.
+
+    Binding*& slot = global_slot(name_idx);
+    if (slot == nullptr) {
+        slot = lookup_global_cache(name);
+    }
+
+    // A missing global is reported by the GetGlobal that follows.
+    if (slot != nullptr) {
+        slot->value.make_exclusive();
+        slot->write_version = globals_version_; // Only this binding is re-copied.
+    }
+}
+
+void VM::op_get_field_unique() {
+    handle_get_field_unique();
+}
+
+void VM::op_index_get_unique() {
+    handle_index_get_unique();
 }
 
 // ─── Module ───────────────────────────────────────────────────────────────────

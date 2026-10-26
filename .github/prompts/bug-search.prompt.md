@@ -28,7 +28,7 @@ Before judging what looks wrong, learn the behaviour the code is meant to have, 
 
 ## 2 — Scope and Ground Rules
 
-- **Default scope** is the whole interpreter: `core/analysis/` (lexer, parser, resolver, types, linter, diagnostics, source) and `core/runtime/` (include, compiler, optimizer, vm, interpreter, stdlib, concurrency, repl, cli), plus the shared utilities in `core/common/`. If the invocation names a directory or file, restrict the hunt to it and its immediate collaborators.
+- **Default scope** is the whole interpreter: `core/analysis/` (lexer, parser, types, linter, diagnostics, source, pipeline) and `core/runtime/` (include, compiler, optimizer, vm, interpreter, stdlib, concurrency, repl, cli), plus the shared utilities in `core/common/`. If the invocation names a directory or file, restrict the hunt to it and its immediate collaborators.
 - **In scope, even when it surfaces elsewhere:** the language server and debugger reuse this front-end, so a defect that first shows up in the LSP or DAP but roots in the lexer, parser, type checker, compiler, VM, or a `Value` *is* this prompt's territory.
 - **Out of scope:** the language server's own code (`language-server/`), the debugger's own code (`debugger/`), the editor extensions (`extensions/`), vendored code (`external/`), generated code, and build outputs (`build/`, `build-fuzz/`). Point findings there at the matching hunt.
 - **Verify every location.** Read each file you cite — never report a defect or line range you have not confirmed in the source. A hallucinated location wastes the fixer's time.
@@ -41,7 +41,7 @@ Hunt for these defect classes. The pipeline-phase list mirrors [bug-fix.prompt.m
 1. **Pipeline-phase correctness.** Trace a construct through the pipeline and find the phase that mishandles it:
     - **Lexer** (`core/analysis/lexer/`) — wrong tokenisation, especially string interpolation (`StringStart` / `InterpolationStart` / `StringEnd` sequences), numeric and escape literals, and multi-byte UTF-8 column widths.
     - **Parser** (`core/analysis/parser/`) — malformed AST, or a **recursive branch missing its `make_recursion_guard`** (every recursing branch needs one; recursing lookahead helpers need an explicit depth bound, e.g. `skip_type_at`). Missing guards surface under fuzzing as native stack overflows.
-    - **Include resolver** (`core/runtime/include/`) — wrong relative resolution, missing deduplication, or a bypassed security check (circular include, `..` traversal, symlink).
+    - **Include resolver** (`core/runtime/include/`) — wrong relative resolution, missing deduplication, or a bypassed security check (`.`/`..` traversal, symlink, absolute path from unanchored input, containment that fails open).
     - **Type checker** (`core/analysis/types/`) — a wrong or missing type error. It collects `vector<Diagnostic>` and never throws, so a phase here that throws or drops a diagnostic is suspect.
     - **Linter** (`core/analysis/linter/`) — a false-positive or false-negative warning.
     - **Compiler** (`core/runtime/compiler/`) — wrong bytecode or variable→slot resolution. In particular the **value-block scratch-slot invariant**: any path that leaves operand-stack temporaries live *before* compiling a locals-declaring sub-expression (a `match`/`if` used as a value, a `container[index] = …` target, prior call args, a binary op's left operand, dict keys, pipe stages, interpolation parts) must bracket it with `reserve_scratch_slots` / `release_scratch_slots`, or `GetLocal`/`SetLocal` land on the wrong stack slots and corrupt state.

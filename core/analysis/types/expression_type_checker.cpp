@@ -1,6 +1,9 @@
 #include "analysis/types/expression_type_checker.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <format>
+#include <ranges>
 #include <string_view>
 #include <utility>
 
@@ -17,6 +20,10 @@
 namespace luma {
 
 ExpressionTypeChecker::ExpressionTypeChecker(TypeCheckingServices& tc) : tc_{tc} {}
+
+void ExpressionTypeChecker::reset_pass_state() {
+    spawn_result_types_.clear();
+}
 
 void ExpressionTypeChecker::emit_err(std::string_view message, const SourceLocation& loc,
                                      std::string_view hint, DiagnosticCode code) {
@@ -38,9 +45,7 @@ TypeInfo ExpressionTypeChecker::infer_expression_type(const Expression& expr) {
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
-    const ScopeGuard guard{[this] {
-        --expression_depth_;
-    }};
+    const ScopeGuard guard{[this] { --expression_depth_; }};
 
     return dispatch_expr(expr);
 }
@@ -96,15 +101,24 @@ TypeInfo ExpressionTypeChecker::visit_spawn(const SpawnExpression& node) {
 
     const auto inner = infer_expression_type(*node.call);
 
+    // Only an enclosing task_scope reads the recorded type; a stray spawn
+    // (already an error) must not leave a pointer behind.
+    if (tc_.context().task_scope_depth > 0) {
+        spawn_result_types_.emplace_back(&node, inner);
+    }
+
     return TypeInfo::make_task(inner);
 }
 
 TypeInfo ExpressionTypeChecker::visit_task_scope(const TaskScopeExpression& node) {
     ++tc_.context().task_scope_depth;
 
-    // Balance the task-scope-depth counter on every exit path.
-    const ScopeGuard task_scope_depth_guard{[this] {
+    // Balance the task-scope-depth counter and drop this scope's recorded
+    // spawn types on every exit path.
+    const auto spawn_types_mark = spawn_result_types_.size();
+    const ScopeGuard task_scope_depth_guard{[this, spawn_types_mark] {
         --tc_.context().task_scope_depth;
+        spawn_result_types_.resize(spawn_types_mark);
     }};
 
     TypeInfo element_type = TypeInfo::make(TypeInfo::Kind::Unknown);
@@ -137,7 +151,17 @@ TypeInfo ExpressionTypeChecker::visit_task_scope(const TaskScopeExpression& node
         }
 
         const auto& spawn = static_cast<const SpawnExpression&>(*expr_stmt.expression);
-        const auto inner = infer_expression_type(*spawn.call);
+        const auto own_spawns = std::ranges::subrange(
+            spawn_result_types_.begin() + static_cast<std::ptrdiff_t>(spawn_types_mark),
+            spawn_result_types_.end());
+        const auto recorded = std::ranges::find(
+            own_spawns, &spawn, &std::pair<const SpawnExpression*, TypeInfo>::first);
+
+        if (recorded == own_spawns.end()) {
+            continue;
+        }
+
+        const auto& inner = recorded->second;
 
         if (!have_element_type) {
             element_type = inner;

@@ -10,16 +10,15 @@
 #include "analysis/lexer/token.hpp"
 #include "analysis/linter/linter.hpp"
 #include "analysis/parser/parser.hpp"
-#include "analysis/resolver/resolver.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "fuzz_harness.hpp"
 
 // Front-end pipeline-stage helpers shared by every fuzz target.
 //
-// These wrappers depend only on luma_analysis (lexer → parser → resolver →
-// type checker → linter), so the analysis-only targets can include this
-// header without pulling in any runtime/VM headers.  Compile/optimise/execute
-// helpers live in fuzz_pipeline.hpp.
+// These wrappers depend only on luma_analysis (lexer → parser → type checker →
+// linter), so the analysis-only targets can include this header without
+// pulling in any runtime/VM headers.  Compile/optimise/execute helpers live in
+// fuzz_pipeline.hpp.
 
 namespace luma::fuzz {
 
@@ -69,13 +68,7 @@ struct ParseResult {
     return ParseResult{std::move(program), parser.get_errors().empty()};
 }
 
-// Stage 3 — resolve names in place.  Returns the resolver diagnostics.
-[[nodiscard]] inline std::vector<Diagnostic> resolve(Program& program) {
-    NameResolver resolver;
-    return resolver.resolve(program);
-}
-
-// Stage 4 — type-check.  Returns the type diagnostics and exercises the
+// Stage 3 — type-check.  Returns the type diagnostics and exercises the
 // warning accessor as a side effect.
 [[nodiscard]] inline std::vector<Diagnostic> type_check(Program& program) {
     TypeChecker checker;

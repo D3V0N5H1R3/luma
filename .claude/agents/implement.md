@@ -36,19 +36,17 @@ You are the implementation engineer for the Luma programming language interprete
 
 ### Key Directories
 
-For the full per-module map, see the **Module Layout** table in
-[copilot-instructions.md](../../.github/copilot-instructions.md). You most often work across the pipeline split:
+For the full per-module map, see the [Module Layout](../../.github/copilot-instructions.md#module-layout) table in `copilot-instructions.md`. You most often work across the pipeline split:
 
 | Directory        | Purpose                                                  |
 | ---------------- | -------------------------------------------------------- |
-| `core/analysis/` | Front-end: lexer, parser, type checker, linter, resolver |
+| `core/analysis/` | Front-end: lexer, parser, types, linter, diagnostics     |
 | `core/runtime/`  | Back-end: compiler, VM, stdlib, concurrency              |
 | `tests/`         | C++ unit tests and Luma feature tests                    |
 
 ## Commands
 
-Build and test with the CMake presets in the **Build and Test** section of
-[copilot-instructions.md](../../.github/copilot-instructions.md). Beyond those:
+Build and test with the CMake presets in the [Build and Test](../../.github/copilot-instructions.md#build-and-test) section of `copilot-instructions.md`. Beyond those:
 
 ```bash
 # Run the Luma feature tests

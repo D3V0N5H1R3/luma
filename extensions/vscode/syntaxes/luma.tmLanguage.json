@@ -98,6 +98,10 @@
                     "match": "\\b0[xX][0-9a-fA-F]+"
                 },
                 {
+                    "name": "constant.numeric.octal.luma",
+                    "match": "\\b0[oO][0-7]+"
+                },
+                {
                     "name": "constant.numeric.binary.luma",
                     "match": "\\b0[bB][01]+"
                 },

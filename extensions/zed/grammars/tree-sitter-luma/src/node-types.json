@@ -3046,6 +3046,10 @@
         {
           "type": "integer_literal",
           "named": true
+        },
+        {
+          "type": "octal_literal",
+          "named": true
         }
       ]
     }
@@ -5708,6 +5712,10 @@
   {
     "type": "number",
     "named": false
+  },
+  {
+    "type": "octal_literal",
+    "named": true
   },
   {
     "type": "optional",

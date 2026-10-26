@@ -1,10 +1,22 @@
 cmake_minimum_required(VERSION 3.21)
 
+# CMAKE_CURRENT_* (not CMAKE_SOURCE_DIR) so the check targets this project even
+# when it is pulled into a super-build via add_subdirectory().
+if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_CURRENT_BINARY_DIR)
+    message(FATAL_ERROR
+        "In-source builds are not supported. Remove CMakeCache.txt and CMakeFiles/ "
+        "from the source root, then configure out of source, e.g. `cmake --preset default`.")
+endif()
+
 # Single source of truth for the project version: the top-level VERSION file.
 # The value flows into project(), the generated common/version.hpp, the install
 # package version, and CPack metadata.
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LUMA_VERSION)
 string(STRIP "${LUMA_VERSION}" LUMA_VERSION)
+
+# Re-run configure when VERSION changes so version.hpp and package metadata never go stale.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
 
 project(luma VERSION ${LUMA_VERSION} LANGUAGES CXX C)
 
@@ -60,6 +72,10 @@ option(LUMA_FEATURE_LTO
     "Enable link-time optimisation for Release builds" OFF)
 set(LUMA_DISABLE_LTO_TARGETS "" CACHE STRING
     "Semicolon-separated list of targets to exclude from LTO")
+set(LUMA_FEATURE_TEST_TIMEOUT 30 CACHE STRING
+    "Timeout in seconds for each Luma feature test (LUMA_BUILD_TESTS)")
+set(LUMA_FUZZ_QUICK_TIME 10 CACHE STRING
+    "Seconds each fuzz *_quick CTest entry runs (LUMA_BUILD_FUZZ)")
 
 # ─────────── Target naming convention ───────────
 #   Executables:  luma, luma_lsp, luma_dap
@@ -108,7 +124,8 @@ message(STATUS "")
 # luma_analysis  →  lexer, parser, type_checker, linter, resolver, pipeline,
 #                   diagnostics, source, errors, ast, stdlib_catalog
 # luma_core      →  luma_analysis + compiler, vm, interpreter, stdlib,
-#                   cli, repl, include, concurrency, stdlib_* OBJECT libs
+#                   cli, repl, include, concurrency, stdlib_* OBJECT libs,
+#                   luma_tls (mbedtls_lib + LUMA_HAS_TLS), miniz_lib
 # luma_lsp_lib   →  luma_analysis + luma_shared (json, protocol)
 # luma_dap_lib   →  luma_core + luma_shared (json, protocol)
 # luma_shared    →  json, protocol transport (standalone OBJECT library)
@@ -164,6 +181,7 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 set(LUMA_CMAKE_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/luma")
+set(LUMA_INSTALL_EXAMPLES_DIR "${CMAKE_INSTALL_DATADIR}/luma/examples")
 
 install(TARGETS luma
     EXPORT LumaTargets
@@ -194,6 +212,7 @@ configure_package_config_file(
     cmake/LumaConfig.cmake.in
     "${CMAKE_CURRENT_BINARY_DIR}/LumaConfig.cmake"
     INSTALL_DESTINATION ${LUMA_CMAKE_INSTALL_DIR}
+    PATH_VARS LUMA_INSTALL_EXAMPLES_DIR
 )
 
 write_basic_package_version_file(
@@ -209,24 +228,14 @@ install(FILES
     COMPONENT Development
 )
 
-# Install public-facing headers for downstream C++ consumers.
-# Note: core/common/ headers are intentionally not installed. They are internal
-# utilities (base64, string helpers, hashing, etc.) used only within the Luma
-# build. The public API surface is limited to the types, AST nodes, and
-# interpreter forward declarations listed below.
-install(DIRECTORY core/analysis/types/ DESTINATION include/luma/analysis/types
-    COMPONENT Development
-    FILES_MATCHING PATTERN "*.hpp")
-install(DIRECTORY core/runtime/interpreter/ DESTINATION include/luma/runtime/interpreter
-    COMPONENT Development
-    FILES_MATCHING PATTERN "*fwd.hpp")
-install(DIRECTORY core/analysis/ast/ DESTINATION include/luma/analysis/ast
-    COMPONENT Development
-    FILES_MATCHING PATTERN "*.hpp")
+# No C++ headers are installed: Luma ships executables only and exports no
+# library to link against, and the internal headers are not self-contained
+# (they reach into core/common, lexer, source, …), so installing a subset would
+# hand downstream consumers headers that cannot compile.
 
 # Install example programs.
 install(DIRECTORY examples/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/luma/examples
+    DESTINATION ${LUMA_INSTALL_EXAMPLES_DIR}
     COMPONENT Examples
     FILES_MATCHING PATTERN "*.luma"
 )
@@ -236,7 +245,6 @@ install(FILES README.md LICENSE
     DESTINATION ${CMAKE_INSTALL_DOCDIR}
     COMPONENT Documentation
 )
-
 
 # ─────────── Convenience targets for code quality tools ───────────
 # Defines the format and tidy targets when clang-format / clang-tidy are found.

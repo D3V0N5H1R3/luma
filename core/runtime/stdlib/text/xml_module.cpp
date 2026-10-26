@@ -421,7 +421,7 @@ void register_xml_ns(const EnvPtr& env) {
     ModuleBuilder{"Xml", env}
         .func("element", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& tag = args[0].as_string();
+            const auto& tag = expect_string(args[0], "Xml.element", loc);
             validate_xml_name(tag, "Xml.element", loc);
 
             auto node = std::make_shared<XmlValue>();
@@ -434,8 +434,8 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_xml(args[0], "Xml.set_attribute", loc);
 
-            const auto& name = args[1].as_string();
-            const auto& value = args[2].as_string();
+            const auto& name = expect_string(args[1], "Xml.set_attribute", loc);
+            const auto& value = expect_string(args[2], "Xml.set_attribute", loc);
 
             validate_xml_name(name, "Xml.set_attribute", loc);
 
@@ -455,7 +455,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_xml(args[0], "Xml.remove_attribute", loc);
 
-            const auto& name = args[1].as_string();
+            const auto& name = expect_string(args[1], "Xml.remove_attribute", loc);
 
             return modify_xml_clone(src, [&name](XmlValue& node) {
                 std::erase_if(node.attributes,
@@ -466,7 +466,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_xml(args[0], "Xml.set_text", loc);
 
-            auto content = args[1].as_string();
+            auto content = expect_string(args[1], "Xml.set_text", loc);
 
             return modify_xml_clone(src, [&content](XmlValue& node) {
                 // Remove existing text children and add new one.
@@ -485,7 +485,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_xml(args[0], "Xml.set_cdata", loc);
 
-            auto content = args[1].as_string();
+            auto content = expect_string(args[1], "Xml.set_cdata", loc);
 
             return modify_xml_clone(src, [&content](XmlValue& node) {
                 // Remove existing CDATA children.
@@ -513,7 +513,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_xml(args[0], "Xml.add_comment", loc);
 
-            auto content = args[1].as_string();
+            auto content = expect_string(args[1], "Xml.add_comment", loc);
 
             return modify_xml_clone(src, [&content](XmlValue& node) {
                 auto comment = std::make_shared<XmlValue>();
@@ -544,7 +544,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.attribute", loc);
 
-            const auto& name = args[1].as_string();
+            const auto& name = expect_string(args[1], "Xml.attribute", loc);
             auto value = xml_detail::find_attribute(*node, name);
 
             if (value) {
@@ -610,7 +610,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.has_attribute", loc);
 
-            const auto& name = args[1].as_string();
+            const auto& name = expect_string(args[1], "Xml.has_attribute", loc);
 
             return Value{xml_detail::has_attribute(*node, name)};
         })
@@ -662,16 +662,16 @@ void register_xml_ns(const EnvPtr& env) {
         })
         .func("from_dictionary", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_dict(args[1], "Xml.from_dictionary", loc);
+            const auto& entries = expect_dict(args[1], "Xml.from_dictionary", loc);
 
-            const auto& root_tag = args[0].as_string();
+            const auto& root_tag = expect_string(args[0], "Xml.from_dictionary", loc);
             validate_xml_name(root_tag, "Xml.from_dictionary", loc);
 
             auto root = std::make_shared<XmlValue>();
             root->node_type = XmlValue::NodeType::Element;
             root->tag_or_content = root_tag;
 
-            for (const auto& [k, v] : args[1].as_dictionary()->entries) {
+            for (const auto& [k, v] : entries->entries) {
                 validate_xml_name(k, "Xml.from_dictionary", loc);
 
                 auto child = std::make_shared<XmlValue>();
@@ -693,7 +693,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_xml(args[0], "Xml.set_tag", loc);
 
-            auto tag = args[1].as_string();
+            auto tag = expect_string(args[1], "Xml.set_tag", loc);
 
             validate_xml_name(tag, "Xml.set_tag", loc);
 
@@ -703,7 +703,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.children_by_tag", loc);
 
-            const auto& tag = args[1].as_string();
+            const auto& tag = expect_string(args[1], "Xml.children_by_tag", loc);
             auto matches = xml_detail::children_by_tag(*node, tag);
             auto arr = std::make_shared<ArrayValue>();
 
@@ -717,7 +717,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.has_child", loc);
 
-            const auto& tag = args[1].as_string();
+            const auto& tag = expect_string(args[1], "Xml.has_child", loc);
 
             return Value{xml_detail::any_child_with_tag(*node, tag)};
         })
@@ -725,7 +725,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.find_descendant", loc);
 
-            const auto& tag = args[1].as_string();
+            const auto& tag = expect_string(args[1], "Xml.find_descendant", loc);
             auto found = find_descendant_element(*node, tag, 0, loc);
 
             if (!found) {
@@ -740,7 +740,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.find_all_descendants", loc);
 
-            const auto& tag = args[1].as_string();
+            const auto& tag = expect_string(args[1], "Xml.find_all_descendants", loc);
             std::vector<std::shared_ptr<XmlValue>> results;
 
             collect_descendant_elements(*node, tag, results, 0, loc);
@@ -758,7 +758,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.get_path", loc);
 
-            const auto& path = args[1].as_string();
+            const auto& path = expect_string(args[1], "Xml.get_path", loc);
             std::string error;
             auto result = navigate_xml_get_path(node, path, error);
 
@@ -773,7 +773,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_xml(args[0], "Xml.remove_child", loc);
 
-            const auto index = args[1].as_integer();
+            const auto index = expect_integer(args[1], "Xml.remove_child", loc);
             const auto count = element_child_count(*src);
 
             if (index < 0 || index >= count) {
@@ -803,7 +803,7 @@ void register_xml_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_xml(args[0], "Xml.replace_child", loc);
 
-            const auto index = args[1].as_integer();
+            const auto index = expect_integer(args[1], "Xml.replace_child", loc);
             const auto count = element_child_count(*src);
 
             if (index < 0 || index >= count) {

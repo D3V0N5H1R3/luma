@@ -589,7 +589,7 @@ LUMA_TEST(math_interval_construct_and_contains) {
     ASSERT_RESULT_SUCCESS(v);
 
     const auto& rec = v.as_result()->owned_inner->as_record();
-    ASSERT_EQ(rec->type_name, std::string{"Interval"});
+    ASSERT_EQ(rec->type_name, std::string{"Math.Interval"});
     ASSERT_NEAR(rec->find_field("minimum")->as_number(), 1.0, 1e-9);
     ASSERT_NEAR(rec->find_field("maximum")->as_number(), 5.0, 1e-9);
 

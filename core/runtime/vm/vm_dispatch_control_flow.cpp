@@ -105,6 +105,20 @@ void VM::handle_set_upvalue() {
     }
 }
 
+// Copy-on-write root for an upvalue (see VM::op_unique_local).
+void VM::op_unique_upvalue() {
+    auto& cf = stack_.frames.back();
+    auto index = read_u16();
+
+    validate_upvalue_index(cf, index);
+
+    if (auto* cell = get_upvalue_cell(*cf.closure, index)) {
+        cell->make_exclusive();
+    } else {
+        cf.closure->upvalues[index].make_exclusive();
+    }
+}
+
 void VM::handle_get_global() {
     auto name_idx = read_u16();
     const auto& name = checked_name(name_idx); // bounds-checks name_idx (security-critical)
@@ -119,14 +133,52 @@ void VM::handle_get_global() {
 
     if (slot != nullptr) [[likely]] {
         push(slot->value);
-    } else {
+    } else if (auto hint = global_env_->sandbox_denial_hint(name)) {
+        runtime_error(SandboxPolicy::access_denied_message(name), *hint);
+    } else if (!push_global_field_path(name)) {
         runtime_error(vm_errors::undefined_variable(name), vm_errors::hint_check_variable_spelling);
+    }
+}
+
+bool VM::push_global_field_path(std::string_view qualified_name) {
+    // The compiler turns `a.b` into one qualified GetGlobal whenever `a` is not
+    // a local, since it cannot tell a module member (Math.pi) from a field of a
+    // global variable.  The REPL's top-level variables are globals, so a miss
+    // falls back to reading the fields of global `a`.
+    const auto dot = qualified_name.find('.');
+
+    if (dot == std::string_view::npos) {
+        return false;
+    }
+
+    const auto* root = lookup_global_cache(qualified_name.substr(0, dot));
+
+    if (root == nullptr) {
+        return false;
+    }
+
+    push(root->value);
+
+    auto fields = qualified_name.substr(dot + 1);
+
+    while (true) {
+        const auto next = fields.find('.');
+        push_field(fields.substr(0, next));
+
+        if (next == std::string_view::npos) {
+            return true;
+        }
+
+        fields = fields.substr(next + 1);
     }
 }
 
 void VM::handle_set_global() {
     auto name_idx = read_u16();
     const auto& name = checked_name(name_idx);
+
+    reject_global_write_in_task(name);
+    ++globals_version_; // Invalidates the cached task snapshot.
 
     Binding*& slot = global_slot(name_idx);
     if (slot == nullptr) {
@@ -140,6 +192,7 @@ void VM::handle_set_global() {
         }
 
         slot->value = peek();
+        slot->write_version = globals_version_; // Only this binding is re-copied.
     } else {
         // First definition — goes through the Environment to insert the
         // binding, then we cache the new entry in both the string-keyed and
@@ -148,6 +201,7 @@ void VM::handle_set_global() {
         auto* new_binding = global_env_->find_binding(name);
 
         if (new_binding != nullptr) {
+            new_binding->write_version = globals_version_;
             global_cache_.insert_or_update(name, new_binding);
             slot = new_binding;
         }
@@ -167,6 +221,8 @@ void VM::handle_loop(const std::uint8_t* code_start) {
         runtime_error(vm_errors::loop_target_before_start);
     }
     cf.ip -= offset;
+    // Loop back-edge: a cooperative cancellation point for spawned tasks.
+    check_cancellation();
     if (++loop_iterations_ > ResourceLimits::max_while_iterations) [[unlikely]] {
         loop_iterations_ = 0;
         runtime_error(
@@ -336,6 +392,18 @@ void VM::handle_tail_call(const std::uint8_t*& code_start, const std::uint8_t*& 
     if (callee.is_function() && (callee.as_function()->compiled != nullptr)) {
         const auto* compiled = callee.as_function()->compiled;
 
+        // A tail call is a call: honour cancellation here too, or a cancelled
+        // task stuck in tail recursion would never observe it.
+        check_cancellation();
+
+        // Mirror call_function(): a missing required argument (reachable from
+        // the REPL, which skips type checking, or crafted bytecode) must fail
+        // instead of silently running as `none`.
+        if (arg_count < compiled->required_arity) [[unlikely]] {
+            runtime_error(
+                vm_errors::missing_required_arguments(compiled->required_arity, arg_count));
+        }
+
         if (arg_count < compiled->arity) {
             for (int i = arg_count; i < compiled->arity; ++i) {
                 push(Value{});
@@ -354,11 +422,25 @@ void VM::handle_tail_call(const std::uint8_t*& code_start, const std::uint8_t*& 
         const auto count = static_cast<std::size_t>(arg_count);
         const auto src_base = stack_size() - count;
 
+        // Move the arguments down over the old frame's slots (src >= dest, so
+        // ascending order never clobbers an unread argument), then destroy
+        // everything above them — the old frame's locals and the moved-from
+        // argument slots — instead of leaving it alive above the top.
         for (std::size_t i = 0; i < count; ++i) {
-            stack_.base[base + 1 + i] = stack_.base[src_base + i];
+            const auto dest = base + 1 + i;
+            const auto src = src_base + i;
+
+            if (dest != src) {
+                stack_.base[dest] = std::move(stack_.base[src]);
+            }
         }
 
-        stack_.top = stack_.base + base + 1 + arg_count;
+        stack_.truncate_to(base + 1 + count);
+
+        // The frame now runs a different activation; a try handler the old
+        // activation left behind (only possible in crafted bytecode) must not
+        // resume into it.
+        exception_handler_.discard_frames_from(stack_.frames.size() - 1);
 
         // Reusing this frame for a different function invalidates its
         // per-function global inline cache.  cf.global_bindings points into
@@ -439,15 +521,22 @@ void VM::handle_make_closure() {
     auto func_idx = read_u16();
     (void)read_byte(); // upvalue_count — read but not used directly
 
-    if ((compiled_functions_ == nullptr) || func_idx >= compiled_functions_->size()) {
+    // Indices refer to the table of the function being executed, which is not
+    // the installed one when the REPL calls a closure from an earlier input.
+    const auto* table = (cf.closure != nullptr && cf.closure->function_table != nullptr)
+                            ? cf.closure->function_table
+                            : compiled_functions_;
+
+    if ((table == nullptr) || func_idx >= table->size()) {
         runtime_error(vm_errors::invalid_function_index(func_idx));
     }
 
-    const auto* compiled = &(*compiled_functions_)[func_idx];
+    const auto* compiled = &(*table)[func_idx];
 
     auto func_val = std::make_shared<FunctionValue>();
     func_val->name = compiled->name;
     func_val->compiled = compiled;
+    func_val->function_table = table;
 
     func_val->upvalues.resize(compiled->upvalues.size());
     func_val->upvalue_cells.resize(compiled->upvalues.size());

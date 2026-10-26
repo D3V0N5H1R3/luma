@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_TYPES_TYPE_CHECK_HELPERS_HPP
+#define LUMA_TYPES_TYPE_CHECK_HELPERS_HPP
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Type Check Helpers — Shared Validation Utilities
@@ -44,6 +45,7 @@
 #include <string_view>
 #include <vector>
 
+#include "analysis/ast/ast_fwd.hpp"
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/diagnostics/diagnostic_builders.hpp"
 #include "analysis/source/source_location.hpp"
@@ -51,10 +53,38 @@
 #include "analysis/types/type_checking_context.hpp"
 #include "analysis/types/type_info.hpp"
 
+namespace luma {
+
+struct CallExpression;
+struct FunctionDeclaration;
+struct Parameter;
+
+} // namespace luma
+
 // Reusable inline validation helpers shared by ExpressionTypeChecker,
 // StatementTypeChecker, and their sub-translation-units.  See the file-level
 // comment block above for the full contract and usage examples.
 namespace luma::type_check_helpers {
+
+// ── Namespace-internal access ────────────────────────────────────────────────
+// The namespace that owns `qualified_member`: everything before its last dot
+// ("Outer.Inner.Item" → "Outer.Inner"; "Geo.Secret" → "Geo").
+[[nodiscard]] inline std::string_view owning_namespace(std::string_view qualified_member) noexcept {
+    const auto pos = qualified_member.rfind('.');
+    return pos == std::string_view::npos ? std::string_view{} : qualified_member.substr(0, pos);
+}
+
+// True when code checked in `current_namespace` (the fully qualified path of
+// the namespace being checked, empty at top level) may use members internal to
+// `owner`: it is `owner` itself or a namespace nested inside it.
+[[nodiscard]] inline bool is_within_namespace(std::string_view current_namespace,
+                                              std::string_view owner) noexcept {
+    if (owner.empty() || !current_namespace.starts_with(owner)) {
+        return false;
+    }
+
+    return current_namespace.size() == owner.size() || current_namespace[owner.size()] == '.';
+}
 
 // ── require_numeric_operand ──────────────────────────────────────────────────
 // Returns true when `type` is numeric (integer or number), StdlibAny, or
@@ -266,4 +296,75 @@ template <typename ParamRange>
     return GenericResolver::ParamGuard{tc.generics().bindings(), names, args};
 }
 
+// ── numeric widening ─────────────────────────────────────────────────────────
+// An integer value may flow into a `number` context — directly, or nested in a
+// covariant container (array<integer> → array<number>).  The value must then
+// be converted at runtime so its representation matches the static type.
+//
+// numeric_widening_pattern returns the runtime pattern describing that
+// conversion (e.g. "number", "array<number>", "(number,_)" — `_` leaves a
+// component untouched), or nullopt when the flow involves no integer → number
+// widening.
+//
+// mark_numeric_widening records that pattern on `expr` for the compiler, which
+// then emits IntToNumber / WidenNumber after the expression.  For array,
+// dictionary, and tuple literals it marks the individual elements instead, so
+// widened integer literals fold into number constants at compile time.  For a
+// generic choice constructor call or record creation flowing into an
+// instantiation with `number` type arguments (List<integer> → List<number>) it
+// descends into the arguments / field values, whose runtime values the pattern
+// language cannot describe.  Call it at every assignment-like check site once
+// the flow has been accepted.
+[[nodiscard]] std::optional<std::string> numeric_widening_pattern(const TypeInfo& target,
+                                                                  const TypeInfo& source);
+
+void mark_numeric_widening(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                           const TypeInfo& source);
+
+// ── report_unknown_types ─────────────────────────────────────────────────────
+// Emits "unknown type '<name>'<context>" for every type name in `ann` that
+// resolves to nothing — the annotation itself, its generic arguments, tuple
+// elements, and function parameter/return types.  A misspelled name would
+// otherwise resolve to the permissive Unknown type and silently accept any
+// value.  Type parameters bound by the enclosing generic declaration are not
+// reported.  `context` is appended to the message verbatim (e.g.
+// " for parameter 'x' of function 'f'"; pass "" for none).  Returns true when
+// at least one diagnostic was emitted.
+bool report_unknown_types(TypeCheckingServices& tc, const TypeAnnotation& ann,
+                          std::string_view context, const SourceLocation& loc);
+
+// ── Call-argument mapping ────────────────────────────────────────────────────
+// The parameter index each written argument of a call to a declared function
+// binds to.  An entry is nullopt when the argument binds to no parameter: an
+// excess positional argument, or a named argument whose name is unknown or
+// whose parameter was already given.
+struct CallArgumentMapping {
+    std::vector<std::optional<std::size_t>> positional;
+    std::vector<std::optional<std::size_t>> named;
+};
+
+// Maps the positional and named arguments of `expr` onto the parameters of
+// `func`, reporting every arity problem in one place for both the generic and
+// the non-generic call paths: too many or too few arguments, a named argument
+// that matches no parameter, a parameter given more than once (positionally
+// and by name, or twice by name), and a required parameter left without an
+// argument.  When `is_piped` is set the piped value fills parameter 0, so
+// positional arguments start at parameter 1.  `fn_name` names the callee in
+// diagnostics.
+[[nodiscard]] CallArgumentMapping map_call_arguments(TypeCheckingServices& tc,
+                                                     const FunctionDeclaration& func,
+                                                     std::string_view fn_name,
+                                                     const CallExpression& expr, bool is_piped);
+
+// Checks unique/borrow ownership of one argument flowing into `param` — shared
+// by the generic, non-generic, and piped call paths.  A borrowed variable
+// cannot satisfy a unique parameter (it would be consumed); a borrow parameter
+// only lends the argument, so the consumption that inferring the argument
+// recorded on a unique variable is undone.  `is_piped` selects the wording for
+// a value piped into the first parameter.
+void check_argument_ownership(TypeCheckingServices& tc, const Parameter& param,
+                              const Expression& arg, std::string_view fn_name, bool is_piped);
+
 } // namespace luma::type_check_helpers
+
+#endif // LUMA_TYPES_TYPE_CHECK_HELPERS_HPP

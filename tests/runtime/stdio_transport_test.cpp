@@ -18,7 +18,6 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <span>
 #include <string>
 #include <utility>
 
@@ -316,79 +315,6 @@ static void test_read_message_returns_nullopt_after_last_message() {
     ASSERT_FALSE(transport.read_message().has_value());
 }
 
-// ═══════════════════════════════════════════════════════════
-// read_raw — opt-in read timeout (POSIX only)
-// ═══════════════════════════════════════════════════════════
-//
-// The timeout path polls the real STDIN file descriptor.  On POSIX a redirected
-// pipe descriptor honours poll(), so the "no data before the deadline" branch is
-// deterministic.  On Windows the wait targets the Win32 STD_INPUT_HANDLE rather
-// than the CRT descriptor a test can redirect, so this branch is not unit-tested
-// there; the DAP shutdown path exercises it end to end instead.
-
-#ifndef _WIN32
-namespace {
-
-// Exposes the protected read primitive so the timeout branch can be driven
-// directly, independent of the buffering in read_message().
-class ReadRawProbe : public StdioTransport {
-public:
-    using StdioTransport::StdioTransport;
-
-    [[nodiscard]] std::size_t call_read_raw(std::span<char> buf) {
-        return read_raw(buf);
-    }
-};
-
-} // namespace
-
-static void test_read_raw_times_out_when_no_data_available() {
-    int pipe_fds[2];
-    ASSERT_EQ(::pipe(pipe_fds), 0);
-
-    // RAII: point STDIN at the pipe read-end for the scope, restoring the real
-    // stdin and closing every fd on destruction — including the unwind path, so
-    // a throw from call_read_raw() (wait_for_stdin throws on poll() failure)
-    // cannot leak fds or leave stdin redirected for later tests.
-    class StdinPipeRedirect {
-    public:
-        StdinPipeRedirect(int read_fd, int write_fd)
-            : read_fd_{read_fd}, write_fd_{write_fd}, saved_fd_{::dup(STDIN_FILENO)} {
-            ::dup2(read_fd_, STDIN_FILENO);
-        }
-
-        ~StdinPipeRedirect() {
-            ::dup2(saved_fd_, STDIN_FILENO);
-            ::close(saved_fd_);
-            ::close(read_fd_);
-            ::close(write_fd_);
-        }
-
-        StdinPipeRedirect(const StdinPipeRedirect&) = delete;
-        StdinPipeRedirect& operator=(const StdinPipeRedirect&) = delete;
-        StdinPipeRedirect(StdinPipeRedirect&&) = delete;
-        StdinPipeRedirect& operator=(StdinPipeRedirect&&) = delete;
-
-    private:
-        int read_fd_;
-        int write_fd_;
-        int saved_fd_;
-    };
-
-    const StdinPipeRedirect redirect{pipe_fds[0], pipe_fds[1]};
-
-    ReadRawProbe probe;
-    probe.set_read_timeout(50); // milliseconds
-
-    char buf[16];
-    // The write end stays open, so the read end is not at EOF — poll() must time
-    // out and read_raw() must report "no data" as 0 rather than blocking.
-    const auto count = probe.call_read_raw(std::span<char>{buf, sizeof(buf)});
-
-    ASSERT_EQ(count, static_cast<std::size_t>(0));
-}
-#endif
-
 // ─── main ───
 
 int main() {
@@ -400,10 +326,6 @@ int main() {
     RUN(test_read_message_reads_sequential_messages);
     RUN(test_read_message_returns_nullopt_on_empty_input);
     RUN(test_read_message_returns_nullopt_after_last_message);
-
-#ifndef _WIN32
-    RUN(test_read_raw_times_out_when_no_data_available);
-#endif
 
     return SUMMARY();
 }

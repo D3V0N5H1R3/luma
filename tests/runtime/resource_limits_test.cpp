@@ -6,6 +6,7 @@
 // value via RAII.
 
 #include <cstdint>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -286,9 +287,52 @@ static void test_string_pad_limit_enforced() {
     ASSERT_FALSE(result.as_bool());
 }
 
+// ═══════════════════════════════════════════════════════════
+// LUMA_LIMIT_* environment overrides are range-checked
+// (regression: 0 and arbitrarily large values were accepted)
+// ═══════════════════════════════════════════════════════════
+
+static void test_env_override_zero_is_ignored() {
+    const LimitGuard guard{ResourceLimits::max_parse_depth, 128};
+    const ScopedEnv env{"LUMA_LIMIT_MAX_PARSE_DEPTH", "0"};
+    const CapturedStream captured_err{std::cerr};
+
+    ResourceLimits::init_from_env();
+
+    // 0 would make every program fail to parse; the default is kept.
+    ASSERT_EQ(ResourceLimits::max_parse_depth, 128);
+    ASSERT_TRUE(captured_err.str().find("LUMA_LIMIT_MAX_PARSE_DEPTH") != std::string::npos);
+}
+
+static void test_env_override_above_ceiling_is_clamped() {
+    const LimitGuard guard{ResourceLimits::max_parse_depth, 128};
+    const ScopedEnv env{"LUMA_LIMIT_MAX_PARSE_DEPTH", "100000000"};
+    const CapturedStream captured_err{std::cerr};
+
+    ResourceLimits::init_from_env();
+
+    // A huge parse depth would defeat the native stack-overflow guard.
+    ASSERT_EQ(ResourceLimits::max_parse_depth, 512);
+    ASSERT_TRUE(captured_err.str().find("clamping") != std::string::npos);
+}
+
+static void test_env_override_in_range_is_applied() {
+    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(10'000'000)};
+    const ScopedEnv env{"LUMA_LIMIT_MAX_ARRAY_SIZE", "1234"};
+
+    ResourceLimits::init_from_env();
+
+    ASSERT_EQ(ResourceLimits::max_array_size, static_cast<std::size_t>(1234));
+}
+
 // ─── main ───
 
 int main() {
+    // Environment overrides.
+    RUN(test_env_override_zero_is_ignored);
+    RUN(test_env_override_above_ceiling_is_clamped);
+    RUN(test_env_override_in_range_is_applied);
+
     // Call depth.
     RUN(test_call_depth_limit_enforced);
     RUN(test_call_depth_within_limit_succeeds);

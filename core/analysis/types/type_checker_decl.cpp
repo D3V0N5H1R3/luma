@@ -22,7 +22,9 @@
 
 #include "analysis/ast/ast_dispatch.hpp"
 #include "analysis/ast/declaration.hpp"
+#include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checker.hpp"
+#include "common/scope_guard.hpp"
 #include "symbols/qualified_name.hpp"
 
 namespace luma {
@@ -32,8 +34,33 @@ namespace luma {
 // ═══════════════════════════════════════════════════════════
 
 void TypeChecker::register_declarations(const std::vector<std::unique_ptr<Declaration>>& decls) {
+    // Function signatures are resolved (and stored) as each function is
+    // registered, so every type-like declaration — records, choices,
+    // interfaces, aliases, namespaces — must be registered first; otherwise a
+    // type declared later in the file would resolve to the permissive Unknown
+    // in an earlier function's signature.  `use` imports come next because
+    // they may import functions (resolving their signatures) and bare type
+    // names that the remaining function signatures refer to.
+    const auto is_type_like = [](const Declaration& decl) {
+        return decl.kind != DeclarationKind::Function && decl.kind != DeclarationKind::Use;
+    };
+
     for (const auto& decl : decls) {
-        register_declaration(*decl);
+        if (is_type_like(*decl)) {
+            register_declaration(*decl);
+        }
+    }
+
+    for (const auto& decl : decls) {
+        if (decl->kind == DeclarationKind::Use) {
+            register_declaration(*decl);
+        }
+    }
+
+    for (const auto& decl : decls) {
+        if (decl->kind == DeclarationKind::Function) {
+            register_declaration(*decl);
+        }
     }
 }
 
@@ -91,6 +118,8 @@ void TypeChecker::register_declaration(const Declaration& decl) {
         } else if constexpr (std::is_same_v<T, NamespaceDeclaration>) {
             register_namespace(node, "");
         } else if constexpr (std::is_same_v<T, TypeAliasDeclaration>) {
+            warn_if_duplicate(symbols_.type_aliases, node.name, "type alias", node.location);
+
             symbols_.type_aliases[node.name] = node.target_type;
             registry_.register_symbol(node.name, SuggestionCategory::Type);
 
@@ -106,6 +135,11 @@ void TypeChecker::register_declaration(const Declaration& decl) {
 
 void TypeChecker::define_function_in_scope(const FunctionDeclaration& func,
                                            const std::string& name) {
+    // check_function() reports internal types in the signature, with the
+    // function's location; resolving it here must not report them first.
+    ++deferred_internal_access_reports_;
+    const ScopeGuard deferred_guard{[this] { --deferred_internal_access_reports_; }};
+
     std::vector<TypeInfo> param_types;
     param_types.reserve(func.parameters.size());
     std::ranges::transform(func.parameters, std::back_inserter(param_types),
@@ -113,6 +147,10 @@ void TypeChecker::define_function_in_scope(const FunctionDeclaration& func,
 
     current_scope()->define(
         name, TypeInfo::make_func(std::move(param_types), resolve_type(func.return_type)), {});
+
+    if (auto* symbol = current_scope()->lookup_mut(name)) {
+        symbol->function_declaration = &func;
+    }
 }
 
 template <typename T>
@@ -129,7 +167,7 @@ void TypeChecker::import_all_namespace_types(StringMap<const T*>& map, TypeInfo:
 
         const auto bare = qname.substr(prefix.size());
 
-        if (is_qualified_name(bare)) {
+        if (symbols::is_qualified_name(bare)) {
             continue; // nested namespace member — skip
         }
 
@@ -166,7 +204,13 @@ bool TypeChecker::import_one_namespace_type(StringMap<const T*>& map, TypeInfo::
 
 void TypeChecker::register_use_declaration(const UseDeclaration& use_decl) {
     const auto& path = use_decl.namespace_path;
-    const auto split = split_module(path);
+    const auto split = symbols::split_module(path);
+
+    // Imported function signatures name their namespace's own types by their
+    // bare names, so resolve them from inside that namespace.
+    const auto saved_namespace = ctx_.current_namespace;
+    ctx_.current_namespace = split ? std::string{split->first} : path;
+    const ScopeGuard namespace_guard{[&] { ctx_.current_namespace = saved_namespace; }};
 
     if (!split) {
         // Wildcard: use Namespace — import all members as bare names.
@@ -232,7 +276,7 @@ void TypeChecker::register_use_declaration(const UseDeclaration& use_decl) {
 }
 
 void TypeChecker::register_namespace(const NamespaceDeclaration& ns, std::string_view prefix) {
-    const auto qualified = make_qualified(prefix, ns.name);
+    const auto qualified = symbols::make_qualified(prefix, ns.name);
 
     // Helper: register a qualified name as a type symbol, and mark internal if needed.
     auto register_type_member = [&](const std::string& qname, bool is_internal) {
@@ -249,7 +293,7 @@ void TypeChecker::register_namespace(const NamespaceDeclaration& ns, std::string
             symbols_.namespace_functions[ns.name][func.name] = &func;
 
             if (decl->is_internal_to_namespace) {
-                internal_members_.insert(make_qualified(qualified, func.name));
+                internal_members_.insert(symbols::make_qualified(qualified, func.name));
             }
         } else if (decl->kind == DeclarationKind::Namespace) {
             const auto& inner_ns = static_cast<const NamespaceDeclaration&>(*decl);
@@ -257,22 +301,22 @@ void TypeChecker::register_namespace(const NamespaceDeclaration& ns, std::string
             register_namespace(inner_ns, qualified);
         } else if (decl->kind == DeclarationKind::Record) {
             const auto& rec = static_cast<const RecordDeclaration&>(*decl);
-            const auto qname = make_qualified(qualified, rec.name);
+            const auto qname = symbols::make_qualified(qualified, rec.name);
             symbols_.records[qname] = &rec;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::Choice) {
             const auto& ch = static_cast<const ChoiceDeclaration&>(*decl);
-            const auto qname = make_qualified(qualified, ch.name);
+            const auto qname = symbols::make_qualified(qualified, ch.name);
             symbols_.choices[qname] = &ch;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::Interface) {
             const auto& iface = static_cast<const InterfaceDeclaration&>(*decl);
-            const auto qname = make_qualified(qualified, iface.name);
+            const auto qname = symbols::make_qualified(qualified, iface.name);
             symbols_.interfaces[qname] = &iface;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::TypeAlias) {
             const auto& alias = static_cast<const TypeAliasDeclaration&>(*decl);
-            const auto qname = make_qualified(qualified, alias.name);
+            const auto qname = symbols::make_qualified(qualified, alias.name);
             symbols_.type_aliases[qname] = alias.target_type;
             register_type_member(qname, decl->is_internal_to_namespace);
         }
@@ -300,7 +344,10 @@ void TypeChecker::check_declaration(const Declaration& decl) {
         } else if constexpr (std::is_same_v<T, NamespaceDeclaration>) {
             const auto saved_namespace = ctx_.current_namespace;
 
-            ctx_.current_namespace = node.name;
+            // The fully qualified path ("Outer.Inner"): nested namespace
+            // members are registered under it, so a bare sibling name is
+            // retried as "<path>.<name>".
+            ctx_.current_namespace = symbols::make_qualified(saved_namespace, node.name);
 
             for (const auto& decl : node.declarations) {
                 check_declaration(*decl);
@@ -312,6 +359,11 @@ void TypeChecker::check_declaration(const Declaration& decl) {
             const GenericResolver::BindingScope generic_scope{generics_, node.type_params};
 
             for (const auto& field : node.fields) {
+                (void)type_check_helpers::report_unknown_types(
+                    *this, field.type,
+                    std::format(" for field '{}' of record '{}'", field.name, node.name),
+                    node.location);
+
                 if (!field.default_value) {
                     continue;
                 }
@@ -327,6 +379,9 @@ void TypeChecker::check_declaration(const Declaration& decl) {
                           field.default_value->location,
                           "ensure the default value matches the field's declared type",
                           DiagnosticCode::TypeMismatch);
+                } else {
+                    type_check_helpers::mark_numeric_widening(*this, *field.default_value,
+                                                              field_type, default_type);
                 }
             }
         } else if constexpr (std::is_same_v<T, ChoiceDeclaration>) {
@@ -334,37 +389,32 @@ void TypeChecker::check_declaration(const Declaration& decl) {
 
             for (const auto& variant : node.variants) {
                 for (const auto& field : variant.fields) {
-                    const auto field_type = resolve_type(field.type);
-
-                    if (field_type.kind == TypeInfo::Kind::Unknown &&
-                        !generics_.bindings().contains(field.type.name())) {
-                        const auto hint = suggest_type_name(field.type.name());
-                        error(std::format("unknown type '{}' for field '{}' in "
-                                          "variant '{}' of choice '{}'",
-                                          field.type.name(), field.name, variant.name, node.name),
-                              node.location,
-                              hint.empty() ? "check the spelling or make sure the type is declared"
-                                           : hint);
-                    }
+                    (void)type_check_helpers::report_unknown_types(
+                        *this, field.type,
+                        std::format(" for field '{}' in variant '{}' of choice '{}'", field.name,
+                                    variant.name, node.name),
+                        node.location);
                 }
             }
-        } else if constexpr (std::is_same_v<T, TypeAliasDeclaration>) {
-            // Push type parameter bindings for generic aliases.
+        } else if constexpr (std::is_same_v<T, InterfaceDeclaration>) {
             const GenericResolver::BindingScope generic_scope{generics_, node.type_params};
 
-            const auto resolved = resolve_type(node.target_type);
-
-            // Only error on unknown if the alias has no type params
-            // (generic aliases reference their type params which resolve to Unknown).
-            if (resolved.kind == TypeInfo::Kind::Unknown && node.type_params.empty()) {
-                const auto hint = suggest_type_name(node.target_type.name());
-                error(std::format("unknown type '{}' in type alias '{}'", node.target_type.name(),
-                                  node.name),
-                      node.location,
-                      hint.empty() ? "check the spelling or make sure the type is declared" : hint);
+            for (const auto& field : node.fields) {
+                (void)type_check_helpers::report_unknown_types(
+                    *this, field.type,
+                    std::format(" for field '{}' of interface '{}'", field.name, node.name),
+                    node.location);
             }
+        } else if constexpr (std::is_same_v<T, TypeAliasDeclaration>) {
+            // Push type parameter bindings for generic aliases; references to
+            // them are bound type parameters, not unknown types.
+            const GenericResolver::BindingScope generic_scope{generics_, node.type_params};
+
+            (void)type_check_helpers::report_unknown_types(
+                *this, node.target_type, std::format(" in type alias '{}'", node.name),
+                node.location);
         }
-        // Include, Interface, Use — no checking action in this pass.
+        // Include, Use — no checking action in this pass.
     });
 }
 
@@ -378,15 +428,25 @@ void TypeChecker::check_function(const FunctionDeclaration& func) {
     // Push type parameter bindings for generic functions.
     const GenericResolver::BindingScope generic_scope{generics_, func.type_params};
 
-    // Track whether we are inside @main so that '?' propagation is forbidden.
+    // Track whether we are inside @main, where '?' propagation is allowed: a
+    // propagated failure there prints the error and exits.
     const auto saved_is_in_main = ctx_.is_in_main;
 
     ctx_.is_in_main = func.is_main;
+
+    (void)type_check_helpers::report_unknown_types(
+        *this, func.return_type, std::format(" for the return type of function '{}'", func.name),
+        func.location);
 
     // Set expected return type.
     ctx_.current_return_type = resolve_type(func.return_type);
 
     for (const auto& param : func.parameters) {
+        (void)type_check_helpers::report_unknown_types(
+            *this, param.type,
+            std::format(" for parameter '{}' of function '{}'", param.name, func.name),
+            func.location);
+
         const auto param_type = resolve_type(param.type);
 
         current_scope()->define(param.name, param_type,
@@ -406,30 +466,22 @@ void TypeChecker::check_function(const FunctionDeclaration& func) {
                                   "parameter type '{}'",
                                   default_type.to_string(), param_type.to_string()),
                       param.default_value->location);
+            } else {
+                type_check_helpers::mark_numeric_widening(*this, *param.default_value, param_type,
+                                                          default_type);
             }
         }
     }
 
     check_statement_list(func.body);
 
-    // Linter: warn about unused parameters.
-    for (const auto& param : func.parameters) {
-        if (param.name.starts_with('_')) {
-            continue;
-        }
+    // Unused parameters are reported by the linter (W0003), not here.
 
-        const auto* sym = current_scope()->lookup(param.name);
-
-        if ((sym != nullptr) && !sym->is_read) {
-            warn(std::format("unused parameter '{}'", param.name), func.location,
-                 "prefix with '_' to suppress this warning", DiagnosticCode::UnusedParameter);
-        }
-    }
-
-    // Warn when a concrete-typed function might fall off the end without returning.
+    // A concrete-typed function must not fall off the end without returning —
+    // including one whose body is empty.
     if (ctx_.current_return_type && ctx_.current_return_type->kind != TypeInfo::Kind::Void &&
         ctx_.current_return_type->kind != TypeInfo::Kind::StdlibAny &&
-        ctx_.current_return_type->kind != TypeInfo::Kind::Unknown && !func.body.empty() &&
+        ctx_.current_return_type->kind != TypeInfo::Kind::Unknown &&
         !definitely_returns(func.body)) {
         error(std::format("function '{}' declares return type '{}' but may fall through "
                           "without returning a value — add a return statement on all paths",

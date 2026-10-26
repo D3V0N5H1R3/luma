@@ -2,9 +2,12 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "lex_parse_util.hpp"
 #include "runtime/compiler/chunk.hpp"
+#include "runtime/compiler/compiler.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/compiler/verifier.hpp"
 #include "test_framework.hpp"
@@ -143,12 +146,15 @@ static void test_jump_target_out_of_bounds() {
 // ─── Valid jump target ───
 
 static void test_valid_jump_target() {
+    // Hand-laid bytecode: opcode, then its operand bytes.
+    // clang-format off
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::Jump), 0x00, 0x00, 0x00,
-        0x01,                                  // jump +1 → offset 6
+        static_cast<std::uint8_t>(Op::Jump),
+        0x00, 0x00, 0x00, 0x01,                // jump +1 → offset 6
         static_cast<std::uint8_t>(Op::True),   // offset 5 (skipped)
         static_cast<std::uint8_t>(Op::Return), // offset 6 (target)
     });
+    // clang-format on
 
     BytecodeVerifier verifier;
     auto errors = verifier.verify(func);
@@ -235,8 +241,8 @@ static void test_stack_underflow() {
 // ─── Stack depth with arity ───
 
 static void test_stack_depth_with_arity() {
-    // A function with arity 2 starts with 2 items on the stack.
-    // Pop twice should be fine.
+    // A function with arity 2 starts with the callee and 2 arguments on the
+    // stack, so popping both arguments still leaves a value to return.
     auto func = make_func(
         {
             static_cast<std::uint8_t>(Op::Pop),
@@ -277,13 +283,16 @@ static void test_valid_multi_instruction_sequence() {
 // ─── Valid conditional jump ───
 
 static void test_conditional_jump_valid() {
+    // Hand-laid bytecode: opcode, then its operand bytes.
+    // clang-format off
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::True), static_cast<std::uint8_t>(Op::JumpIfFalse), 0x00, 0x00,
-        0x00,
-        0x01,                                  // jump +1 → offset 7
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::JumpIfFalse),
+        0x00, 0x00, 0x00, 0x01,                // jump +1 → offset 7
         static_cast<std::uint8_t>(Op::True),   // offset 6
         static_cast<std::uint8_t>(Op::Return), // offset 7 (target)
     });
+    // clang-format on
 
     BytecodeVerifier verifier;
     auto errors = verifier.verify(func);
@@ -295,13 +304,16 @@ static void test_conditional_jump_valid() {
 // ─── Valid TryCatch ───
 
 static void test_try_catch_valid() {
+    // Hand-laid bytecode: opcode, then its operand bytes.
+    // clang-format off
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::TryCatch), 0x00, 0x00, 0x00,
-        0x02,                                  // catch at offset 5+2=7
+        static_cast<std::uint8_t>(Op::TryCatch),
+        0x00, 0x00, 0x00, 0x02,                // catch at offset 5+2=7
         static_cast<std::uint8_t>(Op::True),   // try body (offset 5)
         static_cast<std::uint8_t>(Op::TryEnd), // end try (offset 6)
         static_cast<std::uint8_t>(Op::Return), // catch/after (offset 7)
     });
+    // clang-format on
 
     BytecodeVerifier verifier;
     auto errors = verifier.verify(func);
@@ -562,6 +574,296 @@ static void test_upvalue_access_with_zero_upvalues() {
     ASSERT_TRUE(has_error_containing(errors, "upvalue index"));
 }
 
+// ─── Stack depth along control flow ───
+
+// Encode a forward jump / loop whose 4-byte big-endian operand is `distance`.
+static void append_jump(std::vector<std::uint8_t>& code, Op op, std::uint32_t distance) {
+    code.push_back(static_cast<std::uint8_t>(op));
+    code.push_back(static_cast<std::uint8_t>(distance >> 24U));
+    code.push_back(static_cast<std::uint8_t>(distance >> 16U));
+    code.push_back(static_cast<std::uint8_t>(distance >> 8U));
+    code.push_back(static_cast<std::uint8_t>(distance));
+}
+
+static CompiledFunction make_func_from(std::vector<std::uint8_t> code, int arity = 0) {
+    CompiledFunction func;
+    func.mutable_chunk().code = std::move(code);
+    func.arity = arity;
+    return func;
+}
+
+static void test_make_closure_pushes_the_closure() {
+    // MakeClosure; SetGlobal; Pop — the shape of every function declaration.
+    auto func = make_func({
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0x00,
+        0x00,
+        0x00,
+        static_cast<std::uint8_t>(Op::SetGlobal),
+        0x00,
+        0x00,
+        static_cast<std::uint8_t>(Op::Pop),
+        static_cast<std::uint8_t>(Op::None),
+        static_cast<std::uint8_t>(Op::Return),
+    });
+    (void)func.mutable_chunk().names.add("f");
+
+    ASSERT_TRUE(BytecodeVerifier{}.verify(func).empty());
+}
+
+static void test_branches_are_simulated_separately() {
+    // if/else: each branch pops the condition once.  A straight-line pass
+    // would see two pops for one push.
+    std::vector<std::uint8_t> code{static_cast<std::uint8_t>(Op::True)};
+    append_jump(code, Op::JumpIfFalse, 7); // → else branch
+    code.push_back(static_cast<std::uint8_t>(Op::Pop));
+    code.push_back(static_cast<std::uint8_t>(Op::One));
+    append_jump(code, Op::Jump, 2);                        // → end
+    code.push_back(static_cast<std::uint8_t>(Op::Pop));    // else: pop condition
+    code.push_back(static_cast<std::uint8_t>(Op::Zero));   // else value
+    code.push_back(static_cast<std::uint8_t>(Op::Return)); // end
+
+    ASSERT_TRUE(BytecodeVerifier{}.verify(make_func_from(code)).empty());
+}
+
+static void test_underflow_on_one_branch_is_detected() {
+    // The else branch pops the condition, the callee slot, and then one more.
+    std::vector<std::uint8_t> code{static_cast<std::uint8_t>(Op::True)};
+    append_jump(code, Op::JumpIfFalse, 2); // → else branch
+    code.push_back(static_cast<std::uint8_t>(Op::None));
+    code.push_back(static_cast<std::uint8_t>(Op::Return));
+    code.push_back(static_cast<std::uint8_t>(Op::Pop)); // else
+    code.push_back(static_cast<std::uint8_t>(Op::Pop));
+    code.push_back(static_cast<std::uint8_t>(Op::Pop)); // underflow
+    code.push_back(static_cast<std::uint8_t>(Op::None));
+    code.push_back(static_cast<std::uint8_t>(Op::Return));
+
+    ASSERT_TRUE(has_error_containing(BytecodeVerifier{}.verify(make_func_from(code)),
+                                     "stack underflow at offset 10"));
+}
+
+static void test_exhausted_iterator_pushes_only_false() {
+    // for-loop shape: the exhausted step leaves just `false` for the exit.
+    std::vector<std::uint8_t> code{static_cast<std::uint8_t>(Op::GetLocal), 0x00, 0x00,
+                                   static_cast<std::uint8_t>(Op::ForIterStep)};
+    append_jump(code, Op::JumpIfFalse, 7);              // → exit at offset 16
+    code.push_back(static_cast<std::uint8_t>(Op::Pop)); // pop true
+    code.push_back(static_cast<std::uint8_t>(Op::Pop)); // pop element
+    append_jump(code, Op::Loop, 16);                    // → GetLocal at offset 0
+    code.push_back(static_cast<std::uint8_t>(Op::Pop)); // exit: pop false
+    code.push_back(static_cast<std::uint8_t>(Op::None));
+    code.push_back(static_cast<std::uint8_t>(Op::Return));
+
+    ASSERT_TRUE(BytecodeVerifier{}.verify(make_func_from(code)).empty());
+
+    // At the exit only `false` and the callee slot are on the stack, so a third
+    // Pop there underflows — it would not if the exhausted step were assumed
+    // to have pushed an element too.
+    code.insert(code.begin() + 16, 2, static_cast<std::uint8_t>(Op::Pop));
+    ASSERT_TRUE(
+        has_error_containing(BytecodeVerifier{}.verify(make_func_from(code)), "stack underflow"));
+}
+
+static void test_loop_that_grows_the_stack_is_rejected() {
+    // Each iteration pushes a value and loops back without popping it.  The
+    // walk must report this instead of re-walking the loop once per slot.
+    std::vector<std::uint8_t> code{static_cast<std::uint8_t>(Op::One)};
+    append_jump(code, Op::Loop, 6); // → One at offset 0
+
+    ASSERT_TRUE(has_error_containing(BytecodeVerifier{}.verify(make_func_from(code)),
+                                     "stack grows by 1 on every iteration"));
+}
+
+static void test_pathological_merges_hit_the_step_budget() {
+    // A chain of branches that each skip one push reaches every later merge
+    // point with ever deeper stacks, which would re-walk the rest of the chain
+    // quadratically often.  The step budget stops the walk instead.
+    std::vector<std::uint8_t> code;
+
+    for (int i = 0; i < 500; ++i) {
+        code.push_back(static_cast<std::uint8_t>(Op::True));
+        append_jump(code, Op::JumpIfFalse, 1); // → skip the One
+        code.push_back(static_cast<std::uint8_t>(Op::One));
+    }
+
+    code.push_back(static_cast<std::uint8_t>(Op::Return));
+
+    ASSERT_TRUE(
+        has_error_containing(BytecodeVerifier{}.verify(make_func_from(code)), "step budget"));
+}
+
+static void test_shallow_exhaustion_edge_is_an_underflow() {
+    // A jump straight onto the JumpIfFalse that follows a ForIterStepKV skips
+    // the step, so its exhaustion edge would leave a negative depth.
+    std::vector<std::uint8_t> code;
+    append_jump(code, Op::Jump, 4); // → JumpIfFalse at offset 9
+    code.insert(code.end(), {static_cast<std::uint8_t>(Op::GetLocal), 0x00, 0x00,
+                             static_cast<std::uint8_t>(Op::ForIterStepKV)});
+    append_jump(code, Op::JumpIfFalse, 0);
+    code.push_back(static_cast<std::uint8_t>(Op::Return));
+
+    ASSERT_TRUE(has_error_containing(BytecodeVerifier{}.verify(make_func_from(code)),
+                                     "stack underflow at offset 9"));
+}
+
+static void test_catch_handler_receives_the_error() {
+    // The handler starts with the error value pushed on the restored stack.
+    std::vector<std::uint8_t> code;
+    append_jump(code, Op::TryCatch, 7); // → catch at offset 12
+    code.push_back(static_cast<std::uint8_t>(Op::TryEnd));
+    code.push_back(static_cast<std::uint8_t>(Op::None));
+    append_jump(code, Op::Jump, 2);                        // → end at offset 14
+    code.push_back(static_cast<std::uint8_t>(Op::Pop));    // catch: discard the error
+    code.push_back(static_cast<std::uint8_t>(Op::None));   // catch: result value
+    code.push_back(static_cast<std::uint8_t>(Op::Return)); // end
+
+    ASSERT_TRUE(BytecodeVerifier{}.verify(make_func_from(code)).empty());
+}
+
+static void test_make_record_pops_its_fields() {
+    // MakeRecord with three fields, but only one value above the callee slot.
+    auto func = make_func({
+        static_cast<std::uint8_t>(Op::One),
+        static_cast<std::uint8_t>(Op::MakeRecord),
+        0x00,
+        0x00,
+        0x03,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        static_cast<std::uint8_t>(Op::Return),
+    });
+    (void)func.mutable_chunk().names.add("Point");
+
+    ASSERT_TRUE(has_error_containing(BytecodeVerifier{}.verify(func), "stack underflow"));
+}
+
+static void test_stack_effects_match_fixed_opcode_metadata() {
+    // Where the opcode table records a fixed net effect, the verifier's model
+    // must agree.  Count-dependent opcodes have no fixed effect, so the zero
+    // operand bytes used here never matter.
+    for (std::size_t i = 0; i <= static_cast<std::size_t>(Op::EndModule); ++i) {
+        const auto op = static_cast<Op>(i);
+        const auto fixed = opcode_fixed_stack_effect(op);
+
+        if (!fixed || (opcode_flags(op) & op_flag::k_terminator) != 0) {
+            continue;
+        }
+
+        std::vector<std::uint8_t> code(8, 0);
+        code[0] = static_cast<std::uint8_t>(op);
+        const auto effect = instruction_stack_effect(code, 0);
+
+        ASSERT_EQ(effect.pushes - effect.pops, *fixed);
+    }
+}
+
+static void test_compiled_program_verifies() {
+    // Functions, loops with break, branches, try/catch, records, pipes, and
+    // task scopes as the compiler actually emits them.
+    const auto program = luma::test::lex_and_parse(
+        "record Point { number x, number y }\n"
+        "function number total(array<number> values) {\n"
+        "    mutable number sum = 0\n"
+        "    for i, value in values {\n"
+        "        if i > 10 { break }\n"
+        "        sum += value\n"
+        "    }\n"
+        "    return sum\n"
+        "}\n"
+        "function string label(number value) {\n"
+        "    return match value > 2.0 { case true { \"big\" } case false { \"small\" } }\n"
+        "}\n"
+        "Point p = Point { x = 1.0, y = 2.0 }\n"
+        "Point q = p with { y = 3.0 }\n"
+        "try {\n"
+        "    print(total([q.x, q.y]) |> label())\n"
+        "} catch (err) {\n"
+        "    print(err)\n"
+        "}\n"
+        "array<number> results = task_scope {\n"
+        "    spawn total([1.0])\n"
+        "}\n");
+
+    Compiler compiler;
+    const auto result = compiler.compile(program, /*repl_mode=*/true);
+
+    ASSERT_TRUE(result.success);
+
+    BytecodeVerifier verifier;
+    ASSERT_TRUE(verifier.verify(result.top_level).empty());
+
+    for (const auto& function : result.functions) {
+        ASSERT_TRUE(verifier.verify(function).empty());
+    }
+}
+
+// Regression: a jump to exactly code.size() was accepted, although the VM has
+// no instruction to run there.
+static void test_jump_to_code_end_is_rejected() {
+    // clang-format off
+    auto func = make_func({
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::JumpIfFalse),
+        0x00, 0x00, 0x00, 0x01,                // → offset 7 == code size
+        static_cast<std::uint8_t>(Op::Return), // offset 6
+    });
+    // clang-format on
+
+    BytecodeVerifier verifier;
+    const auto errors = verifier.verify(func);
+
+    ASSERT_TRUE(has_error_containing(errors, "at or beyond code size"));
+}
+
+// Regression: control falling through the last instruction was never reported.
+static void test_fall_off_end_is_rejected() {
+    auto func = make_func({
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::Pop),
+    });
+
+    BytecodeVerifier verifier;
+    const auto errors = verifier.verify(func);
+
+    ASSERT_TRUE(has_error_containing(errors, "falls off the end"));
+}
+
+// The shape that used to fall off the end (an if/else whose last branch ends
+// in `return`, in a zero-parameter function) now verifies cleanly, so
+// --verify would have caught the old miscompile.
+static void test_compiled_branch_ending_in_return_verifies() {
+    const auto program = luma::test::lex_and_parse("function boolean ready() { return true }\n"
+                                                   "function void go() {\n"
+                                                   "    if ready() {\n"
+                                                   "        print(\"work\")\n"
+                                                   "    } else {\n"
+                                                   "        return\n"
+                                                   "    }\n"
+                                                   "}\n"
+                                                   "function integer pick() {\n"
+                                                   "    while true {\n"
+                                                   "        if ready() { break }\n"
+                                                   "        return 1\n"
+                                                   "    }\n"
+                                                   "}\n");
+
+    Compiler compiler;
+    const auto result = compiler.compile(program, /*repl_mode=*/false);
+
+    ASSERT_TRUE(result.success);
+
+    BytecodeVerifier verifier;
+    ASSERT_TRUE(verifier.verify(result.top_level).empty());
+
+    for (const auto& function : result.functions) {
+        ASSERT_TRUE(verifier.verify(function).empty());
+    }
+}
+
 // ─── main ───
 
 int main() {
@@ -601,5 +903,21 @@ int main() {
     RUN(test_valid_upvalue_index);
     RUN(test_set_upvalue_out_of_bounds);
     RUN(test_upvalue_access_with_zero_upvalues);
+
+    // Stack depth along control flow.
+    RUN(test_make_closure_pushes_the_closure);
+    RUN(test_branches_are_simulated_separately);
+    RUN(test_underflow_on_one_branch_is_detected);
+    RUN(test_exhausted_iterator_pushes_only_false);
+    RUN(test_loop_that_grows_the_stack_is_rejected);
+    RUN(test_pathological_merges_hit_the_step_budget);
+    RUN(test_shallow_exhaustion_edge_is_an_underflow);
+    RUN(test_catch_handler_receives_the_error);
+    RUN(test_make_record_pops_its_fields);
+    RUN(test_stack_effects_match_fixed_opcode_metadata);
+    RUN(test_compiled_program_verifies);
+    RUN(test_jump_to_code_end_is_rejected);
+    RUN(test_fall_off_end_is_rejected);
+    RUN(test_compiled_branch_ending_in_return_verifies);
     return SUMMARY();
 }

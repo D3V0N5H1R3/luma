@@ -44,14 +44,16 @@ function void main() {
     borrow string view = message
     inspect(view)
 
-    # The original is still accessible (borrow is read-only).
+    # Borrowing does not move the value, so the original is still usable.
     print("  original: '${message}'")
 
     # ── Unused variable suppression with _ ──
     print("")
     print("=== Unused _ prefix ===")
 
-    # The _ prefix suppresses unused-variable warnings.
+    # The _ prefix marks a value as deliberately unused: it silences the
+    # unused-variable warning, and lets a unique local go unconsumed (which
+    # is otherwise a compile error).
     integer _unused = 42
     unique string _discarded = acquire_handle("temp")
     print("  no warnings for _unused or _discarded")

@@ -17,6 +17,8 @@ choice TypeShape {
     Dot
 }
 
+# ─── Primitive types ─────────────────────────────────────
+
 @test
 function void test_boolean_type() {
     boolean is_enabled = true
@@ -77,6 +79,8 @@ function void test_type_of() {
     assert(type_of(none) == "none")
 }
 
+# ─── Division, interpolation and multi-line strings ──────
+
 @test
 function void test_true_and_floor_division() {
     # / is true division and always yields a number.
@@ -115,7 +119,7 @@ function void test_multiline_string() {
     assert("World" in text_block)
 }
 
-# ─── String Slice Syntax ───
+# ─── String slice syntax ─────────────────────────────────
 
 @test
 function void test_string_slice() {
@@ -133,7 +137,7 @@ function void test_string_slice_middle() {
     assert(sliced == "cd")
 }
 
-# ─── String Index / Inclusive Slice ───
+# ─── String index and inclusive slice ────────────────────
 
 @test
 function void test_string_index() {
@@ -161,7 +165,7 @@ function void test_string_slice_inclusive_negative_end() {
     assert(text[1 ..= -2] == "ell")
 }
 
-# ─── String Escapes ───
+# ─── String escapes ──────────────────────────────────────
 
 @test
 function void test_string_escape_null() {
@@ -177,7 +181,7 @@ function void test_string_escape_tab() {
     assert("\t" in tab_string)
 }
 
-# ─── Integer Limits ───
+# ─── Integer limits ──────────────────────────────────────
 
 @test
 function void test_integer_max_value() {
@@ -188,28 +192,32 @@ function void test_integer_max_value() {
 
 @test
 function void test_integer_min_value() {
-    integer minimum_integer = -9223372036854775807
+    # The literal 9223372036854775808 is out of range before negation, so the
+    # minimum has to be computed.
+    integer minimum_integer = -9223372036854775807 - 1
 
-    assert(minimum_integer == -9223372036854775807)
+    assert(type_of(minimum_integer) == "integer")
+    assert(minimum_integer + 1 == -9223372036854775807)
+    assert(minimum_integer < -9223372036854775807)
 }
 
 @test
-function void test_integer_safe_arithmetic() {
+function void test_integer_arithmetic_beyond_32_bits() {
     integer first_operand = 1000000000
     integer second_operand = 2000000000
-    integer sum_result = first_operand + second_operand
+    integer sum = first_operand + second_operand
 
-    assert(sum_result == 3000000000)
+    assert(sum == 3000000000)
 }
 
 @test
 function void test_number_division_normal() {
     number quotient = 10.0 / 3.0
 
-    assert(quotient > 3.3 && quotient < 3.4)
+    assert(Math.approximately_equal(quotient, 3.3333333333333335))
 }
 
-# ─── type_of Collections ───
+# ─── type_of collections and print ───────────────────────
 
 @test
 function void test_type_of_collections() {
@@ -235,17 +243,16 @@ function void test_print_multiple_arguments_returns_none() {
     assert(print(1, "two", true, 4.5) == none)
 }
 
-# ─── assert failure semantics ────────────────────────────
+# ─── assert semantics ────────────────────────────────────
 
 @test
-function void test_assert_passes_on_truthy() {
-    mutable boolean reached_after_assert = false
+function void test_assert_passes_on_true_condition() {
+    # The condition must be a boolean (a compile-time check); reaching the
+    # end means no assertion threw.
+    array<integer> values = [1]
 
-    assert(true)
-    assert(1 == 1, "one equals one")
-    reached_after_assert = true
-
-    assert(reached_after_assert)
+    assert(Array.length(values) == 1)
+    assert("text" != "", "a computed true condition passes")
 }
 
 @test
@@ -275,27 +282,27 @@ function void test_assert_failure_uses_custom_message() {
 }
 
 @test
-function void test_assert_failure_on_falsy_value() {
-    # A falsy non-boolean argument (empty string) fails the assertion.
-    mutable boolean caught = false
+function void test_assert_failure_on_computed_false_condition() {
+    mutable string caught_message = ""
+    string empty_text = ""
 
     try {
-        assert("")
-    } catch(_err) {
-        caught = true
+        assert(String.length(empty_text) > 0)
+    } catch(err) {
+        caught_message = err
     }
 
-    assert(caught)
+    assert(caught_message == "assertion failed")
 }
 
 # ─── Integer → number implicit widening ──────────────────
 
 @test
 function void test_integer_assigned_to_number_variable() {
-    number x = 5
+    number widened = 5
 
-    assert(Math.approximately_equal(x, 5.0))
-    assert(type_of(x) == "number")
+    assert(Math.approximately_equal(widened, 5.0))
+    assert(type_of(widened) == "number")
 }
 
 @test
@@ -317,7 +324,7 @@ function void test_mixed_integer_number_arithmetic() {
     assert(Math.approximately_equal(product, 7.5))
 }
 
-# ─── Complex String Interpolation ────────────────────────
+# ─── Complex string interpolation ────────────────────────
 
 @test
 function void test_string_interpolation_with_computed_value() {
@@ -330,25 +337,25 @@ function void test_string_interpolation_with_computed_value() {
 
 @test
 function void test_string_interpolation_with_arithmetic() {
-    integer a = 3
-    integer b = 4
-    string output = "sum=${a + b}, product=${a * b}"
+    integer first = 3
+    integer second = 4
+    string output = "sum=${first + second}, product=${first * second}"
 
     assert(output == "sum=7, product=12")
 }
 
 @test
 function void test_string_interpolation_many_parts() {
-    integer n = 1
-    string s = "x"
     # More than the inline buffer capacity (8 parts) forces the heap-fallback
     # path and interleaves string and non-string operands with literal chunks.
-    string output = "a${n}b${s}c${n}d${s}e${n}f${s}g${n}h${s}i"
+    integer count = 1
+    string label = "x"
+    string output = "a${count}b${label}c${count}d${label}e${count}f${label}g${count}h${label}i"
 
     assert(output == "a1bxc1dxe1fxg1hxi")
 }
 
-# ─── Triple-Quoted String with Interpolation ─────────────
+# ─── Triple-quoted string with interpolation ─────────────
 
 @test
 function void test_multiline_string_with_interpolation() {
@@ -371,68 +378,115 @@ function void test_multiline_string_preserves_lines() {
     """
     array<string> lines = String.split(String.trim(block), "\n")
 
-    assert(Array.length(lines) == 3)
+    assert(lines == ["Line1", "Line2", "Line3"])
 }
 
-# ─── Collection Type Keywords ────────────────────────────
+@test
+function void test_multiline_string_dedents_across_interpolations() {
+    # The common indent is computed once for the whole literal, so the text
+    # after an interpolation loses its indentation too.
+    string name = "Alice"
+    string letter = """
+        Dear ${name},
+        Thank you.
+        """
+
+    assert(letter == "Dear Alice,\nThank you.")
+}
+
+@test
+function void test_multiline_string_keeps_space_between_interpolations() {
+    string first = "x"
+    string second = "y"
+
+    assert("""${first} ${second}""" == "x y")
+
+    string stacked = """
+        ${first}
+          ${second}
+        """
+
+    assert(stacked == "x\n  y")
+}
+
+@test
+function void test_multiline_string_processes_escapes() {
+    integer price = 3
+    string text = """
+        cost: \${price} = ${price}\tok
+        quote: \"\"\"
+        """
+
+    assert(text == "cost: \${price} = 3\tok\nquote: \"\"\"")
+}
+
+# ─── Number literal forms ────────────────────────────────
+
+@test
+function void test_octal_literal() {
+    assert(0o17 == 15)
+    assert(0o755 == 493)
+}
+
+# ─── Collection type keywords ────────────────────────────
 
 @test
 function void test_queue_type_keyword() {
-    queue<integer> q = Queue.new()
-    queue<integer> q2 = Queue.enqueue(q, 42)
+    queue<integer> empty_queue = Queue.new()
+    queue<integer> filled_queue = Queue.enqueue(empty_queue, 42)
 
-    assert(Queue.length(q2) == 1)
-    assert(type_of(q2) == "queue")
+    assert(Queue.length(filled_queue) == 1)
+    assert(type_of(filled_queue) == "queue")
 }
 
-function integer queue_size(queue<integer> q) {
-    return Queue.length(q)
+function integer queue_size(queue<integer> items) {
+    return Queue.length(items)
 }
 
 @test
 function void test_queue_type_in_function_signature() {
-    queue<integer> q = Queue.new()
-    |> Queue.enqueue(1)
-    |> Queue.enqueue(2)
+    queue<integer> items = Queue.new()
+        |> Queue.enqueue(1)
+        |> Queue.enqueue(2)
 
-    assert(queue_size(q) == 2)
+    assert(queue_size(items) == 2)
 }
 
 @test
 function void test_stack_type_keyword() {
-    stack<integer> s = Stack.new()
-    stack<integer> s2 = Stack.push(s, 99)
+    stack<integer> empty_stack = Stack.new()
+    stack<integer> filled_stack = Stack.push(empty_stack, 99)
 
-    assert(Stack.length(s2) == 1)
-    assert(type_of(s2) == "stack")
+    assert(Stack.length(filled_stack) == 1)
+    assert(type_of(filled_stack) == "stack")
 }
 
-function integer stack_size(stack<integer> s) {
-    return Stack.length(s)
+function integer stack_size(stack<integer> items) {
+    return Stack.length(items)
 }
 
 @test
 function void test_stack_type_in_function_signature() {
-    stack<integer> s = Stack.new()
-    |> Stack.push(10)
-    |> Stack.push(20)
-    |> Stack.push(30)
+    stack<integer> items = Stack.new()
+        |> Stack.push(10)
+        |> Stack.push(20)
+        |> Stack.push(30)
 
-    assert(stack_size(s) == 3)
+    assert(stack_size(items) == 3)
 }
 
 @test
 function void test_collection_type_keywords_in_tuple() {
-    queue<integer> q = Queue.new() |> Queue.enqueue(3)
-    stack<integer> s = Stack.new() |> Stack.push(4)
+    queue<integer> source_queue = Queue.new() |> Queue.enqueue(3)
+    stack<integer> source_stack = Stack.new() |> Stack.push(4)
 
-    (queue<integer> queue_val, stack<integer> stack_val) = (q, s)
+    (queue<integer> queue_value, stack<integer> stack_value) = (source_queue, source_stack)
 
-    assert(Queue.length(queue_val) == 1)
-    assert(Stack.length(stack_val) == 1)
+    assert(Queue.length(queue_value) == 1)
+    assert(Stack.length(stack_value) == 1)
 }
 
-# ─── Numeric Literal Bases ───────────────────────────────
+# ─── Numeric literal bases ───────────────────────────────
 
 @test
 function void test_hex_integer_literal() {
@@ -459,7 +513,7 @@ function void test_scientific_notation_negative_exponent() {
     assert(Math.approximately_equal(small, 0.025))
 }
 
-# ─── type_of on Composite and Wrapped Values ─────────────
+# ─── type_of on composite and wrapped values ─────────────
 
 @test
 function void test_type_of_tuple() {
@@ -479,34 +533,70 @@ function void test_type_of_optional_some_reports_inner() {
 
 @test
 function void test_type_of_record_reports_name() {
-    TypePoint p = TypePoint { x = 1.0, y = 2.0 }
+    TypePoint point = TypePoint { x = 1.0, y = 2.0 }
 
-    assert(type_of(p) == "TypePoint")
+    assert(type_of(point) == "TypePoint")
 }
 
 @test
 function void test_type_of_choice_reports_name() {
-    TypeShape s = TypeShape.Circle(3.0)
+    TypeShape shape = TypeShape.Circle(3.0)
 
-    assert(type_of(s) == "TypeShape")
+    assert(type_of(shape) == "TypeShape")
 }
 
-# ─── Integer Overflow Promotes to number ─────────────────
+# ─── Integer overflow is a runtime error ─────────────────
 
 @test
-function void test_integer_overflow_promotes_to_number() {
-    integer maximum_integer = 9223372036854775807
+function void test_integer_overflow_raises_error() {
+    mutable integer maximum_integer = 9223372036854775807
+    mutable string caught_message = ""
 
-    # Overflowing integer arithmetic widens the result to number rather
-    # than wrapping around.
-    assert(type_of(maximum_integer + 1) == "number")
+    # Overflowing integer arithmetic raises instead of wrapping around or
+    # silently widening to number, so an integer variable always holds an
+    # integer.
+    try {
+        integer _ = maximum_integer * 2
+    } catch(err) {
+        caught_message = err
+    }
 
-    number promoted = maximum_integer + 1
+    assert(caught_message == "integer overflow in multiplication")
 
-    assert(promoted > 9000000000000000000.0)
+    caught_message = ""
+
+    try {
+        maximum_integer++
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(caught_message == "integer overflow in increment")
+    assert(maximum_integer == 9223372036854775807, "the failed increment left the value intact")
+
+    integer minimum_integer = -9223372036854775807 - 1
+    caught_message = ""
+
+    try {
+        integer _ = minimum_integer - 1
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(String.contains(caught_message, "integer overflow in"))
+
+    caught_message = ""
+
+    try {
+        integer _ = -minimum_integer
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(caught_message == "integer overflow in negation")
 }
 
-# ─── Integer Division / Modulo Sign ──────────────────────
+# ─── Integer modulo sign ─────────────────────────────────
 
 @test
 function void test_modulo_sign_follows_dividend() {
@@ -514,10 +604,12 @@ function void test_modulo_sign_follows_dividend() {
     assert(7 % -2 == 1)
 }
 
-# ─── Floating-point Modulo ───────────────────────────────
+# ─── Floating-point modulo ───────────────────────────────
+
 # `%` on `number` operands computes the floating-point remainder (fmod),
 # matching the type checker and the language reference (which document
 # `number % number`). Integer `%` stays integer modulo.
+
 @test
 function void test_modulo_floating_point() {
     assert(Math.approximately_equal(5.5 % 2.0, 1.5))
@@ -529,10 +621,11 @@ function void test_modulo_floating_point() {
     # Compound `%=` on a `number` accumulator (see the User Manual example).
     mutable number total = 10.0
     total %= 3.0
+
     assert(Math.approximately_equal(total, 1.0))
 }
 
-# ─── Additional String Escapes ───────────────────────────
+# ─── Additional string escapes ───────────────────────────
 
 @test
 function void test_string_escape_carriage_return_and_backslash() {
@@ -549,4 +642,159 @@ function void test_string_escape_dollar() {
 
     assert(text == "price $5")
     assert(String.length(text) == 8)
+}
+
+# ─── Integer → number widening in other contexts ────────
+#
+# An integer flowing into a `number` context is converted, so the runtime value
+# is a number wherever its static type says `number` — not only for plain
+# variable declarations.
+
+record WideningBox {
+    number size = 3
+}
+
+record WideningCell<T> {
+    T value
+}
+
+choice WideningShape {
+    Circle(number radius)
+}
+
+choice WideningList<T> {
+    Empty
+    Node(T head, WideningList<T> tail)
+}
+
+function number widening_identity(number value) {
+    return value
+}
+
+function number widening_from_integer(integer value) {
+    return value
+}
+
+function integer widening_increment(integer value) {
+    return value + 1
+}
+
+function number widening_tail_call(integer value) {
+    return widening_increment(value)
+}
+
+function number widening_default(number value = 4) {
+    return value
+}
+
+@test
+function void test_widening_record_fields_and_defaults() {
+    WideningBox explicit_box = WideningBox { size = 5 }
+    WideningBox default_box = WideningBox {}
+    WideningBox changed_box = explicit_box with { size = 7 }
+
+    assert(type_of(explicit_box.size) == "number")
+    assert(type_of(default_box.size) == "number")
+    assert(type_of(changed_box.size) == "number")
+}
+
+@test
+function void test_widening_field_and_index_assignment() {
+    mutable WideningBox box = WideningBox {}
+    mutable array<number> values = [0.5, 1.5]
+
+    box.size = 9
+    values[0] = 2
+
+    assert(type_of(box.size) == "number")
+    assert(type_of(values[0]) == "number")
+}
+
+@test
+function void test_widening_function_arguments_and_returns() {
+    assert(type_of(widening_identity(5)) == "number")
+    assert(type_of(widening_identity(value: 5)) == "number")
+    assert(type_of(5 |> widening_identity()) == "number")
+    assert(type_of(widening_from_integer(5)) == "number")
+    assert(type_of(widening_tail_call(5)) == "number")
+    assert(type_of(widening_default()) == "number")
+}
+
+@test
+function void test_widening_choice_payloads() {
+    match WideningShape.Circle(5) {
+        case WideningShape.Circle(radius) {
+            assert(type_of(radius) == "number")
+        }
+    }
+}
+
+@test
+function void test_widening_collections_and_wrappers() {
+    array<integer> integers = [1, 2]
+    array<number> widened = integers
+    dictionary<number> totals = {"a": 1}
+    (number, string) pair = (1, "one")
+    optional<number> maybe = some(1)
+    result<number> outcome = success(1)
+
+    assert("${widened}" == "[1.0, 2.0]")
+    assert("${totals}" == "{\"a\": 1.0}")
+    assert(type_of(pair.0) == "number")
+    assert("${maybe}" == "1.0")
+    assert("${outcome}" == "success(1.0)")
+}
+
+@test
+function void test_widening_mixed_numeric_literals() {
+    array<number> values = [3, 4.5]
+    dictionary<number> prices = {"tea": 2, "cake": 3.5}
+
+    assert(type_of(values[0]) == "number")
+    assert("${values}" == "[3.0, 4.5]")
+    assert("${prices}" == "{\"tea\": 2.0, \"cake\": 3.5}")
+}
+
+@test
+function void test_widening_stdlib_element_arguments() {
+    array<number> values = [1.5]
+
+    assert("${Array.push(values, 2)}" == "[1.5, 2.0]")
+    assert("${values |> Array.push(2)}" == "[1.5, 2.0]")
+    assert("${Array.concat(values, [2, 3])}" == "[1.5, 2.0, 3.0]")
+}
+
+@test
+function void test_widening_generic_user_types() {
+    WideningCell<number> cell = WideningCell<number> { value = 5 }
+    WideningList<number> list = WideningList.Node(1, WideningList.Node(2, WideningList.Empty))
+
+    assert(type_of(cell.value) == "number")
+
+    match list {
+        case WideningList.Node(head, _tail) { assert(type_of(head) == "number") }
+        case WideningList.Empty { assert(false, "list should not be empty") }
+    }
+}
+
+@test
+function void test_widening_downcast() {
+    match downcast<number>(5) {
+        success(value) { assert(type_of(value) == "number") }
+        failure(_error) { assert(false, "downcast<number>(5) should succeed") }
+    }
+}
+
+@test
+function void test_widening_conditional_branches_and_defaults() {
+    boolean is_set = true
+    integer selector = 1
+    optional<number> missing = none
+    WideningBox from_if = WideningBox { size = if is_set { 1 } else { 2.5 } }
+    WideningBox from_match = WideningBox { size = match selector { case 1 { 4 } else { 2.5 } } }
+    WideningBox from_default = WideningBox { size = missing ?? 5 }
+
+    assert(type_of(from_if.size) == "number")
+    assert(type_of(from_match.size) == "number")
+    assert(type_of(from_default.size) == "number")
 }

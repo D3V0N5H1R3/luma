@@ -80,7 +80,7 @@ void register_csv_functions(std::vector<FunctionSpec>& specs, const ModuleBuilde
             m.fn("select", 2, "(table: Csv.Table, names: array<string>)",
                  R::result(named::csv_table()), {named::csv_table(), p.array_string}),
             m.fn("filter_rows", 2,
-                 "(table: Csv.Table, function: func(dictionary<string>) -> boolean)",
+                 "(table: Csv.Table, function: function(dictionary<string>) -> boolean)",
                  R::result(named::csv_table()), {named::csv_table(), p.func}),
             m.fn("header", 1, "(csv: string)", R::result(R::array(R::string_type())), {p.string}),
             m.fn("deserialize_with", 2, "(csv: string, options: Csv.Dialect | dictionary<string>)",

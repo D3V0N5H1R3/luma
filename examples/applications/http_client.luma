@@ -39,14 +39,14 @@ function void main() {
 
     print("Parsed back: search=${parsed["search"]}, page=${parsed["page"]}")
 
-    # ── HTTPS detection ──
-    print("\n=== HTTPS Detection ===")
+    # ── Request error handling ──
+    print("\n=== Request Error Handling ===")
 
     # Use a closed localhost port so the request fails fast instead
     # of hanging on an unreachable external host.
-    result<Http.Response> r = Http.get("https://localhost:1")
+    result<Http.Response> outcome = Http.get("https://localhost:1")
 
-    match r {
+    match outcome {
         success(response) {
             print("Request unexpectedly succeeded with status ${response.status}.")
         }

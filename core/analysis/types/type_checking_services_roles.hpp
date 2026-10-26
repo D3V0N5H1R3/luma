@@ -23,7 +23,8 @@
 //   TypeCheckingServices definition.
 // ─────────────────────────────────────────────────────────────────────────────
 
-#pragma once
+#ifndef LUMA_TYPES_TYPE_CHECKING_SERVICES_ROLES_HPP
+#define LUMA_TYPES_TYPE_CHECKING_SERVICES_ROLES_HPP
 
 #include <cstddef>
 #include <memory>
@@ -124,6 +125,14 @@ public:
     virtual ~ITypeResolutionService() = default;
 
     [[nodiscard]] virtual TypeInfo resolve_type(const TypeAnnotation& ann) = 0;
+
+    // Reports, at `loc`, a use of a namespace-internal type by the annotation
+    // node `ann` itself (not its type arguments) from outside that namespace.
+    // Each annotation node is reported at most once, whether here or by a
+    // later resolve_type(), so callers that know the source location report
+    // first.  Returns true when the access is denied.
+    virtual bool report_internal_type_access(const TypeAnnotation& ann,
+                                             const SourceLocation& loc) = 0;
     [[nodiscard]] virtual bool is_assignable(const TypeInfo& target, const TypeInfo& source) = 0;
     [[nodiscard]] virtual bool
     satisfies_interface(std::string_view record_name, std::string_view iface_name,
@@ -170,6 +179,16 @@ public:
     virtual ~IStatementCheckingService() = default;
 
     virtual void check_statement(const Statement& stmt) = 0;
+
+    // True when every path through `stmts` ends in a return statement.
+    [[nodiscard]] virtual bool
+    definitely_returns(const std::vector<std::unique_ptr<Statement>>& stmts) const = 0;
+
+    // True when no path through `stmts` reaches its end (each ends in a
+    // return, break, or continue), so the block does not feed an ownership
+    // merge after its if/match.
+    [[nodiscard]] virtual bool
+    never_falls_through(const std::vector<std::unique_ptr<Statement>>& stmts) const = 0;
 
 protected:
     IStatementCheckingService() = default;
@@ -292,3 +311,5 @@ protected:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_TYPE_CHECKING_SERVICES_ROLES_HPP

@@ -9,8 +9,9 @@
 build/
 build-*/
 cmake-build-*/
+# Unanchored: also covers the VS Code extension's esbuild output (extensions/vscode/out/).
 out/
-install/
+/install/
 
 # Rust build output (Zed extension, tree-sitter grammar).
 target/
@@ -35,7 +36,6 @@ CMakeFiles/
 *.ninja
 .ninja_deps
 .ninja_log
-rules.ninja
 
 # ── Compiled binaries ──
 *.a
@@ -70,17 +70,15 @@ rules.ninja
 *.suo
 *.user
 *.VC.db
-*.VC.opendb
 *.vcxproj
 *.vcxproj.filters
-*.vcxproj.user
 /Debug/
 ipch/
 /MinSizeRel/
 /Release/
 /RelWithDebInfo/
-x64/
-x86/
+/x64/
+/x86/
 
 # Visual Studio Code
 .vscode/*
@@ -114,7 +112,7 @@ xcuserdata/
 # ── Environment and secrets ──
 .env
 .env.*
-.env.local
+!.env.example
 
 # ── OS-specific files ──
 
@@ -151,6 +149,7 @@ vcpkg_installed/
 # ── Python artifacts ──
 __pycache__/
 *.pyc
+.ruff_cache/
 
 # ── Extension build artifacts ──
 *.tgz
@@ -163,15 +162,18 @@ __pycache__/
 *.gcov
 *.profdata
 *.profraw
-coverage/
+/coverage/
 lcov.info
 
 # ── Fuzzing artifacts ──
-crash-*
-leak-*
-oom-*
-slow-unit-*
-timeout-*
+# libFuzzer writes these to its working directory, which is the repository root
+# for both CI (fuzz.yml) and the documented local workflow (fuzz/DIRECTORY.md).
+# Anchored so source files such as `oom-guard.cpp` are never swallowed.
+/crash-*
+/leak-*
+/oom-*
+/slow-unit-*
+/timeout-*
 
 # ── Profiling and sanitiser output ──
 gmon.out
@@ -186,21 +188,24 @@ sanitizer.log.*
 *.swp
 
 # ── Temporary output files ──
-*_out.txt
-*_out2.txt
-*_out3.txt
-ct_*.txt
-const_warnings.txt
-temp_*
+# Root-anchored scratch output, so source files such as `temp_converter.luma`
+# or snapshot fixtures like `parse_out.txt` elsewhere in the tree stay tracked.
+/*_out.txt
+/*_out2.txt
+/*_out3.txt
+/ct_*.txt
+/const_warnings.txt
+/temp_*
 *.tmp
 # Benchmark scratch files (normally cleaned up; ignored in case of a crash).
 __bench_*
 luma_bench_tmp*/
 # Unix core dumps. The trailing-slash negation keeps the tracked `core/`
-# source directory while still ignoring `core` and `core.<pid>` dump files.
+# source directory while still ignoring `core` and `core.<pid>` dump files;
+# the digit keeps sources such as `core.hpp` or `core.luma` tracked.
 core
 !core/
-core.*
+core.[0-9]*
 
 # ── Prompt-pipeline artifacts ──
 # Reports, logs, and transcripts produced by scripts/pipeline/*.ps1. These are

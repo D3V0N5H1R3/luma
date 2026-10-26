@@ -3,13 +3,18 @@
 
 #include "runtime/stdlib/io/http_module_response.hpp"
 
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstddef>
+#include <cstdint>
+#include <format>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include "common/resource_limits.hpp"
 #include "common/string_utils.hpp"
@@ -29,27 +34,39 @@ namespace {
 // Fixed read buffer size for streaming an HTTP response off the socket.
 constexpr std::size_t k_http_response_buffer_size{4096};
 
+// Why read_response_chunks stopped.
+enum class ReadStop {
+    Done,         // The stop predicate reported the read complete.
+    Closed,       // The peer closed the connection, or recv failed / timed out.
+    LimitReached, // The raw response hit max_http_resp_size().
+};
+
 // Stream bytes from `conn` into `raw` in fixed-size chunks until `should_stop(raw)`
 // reports the read is complete, the peer closes the connection (recv <= 0), or the
-// response size cap is reached.  Centralises the recv → append → cap loop shared by
-// every framing-specific reader below; each caller supplies its own stop predicate.
+// response size cap is reached, and report which of the three happened so the
+// caller can tell a complete response from a truncated one.  Centralises the
+// recv → append → cap loop shared by every framing-specific reader below; each
+// caller supplies its own stop predicate.
 template <typename StopPredicate>
-void read_response_chunks(Connection& conn, std::string& raw, StopPredicate should_stop) {
+[[nodiscard]] ReadStop read_response_chunks(Connection& conn, std::string& raw,
+                                            StopPredicate should_stop) {
     std::array<char, k_http_response_buffer_size> buf{};
 
     while (!should_stop(raw)) {
         if (raw.size() >= max_http_resp_size()) {
-            break;
+            return ReadStop::LimitReached;
         }
 
         const auto n = conn.recv_data(buf.data(), buf.size());
 
         if (n <= 0) {
-            break;
+            return ReadStop::Closed;
         }
 
         raw.append(buf.data(), static_cast<std::size_t>(n));
     }
+
+    return ReadStop::Done;
 }
 
 // Parse a decimal HTTP status code, returning nullopt when it is malformed
@@ -71,11 +88,64 @@ struct TransferFraming {
     bool is_chunked{false};
 };
 
+// Status code from the status line ("HTTP/1.x STATUS [REASON]") at the start of
+// `headers`, or nullopt when it is malformed.
+[[nodiscard]] std::optional<int> status_code_of(const std::string& headers) {
+    const auto status_line = headers.substr(0, headers.find("\r\n"));
+    const auto sp1 = status_line.find(' ');
+
+    if (sp1 == std::string::npos) {
+        return std::nullopt;
+    }
+
+    const auto sp2 = status_line.find(' ', sp1 + 1);
+
+    return parse_status_code(status_line.substr(
+        sp1 + 1, (sp2 == std::string::npos) ? std::string::npos : sp2 - sp1 - 1));
+}
+
+constexpr int k_status_informational_min{100};
+constexpr int k_status_informational_max{199};
+constexpr int k_status_switching_protocols{101};
+constexpr int k_status_no_content{204};
+constexpr int k_status_not_modified{304};
+
+[[nodiscard]] bool is_informational(std::optional<int> status) {
+    return status && *status >= k_status_informational_min && *status <= k_status_informational_max;
+}
+
+// An interim response precedes the final one on the same connection.  101
+// Switching Protocols is final: the connection stops speaking HTTP after it.
+[[nodiscard]] bool is_interim_status(std::optional<int> status) {
+    return is_informational(status) && *status != k_status_switching_protocols;
+}
+
+// RFC 9112 §6.3 rule 1: a response to HEAD, and any 1xx, 204, or 304 response,
+// ends at the empty line after its header fields.
+[[nodiscard]] bool has_no_body(std::string_view request_method, std::optional<int> status) {
+    if (case_insensitive_equal(request_method, "HEAD")) {
+        return true;
+    }
+
+    return is_informational(status) ||
+           (status && (*status == k_status_no_content || *status == k_status_not_modified));
+}
+
 // Read from the connection until the header terminator (CRLF CRLF) appears or
-// the size cap is reached.
-void read_until_headers_complete(Connection& conn, std::string& raw) {
-    read_response_chunks(conn, raw, [](const std::string& data) {
-        return data.find("\r\n\r\n") != std::string::npos;
+// the read stops.  The search resumes where the previous one left off (minus the
+// three bytes a terminator split across two reads could start with), so header
+// reading stays linear in the response size.
+[[nodiscard]] ReadStop read_until_headers_complete(Connection& conn, std::string& raw) {
+    std::size_t search_from{0};
+
+    return read_response_chunks(conn, raw, [&search_from](const std::string& data) {
+        if (data.find("\r\n\r\n", search_from) != std::string::npos) {
+            return true;
+        }
+
+        search_from = (data.size() > 3) ? data.size() - 3 : 0;
+
+        return false;
     });
 }
 
@@ -125,105 +195,77 @@ void read_until_headers_complete(Connection& conn, std::string& raw) {
     return framing;
 }
 
-// Read remaining body bytes for a Content-Length framed response.
-void read_body_by_content_length(Connection& conn, std::string& raw, std::size_t body_start,
-                                 std::size_t content_length) {
-    read_response_chunks(conn, raw, [body_start, content_length](const std::string& data) {
-        return data.size() - body_start >= content_length;
-    });
+[[nodiscard]] std::string too_large_error() {
+    return std::format("response exceeds the maximum size of {} bytes", max_http_resp_size());
 }
 
-// Read a chunked-transfer body until the terminal chunk, then decode it in
-// place, replacing the chunked bytes in `raw` with the decoded body.
-void read_and_decode_chunked_body(Connection& conn, std::string& raw, std::size_t body_start) {
-    // Read chunked transfer encoding by incrementally parsing chunk headers
-    // to find the terminal 0-length chunk.  This avoids false matches on
-    // payload data that happens to contain "\r\n0\r\n".
-    read_response_chunks(conn, raw, [body_start](const std::string& data) {
-        auto pos = body_start;
+// Read the remaining body bytes of a Content-Length framed response.  Returns an
+// error message (empty on success) when the declared length exceeds the size
+// cap or the connection ends before every declared byte arrived.
+[[nodiscard]] std::string read_body_by_content_length(Connection& conn, std::string& raw,
+                                                      std::size_t body_start,
+                                                      std::size_t content_length) {
+    if (content_length > max_http_resp_size() - std::min(body_start, max_http_resp_size())) {
+        return too_large_error();
+    }
 
-        while (pos < data.size()) {
-            auto line_end = data.find("\r\n", pos);
+    const auto stop =
+        read_response_chunks(conn, raw, [body_start, content_length](const std::string& data) {
+            return data.size() - body_start >= content_length;
+        });
 
-            if (line_end == std::string::npos) {
-                return false; // incomplete chunk header — need more data
-            }
+    if (stop != ReadStop::Done) {
+        return std::format("connection closed after {} of {} body bytes", raw.size() - body_start,
+                           content_length);
+    }
 
-            const auto size_str = data.substr(pos, line_end - pos);
-            std::size_t chunk_size = 0;
+    // Drop anything the peer sent past the declared length.
+    raw.resize(body_start + content_length);
 
-            try {
-                chunk_size = std::stoull(size_str, nullptr, 16);
-            } catch (...) {
-                return true; // malformed — stop reading, let decoder handle it
-            }
+    return {};
+}
 
-            if (chunk_size == 0) {
-                return true; // terminal chunk found
-            }
+// Read a chunked-transfer body until the terminal chunk, decoding it
+// incrementally as data arrives, then replace the chunked bytes in `raw` with
+// the decoded body.  Returns an error message (empty on success) for a
+// malformed or oversized chunk stream, or one the peer cut short.
+[[nodiscard]] std::string read_and_decode_chunked_body(Connection& conn, std::string& raw,
+                                                       std::size_t body_start) {
+    ChunkedBodyDecoder decoder{body_start, max_http_resp_size()};
 
-            // Skip past: chunk-size CRLF chunk-data CRLF
-            pos = line_end + 2 + chunk_size + 2;
-        }
-
-        return false; // need more data
+    const auto stop = read_response_chunks(conn, raw, [&decoder](const std::string& data) {
+        return decoder.feed(data) != ChunkedBodyDecoder::Status::NeedMore;
     });
 
-    // Decode chunked body.
-    std::string decoded_body{};
-
-    auto chunk_pos = body_start;
-
-    while (chunk_pos < raw.size()) {
-        auto chunk_end = raw.find("\r\n", chunk_pos);
-
-        if (chunk_end == std::string::npos) {
+    switch (decoder.status()) {
+        case ChunkedBodyDecoder::Status::Complete:
             break;
-        }
-
-        const auto size_str = raw.substr(chunk_pos, chunk_end - chunk_pos);
-
-        std::size_t chunk_size{0};
-
-        try {
-            chunk_size = std::stoull(size_str, nullptr, 16);
-        } catch (const std::invalid_argument&) {
-            break;
-        } catch (const std::out_of_range&) {
-            break;
-        }
-
-        if (chunk_size == 0) {
-            break;
-        }
-
-        if (chunk_size > max_http_resp_size() ||
-            decoded_body.size() + chunk_size > max_http_resp_size()) {
-            break;
-        }
-
-        auto data_start = chunk_end + 2;
-
-        if (data_start + chunk_size > raw.size()) {
-            break;
-        }
-
-        decoded_body.append(raw, data_start, chunk_size);
-
-        chunk_pos = data_start + chunk_size + 2; // skip \r\n
+        case ChunkedBodyDecoder::Status::Malformed:
+            return "malformed chunked transfer encoding";
+        case ChunkedBodyDecoder::Status::TooLarge:
+            return too_large_error();
+        case ChunkedBodyDecoder::Status::NeedMore:
+            return (stop == ReadStop::LimitReached)
+                       ? too_large_error()
+                       : std::string{"connection closed before the chunked body was complete"};
     }
 
     // Replace body in raw response.  Truncate the chunked bytes in place and
     // append the decoded body, avoiding the extra full-body copy that
     // raw.substr(0, body_start) + decoded_body would allocate.
     raw.resize(body_start);
-    raw += decoded_body;
+    raw += decoder.body();
+
+    return {};
 }
 
 // Fallback when neither Content-Length nor chunked framing is present: read
-// until the peer closes the connection.
-void read_body_until_close(Connection& conn, std::string& raw) {
-    read_response_chunks(conn, raw, [](const std::string&) { return false; });
+// until the peer closes the connection.  Hitting the size cap first is an
+// error, not a silently truncated body.
+[[nodiscard]] std::string read_body_until_close(Connection& conn, std::string& raw) {
+    const auto stop = read_response_chunks(conn, raw, [](const std::string&) { return false; });
+
+    return (stop == ReadStop::LimitReached) ? too_large_error() : std::string{};
 }
 
 } // namespace
@@ -324,32 +366,153 @@ void read_body_until_close(Connection& conn, std::string& raw) {
     return resp;
 }
 
+// ─── ChunkedBodyDecoder ───────────────────────────────────────────────────────
+
+ChunkedBodyDecoder::ChunkedBodyDecoder(std::size_t body_start, std::size_t max_body_size)
+    : pos_{body_start}, max_body_size_{max_body_size} {}
+
+ChunkedBodyDecoder::Status ChunkedBodyDecoder::feed(std::string_view data) {
+    // Upper bound on a chunk-size line (hex digits plus chunk extensions); a
+    // longer unterminated line is garbage, not a header still in transit.
+    constexpr std::size_t k_max_chunk_header_line{4096};
+
+    while (status_ == Status::NeedMore) {
+        const auto line_end = data.find("\r\n", pos_);
+
+        if (line_end == std::string_view::npos) {
+            if (data.size() - std::min(pos_, data.size()) > k_max_chunk_header_line) {
+                status_ = Status::Malformed;
+            }
+
+            break; // Incomplete chunk header — need more data.
+        }
+
+        // chunk-size [ ";" chunk-ext ] — only the hex size matters here.
+        auto size_field = data.substr(pos_, line_end - pos_);
+
+        if (const auto ext = size_field.find(';'); ext != std::string_view::npos) {
+            size_field = size_field.substr(0, ext);
+        }
+
+        while (!size_field.empty() && (size_field.back() == ' ' || size_field.back() == '\t')) {
+            size_field.remove_suffix(1);
+        }
+
+        std::uint64_t chunk_size{0};
+        const auto [ptr, ec] = std::from_chars(
+            size_field.data(), size_field.data() + size_field.size(), chunk_size, 16);
+
+        // from_chars rejects empty input and a sign, and reports overflow as
+        // result_out_of_range instead of wrapping (the old stoull-based scan
+        // let a 2^64-20 size wrap `pos` back onto itself and spin forever).
+        if (size_field.empty() || ec != std::errc{} ||
+            ptr != size_field.data() + size_field.size()) {
+            status_ = Status::Malformed;
+
+            break;
+        }
+
+        if (chunk_size == 0) {
+            status_ = Status::Complete; // Terminal chunk; trailers are not needed.
+
+            break;
+        }
+
+        if (chunk_size > max_body_size_ - body_.size()) {
+            status_ = Status::TooLarge;
+
+            break;
+        }
+
+        const auto data_start = line_end + 2;
+        const auto size = static_cast<std::size_t>(chunk_size);
+
+        // Wait until the whole chunk and its trailing CRLF have arrived.
+        if (data.size() < data_start || data.size() - data_start < size + 2) {
+            break;
+        }
+
+        if (data.substr(data_start + size, 2) != "\r\n") {
+            status_ = Status::Malformed;
+
+            break;
+        }
+
+        body_.append(data.substr(data_start, size));
+
+        // Strictly advances: size >= 1 plus at least five framing bytes.
+        pos_ = data_start + size + 2;
+    }
+
+    return status_;
+}
+
 // Read the full HTTP response, handling Content-Length and chunked transfer.
-[[nodiscard]] std::string read_http_response(Connection& conn) {
-    std::string raw{};
+[[nodiscard]] HttpReadResult read_http_response(Connection& conn, std::string_view request_method) {
+    HttpReadResult result{};
+    std::string& raw = result.raw;
 
-    read_until_headers_complete(conn, raw);
+    // A server may send any number of interim 1xx responses (100 Continue, 103
+    // Early Hints) before the final one; bound how many are skipped so a
+    // hostile peer cannot keep the reader busy forever with tiny ones.
+    constexpr int k_max_interim_responses{32};
 
-    const auto header_end = raw.find("\r\n\r\n");
+    for (int interim = 0;; ++interim) {
+        const auto header_stop = read_until_headers_complete(conn, raw);
 
-    if (header_end == std::string::npos) {
-        return raw;
+        const auto header_end = raw.find("\r\n\r\n");
+
+        if (header_end == std::string::npos) {
+            if (header_stop == ReadStop::LimitReached) {
+                result.error = too_large_error();
+            } else if (!raw.empty()) {
+                result.error = "connection closed before the response headers were complete";
+            }
+
+            return result;
+        }
+
+        const auto headers_str = raw.substr(0, header_end);
+        const auto body_start = header_end + 4;
+        const auto status = status_code_of(headers_str);
+
+        if (is_interim_status(status)) {
+            if (interim + 1 >= k_max_interim_responses) {
+                result.error = "too many interim (1xx) responses";
+
+                return result;
+            }
+
+            // Discard the interim response; the final one follows directly.
+            raw.erase(0, body_start);
+
+            continue;
+        }
+
+        // RFC 9112 §6.3 rule 1: these responses never carry a body, whatever
+        // Content-Length / Transfer-Encoding claim.
+        if (has_no_body(request_method, status)) {
+            raw.resize(body_start);
+
+            return result;
+        }
+
+        const auto framing = parse_transfer_framing(headers_str);
+
+        // RFC 9112 §6.3: Transfer-Encoding overrides Content-Length when both
+        // are present (a sender must not send both; honouring Content-Length
+        // there is a request-smuggling / truncation hazard).
+        if (framing.is_chunked) {
+            result.error = read_and_decode_chunked_body(conn, raw, body_start);
+        } else if (framing.has_content_length) {
+            result.error =
+                read_body_by_content_length(conn, raw, body_start, framing.content_length);
+        } else {
+            result.error = read_body_until_close(conn, raw);
+        }
+
+        return result;
     }
-
-    const auto headers_str = raw.substr(0, header_end);
-    const auto body_start = header_end + 4;
-
-    const auto framing = parse_transfer_framing(headers_str);
-
-    if (framing.has_content_length) {
-        read_body_by_content_length(conn, raw, body_start, framing.content_length);
-    } else if (framing.is_chunked) {
-        read_and_decode_chunked_body(conn, raw, body_start);
-    } else {
-        read_body_until_close(conn, raw);
-    }
-
-    return raw;
 }
 
 } // namespace luma

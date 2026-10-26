@@ -26,11 +26,11 @@ namespace luma::stdlib::detail {
 // whose elements are const and force a copy of every FunctionSpec (two heap
 // std::strings + a param_types vector + ReturnTypeDescs each).  The braced
 // temporaries are constructed in place and then moved into the vector, so each
-// spec is built exactly once and never copied.
+// spec is built exactly once and never copied.  push_back keeps the vector's
+// geometric growth (an exact-size reserve here would reallocate on every call
+// once build_catalog()'s up-front estimate is exceeded).
 template <std::size_t N>
 void append_specs(std::vector<FunctionSpec>& specs, FunctionSpec (&&items)[N]) {
-    specs.reserve(specs.size() + N);
-
     for (auto& item : items) {
         specs.push_back(std::move(item));
     }
@@ -217,9 +217,18 @@ namespace named {
     return ReturnTypeDesc::named("Period");
 }
 
-// DateTime.interval() / interval_* take and return these range records (bare name).
-[[nodiscard]] inline ReturnTypeDesc interval() {
-    return ReturnTypeDesc::named("Interval");
+// DateTime.interval() / interval_* take and return these timestamp-range records.
+// Math.Interval shares the short name "Interval" but has different fields, so —
+// unlike most records — both interval records use their fully-qualified name as
+// their type identity (type checker and runtime type_name alike).
+[[nodiscard]] inline ReturnTypeDesc datetime_interval() {
+    return ReturnTypeDesc::named("DateTime.Interval");
+}
+
+// Math.interval() / interval_* take and return these closed numeric-range
+// records (fully-qualified for the reason given at datetime_interval()).
+[[nodiscard]] inline ReturnTypeDesc math_interval() {
+    return ReturnTypeDesc::named("Math.Interval");
 }
 
 // Math.rectangle() / rectangle_* take and return these axis-aligned rectangle
@@ -469,7 +478,7 @@ struct ModuleBuilder {
     [[nodiscard]] FunctionSpec fn(std::string_view name, int arity, std::string params,
                                   ReturnTypeDesc ret, std::vector<ReturnTypeDesc> param_types = {},
                                   std::optional<Capability> cap_override = std::nullopt) const {
-        return {luma::make_qualified(prefix, name),
+        return {luma::symbols::make_qualified(prefix, name),
                 arity,
                 std::move(params),
                 false,
@@ -481,7 +490,7 @@ struct ModuleBuilder {
     [[nodiscard]] FunctionSpec variadic_fn(std::string_view name, int min_arity, std::string params,
                                            ReturnTypeDesc ret,
                                            std::vector<ReturnTypeDesc> param_types = {}) const {
-        return {luma::make_qualified(prefix, name),
+        return {luma::symbols::make_qualified(prefix, name),
                 min_arity,
                 std::move(params),
                 false,
@@ -492,7 +501,7 @@ struct ModuleBuilder {
     }
 
     [[nodiscard]] FunctionSpec constant(std::string_view name, ReturnTypeDesc ret) const {
-        return {luma::make_qualified(prefix, name), 0, "", true, std::move(ret), cap};
+        return {luma::symbols::make_qualified(prefix, name), 0, "", true, std::move(ret), cap};
     }
 };
 

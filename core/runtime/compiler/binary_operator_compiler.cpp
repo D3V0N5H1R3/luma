@@ -16,7 +16,7 @@ namespace luma {
 namespace {
 
 inline constexpr auto k_binary_op_table = [] {
-    std::array<std::optional<Op>, static_cast<std::size_t>(TokenType::Count_)> table{};
+    std::array<std::optional<Op>, static_cast<std::size_t>(TokenType::Count)> table{};
     table[static_cast<std::size_t>(TokenType::Plus)] = Op::Add;
     table[static_cast<std::size_t>(TokenType::Minus)] = Op::Subtract;
     table[static_cast<std::size_t>(TokenType::Star)] = Op::Multiply;
@@ -35,7 +35,7 @@ inline constexpr auto k_binary_op_table = [] {
 }();
 
 inline constexpr auto k_compound_op_table = [] {
-    std::array<std::optional<Op>, static_cast<std::size_t>(TokenType::Count_)> table{};
+    std::array<std::optional<Op>, static_cast<std::size_t>(TokenType::Count)> table{};
     table[static_cast<std::size_t>(TokenType::PlusEquals)] = Op::Add;
     table[static_cast<std::size_t>(TokenType::MinusEquals)] = Op::Subtract;
     table[static_cast<std::size_t>(TokenType::StarEquals)] = Op::Multiply;
@@ -47,8 +47,8 @@ inline constexpr auto k_compound_op_table = [] {
 
 // Bounds-checked lookup into a constexpr token-to-opcode table.
 template <typename Table>
-[[nodiscard]] constexpr auto lookup_op_table(const Table& table,
-                                             std::size_t index) -> Table::value_type {
+[[nodiscard]] constexpr auto lookup_op_table(const Table& table, std::size_t index)
+    -> Table::value_type {
     if (index >= table.size()) {
         return std::nullopt;
     }

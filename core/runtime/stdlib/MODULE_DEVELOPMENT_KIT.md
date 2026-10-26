@@ -1,6 +1,6 @@
 # Module Development Kit
 
-Step-by-step guide for adding a new standard library module to Luma.  By the end you will have a fully working module that is lazily loaded, type-checked, and tested.
+Step-by-step guide for adding a new standard library module to Luma.  By the end you will have a fully working module that is registered with the stdlib, type-checked, and tested.
 
 > **See also:** [Stdlib Module Registration Guide](STDLIB_MODULE_REGISTRATION_GUIDE.md) — when to use each registration pattern (`ModuleBuilder`, `ContainerModuleBuilder`, or `define_native`), the `register_<module_lower>_ns` naming convention, and the error-handling patterns.  This kit links to those references rather than repeating them.
 
@@ -47,7 +47,10 @@ luma_add_stdlib_library(collections
 ```
 
 The build library is grouped for faster incremental builds; the path prefix is
-the category subdirectory the file physically lives in (Steps 1–2).
+the category subdirectory the file physically lives in (Steps 1–2). If the module
+uses a vendored library, pick a group whose `DEPENDS` already links it (`luma_tls`
+for Mbed TLS and the `LUMA_HAS_TLS` macro, `miniz_lib` for compression) or add the
+target to that group's `DEPENDS` list.
 
 ### Step 4 — Register in `stdlib_registry.hpp`
 

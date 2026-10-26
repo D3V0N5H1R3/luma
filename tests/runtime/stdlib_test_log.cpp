@@ -369,6 +369,19 @@ static void test_log_reset_clears_context_and_format() {
     ASSERT_TRUE(out.find("[INFO] fresh") != std::string::npos);
 }
 
+static void test_log_set_output_failed_open_keeps_current_file() {
+    // Regression: set_output closed the current file BEFORE opening the new one,
+    // so a failed open left the sink set to File with a closed stream and every
+    // later line was silently dropped.  The parent directory does not exist, so
+    // the open fails while the path itself passes the sandbox validation.
+    const auto out = capture_log_output(R"LUMA(Log.set_format("\${message}")
+Log.set_level(Log.Level.Debug)
+assert(Result.is_failure(Log.set_output("_luma_no_such_dir_xyz/redirect.log")))
+Log.information("still logged"))LUMA");
+
+    ASSERT_EQ(out, "still logged\n");
+}
+
 // ─── Negative tests: argument types ───
 
 static void test_log_debug_rejects_non_string() {
@@ -440,6 +453,7 @@ int main() {
     // Registration.
     RUN(test_log_module);
     RUN(test_log_set_output_disabled_in_sandbox);
+    RUN(test_log_set_output_failed_open_keeps_current_file);
 
     // Emission smoke tests.
     RUN(test_log_debug);

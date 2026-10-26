@@ -4,22 +4,53 @@
 
 // ─── Linter warnings ───
 
+// True if the type checker + linter report `code` for `source`. The
+// variable-usage rules (W0001, W0003, W0004, W0005, W0012) live in the linter.
+static bool reports(const std::string& source, DiagnosticCode code) {
+    return has_code(check_warnings_with_lint(source), code);
+}
+
 static void test_shadow_variable_warns() {
-    ASSERT_TRUE(has_warnings("function void test() {\n"
-                             "  integer x = 1\n"
-                             "  if true {\n"
-                             "    integer x = 2\n"
-                             "  }\n"
-                             "}\n"));
+    ASSERT_TRUE(reports("function void test() {\n"
+                        "  integer x = 1\n"
+                        "  if true {\n"
+                        "    integer x = 2\n"
+                        "  }\n"
+                        "}\n",
+                        DiagnosticCode::ShadowedVariable));
 }
 
 static void test_underscore_prefix_no_shadow_warning() {
-    ASSERT_FALSE(has_warnings("function void test() {\n"
-                              "  integer _x = 1\n"
-                              "  if true {\n"
-                              "    integer _x = 2\n"
-                              "  }\n"
-                              "}\n"));
+    ASSERT_FALSE(reports("function void test() {\n"
+                         "  integer _x = 1\n"
+                         "  if true {\n"
+                         "    integer _x = 2\n"
+                         "  }\n"
+                         "}\n",
+                         DiagnosticCode::ShadowedVariable));
+}
+
+static void test_for_loop_variable_shadow_warning() {
+    ASSERT_TRUE(reports("function void test() {\n"
+                        "  integer i = 10\n"
+                        "  for i in 0..3 {\n"
+                        "    print(i)\n"
+                        "  }\n"
+                        "  print(i)\n"
+                        "}\n",
+                        DiagnosticCode::ShadowedVariable));
+}
+
+static void test_sibling_for_loops_do_not_shadow() {
+    ASSERT_FALSE(reports("function void test() {\n"
+                         "  for i in 0..3 {\n"
+                         "    print(i)\n"
+                         "  }\n"
+                         "  for i in 0..3 {\n"
+                         "    print(i)\n"
+                         "  }\n"
+                         "}\n",
+                         DiagnosticCode::ShadowedVariable));
 }
 
 static void test_unreachable_code_warning() {
@@ -37,44 +68,50 @@ static void test_redundant_boolean_comparison_warning() {
 // ─── Unused variable. ───
 
 static void test_unused_variable_warns() {
-    ASSERT_TRUE(has_warnings("function integer test() {\n"
-                             "  integer x = 42\n"
-                             "  return 1\n"
-                             "}\n"));
+    ASSERT_TRUE(reports("function integer test() {\n"
+                        "  integer x = 42\n"
+                        "  return 1\n"
+                        "}\n",
+                        DiagnosticCode::UnusedVariable));
 }
 
 static void test_unused_variable_no_warn_if_read() {
-    ASSERT_FALSE(has_warnings("function integer test() {\n"
-                              "  integer x = 42\n"
-                              "  return x\n"
-                              "}\n"));
+    ASSERT_FALSE(reports("function integer test() {\n"
+                         "  integer x = 42\n"
+                         "  return x\n"
+                         "}\n",
+                         DiagnosticCode::UnusedVariable));
 }
 
 static void test_unused_variable_underscore_suppressed() {
-    ASSERT_FALSE(has_warnings("function integer test() {\n"
-                              "  integer _x = 42\n"
-                              "  return 1\n"
-                              "}\n"));
+    ASSERT_FALSE(reports("function integer test() {\n"
+                         "  integer _x = 42\n"
+                         "  return 1\n"
+                         "}\n",
+                         DiagnosticCode::UnusedVariable));
 }
 
 // ─── Unused parameter. ───
 
 static void test_unused_parameter_warns() {
-    ASSERT_TRUE(has_warnings("function integer add(integer a, integer b) {\n"
-                             "  return a\n"
-                             "}\n"));
+    ASSERT_TRUE(reports("function integer add(integer a, integer b) {\n"
+                        "  return a\n"
+                        "}\n",
+                        DiagnosticCode::UnusedParameter));
 }
 
 static void test_unused_parameter_no_warn_if_read() {
-    ASSERT_FALSE(has_warnings("function integer add(integer a, integer b) {\n"
-                              "  return a + b\n"
-                              "}\n"));
+    ASSERT_FALSE(reports("function integer add(integer a, integer b) {\n"
+                         "  return a + b\n"
+                         "}\n",
+                         DiagnosticCode::UnusedParameter));
 }
 
 static void test_unused_parameter_underscore_suppressed() {
-    ASSERT_FALSE(has_warnings("function integer add(integer a, integer _b) {\n"
-                              "  return a\n"
-                              "}\n"));
+    ASSERT_FALSE(reports("function integer add(integer a, integer _b) {\n"
+                         "  return a\n"
+                         "}\n",
+                         DiagnosticCode::UnusedParameter));
 }
 
 // ─── Unused function (only with require_main=true). ───
@@ -110,40 +147,104 @@ static void test_unused_function_no_warn_test_mode() {
 // ─── Mutable but never mutated. ───
 
 static void test_mutable_never_mutated_warns() {
-    ASSERT_TRUE(has_warnings("function integer test() {\n"
-                             "  mutable integer x = 42\n"
-                             "  return x\n"
-                             "}\n"));
+    ASSERT_TRUE(reports("function integer test() {\n"
+                        "  mutable integer x = 42\n"
+                        "  return x\n"
+                        "}\n",
+                        DiagnosticCode::MutableNeverMutated));
 }
 
 static void test_mutable_mutated_no_warn() {
-    ASSERT_FALSE(has_warnings("function integer test() {\n"
-                              "  mutable integer x = 0\n"
-                              "  x = 42\n"
-                              "  return x\n"
-                              "}\n"));
+    ASSERT_FALSE(reports("function integer test() {\n"
+                         "  mutable integer x = 0\n"
+                         "  x = 42\n"
+                         "  return x\n"
+                         "}\n",
+                         DiagnosticCode::MutableNeverMutated));
 }
 
 static void test_mutable_compound_assigned_no_warn() {
-    ASSERT_FALSE(has_warnings("function integer test() {\n"
-                              "  mutable integer x = 0\n"
-                              "  x += 1\n"
-                              "  return x\n"
-                              "}\n"));
+    ASSERT_FALSE(reports("function integer test() {\n"
+                         "  mutable integer x = 0\n"
+                         "  x += 1\n"
+                         "  return x\n"
+                         "}\n",
+                         DiagnosticCode::MutableNeverMutated));
 }
 
 static void test_mutable_incremented_no_warn() {
-    ASSERT_FALSE(has_warnings("function integer test() {\n"
-                              "  mutable integer x = 0\n"
-                              "  x++\n"
-                              "  return x\n"
-                              "}\n"));
+    ASSERT_FALSE(reports("function integer test() {\n"
+                         "  mutable integer x = 0\n"
+                         "  x++\n"
+                         "  return x\n"
+                         "}\n",
+                         DiagnosticCode::MutableNeverMutated));
 }
 
 static void test_mutable_param_never_mutated_warns() {
-    ASSERT_TRUE(has_warnings("function integer test(mutable integer x) {\n"
-                             "  return x\n"
-                             "}\n"));
+    ASSERT_TRUE(reports("function integer test(mutable integer x) {\n"
+                        "  return x\n"
+                        "}\n",
+                        DiagnosticCode::MutableNeverMutated));
+}
+
+// A second declaration of the same type alias is reported, like a duplicate
+// record, choice, interface, or function (the later one silently won before).
+static void test_duplicate_type_alias_warns() {
+    const auto warnings = check_warnings("type Twin = (integer, integer)\n"
+                                         "type Twin = (string, string)\n");
+
+    ASSERT_TRUE(std::ranges::any_of(warnings, [](const Diagnostic& d) {
+        return d.message.find("type alias 'Twin' is already declared") != std::string::npos &&
+               d.primary_location().line == 2;
+    }));
+}
+
+// ─── Each variable-usage warning is reported exactly once. ───
+
+static std::size_t count_code(const std::vector<Diagnostic>& warnings, DiagnosticCode code) {
+    return static_cast<std::size_t>(
+        std::ranges::count_if(warnings, [code](const Diagnostic& d) { return d.code == code; }));
+}
+
+static void test_variable_usage_warnings_not_duplicated() {
+    const auto warnings =
+        check_warnings_with_lint("function integer helper(integer unused_param) {\n"
+                                 "  integer unused_local = 3\n"
+                                 "  mutable integer never_mutated = 1\n"
+                                 "  mutable integer same = 1\n"
+                                 "  same = same\n"
+                                 "  integer outer = 1\n"
+                                 "  if outer > 0 {\n"
+                                 "    integer outer = 2\n"
+                                 "    return outer + never_mutated + same\n"
+                                 "  }\n"
+                                 "  return 0\n"
+                                 "}\n");
+
+    ASSERT_EQ(count_code(warnings, DiagnosticCode::UnusedVariable), std::size_t{1});
+    ASSERT_EQ(count_code(warnings, DiagnosticCode::UnusedParameter), std::size_t{1});
+    ASSERT_EQ(count_code(warnings, DiagnosticCode::MutableNeverMutated), std::size_t{1});
+    ASSERT_EQ(count_code(warnings, DiagnosticCode::SelfAssignment), std::size_t{1});
+    ASSERT_EQ(count_code(warnings, DiagnosticCode::ShadowedVariable), std::size_t{1});
+}
+
+// An unused match-arm binding is reported once, at the arm that introduced it.
+static void test_unused_match_binding_reported_at_arm() {
+    const auto warnings =
+        check_warnings_with_lint("function integer pick(result<integer> outcome) {\n"
+                                 "  match outcome {\n"
+                                 "    success(value) { return 1 }\n"
+                                 "    failure(_message) { return 0 }\n"
+                                 "  }\n"
+                                 "}\n");
+
+    ASSERT_EQ(count_code(warnings, DiagnosticCode::UnusedVariable), std::size_t{1});
+
+    const auto it = std::ranges::find_if(
+        warnings, [](const Diagnostic& d) { return d.code == DiagnosticCode::UnusedVariable; });
+
+    ASSERT_EQ(it->primary_location().line, 3);
 }
 
 // ─── Unreachable code after break. ───
@@ -260,6 +361,8 @@ int main() {
 
     RUN(test_shadow_variable_warns);
     RUN(test_underscore_prefix_no_shadow_warning);
+    RUN(test_for_loop_variable_shadow_warning);
+    RUN(test_sibling_for_loops_do_not_shadow);
     RUN(test_unreachable_code_warning);
     RUN(test_redundant_boolean_comparison_warning);
 
@@ -288,6 +391,9 @@ int main() {
     RUN(test_mutable_compound_assigned_no_warn);
     RUN(test_mutable_incremented_no_warn);
     RUN(test_mutable_param_never_mutated_warns);
+    RUN(test_variable_usage_warnings_not_duplicated);
+    RUN(test_duplicate_type_alias_warns);
+    RUN(test_unused_match_binding_reported_at_arm);
 
     // ─── Unreachable code after break ───
 

@@ -8,7 +8,7 @@
 // The recursive Luma expression and statement grammar.
 //
 // Deliberately generates shapes that are often ill-typed — its purpose is to
-// stress the parser recovery, resolver, type checker, compiler and VM error
+// stress the parser recovery, type checker, compiler and VM error
 // paths.  generate_statement dispatches to the type-correct stdlib feature
 // emitters in fuzz_gen_stdlib.hpp for the branches that must reach the VM.  See
 // fuzz_source_generator.hpp for the Provider concept these templates require.

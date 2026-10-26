@@ -27,8 +27,31 @@
 #include "analysis/ast/expression.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "common/scope_guard.hpp"
+#include "symbols/qualified_name.hpp"
 
 namespace luma {
+
+namespace {
+
+// Looks `name` up in a declaration registry.  Records and interfaces declared
+// inside a namespace are registered under their qualified name only, while
+// their TypeInfo carries the bare declaration name, so from inside that
+// namespace retry with the qualified name (mirroring resolve_type()).
+// `current_namespace` is the fully qualified path of the namespace being
+// checked ("Outer.Inner"), matching the registration key.
+template <typename Map>
+[[nodiscard]] auto find_visible(const Map& map, std::string_view name,
+                                const std::string& current_namespace) {
+    auto it = map.find(name);
+
+    if (it == map.end() && !current_namespace.empty() && !symbols::is_qualified_name(name)) {
+        it = map.find(symbols::make_qualified(current_namespace, name));
+    }
+
+    return it;
+}
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════
 // Interface satisfaction
@@ -135,8 +158,8 @@ bool TypeChecker::check_structural_satisfaction(
 bool TypeChecker::satisfies_interface(std::string_view record_name, std::string_view iface_name,
                                       const std::vector<TypeInfo>& source_type_args,
                                       const std::vector<TypeInfo>& target_type_args) {
-    const auto rec_it = symbols_.records.find(record_name);
-    const auto iface_it = symbols_.interfaces.find(iface_name);
+    const auto rec_it = find_visible(symbols_.records, record_name, ctx_.current_namespace);
+    const auto iface_it = find_visible(symbols_.interfaces, iface_name, ctx_.current_namespace);
 
     if (rec_it == symbols_.records.end() || iface_it == symbols_.interfaces.end()) {
         return false;
@@ -152,9 +175,7 @@ bool TypeChecker::satisfies_interface(std::string_view record_name, std::string_
     if (!interface_satisfaction_in_progress_.insert(key).second) {
         return true;
     }
-    const ScopeGuard cycle_guard{[&] {
-        interface_satisfaction_in_progress_.erase(key);
-    }};
+    const ScopeGuard cycle_guard{[&] { interface_satisfaction_in_progress_.erase(key); }};
 
     const auto& record = *rec_it->second;
     const auto& iface = *iface_it->second;
@@ -168,8 +189,10 @@ bool TypeChecker::satisfies_interface_interface(std::string_view source_iface_na
                                                 std::string_view target_iface_name,
                                                 const std::vector<TypeInfo>& source_type_args,
                                                 const std::vector<TypeInfo>& target_type_args) {
-    const auto src_it = symbols_.interfaces.find(source_iface_name);
-    const auto tgt_it = symbols_.interfaces.find(target_iface_name);
+    const auto src_it =
+        find_visible(symbols_.interfaces, source_iface_name, ctx_.current_namespace);
+    const auto tgt_it =
+        find_visible(symbols_.interfaces, target_iface_name, ctx_.current_namespace);
 
     if (src_it == symbols_.interfaces.end() || tgt_it == symbols_.interfaces.end()) {
         return false;
@@ -183,9 +206,7 @@ bool TypeChecker::satisfies_interface_interface(std::string_view source_iface_na
     if (!interface_satisfaction_in_progress_.insert(key).second) {
         return true;
     }
-    const ScopeGuard cycle_guard{[&] {
-        interface_satisfaction_in_progress_.erase(key);
-    }};
+    const ScopeGuard cycle_guard{[&] { interface_satisfaction_in_progress_.erase(key); }};
 
     const auto& source_iface = *src_it->second;
     const auto& target_iface = *tgt_it->second;

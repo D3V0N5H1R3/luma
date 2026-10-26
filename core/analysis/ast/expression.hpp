@@ -112,6 +112,15 @@ struct Expression {
 
     ExpressionKind kind;
     SourceLocation location;
+
+    /// Runtime widening pattern recorded by the type checker when this
+    /// expression's static type holds `integer` where its context expects
+    /// `number` — e.g. "number", "array<number>", or "(number,_)" (`_` leaves a
+    /// component untouched).  Null when no widening is needed.  The compiler
+    /// emits IntToNumber / WidenNumber after the expression so the runtime
+    /// representation matches the static type.  `mutable` because the type
+    /// checker annotates an otherwise read-only AST.
+    mutable std::unique_ptr<const std::string> numeric_widening;
 };
 
 /// Attempts to narrow a base Expression reference to a concrete node type `T`.
@@ -312,10 +321,8 @@ struct IndexAccessExpression : Expression {
 
 /// Policy for how root_variable_of() walks an access chain down to its root.
 enum class ChainTraversal {
-    /// Descend through field accesses only; stop at an index access.  Used
-    /// where indexed-element mutation is permitted — e.g. 'a[i].x = …' mutates
-    /// the stored element rather than the 'a' binding, so the chain must not be
-    /// resolved past the '[i]'.
+    /// Descend through field accesses only; stop at an index access (the
+    /// chain then has no variable root and nullptr is returned).
     FieldsOnly,
     /// Descend through both field and index accesses to reach the binding —
     /// e.g. 'a[i]', 'p.arr[i]', and 'a[i][j]' all resolve to their root variable.

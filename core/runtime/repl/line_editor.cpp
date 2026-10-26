@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -11,17 +12,64 @@
 #include "analysis/diagnostics/diagnostic_collector.hpp"
 #include "analysis/lexer/lexer.hpp"
 #include "common/string_utils.hpp"
-#include "runtime/cli/terminal.hpp"
+#include "common/terminal.hpp"
+#include "common/utf8.hpp"
 #include "runtime/repl/repl_detail.hpp"
 
 namespace luma {
 
-// ANSI cursor/clear sequences are defined once in runtime/cli/terminal.hpp
+// ANSI cursor/clear sequences are defined once in common/terminal.hpp
 // (luma::term::ansi) and referenced here to keep a single source of truth.
+
+namespace {
+
+// Line terminator written while the terminal is in raw mode.  POSIX raw mode
+// clears OPOST, so a bare "\n" moves down without returning to column 0 and
+// successive lines "staircase"; the explicit "\r" is harmless on Windows.
+constexpr std::string_view k_raw_newline = "\r\n";
+
+} // namespace
 
 // ─── compute_brace_depth_delta ───────────────────────────────────────────────
 
 namespace repl_detail {
+
+std::size_t next_char_boundary(std::string_view buf, std::size_t pos) noexcept {
+    if (pos >= buf.size()) {
+        return buf.size();
+    }
+
+    return pos + utf8_decode(buf, pos).length;
+}
+
+std::size_t prev_char_boundary(std::string_view buf, std::size_t pos) noexcept {
+    if (pos == 0) {
+        return 0;
+    }
+
+    pos = std::min(pos, buf.size());
+
+    // Walk back over at most three continuation bytes to the lead byte, then
+    // accept it only if it decodes to a character ending exactly at `pos`;
+    // otherwise the previous byte is an ill-formed byte of its own.
+    constexpr std::size_t k_max_continuation_bytes = 3;
+    std::size_t start = pos - 1;
+
+    while (start > 0 && pos - start <= k_max_continuation_bytes &&
+           is_utf8_continuation(static_cast<unsigned char>(buf[start]))) {
+        --start;
+    }
+
+    if (start + utf8_decode(buf, start).length == pos) {
+        return start;
+    }
+
+    return pos - 1;
+}
+
+std::size_t display_width(std::string_view text) noexcept {
+    return static_cast<std::size_t>(utf8_codepoint_count(text));
+}
 
 int compute_brace_depth_delta(std::string_view line) noexcept {
     try {
@@ -97,9 +145,12 @@ void LineEditor::refresh_line(const std::string& prompt, const std::string& buf,
     output += prompt;
     output += buf;
 
-    // Move cursor to correct position.
-    if (pos < buf.size()) {
-        const auto move_back = buf.size() - pos;
+    // Move the cursor back over the text after `pos`.  The terminal moves one
+    // column per character, so count codepoints rather than bytes — a
+    // multi-byte character such as 'é' still occupies a single column.
+    const auto move_back = repl_detail::display_width(std::string_view{buf}.substr(pos));
+
+    if (move_back > 0) {
         output += term::ansi::csi;
         output += std::to_string(move_back);
         output += 'D';
@@ -129,14 +180,14 @@ std::string LineEditor::format_completions_columns(const std::vector<std::string
     const auto num_cols = std::max<std::size_t>(1, k_terminal_width / col_width);
 
     std::ostringstream out;
-    out << '\n';
+    out << k_raw_newline;
 
     for (std::size_t i = 0; i < matches.size(); ++i) {
         out << "  ";
         out << matches[i];
 
         if ((i + 1) % num_cols == 0 || i + 1 == matches.size()) {
-            out << '\n';
+            out << k_raw_newline;
         } else {
             // Pad to column width.
             const auto padding = col_width - matches[i].size();
@@ -215,9 +266,9 @@ void LineEditor::handle_escape_sequence(const std::string& prompt, std::string& 
 
                 break;
 
-            case 'C': // Right arrow
+            case 'C': // Right arrow — one character (codepoint), one column
                 if (pos < buf.size()) {
-                    ++pos;
+                    pos = repl_detail::next_char_boundary(buf, pos);
                     write_out(std::string{term::ansi::csi} + "C");
                 }
 
@@ -225,7 +276,7 @@ void LineEditor::handle_escape_sequence(const std::string& prompt, std::string& 
 
             case 'D': // Left arrow
                 if (pos > 0) {
-                    --pos;
+                    pos = repl_detail::prev_char_boundary(buf, pos);
                     write_out(std::string{term::ansi::csi} + "D");
                 }
 
@@ -243,10 +294,9 @@ void LineEditor::handle_escape_sequence(const std::string& prompt, std::string& 
 
             case '3': { // Delete key (ESC [ 3 ~)
                 char tilde{};
-                read_char(tilde);
 
-                if (tilde == '~' && pos < buf.size()) {
-                    buf.erase(pos, 1);
+                if (read_char(tilde) && tilde == '~' && pos < buf.size()) {
+                    buf.erase(pos, repl_detail::next_char_boundary(buf, pos) - pos);
                     refresh_line(prompt, buf, pos);
                 }
 
@@ -306,35 +356,36 @@ bool LineEditor::read_line(const std::string& prompt, std::string& result) {
         char c{};
 
         if (!read_char(c)) {
-            write_out("\n");
+            write_out(k_raw_newline);
             return false;
         }
 
         switch (c) {
             case '\r': // Enter
             case '\n':
-                write_out("\n");
+                write_out(k_raw_newline);
                 result = buf;
 
                 return true;
 
             case 4: // Ctrl+D (EOF)
                 if (buf.empty()) {
-                    write_out("\n");
+                    write_out(k_raw_newline);
 
                     return false;
                 }
 
                 // Delete character at cursor (standard terminal behaviour).
                 if (pos < buf.size()) {
-                    buf.erase(pos, 1);
+                    buf.erase(pos, repl_detail::next_char_boundary(buf, pos) - pos);
                     refresh_line(prompt, buf, pos);
                 }
 
                 break;
 
             case 3: // Ctrl+C
-                write_out("^C\n");
+                write_out("^C");
+                write_out(k_raw_newline);
                 interrupted_ = true;
                 result.clear();
 
@@ -343,8 +394,11 @@ bool LineEditor::read_line(const std::string& prompt, std::string& result) {
             case 127: // Backspace (Unix)
             case 8:   // Backspace (Windows)
                 if (pos > 0) {
-                    buf.erase(pos - 1, 1);
-                    --pos;
+                    // Remove the whole previous character, not just its last
+                    // byte, so the buffer never holds a partial UTF-8 sequence.
+                    const auto start = repl_detail::prev_char_boundary(buf, pos);
+                    buf.erase(start, pos - start);
+                    pos = start;
                     refresh_line(prompt, buf, pos);
                 }
 
@@ -390,11 +444,23 @@ bool LineEditor::read_line(const std::string& prompt, std::string& result) {
                 // (>= 0x80, negative when char is signed) are inserted rather
                 // than silently dropped by the `>= 32` test.
                 if (static_cast<unsigned char>(c) >= 32) {
-                    buf.insert(pos, 1, c);
-                    ++pos;
+                    // A multi-byte character arrives as consecutive bytes;
+                    // read the rest of it now so the buffer (and the cursor
+                    // position) only ever moves by whole characters.
+                    std::string ch(1, c);
+                    const auto expected =
+                        static_cast<std::size_t>(utf8_codepoint_len(static_cast<std::uint8_t>(c)));
+                    char next{};
+
+                    while (ch.size() < expected && read_char(next)) {
+                        ch += next;
+                    }
+
+                    buf.insert(pos, ch);
+                    pos += ch.size();
 
                     if (pos == buf.size()) {
-                        write_out(c);
+                        write_out(ch);
                     } else {
                         refresh_line(prompt, buf, pos);
                     }

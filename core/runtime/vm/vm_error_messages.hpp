@@ -98,6 +98,25 @@ constexpr std::string_view with_requires_record{"'with' requires a record"};
 // ─── Arithmetic / numeric errors ─────────────────────────────────────────────
 
 constexpr std::string_view number_overflow{"number overflow"};
+
+// Integer arithmetic that does not fit in a 64-bit `integer` raises instead of
+// silently widening to `number` (which would let an `integer`-typed variable
+// hold a `number` at runtime).  `operation` is the noun form: "addition",
+// "subtraction", "multiplication", "increment", "decrement", "negation".
+[[nodiscard]] inline std::string integer_overflow_in(std::string_view operation) {
+    return std::format("integer overflow in {}", operation);
+}
+
+// `number` arithmetic whose finite operands produced ±Infinity.  `operation`
+// is the noun form: "addition", "subtraction", "multiplication", "division".
+[[nodiscard]] inline std::string number_overflow_in(std::string_view operation) {
+    return std::format("number overflow in {}", operation);
+}
+
+constexpr std::string_view hint_integer_overflow{
+    "the result does not fit in a 64-bit integer \xe2\x80\x94 convert an operand to "
+    "'number' first if you need a floating-point result"};
+
 constexpr std::string_view integer_division_overflow{"integer division overflow"};
 constexpr std::string_view integer_division_requires_integers{
     "integer division requires integer operands"};
@@ -280,6 +299,14 @@ constexpr std::string_view await_consumed_task{"await called on an already-consu
 [[nodiscard]] inline std::string cannot_assign_immutable(std::string_view name) {
     return std::format("cannot assign to immutable variable '{}'", name);
 }
+
+[[nodiscard]] inline std::string cannot_assign_global_in_task(std::string_view name) {
+    return std::format("cannot assign to global variable '{}' from a spawned task", name);
+}
+
+constexpr std::string_view hint_global_write_in_task{
+    "a spawned task sees a read-only snapshot of the global variables \xe2\x80\x94 pass "
+    "values in as arguments and return results, or communicate through a channel"};
 
 [[nodiscard]] inline std::string cannot_downcast(std::string_view from, std::string_view to) {
     return std::format("cannot downcast '{}' to '{}'", from, to);

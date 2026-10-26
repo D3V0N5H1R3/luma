@@ -37,7 +37,7 @@
 //                                 to provide element-wise comparison.  If
 //                                 equality is not meaningful for the type,
 //                                 override equals_kind() to return
-//                                 EqualsKind::by_reference (see XmlValue,
+//                                 EqualsKind::ByReference (see XmlValue,
 //                                 XmlValue) and leave equals_to() to the base
 //                                 default (which returns false).
 //   3. value_type.hpp           — Add is_*() and as_*() convenience methods
@@ -93,6 +93,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <future>
 #include <iterator>
@@ -155,8 +156,8 @@ namespace luma {
 struct CollectionObject {
     /// Documents the equality semantics of a collection type.
     enum class EqualsKind {
-        by_value,     ///< Element-wise deep comparison (arrays, queues, stacks, etc.)
-        by_reference, ///< Equality is not meaningful; always returns false.
+        ByValue,     ///< Element-wise deep comparison (arrays, queues, stacks, etc.)
+        ByReference, ///< Equality is not meaningful; always returns false.
     };
 
     explicit CollectionObject(CollectionKind k) : kind_{k} {}
@@ -170,7 +171,7 @@ struct CollectionObject {
     /// Returns the equality semantics for this collection type.
     /// Types returning `by_reference` always compare as not-equal.
     [[nodiscard]] virtual EqualsKind equals_kind() const noexcept {
-        return EqualsKind::by_value;
+        return EqualsKind::ByValue;
     }
 
     [[nodiscard]] virtual std::string to_display_string() const = 0;
@@ -528,8 +529,20 @@ struct ChoiceValue {
 // To read upvalue i: if upvalue_cells[i] != null, dereference the cell;
 // otherwise read upvalues[i].
 struct FunctionValue {
+    // Allocates the identity of a newly created closure (see `identity`).
+    [[nodiscard]] static std::uint64_t next_identity() noexcept {
+        static std::atomic<std::uint64_t> counter{0};
+
+        return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
+
     std::string name;
     const CompiledFunction* compiled{nullptr};
+    // The function table `compiled` belongs to, which its MakeClosure indices
+    // refer to.  Null means the VM's installed table.  It differs only in the
+    // REPL, where each input is compiled into its own table but a closure from
+    // an earlier input can still be called.
+    const std::vector<CompiledFunction>* function_table{nullptr};
 
     // Captured upvalues.  Immutable captures are stored directly in
     // `upvalues`.  Mutable captures use a shared cell (heap-allocated
@@ -539,21 +552,29 @@ struct FunctionValue {
     // `upvalues[i]` is unused in that case.
     std::vector<Value> upvalues;
     std::vector<std::shared_ptr<Value>> upvalue_cells;
+
+    // Equality identity: unique per closure creation and carried over by
+    // deep_copy, so a value-semantics copy (a `mutable` binding, a spawned
+    // task's argument) still equals the function it was copied from — just
+    // as every copy of a task handle shares its completion object.
+    std::uint64_t identity{next_identity()};
 };
 
-// C++ function exposed to Luma code — used for all stdlib bindings.
-// Wraps a NativeFunction callable with parameter/return type metadata
-// so the VM can produce meaningful error messages on type mismatches.
+// C++ function exposed to Luma code — used for all stdlib bindings and for
+// payload-bearing choice-variant constructors.  Carries only the qualified
+// name (for diagnostics and display) and the callable: argument and return
+// types are checked statically, against the StdlibCatalog
+// (shared/stdlib/stdlib_catalog.hpp) for stdlib functions, before any native
+// call runs.
 struct NativeFunctionValue {
     std::string name;
     NativeFunction function;
-    std::vector<std::string> parameter_types;
-    std::string return_type;
 };
 
 struct TaskValue {
-    TaskValue(std::shared_future<Value> f, std::shared_ptr<CancellationToken> ct)
-        : future{std::move(f)}, token{std::move(ct)} {}
+    TaskValue(std::shared_future<Value> f, std::shared_ptr<CancellationToken> ct,
+              std::shared_ptr<TaskCompletion> c = nullptr)
+        : future{std::move(f)}, token{std::move(ct)}, completion{std::move(c)} {}
 
     // A shared_future (not a plain future) so that a task handle can be safely
     // copied across threads: each recipient holds its OWN shared_future object
@@ -563,6 +584,9 @@ struct TaskValue {
     // value_copying.cpp).
     std::shared_future<Value> future;
     std::shared_ptr<CancellationToken> token;
+    // Signalled once `future` is ready, so waiters such as Task.race need not
+    // poll.  Null for a task created already resolved.
+    std::shared_ptr<TaskCompletion> completion;
 };
 
 struct ChannelValue {
@@ -748,7 +772,7 @@ struct XmlValue : CollectionObject {
     }
 
     [[nodiscard]] EqualsKind equals_kind() const noexcept override {
-        return EqualsKind::by_reference;
+        return EqualsKind::ByReference;
     }
 
     [[nodiscard]] Value deep_copy_value() const override;
@@ -773,7 +797,7 @@ struct KeyValueStoreValue : CollectionObject {
     }
 
     [[nodiscard]] EqualsKind equals_kind() const noexcept override {
-        return EqualsKind::by_reference;
+        return EqualsKind::ByReference;
     }
 
     [[nodiscard]] Value deep_copy_value() const override;

@@ -209,14 +209,14 @@ for n in nums {
 When mutation is needed, keep the mutable variable as close to its use as possible and limit the scope of mutation.
 
 ```luma
-# Good — mutable variable used briefly, then consumed
-mutable string result = ""
+# Good — mutable accumulator used briefly, then consumed
+mutable number total = 0.0
 
-for i, fruit in fruits {
-    result = result + "${i}: ${fruit}\n"
+for price in prices {
+    total += price
 }
 
-print(result)
+print("total: ${total}")
 ```
 
 ### Compound Assignment Operators
@@ -271,16 +271,17 @@ function Score lookup(UserId id) {
 
 ### Integer Versus Number
 
-`integer` and `number` are distinct types. Integer division truncates; mixed arithmetic promotes the integer to a number.
+`integer` and `number` are distinct types. Division with `/` always yields a `number`, even for two `integer` operands; use `//` for integer (floor) division. Mixed arithmetic promotes the integer to a number. Arithmetic on two `integer` values stays an `integer`: an overflow raises a runtime error instead of widening to `number`, so use `number` for values that may exceed the 64-bit range.
 
 ```luma
-7 / 2   # 3 (integer division, truncates toward zero)
-7 // 2  # 3 (integer division — explicit, integer-only operator)
+7 / 2   # 3.5 (true division — always a number)
+7 // 2  # 3 (integer floor division — integer-only operator)
+-7 // 2 # -4 (floor division rounds toward negative infinity)
 7.0 / 2 # 3.5 (number division, integer 2 promoted)
 7 / 2.0 # 3.5 (number division, integer 7 promoted)
 ```
 
-Use `//` when both operands are `integer` and you want to make the integer-division intent explicit in the code.
+Use `//` when both operands are `integer` and you need an `integer` result — assigning the result of `/` to an `integer` is a type error.
 
 **Rule: `integer` is for indices and range bounds.** Use `integer` for values that index into a collection or string (array subscripts, string offsets, loop counters used as indices) and for range end-points (`0..n`). Use `number` for everything else — counts, sizes, quantities, scores, IDs, measurements, and mathematical computations. This makes intent immediately visible: a variable typed `integer` addresses a position or delimits a range; a variable typed `number` holds a value.
 
@@ -520,25 +521,25 @@ result<number> final = safe_divide(100.0, 5.0)
 
 ### Never Ignore Results
 
-Every `result<T>` must be handled — matched, unwrapped with a default (`??`), or propagated (`?`). Silently dropping a result hides errors. The type checker emits a warning when a `result<T>` return value is discarded. Assign to `_` to explicitly acknowledge and suppress the warning.
+Every `result<T>` must be handled — matched, unwrapped with a default (`??`), or propagated (`?`). Silently dropping a result hides errors, so discarding a `result<T>` return value is a compile error. Assign to `_` to explicitly acknowledge and discard it.
 
 ```luma
-_ = parse(input) # explicitly discard — warning suppressed
+_ = parse(input) # explicitly discard
 ```
 
 ### `optional<T>`
 
-`optional<T>` represents a value that may or may not be present: either `some(value)` or `none`. Use it when absence is a normal outcome rather than an error — for example, looking up a key that might not exist.
+`optional<T>` represents a value that may or may not be present: either `some(value)` or `none`. Use it when absence is a normal outcome rather than an error — for example, taking the first element of a list that may be empty.
 
 ```luma
 # Exhaustive match
-match Dictionary.get(config, "host") {
+match Array.first(hosts) {
     case some(host) { connect(host) }
     case none       { print("no host configured") }
 }
 
 # Default with ??
-string host = Dictionary.get(config, "host") ?? "localhost"
+string host = Array.first(hosts) ?? "localhost"
 ```
 
 Use the postfix `?` operator inside a function that returns `optional<T>` to propagate `none`:
@@ -568,10 +569,13 @@ string city = user?.address?.city ?? "unknown"
 `try`/`catch`/`finally` handles **programmer errors only** — division by zero, out-of-bounds access, `assert` failures, and failed `Result.unwrap` calls. It does not intercept syntax or type errors.
 
 ```luma
+integer divisor = 0
+
 try {
-    integer result = 10 / 0
+    integer quotient = 10 // divisor
+    print(quotient)
 } catch(err) {
-    print("caught: ${err}")  # caught: division by zero
+    print("caught: ${err}")  # caught: Integer division: division by zero
 } finally {
     print("always runs")
 }
@@ -689,13 +693,13 @@ match code {
 
 Luma offers several collection types. Choose based on the access pattern:
 
-| Collection      | Use When                                                              |
-| --------------- | --------------------------------------------------------------------- |
-| `array<T>`      | Default choice. Ordered data with index-based access.                 |
-| `dictionary<V>` | Key-value lookups with string keys.                                   |
-| `set<T>`        | Unordered unique elements. Membership testing.                        |
-| `queue<T>`      | FIFO semantics — producer-consumer patterns.                          |
-| `stack<T>`      | LIFO semantics — depth-first traversal, undo buffers.                 |
+| Collection      | Use When                                              |
+| --------------- | ----------------------------------------------------- |
+| `array<T>`      | Default choice. Ordered data with index-based access. |
+| `dictionary<V>` | Key-value lookups with string keys.                   |
+| `set<T>`        | Unordered unique elements. Membership testing.        |
+| `queue<T>`      | FIFO semantics — producer-consumer patterns.          |
+| `stack<T>`      | LIFO semantics — depth-first traversal, undo buffers. |
 
 Prefer `array<T>` for ordered, index-accessed data and `set<T>` when membership testing is the primary operation. All collections have value semantics — operations return new copies rather than mutating in place.
 
@@ -814,14 +818,14 @@ Building strings by repeated concatenation in a loop creates a new string on eac
 
 ```luma
 # Good — single pass
-array<string> parts = Array.map(items, (string item) -> item)
-string result = String.join(parts, ", ")
+array<string> labels = Array.map(items, (string item) -> "[${item}]") |> Result.unwrap_or([])
+string joined = String.join(labels, ", ")
 
 # Bad — O(n²) from repeated concatenation
-mutable string result = ""
+mutable string joined = ""
 
 for item in items {
-    result = result + item + ", "
+    joined = joined + "[${item}], "
 }
 ```
 
@@ -843,12 +847,12 @@ The pipe operator `|>` passes the left-hand value as the first argument to the r
 
 ```luma
 # Good — reads left to right
-string result = "  hello world  "
+string shouted = "  hello world  "
     |> String.trim()
     |> String.uppercase()
 
 # Less readable — reads inside out
-string result = String.uppercase(String.trim("  hello world  "))
+string shouted = String.uppercase(String.trim("  hello world  "))
 ```
 
 ### Multi-Line Pipelines
@@ -877,12 +881,12 @@ function integer double(integer n) {
     return n * 2
 }
 
-result<array<integer>> result = numbers
+result<array<integer>> doubled_positives = numbers
     !> Array.filter(is_positive)
     !> Array.map(double)
 
 # Less readable — inline lambdas obscure intent
-result<array<integer>> result = numbers
+result<array<integer>> doubled_positives = numbers
     !> Array.filter((integer n) -> n > 0)
     !> Array.map((integer n) -> n * 2)
 ```
@@ -1277,21 +1281,23 @@ Dictionary.get(scores, "alice")
 
 ### Tasks
 
-Use `spawn` to run a function in the background. Always `await` the task to retrieve its result.
+Use `spawn` inside a `task_scope` to run a function in the background, and `await` the task to retrieve its result.
 
 ```luma
-task<number> t = spawn calculate(data)
+task_scope {
+    task<number> t = spawn calculate(data)
 
-# Do other work while the task runs
+    # Do other work while the task runs
 
-number result = await t
+    number total = await t
+}
 ```
 
-Tasks receive a deep copy of their environment. They do not share mutable state with the spawning scope. Communicate between tasks using channels.
+Tasks see a read-only, deep-copied snapshot of the program's global variables, and assigning a global from a spawned task is a runtime error. They do not share mutable state with the spawning scope: pass values in as arguments, return results, and communicate between tasks using channels.
 
 ### Structured Concurrency
 
-Prefer `task_scope` over bare `spawn`/`await` to ensure all tasks complete before continuing. A `task_scope` block collects child results in spawn order and cancels remaining siblings on first failure.
+A `task_scope` block ensures all tasks complete before continuing. It collects child results in spawn order and cancels remaining siblings on first failure.
 
 ```luma
 array<number> results = task_scope {
@@ -1301,25 +1307,25 @@ array<number> results = task_scope {
 }
 ```
 
-Using `spawn` outside a `task_scope` is allowed but produces a type-checker warning. Fire-and-forget tasks are still permitted when structured lifetimes are not needed.
+Using `spawn` outside a `task_scope` is a compile error, so no task can outlive the scope that started it.
 
 ### Cooperative Cancellation
 
-Use `Task.cancel(t)` to request cancellation and `Task.is_cancelled(t)` to check the status. Tasks check cancellation cooperatively at function calls, loop iterations, and `await` points.
+Use `Task.cancel(t)` to request cancellation of one task and `Task.is_cancelled(t)` to check the status. Cancelling a task does not affect its siblings or its `task_scope`. Tasks check cancellation cooperatively at loop iterations, function calls, tail calls, and `await` points, and a blocking `Channel` wait (`send`, `receive`, `send_all`, `consume`, `select`) gives up when its task is cancelled. A cancelled task ends with a cancellation error, which `await` raises as `task cancelled`.
 
 ```luma
 task_scope {
     task<integer> long_task = spawn expensive_search(1000000)
 
     # Request cancellation — the task will stop at its next check point
-    Task.cancel(long_task)
+    _ = Task.cancel(long_task)
 
     boolean cancelled = Task.is_cancelled(long_task)
     print("Cancelled: ${cancelled}")  # true
 }
 ```
 
-**Cancel-on-first-failure:** When any child task in a `task_scope` throws, all remaining sibling tasks are automatically cancelled and the error propagates to the scope.
+**Cancel-on-first-failure:** When any child task in a `task_scope` fails with an error, the remaining sibling tasks are cancelled straight away and the error propagates out of the scope once they have stopped. A task cancelled on its own with `Task.cancel` is not a failure — it contributes `none` to the scope's results.
 
 **Race cancellation:** `Task.race` cancels all losing tasks once the first task completes.
 
@@ -1330,14 +1336,14 @@ task_scope {
 Channels are typed, thread-safe message queues.
 
 ```luma
-# Unbuffered — send blocks until a receiver is ready
+# Unbounded — send never blocks
 channel<integer> ch = Channel.new()
 
 # Buffered — allows limited queueing
-channel<integer> ch = Channel.new_buffered(10)
+channel<integer> buffered = Channel.new_buffered(10)
 
-Channel.send(ch, 42)
-integer msg = Channel.receive(ch)
+_ = Channel.send(buffered, 42)
+result<integer> msg = Channel.receive(buffered) # failure once closed and drained
 ```
 
 Values are deep-copied on send. The sender and receiver work with independent copies.
@@ -1365,9 +1371,9 @@ Use `assert(condition)` to fail a test immediately when the condition is false. 
 ```luma
 @test
 function void test_with_message() {
-    integer result = compute()
+    integer answer = compute()
 
-    assert(result == 42, "expected 42 but got ${result}")
+    assert(answer == 42, "expected 42 but got ${answer}")
 }
 ```
 
@@ -1419,27 +1425,31 @@ The exit code is non-zero if any test fails. This makes `--test` suitable for CI
 
 - Place feature-specific test suites in `tests/features/language/` (core language features) or `tests/features/stdlib/` (standard library modules) with descriptive file names.
 - Each test file is self-contained — no shared state between files.
+- Begin every suite with the standard header (see [Test Files](#test-files)). Suites in `language/` cite `Luma_User_Manual.md`; suites in `stdlib/` cite `Luma_Standard_Library_Reference.md`.
 
 ```text
 tests/
 └── features/
-    ├── array_functions.luma
-    ├── arrays.luma
-    ├── control_flow.luma
-    ├── dictionaries.luma
-    ├── enums.luma
-    ├── functions.luma
-    ├── interfaces.luma
-    ├── lambdas.luma
-    ├── match.luma
-    ├── math_functions.luma
-    ├── mutability.luma
-    ├── operators.luma
-    ├── records.luma
-    ├── result_functions.luma
-    ├── string_functions.luma
-    ├── tuples.luma
-    └── ...
+    ├── language/
+    │   ├── arrays.luma
+    │   ├── control_flow.luma
+    │   ├── dictionaries.luma
+    │   ├── enums.luma
+    │   ├── functions.luma
+    │   ├── interfaces.luma
+    │   ├── lambdas.luma
+    │   ├── match.luma
+    │   ├── mutability.luma
+    │   ├── operators.luma
+    │   ├── records.luma
+    │   ├── tuples.luma
+    │   └── ...
+    └── stdlib/
+        ├── array_functions.luma
+        ├── math_functions.luma
+        ├── result_functions.luma
+        ├── string_functions.luma
+        └── ...
 ```
 
 ---
@@ -1482,6 +1492,9 @@ Test files do not have a `@main` function. Place helper functions and type defin
 ```luma
 # ═══════════════════════════════════════════════════════════
 # Luma v1.0 — Feature Tests — Arrays
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
 # ─── Creation ───
@@ -1526,7 +1539,7 @@ include "models.luma"
 include "utils.luma"
 ```
 
-Each file is included at most once automatically. Circular includes are a compile-time error.
+Each file is included at most once automatically, so circular includes are safe: a file that is already included is skipped.
 
 ---
 
@@ -1535,12 +1548,12 @@ Each file is included at most once automatically. Circular includes are a compil
 ### Ignoring Result Values
 
 ```luma
-# Wrong — potential failure silently discarded
-Array.get(arr, idx)
+# Wrong — potential failure silently discarded (a compile error)
+FileSystem.write_file(path, report)
 
 # Correct — handle the result
-match Array.get(arr, idx) {
-    success(v) { print(v) }
+match FileSystem.write_file(path, report) {
+    success(_) { print("report saved") }
     failure(m) { print("error: ${m}") }
 }
 ```
@@ -1568,10 +1581,10 @@ result<integer> total = nums
 
 ```luma
 # Hard to read — inside-out evaluation
-string result = String.uppercase(String.trim(String.reverse(input)))
+string normalized = String.uppercase(String.trim(String.reverse(input)))
 
 # Clear — left-to-right evaluation
-string result = input
+string normalized = input
     |> String.reverse()
     |> String.trim()
     |> String.uppercase()
@@ -1679,7 +1692,7 @@ result<array<integer>> out = Array.map(data, (integer x) -> x * 2)
 
 ### Sandbox Mode
 
-Use `--box` when running untrusted Luma files. Sandbox mode disables all OS-accessing modules (`Console`, `FileSystem`, `Process`, `Socket`, `Http`, `Csv`, `Xml`, `KeyValueStore`) and individual file-I/O functions in otherwise-safe modules (`Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, `Hash.sha512_file`).
+Use `--box` when running untrusted Luma files. Sandbox mode disables all OS-accessing modules (`Console`, `FileSystem`, `Process`, `Socket`, `Http`, `Csv`, `Xml`, `KeyValueStore`) and individual file-I/O functions in otherwise-safe modules (`Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`).
 
 ```bash
 luma --box untrusted_script.luma

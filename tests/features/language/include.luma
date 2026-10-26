@@ -7,6 +7,8 @@
 
 include "include_helper.luma"
 
+# ─── Included declarations ───
+
 @test
 function void test_included_function() {
     integer sum = add(3, 4)
@@ -30,70 +32,69 @@ function void test_included_enum() {
     assert(direction == Direction.North, "included enum value")
 }
 
-# ═══════════════════════════════════════════════════════════
-# Edge-case tests — include deduplication
-# ═══════════════════════════════════════════════════════════
+# ─── Include deduplication ───
 
-# Including the same file twice should not cause duplicate definition errors.
+# Including the same file twice must not cause duplicate definition errors:
+# each file is included at most once per compilation.
 include "include_helper.luma"
 
 @test
 function void test_include_deduplication() {
-    # After including the same file twice, the function should still work.
-    integer result_value = add(10, 20)
+    integer sum = add(10, 20)
 
-    assert(result_value == 30, "function from deduplicated include should work")
+    assert(sum == 30, "function from deduplicated include should work")
 }
 
 @test
 function void test_included_record_still_works_after_dedup() {
-    Color c = Color { red = 100, green = 200, blue = 50 }
+    Color color = Color { red = 100, green = 200, blue = 50 }
 
-    assert(c.red == 100)
-    assert(c.green == 200)
-    assert(c.blue == 50)
+    assert(color.red == 100)
+    assert(color.green == 200)
+    assert(color.blue == 50)
 }
 
-# ═══════════════════════════════════════════════════════════
-# Additional include tests
-# ═══════════════════════════════════════════════════════════
+# ─── Using included declarations ───
 
 @test
 function void test_included_function_in_expression() {
-    integer result_value = add(add(1, 2), add(3, 4))
+    integer sum = add(add(1, 2), add(3, 4))
 
-    assert(result_value == 10)
+    assert(sum == 10)
 }
 
 @test
 function void test_included_enum_match() {
-    Direction d = Direction.East
+    Direction heading = Direction.East
 
-    string label = match d {
-    case Direction.North { "N" }
-    case Direction.South { "S" }
-    case Direction.East  { "E" }
-    case Direction.West  { "W" }
+    string label = match heading {
+        case Direction.North { "N" }
+        case Direction.South { "S" }
+        case Direction.East  { "E" }
+        case Direction.West  { "W" }
     }
 
     assert(label == "E")
 }
 
 @test
-function void test_included_enum_all_variants() {
+function void test_included_enum_variants_are_distinct() {
     assert(Direction.North != Direction.South)
-    assert(Direction.East != Direction.West)
     assert(Direction.North != Direction.East)
+    assert(Direction.North != Direction.West)
+    assert(Direction.South != Direction.East)
+    assert(Direction.South != Direction.West)
+    assert(Direction.East != Direction.West)
 }
 
 @test
 function void test_included_record_equality() {
-    Color a = Color { red = 10, green = 20, blue = 30 }
-    Color b = Color { red = 10, green = 20, blue = 30 }
-    Color c = Color { red = 0, green = 0, blue = 0 }
+    Color teal = Color { red = 10, green = 20, blue = 30 }
+    Color same_teal = Color { red = 10, green = 20, blue = 30 }
+    Color black = Color { red = 0, green = 0, blue = 0 }
 
-    assert(a == b)
-    assert(a != c)
+    assert(teal == same_teal)
+    assert(teal != black)
 }
 
 @test
@@ -103,17 +104,15 @@ function void test_included_function_with_zero() {
     assert(add(100, -100) == 0)
 }
 
-# ═══════════════════════════════════════════════════════════
-# Broader declaration kinds — generics, choice payloads, interfaces
-# ═══════════════════════════════════════════════════════════
+# ─── Broader declaration kinds — generics, choice payloads, interfaces ───
 
 @test
 function void test_included_generic_function() {
-    integer n = pick(99)
-    string s = pick("luma")
+    integer number_value = identity(99)
+    string text = identity("luma")
 
-    assert(n == 99, "included generic function with integer")
-    assert(s == "luma", "included generic function with string")
+    assert(number_value == 99, "included generic function with integer")
+    assert(text == "luma", "included generic function with string")
 }
 
 @test
@@ -122,13 +121,13 @@ function void test_included_choice_with_payload() {
     Shape square = Shape.Square(3.0)
 
     number circle_area = match circle {
-    case Shape.Circle(r) { 3.14159 * r * r }
-    case Shape.Square(s) { s * s }
+        case Shape.Circle(radius) { 3.14159 * radius * radius }
+        case Shape.Square(side)   { side * side }
     }
 
     number square_area = match square {
-    case Shape.Circle(r) { 3.14159 * r * r }
-    case Shape.Square(s) { s * s }
+        case Shape.Circle(radius) { 3.14159 * radius * radius }
+        case Shape.Square(side)   { side * side }
     }
 
     assert(Math.approximately_equal(circle_area, 12.56636), "circle area from included choice")
@@ -139,7 +138,7 @@ function void test_included_choice_with_payload() {
 function void test_included_interface_structural() {
     Animal dog = Animal { name = "Rex", legs = 4 }
 
-    string n = name_of(dog)
+    string name = name_of(dog)
 
-    assert(n == "Rex", "included interface used structurally with included record")
+    assert(name == "Rex", "included interface used structurally with included record")
 }

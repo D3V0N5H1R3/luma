@@ -12,7 +12,8 @@
 # ─── AST ──────────────────────────────────────────────────
 
 choice Block {
-    Heading(number level, string text)
+    # The heading rank (1–6) is spliced into an <hN> tag name, so it is an integer.
+    Heading(integer level, string text)
     Paragraph(string text)
     CodeBlock(string language, string code)
     UnorderedList(array<string> items)
@@ -25,10 +26,10 @@ choice Block {
 
 function string escape_html(string text) {
     return text
-    |> String.replace_all("&", "&amp;")
-    |> String.replace_all("<", "&lt;")
-    |> String.replace_all(">", "&gt;")
-    |> String.replace_all("\"", "&quot;")
+        |> String.replace_all("&", "&amp;")
+        |> String.replace_all("<", "&lt;")
+        |> String.replace_all(">", "&gt;")
+        |> String.replace_all("\"", "&quot;")
 }
 
 # ─── Inline Rendering (regex-replace based) ──────────────
@@ -44,22 +45,22 @@ function string render_inlines(string text) {
     # Bold: **text** → <strong>text</strong>
     string with_bold = RegularExpression.replace_all(
         escaped, "\\*\\*([^*]+)\\*\\*", "<strong>\$1</strong>")
-        |> Result.unwrap_or(escaped)
+            |> Result.unwrap_or(escaped)
 
     # Italic: *text* → <em>text</em>
     string with_italic = RegularExpression.replace_all(
         with_bold, "\\*([^*]+)\\*", "<em>\$1</em>")
-        |> Result.unwrap_or(with_bold)
+            |> Result.unwrap_or(with_bold)
 
     # Inline code: `text` → <code>text</code>
     string with_code = RegularExpression.replace_all(
         with_italic, "`([^`]+)`", "<code>\$1</code>")
-        |> Result.unwrap_or(with_italic)
+            |> Result.unwrap_or(with_italic)
 
     # Links: [text](url) → <a href="url">text</a>
     string with_links = RegularExpression.replace_all(
         with_code, "\\[([^\\]]+)\\]\\(([^)]+)\\)", "<a href=\"\$2\">\$1</a>")
-        |> Result.unwrap_or(with_code)
+            |> Result.unwrap_or(with_code)
 
     return with_links
 }
@@ -71,25 +72,21 @@ function string render_inlines(string text) {
 # and ordered-list detectors, which differ only in the predicate they pass.
 function integer count_leading(string line, function(string) -> boolean predicate) {
     mutable integer count = 0
-    integer len = String.length(line)
+    integer length = String.length(line)
 
-    while count < len {
-        if predicate(line[count]) {
-            count += 1
-        } else {
-            break
-        }
+    while count < length && predicate(line[count]) {
+        count += 1
     }
 
     return count
 }
 
 function integer count_leading_hashes(string line) {
-    integer len = String.length(line)
+    integer length = String.length(line)
     integer count = count_leading(line, (string character) -> character == "#")
 
     # A heading is 1–6 leading '#' characters followed by a space.
-    if count > 0 && count <= 6 && count < len && line[count] == " " {
+    if count > 0 && count <= 6 && count < length && line[count] == " " {
         return count
     }
 
@@ -104,18 +101,18 @@ function integer count_leading_digits(string line) {
 }
 
 function boolean is_ordered_list_item(string line) {
-    integer idx = count_leading_digits(line)
-    integer len = String.length(line)
+    integer digit_count = count_leading_digits(line)
+    integer length = String.length(line)
 
-    return idx > 0 && idx + 1 < len && line[idx] == "." && line[idx + 1] == " "
+    return digit_count > 0 && digit_count + 1 < length
+        && line[digit_count] == "." && line[digit_count + 1] == " "
 }
 
-function string strip_ol_prefix(string line) {
-    integer idx = count_leading_digits(line)
-    integer len = String.length(line)
+function string strip_ordered_list_prefix(string line) {
+    integer digit_count = count_leading_digits(line)
 
-    # Skip ". "
-    return String.substring(line, idx + 2, len)
+    # Skip the digits and the ". " that follows them.
+    return String.substring(line, digit_count + 2, String.length(line))
 }
 
 # Collects consecutive list items starting at `start`, using `is_item` to test
@@ -140,9 +137,9 @@ function (array<string>, integer) collect_list_items(array<string> lines, intege
     return (items, i)
 }
 
-# Classifies a trimmed line into a block kind. The order mirrors the original
-# precedence: fences and rules win over quotes and lists, and headings win
-# over ordered-list items, with paragraphs as the fallback.
+# Classifies a trimmed line into a block kind. The checks run in precedence
+# order: fences and rules before quotes and lists, and headings before
+# ordered-list items, with paragraphs as the fallback.
 choice BlockKind {
     Empty
     CodeFence
@@ -231,7 +228,7 @@ function (Block, integer) parse_unordered_list(array<string> lines, integer star
 function (Block, integer) parse_ordered_list(array<string> lines, integer start) {
     (array<string> items, integer next) = collect_list_items(lines, start,
         (string item) -> is_ordered_list_item(item),
-        (string item) -> strip_ol_prefix(item))
+        (string item) -> strip_ordered_list_prefix(item))
 
     return (Block.OrderedList(items), next)
 }
@@ -299,9 +296,9 @@ function string render_li(string item) {
 
 function string render_list(array<string> items, string tag) {
     string li_items = items
-    |> Array.map(render_li)
-    |> Result.unwrap_or([])
-    |> Array.join("\n")
+        |> Array.map(render_li)
+        |> Result.unwrap_or([])
+        |> Array.join("\n")
 
     return "<${tag}>\n${li_items}\n</${tag}>"
 }
@@ -342,17 +339,17 @@ function string render_block(Block block) {
 
 function string render_document(array<Block> blocks) {
     return blocks
-    |> Array.map(render_block)
-    |> Result.unwrap_or([])
-    |> Array.join("\n")
+        |> Array.map(render_block)
+        |> Result.unwrap_or([])
+        |> Array.join("\n")
 }
 
 # ─── Full pipeline: markdown string → HTML string ────────
 
 function string markdown_to_html(string markdown) {
     return markdown
-    |> parse_blocks()
-    |> render_document()
+        |> parse_blocks()
+        |> render_document()
 }
 
 # ─── Tests ───────────────────────────────────────────────
@@ -428,8 +425,8 @@ function void test_horizontal_rule() {
 
 @test
 function void test_unordered_list() {
-    string md = String.join(["- Alpha", "- Beta", "- Gamma"], "\n")
-    string html = markdown_to_html(md)
+    string markdown = String.join(["- Alpha", "- Beta", "- Gamma"], "\n")
+    string html = markdown_to_html(markdown)
 
     assert("Alpha" in html, "expected Alpha in list")
     assert("<ul>" in html, "expected <ul> tag")
@@ -438,8 +435,8 @@ function void test_unordered_list() {
 
 @test
 function void test_code_block() {
-    string md = String.join(["```luma", "print(42)", "```"], "\n")
-    string html = markdown_to_html(md)
+    string markdown = String.join(["```luma", "print(42)", "```"], "\n")
+    string html = markdown_to_html(markdown)
 
     assert("language-luma" in html, "expected language class")
     assert("print(42)" in html, "expected code content")
@@ -447,7 +444,7 @@ function void test_code_block() {
 
 @test
 function void test_full_document() {
-    string md = String.join([
+    string markdown = String.join([
         "# Title",
         "",
         "A paragraph with **bold** and *italic* text.",
@@ -458,7 +455,7 @@ function void test_full_document() {
         "- Item two"
     ], "\n")
 
-    string html = markdown_to_html(md)
+    string html = markdown_to_html(markdown)
 
     assert("<h1>" in html, "expected h1")
     assert("<strong>bold</strong>" in html, "expected bold")

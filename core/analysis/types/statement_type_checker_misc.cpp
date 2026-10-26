@@ -6,6 +6,7 @@
 #include "analysis/ast/statement.hpp"
 #include "analysis/lexer/token_type.hpp"
 #include "analysis/types/compile_time_arithmetic.hpp"
+#include "analysis/types/generic_resolver.hpp"
 #include "analysis/types/statement_type_checker.hpp"
 #include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checking_context.hpp"
@@ -64,12 +65,43 @@ void check_inc_dec_target(TypeCheckingServices& tc, const Expression& target,
     (void)type_check_helpers::require_numeric_operand(tc, type, op, loc);
 }
 
+// True when `type` is a type parameter of the generic declaration being
+// checked — bound to a named `unknown` so its body checks permissively.
+[[nodiscard]] bool is_rigid_type_parameter(TypeCheckingServices& tc, const TypeInfo& type) {
+    if (type.kind != TypeInfo::Kind::Unknown || type.name.empty()) {
+        return false;
+    }
+
+    const auto& bindings = tc.generics().bindings();
+    const auto it = bindings.find(type.name);
+
+    return it != bindings.end() && it->second.kind == TypeInfo::Kind::Unknown &&
+           it->second.name == type.name;
+}
+
+// True when `type` is a specific, known type — not a type parameter or a
+// permissive placeholder — so it cannot stand in for an arbitrary `T`.
+[[nodiscard]] bool is_concrete_type(const TypeInfo& type) {
+    return type.kind != TypeInfo::Kind::Unknown && type.kind != TypeInfo::Kind::StdlibAny;
+}
+
 } // namespace
 
 void StatementTypeChecker::check_target_mutability(const Expression& target,
                                                    const SourceLocation& loc, AssignmentKind kind) {
     const bool plain = kind == AssignmentKind::Plain;
     const std::string_view verb = plain ? "assign to" : "compound-assign to";
+
+    // A field or element of a value that is not held in a variable (a call
+    // result, a literal, ...): the write could never be observed, except
+    // through storage the temporary shares with another value, which it would
+    // silently change.
+    const auto report_temporary_target = [&](const SourceLocation& at) {
+        tc_.error("cannot assign into a temporary value", at,
+                  "store the value in a mutable variable, change it there, and use that "
+                  "variable instead",
+                  DiagnosticCode::ImmutableAssignment);
+    };
 
     if (target.kind == ExpressionKind::Variable) {
         const auto& var = static_cast<const VariableExpression&>(target);
@@ -105,9 +137,12 @@ void StatementTypeChecker::check_target_mutability(const Expression& target,
         // Track mutation for mutable-but-never-mutated warning.
         tc_.context().current_scope->mark_written(var.name);
     } else if (target.kind == ExpressionKind::FieldAccess) {
-        // Walk the chain of field accesses to find the root variable.
-        // Stop at IndexAccess — indexed element field mutation is allowed.
-        if (const auto* var = root_variable_of(target, ChainTraversal::FieldsOnly)) {
+        // Walk the whole chain of field and index accesses to the root
+        // variable. Writing a field of an indexed element (`a[i].x = …`)
+        // mutates the array's value too: immutable bindings share storage
+        // (only `mutable` ones are cloned), so allowing it through an
+        // immutable root would also change every alias of that value.
+        if (const auto* var = root_variable_of(target, ChainTraversal::FieldsAndIndices)) {
             const auto* sym = tc_.lookup_variable(var->name);
 
             if ((sym != nullptr) && !sym->is_mutable) {
@@ -122,6 +157,8 @@ void StatementTypeChecker::check_target_mutability(const Expression& target,
             }
 
             tc_.context().current_scope->mark_written(var->name);
+        } else {
+            report_temporary_target(loc);
         }
     } else if (target.kind == ExpressionKind::IndexAccess) {
         // Walk through nested index/field accesses to find the root variable.
@@ -148,6 +185,8 @@ void StatementTypeChecker::check_target_mutability(const Expression& target,
             }
 
             tc_.context().current_scope->mark_written(var->name);
+        } else {
+            report_temporary_target(loc);
         }
     } else if (plain) {
         tc_.error(
@@ -157,26 +196,31 @@ void StatementTypeChecker::check_target_mutability(const Expression& target,
 }
 
 void StatementTypeChecker::visit_assignment(const AssignmentStatement& stmt) {
+    // '_ = expr' is a discard — the value is evaluated (and checked) but never
+    // stored — unless a mutable '_' variable is in scope, which keeps ordinary
+    // assignment semantics. An immutable '_' (a 'for _' loop variable, a '_'
+    // pattern binding or parameter) could never be assigned, so it is discarded.
+    if (stmt.target->kind == ExpressionKind::Variable &&
+        static_cast<const VariableExpression&>(*stmt.target).name == "_") {
+        const auto* sym = tc_.lookup_variable("_");
+        if (sym == nullptr || !sym->is_mutable) {
+            (void)tc_.infer_expression_type(*stmt.value);
+            return;
+        }
+    }
+
     // Check that target is mutable.
     check_target_mutability(*stmt.target, stmt.location, AssignmentKind::Plain);
 
     const auto target_type = tc_.infer_assignment_target(*stmt.target);
     const auto value_type = tc_.infer_expression_type(*stmt.value);
 
-    // Warn on self-assignment (x = x).
-    if (stmt.target->kind == ExpressionKind::Variable &&
-        stmt.value->kind == ExpressionKind::Variable) {
-        const auto& target_var = static_cast<const VariableExpression&>(*stmt.target);
-        const auto& value_var = static_cast<const VariableExpression&>(*stmt.value);
+    // Self-assignment (x = x) is reported by the linter (W0005), not here.
 
-        if (target_var.name == value_var.name) {
-            tc_.warn("self-assignment has no effect", stmt.location,
-                     "assigning a variable to itself does nothing", DiagnosticCode::SelfAssignment);
-        }
+    if (type_check_helpers::check_type_assignable(tc_, target_type, value_type,
+                                                  "type mismatch in assignment", stmt.location)) {
+        type_check_helpers::mark_numeric_widening(tc_, *stmt.value, target_type, value_type);
     }
-
-    (void)type_check_helpers::check_type_assignable(tc_, target_type, value_type,
-                                                    "type mismatch in assignment", stmt.location);
 }
 
 void StatementTypeChecker::visit_compound_assignment(const CompoundAssignmentStatement& stmt) {
@@ -263,6 +307,19 @@ void StatementTypeChecker::check_compound_operand_types(const CompoundAssignment
         return;
     }
 
+    // Mixed integer/number arithmetic yields a number, which an integer
+    // variable cannot hold (Manual §2) — `x += 0.5` would store a float.
+    if (target_type.kind == TypeInfo::Kind::Integer && value_type.kind == TypeInfo::Kind::Number) {
+        tc_.error(std::format("compound assignment '{}' with a 'number' value produces a number "
+                              "and cannot be applied to an integer variable",
+                              token_type_to_string(stmt.op)),
+                  stmt.location,
+                  "declare the variable as 'number', or convert the value with "
+                  "Converter.to_integer()",
+                  DiagnosticCode::TypeMismatch);
+        return;
+    }
+
     // Arithmetic compound assignment requires numeric types.
     (void)type_check_helpers::require_numeric_operand(
         tc_, target_type, std::format("compound assignment '{}'", token_type_to_string(stmt.op)),
@@ -290,11 +347,42 @@ void StatementTypeChecker::visit_return(const ReturnStatement& stmt) {
     }
 
     if (stmt.value) {
+        tc_.context().has_value_return = true;
+
         const auto value_type = tc_.infer_expression_type(*stmt.value);
 
-        if (ctx.current_return_type->kind != TypeInfo::Kind::Void) {
-            (void)type_check_helpers::check_type_assignable(
-                tc_, *ctx.current_return_type, value_type, "return type mismatch", stmt.location);
+        if (is_rigid_type_parameter(tc_, *ctx.current_return_type) &&
+            is_concrete_type(value_type)) {
+            // Inside a generic body `T` is checked permissively, so without this
+            // `return 0` from a `T`-returning function passed and stored an
+            // integer where the caller expects, say, a string.
+            tc_.error(std::format("cannot return '{}' from a function returning type "
+                                  "parameter '{}'",
+                                  value_type.to_string(), ctx.current_return_type->name),
+                      stmt.location,
+                      std::format("return a value of type '{}' (for example a parameter of "
+                                  "that type), or change the return type",
+                                  ctx.current_return_type->name));
+            return;
+        }
+
+        if (ctx.current_return_type->kind == TypeInfo::Kind::Void) {
+            // A void function has no value to return; a void-typed expression
+            // (`return log(x)`) and permissive types are let through.
+            if (value_type.kind != TypeInfo::Kind::Void &&
+                value_type.kind != TypeInfo::Kind::StdlibAny &&
+                value_type.kind != TypeInfo::Kind::Unknown) {
+                tc_.error(std::format("cannot return a value of type '{}' from a void function",
+                                      value_type.to_string()),
+                          stmt.location,
+                          "remove the value from the return statement, or declare a return type",
+                          DiagnosticCode::TypeMismatch);
+            }
+        } else if (type_check_helpers::check_type_assignable(tc_, *ctx.current_return_type,
+                                                             value_type, "return type mismatch",
+                                                             stmt.location)) {
+            type_check_helpers::mark_numeric_widening(tc_, *stmt.value, *ctx.current_return_type,
+                                                      value_type);
         }
     } else {
         if (ctx.current_return_type->kind != TypeInfo::Kind::Void &&

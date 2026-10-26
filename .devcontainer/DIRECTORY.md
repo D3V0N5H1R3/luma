@@ -17,14 +17,19 @@ pin:
 - **GCC 14** (`gcc-14` / `g++-14`), **CMake**, **Ninja**, and **Make**.
 - **Clang 18** (`clang-18` / `clang++-18`) with the **compiler-rt** runtimes —
   builds the LibFuzzer fuzz targets in [`fuzz/`](../fuzz).
-- **clang-format 18** and **clang-tidy 18** — the C++ formatting and
+- **clang-format 20** and **clang-tidy 18** — the C++ formatting and
   static-analysis gates.
 - **GDB** and **lcov** for native debugging and the coverage preset.
 - **Xvfb** — a headless X server for the VS Code extension's Electron
   integration tests (`npm test`).
-- **Python 3** with the pinned **Ruff** CLI, plus the **Node** and **Rust**
-  (`default` profile, so `rustfmt` and `clippy` are present, with the
-  `wasm32-wasip1` target) toolchains for the VS Code and Zed extensions.
+- **ShellCheck** — the shell lint gate (`ci-shell.yml`), required for every
+  script by the [shell guidelines](../instructions/shell.instructions.md).
+- **Python 3** (also as `python`) with the pinned **Ruff** and **cmakelint**
+  CLIs, plus the **Node** and **Rust** (`default` profile, so `rustfmt` and
+  `clippy` are present, with the `wasm32-wasip1` target) toolchains for the VS
+  Code and Zed extensions.
+- **PowerShell 7** with the pinned **PSScriptAnalyzer** and **Pester** — the
+  PowerShell lint and test gates (`ci-powershell.yml`).
 
 Every third-party C/C++ library is vendored in [`external/`](../external), so no
 dependencies are fetched at build time.
@@ -101,14 +106,23 @@ so opening a Codespace skips the initial compile.
   extension you can still launch the Extension Development Host (the UI runs on
   your host, the extension host in the container), whereas the Zed extension is
   built here and loaded as a dev extension into Zed on your host.
+- **Local Dev Containers share the working tree with the host.** A `build/`
+  directory configured on the host (for example by Visual Studio on Windows)
+  cannot be reused inside the container, so `prepare.sh` skips the C++ build
+  with a warning instead of deleting it — move or delete `build/`, then re-run
+  `bash .devcontainer/prepare.sh`. Likewise, `npm ci` replaces the extensions'
+  `node_modules/` with Linux builds, so re-run `npm ci` on the host before
+  building there again.
 
 ## Customization
 
-- **Interpreter-only work:** remove the `node` and `rust` entries under
-  `features` in [`devcontainer.json`](devcontainer.json) to shorten build time.
+- **Interpreter-only work:** remove the `node`, `rust`, and `powershell` entries
+  under `features` in [`devcontainer.json`](devcontainer.json) to shorten build
+  time.
 - **A different compiler:** change `gcc-14` / `g++-14` in the
-  [`Dockerfile`](Dockerfile) and the `CC` / `CXX` values in `devcontainer.json`
-  (Clang 15+ is also supported).
+  [`Dockerfile`](Dockerfile) — both the packages and the `CC` / `CXX` `ENV`
+  values, which every process in the container inherits (Clang 15+ is also
+  supported).
 
 ## See Also
 

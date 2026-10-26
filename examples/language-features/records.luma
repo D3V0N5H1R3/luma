@@ -3,7 +3,8 @@
 #
 # Demonstrates record types: declaration, default field
 # values, construction, field access, mutation, value
-# semantics, structural equality, and copying with `with`.
+# semantics, structural equality, copying with `with`,
+# nested records, and destructuring.
 # ═══════════════════════════════════════════════════════════
 
 record Point {

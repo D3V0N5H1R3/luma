@@ -2,20 +2,19 @@
 
 A statically typed, expression-oriented programming language designed for beginners — as easy as Python, as safe as Rust.
 
-[![CI](https://github.com/d3v0n5h1r3/luma/actions/workflows/ci.yml/badge.svg)](https://github.com/d3v0n5h1r3/luma/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/d3v0n5h1r3/luma/branch/main/graph/badge.svg)](https://codecov.io/gh/d3v0n5h1r3/luma)
+[![CI](https://github.com/d3v0n5h1r3/luma/actions/workflows/ci.yml/badge.svg)](https://github.com/d3v0n5h1r3/luma/actions/workflows/ci.yml) [![Coverage](https://codecov.io/gh/d3v0n5h1r3/luma/branch/main/graph/badge.svg)](https://codecov.io/gh/d3v0n5h1r3/luma)
 
 ## Project Status
 
 Luma is currently in **alpha**. The language, interpreter, standard library, and tooling are all feature-complete, but Luma has not yet reached a stable 1.0 release — interfaces and behaviour may still change, and it has not been battle-tested in production.
 
-| Component         | Status                    | Notes                                                                                                                                                     |
-| ----------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language & Stdlib | ✅ Feature-Complete | 38 standard library modules covering text, collections, math, files, networking, concurrency, terminal I/O, and more. See [User Manual][manual] and [Standard Library Reference][stdlib]. |
-| Interpreter       | ✅ Feature-Complete | Bytecode compiler and stack-based VM. See [Architecture][arch] for details.                                                                               |
-| REPL              | ✅ Feature-Complete | Includes history, multi-line input, and file loading.                                                                                                     |
-| Debugger (DAP)    | ✅ Feature-Complete | Supports breakpoints, stepping, and variable inspection.                                                                                                  |
-| Language Server   | ✅ Feature-Complete | 27 LSP features. See [Language Server][lsp] for details.                                                                                                  |
+| Component         | Status              | Notes                                                                                                                                                                                     |
+| ----------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Language & Stdlib | ✅ Feature-Complete | 37 standard library modules covering text, collections, math, files, networking, concurrency, terminal I/O, and more. See [User Manual][manual] and [Standard Library Reference][stdlib]. |
+| Interpreter       | ✅ Feature-Complete | Bytecode compiler and stack-based VM. See [Architecture][arch] for details.                                                                                                               |
+| REPL              | ✅ Feature-Complete | Includes history, multi-line input, and file loading.                                                                                                                                     |
+| Debugger (DAP)    | ✅ Feature-Complete | Supports breakpoints, stepping, and variable inspection.                                                                                                                                  |
+| Language Server   | ✅ Feature-Complete | Diagnostics, completions, hover, navigation, rename, and semantic highlighting. See [Language Server][lsp] for details.                                                                   |
 
 [manual]: documents/Luma_User_Manual.md
 [stdlib]: documents/Luma_Standard_Library_Reference.md
@@ -31,7 +30,7 @@ Luma is currently in **alpha**. The language, interpreter, standard library, and
 5. [Usage](#usage)
 6. [Documentation](#documentation)
 7. [Project Structure](#project-structure)
-8. [Debugging](#debugging-luma-programs)
+8. [Debugging Luma Programs](#debugging-luma-programs)
 9. [Development](#development)
 10. [Troubleshooting](#troubleshooting)
 11. [License](#license)
@@ -65,10 +64,7 @@ function void main() {
 }
 ```
 
-Static types catch mistakes before a program runs, while immutable-by-default
-variables, string interpolation, and the `|>` pipe operator keep everyday code
-concise. Browse [`examples/`](examples/) for many more runnable programs, from
-beginner snippets to complete applications.
+Static types catch mistakes before a program runs, while immutable-by-default variables, string interpolation, and the `|>` pipe operator keep everyday code concise. Browse [`examples/`](examples/) for many more runnable programs, from beginner snippets to complete applications.
 
 ## Quick Start
 
@@ -94,45 +90,26 @@ build/luma
 | macOS    | Clang 15 or later  | CMake 3.21+  |
 | Windows  | MSVC 2022 or later | CMake 3.21+  |
 
-All compilers must support C++20. The interpreter, language server, and debugger
-build from these tools alone — every third-party library is vendored.
+All compilers must support C++20. The interpreter, language server, and debugger build from these tools alone — every third-party library is vendored.
 
-> **Note:** These versions are hard minimums, not recommendations. Luma uses the
-> C++20 library features `std::format` and `std::chrono::clock_cast`, which
-> libstdc++ ships only from **GCC 13** — so GCC 12 and earlier fail to build. On
-> distributions whose default `g++` is still GCC 12, notably Raspberry Pi OS and
-> Debian 12 ("bookworm"), install GCC 13 or newer and select it when configuring
-> (`-DCMAKE_CXX_COMPILER=g++-13`).
+> **Note:** These versions are hard minimums, not recommendations. Luma uses the C++20 library features `std::format` and `std::chrono::clock_cast`, which libstdc++ ships only from **GCC 13** — so GCC 12 and earlier fail to build. On distributions whose default `g++` is still GCC 12, notably Raspberry Pi OS and Debian 12 ("bookworm"), install GCC 13 or newer and select it when configuring (`-DCMAKE_CXX_COMPILER=g++-13`).
 
-One optional extra pulls in more tooling:
-
-- The Python helper scripts under `scripts/` (test runners, coverage, and the
-  Git hook installer) need **Python 3.10 or later**.
+The optional Python helper scripts under `scripts/` (test runners, coverage, and the Git hook installer) need **Python 3.10 or later**.
 
 ## Installation
 
-> **Pre-built binaries:** Download ready-to-use binaries for Windows, macOS, and
-> Linux from the [latest release](https://github.com/d3v0n5h1r3/luma/releases/latest).
-> See the [Installation Guide](documents/Luma_Installation_Guide.md) for step-by-step
-> instructions, including editor setup for VS Code and Zed.
+> **Pre-built binaries:** Download ready-to-use binaries for Windows, macOS, and Linux from the [latest release](https://github.com/d3v0n5h1r3/luma/releases/latest). See the [Installation Guide](documents/Luma_Installation_Guide.md) for step-by-step instructions, including editor setup for VS Code and Zed.
 
-> **Tip:** To try Luma without installing a local toolchain, open the repository
-> in [GitHub Codespaces](.devcontainer/DIRECTORY.md) (**Code → Codespaces → Create
-> codespace**). The dev container ships the full C++20 toolchain and builds the
-> interpreter automatically.
+> **Tip:** To try Luma without installing a local toolchain, open the repository in [GitHub Codespaces](.devcontainer/DIRECTORY.md) (**Code → Codespaces → Create codespace**). The dev container ships the full C++20 toolchain and builds the interpreter automatically.
 
-Luma currently ships as source. Clone the repository and build it with CMake. The
-project provides [CMake presets](CMakePresets.json), so the recommended build is:
+To build from source instead, clone the repository and build it with CMake. The project provides [CMake presets](CMakePresets.json), so the recommended build is:
 
 ```bash
 cmake --preset default
 cmake --build --preset default
 ```
 
-This is equivalent to running `cmake -B build -DCMAKE_BUILD_TYPE=Release` followed by
-`cmake --build build --config Release --parallel`. Additional presets cover debug,
-Ninja, sanitizer, coverage, and cross-compilation builds — see
-[instructions/build.instructions.md](instructions/build.instructions.md).
+This is equivalent to running `cmake -B build -DCMAKE_BUILD_TYPE=Release` followed by `cmake --build build --config Release --parallel`. Additional presets cover debug, Ninja, sanitizer, coverage, and cross-compilation builds — see [instructions/build.instructions.md](instructions/build.instructions.md).
 
 Run the test suite to verify the build:
 
@@ -181,21 +158,18 @@ On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands a
 
 ## Documentation
 
-| Document                             | Contents                                                  |
-| ------------------------------------ | --------------------------------------------------------- |
-| [Installation Guide](documents/Luma_Installation_Guide.md) | Pre-built binary setup for Windows, macOS, and Linux.  |
-| [User Manual][manual]                | Complete language reference and tutorial.                 |
-| [Standard Library Reference][stdlib] | All 38 standard library modules and built-in functions.   |
-| [Software Architecture][arch]        | Interpreter pipeline and module design.                   |
-| [Performance Guide](documents/Luma_Performance_Guide.md) | Performance characteristics and optimisation advice.  |
-| [Error Handling](documents/Luma_Error_Handling.md)       | Error categories and `result` / `optional` conventions. |
-| [Debugger](documents/Luma_Debugger.md)                   | Debug Adapter Protocol design and usage.              |
-| [Language Server][lsp]               | Language Server Protocol features and setup.              |
+| Document                                                   | Contents                                                |
+| ---------------------------------------------------------- | ------------------------------------------------------- |
+| [Installation Guide](documents/Luma_Installation_Guide.md) | Pre-built binary setup for Windows, macOS, and Linux.   |
+| [User Manual][manual]                                      | Complete language reference and tutorial.               |
+| [Standard Library Reference][stdlib]                       | All 37 standard library modules and built-in functions. |
+| [Software Architecture][arch]                              | Interpreter pipeline and module design.                 |
+| [Performance Guide](documents/Luma_Performance_Guide.md)   | Performance characteristics and optimisation advice.    |
+| [Error Handling](documents/Luma_Error_Handling.md)         | Error categories and `result` / `optional` conventions. |
+| [Debugger](documents/Luma_Debugger.md)                     | Debug Adapter Protocol design and usage.                |
+| [Language Server][lsp]                                     | Language Server Protocol features and setup.            |
 
-The [documents/](documents/DIRECTORY.md) directory indexes every architecture, reference,
-and guide document. For notable and breaking changes, see
-[CHANGELOG.md](CHANGELOG.md). For contribution and security policies, see
-[CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+The [documents/](documents/DIRECTORY.md) directory indexes every architecture, reference, and guide document. For notable and breaking changes, see [CHANGELOG.md](CHANGELOG.md). For contribution and security policies, see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## Project Structure
 
@@ -242,19 +216,19 @@ Install the **Luma** extension from the marketplace. It bundles the language ser
 
 The extension provides a default `launch.json` configuration. You can customise it:
 
-```jsonc
+```json
 {
     "type": "luma",
     "request": "launch",
     "name": "Debug Luma",
     "program": "${file}",
-    "stopOnEntry": false,
+    "stopOnEntry": false
 }
 ```
 
 ### Zed
 
-The [Zed extension](extensions/zed/) provides Tree-sitter highlighting and LSP integration. Install it from the Zed extension gallery or see [extensions/zed/DIRECTORY.md](extensions/zed/DIRECTORY.md).
+The [Zed extension](extensions/zed/) provides Tree-sitter highlighting, LSP integration, and DAP debugging. Install it from the Zed extension gallery or see [extensions/zed/DIRECTORY.md](extensions/zed/DIRECTORY.md).
 
 ### Features
 
@@ -273,19 +247,20 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit conventions, an
 
 ## Troubleshooting
 
-| Problem                                | Cause                                                   | Fix                                                |
-| -------------------------------------- | ------------------------------------------------------- | -------------------------------------------------- |
-| `'break' used outside of a loop`       | `break` or `continue` typed in the REPL or at top level | Use `break` / `continue` only inside a loop        |
-| `'X' is not available in sandbox mode` | Function belongs to a module disabled by `--box`        | Remove `--box` or avoid OS-accessing modules       |
-| `cannot assign to immutable variable`  | Variable declared without `mutable`                     | Use `mutable` for variables that need reassignment |
-| `division by zero`                     | Dividing by zero with `/` or `%`                        | Guard against zero before dividing                 |
-| `index N out of bounds`                | Array or string index outside valid range               | Check length before indexing                       |
-| `no @main function found`              | Source file has no `@main`-annotated function           | Add `@main` above your entry-point function        |
-| `socket limit reached`                 | More than 1,000 open sockets                            | Close unused sockets with `Socket.close`           |
-| `task queue is full`                   | Too many pending `spawn` tasks (>100,000)               | `await` existing tasks before spawning more        |
-| `unexpected character '&'` or `'\|'`   | Bare `&` or `\|` is not a Luma operator                 | Use `\|>` for pipe; Luma has no `&` or `\|`        |
-| `unterminated string`                  | Missing closing `"` or `"""`                            | Close the string literal                           |
-| REPL works but file execution fails    | REPL does not require `@main`; file mode does           | Add `@main` to your entry-point function           |
+| Problem                                 | Cause                                                      | Fix                                                |
+| --------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------- |
+| `'break' is only allowed inside a loop` | `break` or `continue` used outside a `for` or `while` loop | Move the statement inside a loop                   |
+| `'X' is not available in sandbox mode`  | Function or module disabled by `--box`                     | Remove `--box` or avoid OS-accessing modules       |
+| `bitwise '&' is not an operator`        | Luma has no bitwise operators                              | Use the `Bits` module, e.g. `Bits.and(a, b)`       |
+| `cannot assign to immutable variable`   | Variable declared without `mutable`                        | Use `mutable` for variables that need reassignment |
+| `division by zero`                      | Dividing by zero with `/` or `%`                           | Guard against zero before dividing                 |
+| `index N out of bounds`                 | Array or string index outside valid range                  | Check length before indexing                       |
+| `integer overflow in addition`          | An `integer` result does not fit in 64 bits                | Use `number` for values that may grow that large   |
+| `no @main function found`               | Source file has no `@main`-annotated function              | Add `@main` above your entry-point function        |
+| `task queue is full`                    | Too many pending `spawn` tasks (>100,000)                  | `await` existing tasks before spawning more        |
+| `too many open sockets`                 | More than 1,000 open sockets                               | Close unused sockets with `Socket.close`           |
+| `unterminated string`                   | Missing closing `"` or `"""`                               | Close the string literal                           |
+| REPL works but file execution fails     | REPL does not require `@main`; file mode does              | Add `@main` to your entry-point function           |
 
 ## License
 

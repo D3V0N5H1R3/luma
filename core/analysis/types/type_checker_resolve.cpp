@@ -25,10 +25,14 @@
 #include <algorithm>
 #include <array>
 #include <format>
+#include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/expression.hpp"
+#include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "common/resource_limits.hpp"
 #include "common/scope_guard.hpp"
@@ -40,34 +44,44 @@ namespace luma {
 // Type resolution
 // ═══════════════════════════════════════════════════════════
 
-bool TypeChecker::reject_internal_access(const std::string& qualified_name) {
+bool TypeChecker::is_internal_access_denied(std::string_view qualified_name) const {
     if (!internal_members_.contains(qualified_name)) {
         return false;
     }
 
-    const auto split = split_module(qualified_name);
+    const auto ns = type_check_helpers::owning_namespace(qualified_name);
 
-    if (!split) {
+    // Access from inside the owning namespace (or one nested in it) is always
+    // permitted.  current_namespace is the fully qualified path.
+    return !ns.empty() && !type_check_helpers::is_within_namespace(ctx_.current_namespace, ns);
+}
+
+bool TypeChecker::report_internal_type_access(const TypeAnnotation& ann,
+                                              const SourceLocation& loc) {
+    if (!is_internal_access_denied(ann.name())) {
         return false;
     }
 
-    const auto ns = split->first;
-
-    // Access from inside the owning namespace is always permitted.
-    if (ctx_.current_namespace == ns) {
-        return false;
+    if (internal_access_reported_.insert(&ann).second) {
+        error(std::format("'{}' is internal to namespace '{}' and cannot "
+                          "be accessed from outside",
+                          symbols::qualified_member(ann.name()),
+                          type_check_helpers::owning_namespace(ann.name())),
+              loc,
+              "internal members are private to their namespace — use a public API "
+              "instead");
     }
-
-    const auto short_name = split->second;
-
-    error(std::format("'{}' is internal to namespace '{}' and cannot "
-                      "be accessed from outside",
-                      short_name, ns),
-          SourceLocation{},
-          "internal members are private to their namespace — use a public API "
-          "instead");
 
     return true;
+}
+
+bool TypeChecker::reject_internal_access(const TypeAnnotation& ann) {
+    if (deferred_internal_access_reports_ > 0) {
+        return is_internal_access_denied(ann.name());
+    }
+
+    // No location is known here; callers that know one report first.
+    return report_internal_type_access(ann, SourceLocation{});
 }
 
 TypeInfo TypeChecker::resolve_type(const TypeAnnotation& ann) {
@@ -79,9 +93,7 @@ TypeInfo TypeChecker::resolve_type(const TypeAnnotation& ann) {
     }
 
     // RAII decrement to restore depth on all exit paths.
-    const ScopeGuard guard{[this] {
-        --ctx_.type_resolve_depth;
-    }};
+    const ScopeGuard guard{[this] { --ctx_.type_resolve_depth; }};
 
     // Fast-path: cache hit for simple (non-parameterised, non-tuple, non-func)
     // annotations when no generic bindings are active and the name is not a
@@ -109,7 +121,24 @@ TypeInfo TypeChecker::resolve_type(const TypeAnnotation& ann) {
         return *aliased;
     }
 
-    return resolve_named_type(ann, cacheable);
+    auto resolved = resolve_named_type(ann, cacheable);
+
+    // Inside a namespace, a bare name may refer to a sibling member, which is
+    // registered only under its qualified name ("Util.Shape").  The bare
+    // lookup above found nothing (it never caches Unknown), so retry with the
+    // qualified name; that result is cached under the qualified key only.
+    if (resolved.kind == TypeInfo::Kind::Unknown && resolved.name == ann.name() &&
+        !ctx_.current_namespace.empty() && !symbols::is_qualified_name(ann.name()) &&
+        !generics_.bindings().contains(ann.name())) {
+        auto qualified = ann;
+        qualified.name() = symbols::make_qualified(ctx_.current_namespace, ann.name());
+
+        if (auto member = resolve_type(qualified); member.kind != TypeInfo::Kind::Unknown) {
+            return member;
+        }
+    }
+
+    return resolved;
 }
 
 // ── Tuple / function / alias resolution ──────────────────────
@@ -146,7 +175,7 @@ std::optional<TypeInfo> TypeChecker::resolve_alias_type(const TypeAnnotation& an
 
     // An `internal` type alias is private to its namespace: reject qualified
     // access from outside before resolving the underlying target type.
-    if (reject_internal_access(ann.name())) {
+    if (reject_internal_access(ann)) {
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
@@ -158,9 +187,7 @@ std::optional<TypeInfo> TypeChecker::resolve_alias_type(const TypeAnnotation& an
     }
 
     resolving_aliases_.insert(ann.name());
-    const ScopeGuard alias_guard{[&] {
-        resolving_aliases_.erase(ann.name());
-    }};
+    const ScopeGuard alias_guard{[&] { resolving_aliases_.erase(ann.name()); }};
 
     // Push type param bindings if alias is generic and type args are provided.
     const auto ap_it = generics_.alias_params().find(ann.name());
@@ -189,7 +216,7 @@ std::optional<TypeInfo> TypeChecker::resolve_user_named(const StringMap<const T*
         return std::nullopt;
     }
 
-    if (reject_internal_access(ann.name())) {
+    if (reject_internal_access(ann)) {
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
@@ -277,7 +304,9 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
         }
 
         if (!ann.type_params().empty()) {
-            return TypeInfo::make_result(resolve_type(ann.type_params()[0]));
+            // The default error type of `result<T>` is `string` (Manual §14).
+            return TypeInfo::make_result(resolve_type(ann.type_params()[0]),
+                                         TypeInfo::make(TypeInfo::Kind::String));
         }
 
         return cache_result(TypeInfo::make_result(TypeInfo::make(TypeInfo::Kind::StdlibAny)));
@@ -333,6 +362,19 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
     });
 
     if (std::ranges::find(named_record_types, ann.name()) != named_record_types.end()) {
+        // Keep the element type of queue<T>, stack<T>, set<T> and
+        // key_value_store<T> so that differently-typed instances stay distinct.
+        if (!ann.type_params().empty()) {
+            std::vector<TypeInfo> type_args;
+            type_args.reserve(ann.type_params().size());
+
+            for (const auto& type_param : ann.type_params()) {
+                type_args.push_back(resolve_type(type_param));
+            }
+
+            return TypeInfo::make_generic(TypeInfo::Kind::Record, ann.name(), std::move(type_args));
+        }
+
         return cache_result(TypeInfo::make_named(TypeInfo::Kind::Record, ann.name()));
     }
 
@@ -402,8 +444,10 @@ bool TypeChecker::is_assignable(const TypeInfo& target, const TypeInfo& source) 
         return true;
     }
 
-    // A value of type T is assignable to optional<T>.
-    if (target.kind == TypeInfo::Kind::Optional) {
+    // A value of type T is assignable to optional<T>.  An optional source falls
+    // through to the covariant container check below, so optional<integer> is
+    // assignable to optional<number>.
+    if (target.kind == TypeInfo::Kind::Optional && source.kind != TypeInfo::Kind::Optional) {
         if (!target.inner_types.empty()) {
             return is_assignable(target.element_type(), source);
         }
@@ -545,8 +589,19 @@ std::optional<bool> TypeChecker::is_container_assignable(const TypeInfo& target,
             }
 
             // Check both success type (inner_types[0]) and error type (inner_types[1]).
-            if (!is_assignable(target.result_value_type(), source.result_value_type())) {
-                return false;
+            // `void` and `none` both spell "no value" as a success type: stdlib
+            // signatures say result<void>, the documentation says result<none>.
+            {
+                const auto is_no_value = [](const TypeInfo& type) {
+                    return type.kind == TypeInfo::Kind::Void || type.kind == TypeInfo::Kind::None;
+                };
+                const bool both_no_value = is_no_value(target.result_value_type()) &&
+                                           is_no_value(source.result_value_type());
+
+                if (!both_no_value &&
+                    !is_assignable(target.result_value_type(), source.result_value_type())) {
+                    return false;
+                }
             }
 
             if (target.inner_types.size() > 1 && source.inner_types.size() > 1) {
@@ -587,6 +642,16 @@ bool TypeChecker::is_function_assignable(const TypeInfo& target, const TypeInfo&
         return true;
     }
 
+    // `void` and `none` both spell "returns no value" (a block-bodied lambda
+    // without a value return is `void`; a callback type may say `none`).
+    const auto is_no_value = [](const TypeInfo& type) {
+        return type.kind == TypeInfo::Kind::Void || type.kind == TypeInfo::Kind::None;
+    };
+
+    if (is_no_value(*target.return_type) && is_no_value(*source.return_type)) {
+        return true;
+    }
+
     return is_assignable(*target.return_type, *source.return_type);
 }
 
@@ -603,5 +668,410 @@ bool TypeChecker::is_tuple_assignable(const TypeInfo& target, const TypeInfo& so
 
     return true;
 }
+
+// ═══════════════════════════════════════════════════════════
+// Numeric widening annotations
+// ═══════════════════════════════════════════════════════════
+
+namespace type_check_helpers {
+
+namespace {
+
+// Bounds recursion over pathologically nested types; deeper flows are simply
+// left unwidened.
+constexpr int k_max_widening_depth = 64;
+
+std::optional<std::string> widening_pattern_at(const TypeInfo& target, const TypeInfo& source,
+                                               int depth) {
+    using K = TypeInfo::Kind;
+
+    if (depth > k_max_widening_depth) {
+        return std::nullopt;
+    }
+
+    if (target.kind == K::Number && source.kind == K::Integer) {
+        return "number";
+    }
+
+    // optional<T> has no runtime wrapper, so optional<S> and a bare S widen alike.
+    if (target.kind == K::Optional) {
+        if (target.inner_types.empty()) {
+            return std::nullopt;
+        }
+
+        if (source.kind == K::Optional && source.inner_types.empty()) {
+            return std::nullopt;
+        }
+
+        const auto& inner_source = source.kind == K::Optional ? source.element_type() : source;
+        auto inner = widening_pattern_at(target.element_type(), inner_source, depth + 1);
+
+        if (!inner) {
+            return std::nullopt;
+        }
+
+        return std::format("optional<{}>", *inner);
+    }
+
+    if (target.kind != source.kind) {
+        return std::nullopt;
+    }
+
+    // Tuples, results with a typed error, and similar multi-component types
+    // describe each component; `_` marks a component that needs no widening.
+    const auto components = [&](std::size_t count) -> std::optional<std::vector<std::string>> {
+        if (target.inner_types.size() < count || source.inner_types.size() < count) {
+            return std::nullopt;
+        }
+
+        std::vector<std::string> parts;
+        bool any_widened = false;
+
+        for (std::size_t i = 0; i < count; ++i) {
+            auto part =
+                widening_pattern_at(target.inner_types[i], source.inner_types[i], depth + 1);
+            any_widened = any_widened || part.has_value();
+            parts.push_back(part.value_or("_"));
+        }
+
+        if (!any_widened) {
+            return std::nullopt;
+        }
+
+        return parts;
+    };
+
+    const auto join = [](const std::vector<std::string>& parts) {
+        std::string joined;
+
+        for (const auto& part : parts) {
+            if (!joined.empty()) {
+                joined += ',';
+            }
+            joined += part;
+        }
+
+        return joined;
+    };
+
+    switch (target.kind) {
+        case K::Array:
+        case K::Dictionary: {
+            const auto parts = components(1);
+
+            if (!parts) {
+                return std::nullopt;
+            }
+
+            return std::format("{}<{}>", target.kind == K::Array ? "array" : "dictionary",
+                               (*parts)[0]);
+        }
+
+        case K::Result: {
+            const auto has_error_type =
+                target.inner_types.size() > 1 && source.inner_types.size() > 1;
+            const auto parts = components(has_error_type ? 2 : 1);
+
+            if (!parts) {
+                return std::nullopt;
+            }
+
+            return std::format("result<{}>", join(*parts));
+        }
+
+        case K::Tuple: {
+            if (target.inner_types.size() != source.inner_types.size()) {
+                return std::nullopt;
+            }
+
+            const auto parts = components(target.inner_types.size());
+
+            if (!parts) {
+                return std::nullopt;
+            }
+
+            return std::format("({})", join(*parts));
+        }
+
+        default:
+            return std::nullopt;
+    }
+}
+
+} // namespace
+
+std::optional<std::string> numeric_widening_pattern(const TypeInfo& target,
+                                                    const TypeInfo& source) {
+    return widening_pattern_at(target, source, 0);
+}
+
+namespace {
+
+// `type` with every `number` replaced by `integer`: the worst-case source for a
+// value whose precise static type is not known, so that widening it to `type`
+// converts every integer the value might hold.
+TypeInfo with_integers_for_numbers(const TypeInfo& type) {
+    if (type.kind == TypeInfo::Kind::Number) {
+        return TypeInfo::make(TypeInfo::Kind::Integer);
+    }
+
+    TypeInfo copy = type;
+
+    for (auto& inner : copy.inner_types) {
+        inner = with_integers_for_numbers(inner);
+    }
+
+    return copy;
+}
+
+// True for a flow between two instantiations of the same generic choice or
+// record whose type arguments widen (List<integer> → List<number>).
+bool widens_generic_user_type(const TypeInfo& target, const TypeInfo& source) {
+    using K = TypeInfo::Kind;
+
+    if ((target.kind != K::Choice && target.kind != K::Record) || source.kind != target.kind ||
+        source.name != target.name || target.inner_types.empty()) {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < target.inner_types.size(); ++i) {
+        const auto& target_arg = target.inner_types[i];
+        const bool is_source_known =
+            i < source.inner_types.size() && source.inner_types[i].kind != K::Unknown;
+        const auto source_arg =
+            is_source_known ? source.inner_types[i] : with_integers_for_numbers(target_arg);
+
+        if (numeric_widening_pattern(target_arg, source_arg)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void mark_widening_at(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                      const TypeInfo& source, int depth);
+
+// Widen the field values of a generic constructor call or record creation to
+// the field types of the `target` instantiation.  The pattern language cannot
+// describe user-defined (possibly recursive) types, so the widening happens
+// where each field value is produced instead.  Field values built from other
+// expressions (e.g. a variable holding a List<integer>) are not reachable here.
+void mark_generic_fields(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                         int depth) {
+    const auto mark_field = [&](const Expression& value, const TypeAnnotation& field_type) {
+        const auto resolved = tc.resolve_type(field_type);
+        mark_widening_at(tc, value, resolved, with_integers_for_numbers(resolved), depth + 1);
+    };
+
+    if (target.kind == TypeInfo::Kind::Choice && expr.kind == ExpressionKind::Call) {
+        const auto& call = static_cast<const CallExpression&>(expr);
+        const auto choice_it = tc.choices().find(target.name);
+
+        if (call.callee->kind != ExpressionKind::FieldAccess || choice_it == tc.choices().end()) {
+            return;
+        }
+
+        const auto& choice = *choice_it->second;
+        const auto& variant_name =
+            static_cast<const FieldAccessExpression&>(*call.callee).field_name;
+        const auto variant = std::ranges::find(choice.variants, variant_name, &ChoiceVariant::name);
+
+        if (variant == choice.variants.end()) {
+            return;
+        }
+
+        const auto bindings = bind_type_params(tc, choice.type_params, target.inner_types);
+
+        for (std::size_t i = 0; i < variant->fields.size() && i < call.arguments.size(); ++i) {
+            mark_field(*call.arguments[i], variant->fields[i].type);
+        }
+
+        return;
+    }
+
+    if (target.kind == TypeInfo::Kind::Record && expr.kind == ExpressionKind::RecordCreation) {
+        const auto& creation = static_cast<const RecordCreationExpression&>(expr);
+        const auto record_it = tc.records().find(creation.type_name);
+
+        if (record_it == tc.records().end()) {
+            return;
+        }
+
+        const auto& record = *record_it->second;
+        const auto bindings = bind_type_params(tc, record.type_params, target.inner_types);
+
+        for (const auto& field : creation.fields) {
+            const auto declared = std::ranges::find(record.fields, field.name, &RecordField::name);
+
+            if (declared != record.fields.end()) {
+                mark_field(*field.value, declared->type);
+            }
+        }
+    }
+}
+
+void mark_widening_at(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                      const TypeInfo& source, int depth) {
+    using K = TypeInfo::Kind;
+
+    if (depth > k_max_widening_depth) {
+        return;
+    }
+
+    if (widens_generic_user_type(target, source)) {
+        mark_generic_fields(tc, expr, target, depth);
+        return;
+    }
+
+    auto pattern = numeric_widening_pattern(target, source);
+
+    if (!pattern) {
+        return;
+    }
+
+    // Widen literal elements individually: integer literals then fold into
+    // number constants, and no widened copy of the collection is built.
+    if (expr.kind == ExpressionKind::ArrayLiteral && target.kind == K::Array &&
+        source.kind == K::Array && !target.inner_types.empty() && !source.inner_types.empty()) {
+        for (const auto& element : static_cast<const ArrayLiteralExpression&>(expr).elements) {
+            mark_widening_at(tc, *element, target.element_type(), source.element_type(), depth + 1);
+        }
+
+        return;
+    }
+
+    if (expr.kind == ExpressionKind::DictionaryLiteral && target.kind == K::Dictionary &&
+        source.kind == K::Dictionary && !target.inner_types.empty() &&
+        !source.inner_types.empty()) {
+        for (const auto& entry : static_cast<const DictionaryLiteralExpression&>(expr).entries) {
+            mark_widening_at(tc, *entry.value, target.element_type(), source.element_type(),
+                             depth + 1);
+        }
+
+        return;
+    }
+
+    if (expr.kind == ExpressionKind::TupleLiteral && target.kind == K::Tuple &&
+        source.kind == K::Tuple) {
+        const auto& elements = static_cast<const TupleLiteralExpression&>(expr).elements;
+
+        if (target.inner_types.size() == elements.size() &&
+            source.inner_types.size() == elements.size()) {
+            for (std::size_t i = 0; i < elements.size(); ++i) {
+                mark_widening_at(tc, *elements[i], target.inner_types[i], source.inner_types[i],
+                                 depth + 1);
+            }
+
+            return;
+        }
+    }
+
+    expr.numeric_widening = std::make_unique<const std::string>(*std::move(pattern));
+}
+
+} // namespace
+
+void mark_numeric_widening(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                           const TypeInfo& source) {
+    mark_widening_at(tc, expr, target, source, 0);
+}
+
+namespace {
+
+// Reports every annotation node in `ann` that names an internal type from
+// outside its namespace, at `loc`.  Runs before any resolution of the tree,
+// because resolving an annotation resolves its type arguments too, and the
+// first report of a node is the one that counts.
+void report_internal_types(TypeCheckingServices& tc, const TypeAnnotation& ann,
+                           const SourceLocation& loc) {
+    const auto report_all = [&](const std::vector<TypeAnnotation>& annotations) {
+        for (const auto& inner : annotations) {
+            report_internal_types(tc, inner, loc);
+        }
+    };
+
+    if (ann.kind() == TypeAnnotationKind::Tuple) {
+        report_all(ann.tuple_elements());
+        return;
+    }
+
+    if (ann.kind() == TypeAnnotationKind::Function) {
+        report_all(ann.function_params());
+
+        if (const auto* return_type = ann.return_type_ptr()) {
+            report_internal_types(tc, *return_type, loc);
+        }
+
+        return;
+    }
+
+    if (!ann.name().empty()) {
+        (void)tc.report_internal_type_access(ann, loc);
+    }
+
+    report_all(ann.type_params());
+}
+
+bool report_unknown_names(TypeCheckingServices& tc, const TypeAnnotation& ann,
+                          std::string_view context, const SourceLocation& loc) {
+    bool reported = false;
+
+    const auto report_all = [&](const std::vector<TypeAnnotation>& annotations) {
+        for (const auto& inner : annotations) {
+            reported = report_unknown_names(tc, inner, context, loc) || reported;
+        }
+    };
+
+    if (ann.kind() == TypeAnnotationKind::Tuple) {
+        report_all(ann.tuple_elements());
+        return reported;
+    }
+
+    if (ann.kind() == TypeAnnotationKind::Function) {
+        report_all(ann.function_params());
+
+        if (const auto* return_type = ann.return_type_ptr()) {
+            reported = report_unknown_names(tc, *return_type, context, loc) || reported;
+        }
+
+        return reported;
+    }
+
+    if (ann.name().empty()) {
+        return false;
+    }
+
+    // An unresolvable name yields an Unknown carrying that very name; other
+    // Unknown results (rejected internal access, a recursive alias, an alias to
+    // an unknown name) were either already reported or name a different type.
+    // A bound type parameter also resolves to a named Unknown, so skip those.
+    // Internal-access violations in the tree were reported up front, so
+    // resolving here does not report them again.
+    const auto resolved = tc.resolve_type(ann);
+
+    if (resolved.kind == TypeInfo::Kind::Unknown && resolved.name == ann.name() &&
+        !tc.generics().bindings().contains(ann.name())) {
+        const auto hint = tc.suggest_type_name(ann.name());
+        tc.error(std::format("unknown type '{}'{}", ann.name(), context), loc,
+                 hint.empty() ? "check the spelling or make sure the type is declared" : hint);
+        reported = true;
+    }
+
+    report_all(ann.type_params());
+
+    return reported;
+}
+
+} // namespace
+
+bool report_unknown_types(TypeCheckingServices& tc, const TypeAnnotation& ann,
+                          std::string_view context, const SourceLocation& loc) {
+    report_internal_types(tc, ann, loc);
+
+    return report_unknown_names(tc, ann, context, loc);
+}
+
+} // namespace type_check_helpers
 
 } // namespace luma

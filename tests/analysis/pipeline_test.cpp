@@ -4,6 +4,7 @@
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/diagnostics/diagnostic.hpp"
+#include "analysis/diagnostics/diagnostic_builder.hpp"
 #include "analysis/pipeline/pipeline.hpp"
 #include "test_framework.hpp"
 
@@ -281,6 +282,41 @@ static void test_internal_error_has_no_span() {
     ASSERT_TRUE(diagnostic.message.find("internal error") != std::string::npos);
 }
 
+// Rules checked by both the type checker and the linter (e.g. W0009) must be
+// reported once: merge_new_diagnostics drops a finding with the same code and
+// location as an earlier one, but keeps everything else.
+static void test_merge_new_diagnostics_skips_duplicates() {
+    const SourceLocation here{.file_id = 1, .line = 3, .column = 7};
+    const SourceLocation elsewhere{.file_id = 1, .line = 4, .column = 7};
+
+    std::vector<Diagnostic> target{diag::warning("type checker copy")
+                                       .error_code(DiagnosticCode::FloatingPointEquality)
+                                       .primary(here)
+                                       .build()};
+
+    std::vector<Diagnostic> lint{
+        diag::warning("linter copy")
+            .error_code(DiagnosticCode::FloatingPointEquality)
+            .primary(here)
+            .build(),
+        diag::warning("other line")
+            .error_code(DiagnosticCode::FloatingPointEquality)
+            .primary(elsewhere)
+            .build(),
+        diag::warning("other rule")
+            .error_code(DiagnosticCode::DoubleNegation)
+            .primary(here)
+            .build(),
+    };
+
+    merge_new_diagnostics(target, std::move(lint));
+
+    ASSERT_EQ(target.size(), static_cast<std::size_t>(3));
+    ASSERT_EQ(target[0].message, std::string{"type checker copy"});
+    ASSERT_EQ(target[1].message, std::string{"other line"});
+    ASSERT_EQ(target[2].message, std::string{"other rule"});
+}
+
 int main() {
     RUN(test_empty_pipeline);
     RUN(test_single_success_pass);
@@ -295,5 +331,6 @@ int main() {
     RUN(test_pipeline_result_no_errors);
     RUN(test_pass_timings);
     RUN(test_internal_error_has_no_span);
+    RUN(test_merge_new_diagnostics_skips_duplicates);
     return SUMMARY();
 }

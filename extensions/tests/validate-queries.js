@@ -49,6 +49,7 @@ const HIGHLIGHT_TESTS = [
         expect: "string",
     },
     { name: "integer literal", code: "integer x = 42", expect: "number" },
+    { name: "octal literal", code: "integer x = 0o755", expect: "number" },
     {
         name: "boolean literal",
         code: "boolean flag = true",

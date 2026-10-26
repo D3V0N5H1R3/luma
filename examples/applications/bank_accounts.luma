@@ -55,7 +55,9 @@ function string describe_kind(TransactionKind kind) {
 }
 
 function string format_transaction(Transaction entry) {
-    string account = Result.unwrap_or(String.pad_right(entry.account_id, 10, " "), entry.account_id)
+    string account = entry.account_id
+        |> String.pad_right(10, " ")
+        |> Result.unwrap_or(entry.account_id)
     string action = describe_kind(entry.kind) |> String.pad_right(22, " ") |> Result.unwrap_or("?")
     string amount = format_money(entry.amount) |> String.pad_left(10, " ") |> Result.unwrap_or("?")
     string balance = format_money(entry.balance_after)
@@ -71,23 +73,38 @@ function Bank empty_bank() {
     return Bank { accounts = {}, ledger = [] }
 }
 
-function result<Bank> open_account(Bank bank, string account_id, string owner, number opening) {
+function result<Bank> open_account(
+    Bank bank,
+    string account_id,
+    string owner,
+    number opening_balance
+) {
     if Dictionary.has(bank.accounts, account_id) {
         return failure("account ${account_id} already exists")
     }
 
-    if opening < 0.0 {
+    if opening_balance < 0.0 {
         return failure("opening balance cannot be negative")
     }
 
-    Account account = Account { id = account_id, owner = owner, balance = opening }
+    Account account = Account { id = account_id, owner = owner, balance = opening_balance }
 
     return success(bank with {
         accounts = Dictionary.set(bank.accounts, account_id, account)
     })
 }
 
-# ─── Ledger Helper ───────────────────────────────────────
+# ─── Ledger Helpers ──────────────────────────────────────
+
+# Every operation looks accounts up through here, so an unknown id always
+# produces the same message.
+function result<Account> find_account(Bank bank, string account_id) {
+    if !Dictionary.has(bank.accounts, account_id) {
+        return failure("No account found with id ${account_id}.")
+    }
+
+    return Dictionary.get(bank.accounts, account_id)
+}
 
 function Bank record_entry(Bank bank, Account account, TransactionKind kind, number amount) {
     Transaction entry = Transaction {
@@ -110,11 +127,7 @@ function result<Bank> deposit(Bank bank, string account_id, number amount) {
         return failure("deposit amount must be positive")
     }
 
-    if !Dictionary.has(bank.accounts, account_id) {
-        return failure("No account found with id ${account_id}.")
-    }
-
-    Account account = Dictionary.get(bank.accounts, account_id)?
+    Account account = find_account(bank, account_id)?
     Account updated = account with { balance = account.balance + amount }
 
     return success(record_entry(bank, updated, TransactionKind.Deposit, amount))
@@ -125,11 +138,7 @@ function result<Bank> withdraw(Bank bank, string account_id, number amount) {
         return failure("withdrawal amount must be positive")
     }
 
-    if !Dictionary.has(bank.accounts, account_id) {
-        return failure("No account found with id ${account_id}.")
-    }
-
-    Account account = Dictionary.get(bank.accounts, account_id)?
+    Account account = find_account(bank, account_id)?
 
     if amount > account.balance {
         string balance_text = format_money(account.balance)
@@ -146,12 +155,10 @@ function result<Bank> transfer(Bank bank, string from_id, string to_id, number a
         return failure("cannot transfer to the same account")
     }
 
-    if !Dictionary.has(bank.accounts, to_id) {
-        return failure("account ${to_id} not found")
-    }
-
+    # Look up the target first so an unknown recipient is reported before any
+    # funds-related error on the source account.
+    Account target = find_account(bank, to_id)?
     Bank debited = withdraw(bank, from_id, amount)?
-    Account target = Dictionary.get(debited.accounts, to_id)?
     Account credited = target with { balance = target.balance + amount }
 
     Bank with_credit = record_entry(
@@ -173,17 +180,17 @@ function result<Bank> transfer(Bank bank, string from_id, string to_id, number a
 # ─── Queries ─────────────────────────────────────────────
 
 function result<number> balance_of(Bank bank, string account_id) {
-    Account account = Dictionary.get(bank.accounts, account_id)?
+    Account account = find_account(bank, account_id)?
 
     return success(account.balance)
 }
 
 function number total_assets(Bank bank) {
     return Dictionary.values(bank.accounts)
-    |> Array.map((Account a) -> a.balance)
-    |> Result.unwrap_or([])
-    |> Array.sum()
-    |> Result.unwrap_or(0.0)
+        |> Array.map((Account a) -> a.balance)
+        |> Result.unwrap_or([])
+        |> Array.sum()
+        |> Result.unwrap_or(0.0)
 }
 
 # ─── Reporting ───────────────────────────────────────────
@@ -207,6 +214,13 @@ function void print_statement(Bank bank) {
 }
 
 # ─── Demo ────────────────────────────────────────────────
+
+function void report_rejection(result<Bank> outcome) {
+    match outcome {
+        success(_) { print("  (unexpected success)") }
+        failure(message) { print("  ✗ ${message}") }
+    }
+}
 
 function result<Bank> build_demo_bank() {
     mutable Bank bank = empty_bank()
@@ -235,20 +249,9 @@ function void main() {
 
             print("\n─── Rejected operations ───")
 
-            match withdraw(bank, "AC-1002", 10000.0) {
-                success(_) { print("  (unexpected success)") }
-                failure(message) { print("  ✗ ${message}") }
-            }
-
-            match deposit(bank, "AC-9999", 10.0) {
-                success(_) { print("  (unexpected success)") }
-                failure(message) { print("  ✗ ${message}") }
-            }
-
-            match deposit(bank, "AC-1001", -5.0) {
-                success(_) { print("  (unexpected success)") }
-                failure(message) { print("  ✗ ${message}") }
-            }
+            report_rejection(withdraw(bank, "AC-1002", 10000.0))
+            report_rejection(deposit(bank, "AC-9999", 10.0))
+            report_rejection(deposit(bank, "AC-1001", -5.0))
         }
         failure(message) {
             print("  failed to build bank: ${message}")
@@ -258,15 +261,15 @@ function void main() {
 
 # ─── Tests ───────────────────────────────────────────────
 
-function boolean approx(number a, number b) {
-    return Result.unwrap_or(Math.absolute(a - b), 1.0) < 0.005
+function boolean is_close(number actual, number expected) {
+    return Math.approximately_equal(actual, expected, 0.005)
 }
 
 @test
 function void test_open_account_sets_balance() {
     Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
 
-    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 100.0),
+    assert(is_close(Result.unwrap_or(balance_of(bank, "A"), -1.0), 100.0),
         "opening balance should be 100")
 }
 
@@ -283,7 +286,7 @@ function void test_deposit_increases_balance() {
     mutable Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
     bank = deposit(bank, "A", 50.0) |> Result.unwrap()
 
-    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 150.0), "balance should be 150")
+    assert(is_close(Result.unwrap_or(balance_of(bank, "A"), -1.0), 150.0), "balance should be 150")
 }
 
 @test
@@ -291,7 +294,7 @@ function void test_withdraw_decreases_balance() {
     mutable Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
     bank = withdraw(bank, "A", 30.0) |> Result.unwrap()
 
-    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 70.0), "balance should be 70")
+    assert(is_close(Result.unwrap_or(balance_of(bank, "A"), -1.0), 70.0), "balance should be 70")
 }
 
 @test
@@ -317,8 +320,8 @@ function void test_transfer_moves_funds() {
     bank = open_account(bank, "B", "Ben", 0.0) |> Result.unwrap()
     bank = transfer(bank, "A", "B", 40.0) |> Result.unwrap()
 
-    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 60.0), "A should have 60")
-    assert(approx(Result.unwrap_or(balance_of(bank, "B"), -1.0), 40.0), "B should have 40")
+    assert(is_close(Result.unwrap_or(balance_of(bank, "A"), -1.0), 60.0), "A should have 60")
+    assert(is_close(Result.unwrap_or(balance_of(bank, "B"), -1.0), 40.0), "B should have 40")
 }
 
 @test
@@ -328,7 +331,7 @@ function void test_transfer_conserves_total() {
     bank = open_account(bank, "B", "Ben", 25.0) |> Result.unwrap()
     bank = transfer(bank, "A", "B", 40.0) |> Result.unwrap()
 
-    assert(approx(total_assets(bank), 125.0), "total assets should be conserved at 125")
+    assert(is_close(total_assets(bank), 125.0), "total assets should be conserved at 125")
 }
 
 @test
@@ -340,7 +343,7 @@ function void test_failed_transfer_leaves_balances_untouched() {
     result<Bank> outcome = transfer(bank, "A", "B", 1000.0)
 
     assert(!Result.is_success(outcome), "over-limit transfer should fail")
-    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 30.0),
+    assert(is_close(Result.unwrap_or(balance_of(bank, "A"), -1.0), 30.0),
         "A unchanged after failed transfer")
 }
 

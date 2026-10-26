@@ -288,6 +288,13 @@ struct Refiner {
         return first_arg.inner_types[0];
     }
 
+    // The record-modelled element containers keep their element type as the
+    // sole type argument (set<T>, queue<T>, stack<T>).
+    if (first_arg.kind == K::Record && !first_arg.inner_types.empty() &&
+        (first_arg.name == "set" || first_arg.name == "queue" || first_arg.name == "stack")) {
+        return first_arg.inner_types[0];
+    }
+
     return TypeInfo::make(K::StdlibAny);
 }
 
@@ -387,10 +394,42 @@ struct Refiner {
         return TypeInfo::make_result(TypeInfo::make_tuple({TypeInfo::make_array(c.elem), c.elem}));
     });
 
-    add({"Array.map", "Array.filter", "Array.sort", "Array.sort_by", "Array.slice",
-         "Array.take_while", "Array.drop_while", "Array.flat_map", "Array.set", "Array.scan"},
+    add({"Array.filter", "Array.sort", "Array.sort_by", "Array.slice", "Array.take_while",
+         "Array.drop_while", "Array.set"},
         true,
         [](const RefineContext& c) { return TypeInfo::make_result(TypeInfo::make_array(c.elem)); });
+
+    // Array.map yields the callback's return type U, not the input element type
+    // T.  A callback whose return type is unavailable (e.g. a block-body lambda,
+    // typed StdlibAny) keeps the result element type dynamic.
+    add({"Array.map"}, true, [](const RefineContext& c) -> TypeInfo {
+        if (c.arg_types.size() >= 2 && c.arg_types[1].kind == K::Func &&
+            c.arg_types[1].return_type && c.arg_types[1].return_type->kind != K::None) {
+            return TypeInfo::make_result(TypeInfo::make_array(*c.arg_types[1].return_type));
+        }
+
+        return c.static_type;
+    });
+
+    // Array.flat_map's callback returns array<U>; the flattened result is array<U>.
+    add({"Array.flat_map"}, true, [](const RefineContext& c) -> TypeInfo {
+        if (c.arg_types.size() >= 2 && c.arg_types[1].kind == K::Func &&
+            c.arg_types[1].return_type && c.arg_types[1].return_type->kind == K::Array &&
+            !c.arg_types[1].return_type->inner_types.empty()) {
+            return TypeInfo::make_result(*c.arg_types[1].return_type);
+        }
+
+        return c.static_type;
+    });
+
+    // Array.scan accumulates values of the initial value's type U.
+    add({"Array.scan"}, true, [](const RefineContext& c) -> TypeInfo {
+        if (c.arg_types.size() >= 2) {
+            return TypeInfo::make_result(TypeInfo::make_array(c.arg_types[1]));
+        }
+
+        return c.static_type;
+    });
 
     add({"Array.find", "Array.minimum", "Array.maximum", "Array.sum"}, true,
         [](const RefineContext& c) { return TypeInfo::make_result(c.elem); });
@@ -703,13 +742,14 @@ struct Refiner {
     });
 
     // ── Set / Reference / Resource ──
-    add({"Set.to_array"}, true, [](const RefineContext& c) -> TypeInfo {
-        if (c.elem.kind != K::StdlibAny) {
-            return TypeInfo::make_array(c.elem);
-        }
+    add({"Set.to_array", "Queue.to_array", "Stack.to_array"}, true,
+        [](const RefineContext& c) -> TypeInfo {
+            if (c.elem.kind != K::StdlibAny) {
+                return TypeInfo::make_array(c.elem);
+            }
 
-        return c.static_type;
-    });
+            return c.static_type;
+        });
 
     add({"Reference.get"}, true, [](const RefineContext& c) -> TypeInfo {
         if (!c.arg_types.empty() && c.arg_types[0].kind == K::Reference &&

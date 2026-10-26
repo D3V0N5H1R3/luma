@@ -4,8 +4,7 @@
 # build-output locations and use the first that exists. Each case runs a real
 # (tiny) program written to a temporary, process-unique file. If no binary is
 # found, the startup benchmarks are skipped rather than reporting misleading
-# timings (the previous version invoked a non-existent "-e" flag against a
-# hardcoded path, so it only ever measured process-launch error latency).
+# timings.
 
 function optional<string> bench_resolve_luma_binary() {
     array<string> candidates = [
@@ -26,16 +25,22 @@ function optional<string> bench_resolve_luma_binary() {
     return none
 }
 
-function BenchResult run_startup_benchmarks(BenchResult state) {
+# `luma <file>.luma` caches compiled bytecode next to the source as <file>.lumc.
+function string bench_bytecode_cache_path(string program) {
+    return "${String.substring(program, 0, String.length(program) - 5)}.lumc"
+}
+
+# Evicting the bytecode cache first forces the full lex → parse → type-check →
+# compile path; otherwise every run after the first would only load the cached
+# bytecode.
+function void bench_run_cold(string luma, string program) {
+    result<boolean> _evicted = FileSystem.delete(bench_bytecode_cache_path(program))
+    result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${program}\"")
+}
+
+function BenchResult bench_run_startup_cases(BenchResult state, string luma) {
     mutable BenchResult st = state
 
-    optional<string> binary = bench_resolve_luma_binary()
-    if Optional.is_none(binary) {
-        print("startup benchmarks skipped: luma binary not found in build/")
-        return st
-    }
-
-    string luma = Optional.unwrap(binary)
     integer pid = Process.get_process_id()
     string empty_program = "__bench_startup_${pid}_empty.luma"
     string hello_program = "__bench_startup_${pid}_hello.luma"
@@ -58,19 +63,26 @@ function BenchResult run_startup_benchmarks(BenchResult state) {
         "include \"${include_helper}\"\n@main\nfunction void main() { print(inc_add(1, 2)) }\n")
 
     st = time_it(st, "Process.run: luma empty program", 5, () -> {
-        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${empty_program}\"")
+        bench_run_cold(luma, empty_program)
     })
 
     st = time_it(st, "Process.run: luma hello world", 5, () -> {
-        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${hello_program}\"")
+        bench_run_cold(luma, hello_program)
     })
 
     st = time_it(st, "Process.run: luma arithmetic", 5, () -> {
-        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${arith_program}\"")
+        bench_run_cold(luma, arith_program)
     })
 
     st = time_it(st, "Process.run: luma include", 5, () -> {
-        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${include_program}\"")
+        bench_run_cold(luma, include_program)
+    })
+
+    # The warmup run writes the bytecode cache, so every timed run loads it
+    # instead of compiling. Compared with the cold "hello world" case above,
+    # this isolates the compile cost that the .lumc cache saves.
+    st = time_it(st, "Process.run: luma hello world (bytecode cache hit)", 5, () -> {
+        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${hello_program}\"")
     })
 
     # Analysis-only path: --check runs lex → parse → type-check → lint (and the
@@ -89,11 +101,26 @@ function BenchResult run_startup_benchmarks(BenchResult state) {
         result<Process.ProcessResult> _r = Process.run("\"${luma}\" --version")
     })
 
-    result<boolean> _de = FileSystem.delete(empty_program)
-    result<boolean> _dh = FileSystem.delete(hello_program)
-    result<boolean> _da = FileSystem.delete(arith_program)
-    result<boolean> _dih = FileSystem.delete(include_helper)
-    result<boolean> _dim = FileSystem.delete(include_program)
+    array<string> programs = [
+        empty_program, hello_program, arith_program, include_helper, include_program
+    ]
+
+    for program in programs {
+        result<boolean> _source = FileSystem.delete(program)
+        result<boolean> _cache = FileSystem.delete(bench_bytecode_cache_path(program))
+    }
 
     return st
+}
+
+function BenchResult run_startup_benchmarks(BenchResult state) {
+    match bench_resolve_luma_binary() {
+        case some(luma) {
+            return bench_run_startup_cases(state, luma)
+        }
+        case none {
+            print("startup benchmarks skipped: luma binary not found in build/")
+            return state
+        }
+    }
 }

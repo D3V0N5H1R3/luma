@@ -18,7 +18,13 @@ namespace luma {
 // direct unit and fuzz testing (see fuzz/fuzz_regex.cpp).  The walk is pure:
 // equal inputs always yield equal results, and a pattern with no '(' group can
 // never be flagged.
-[[nodiscard]] bool has_dangerous_quantifier_nesting(std::string_view pattern);
+// `case_insensitive` mirrors the icase flag the pattern will be compiled
+// with: literal first characters are then compared ASCII-case-folded, so
+// `(a|A)+` is flagged under icase.  Named-group headers (`(?<n>`, `(?P<n>`)
+// are skipped, and \x / \u / \c escapes and backreferences count as wildcard
+// first tokens.
+[[nodiscard]] bool has_dangerous_quantifier_nesting(std::string_view pattern,
+                                                    bool case_insensitive = false);
 
 void register_regularexpression_ns(const EnvPtr& env);
 

@@ -85,6 +85,7 @@
 #ifndef LUMA_VM_VM_HPP
 #define LUMA_VM_VM_HPP
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -107,8 +108,10 @@
 #include "common/string_hash.hpp"
 #include "runtime/compiler/chunk.hpp"
 #include "runtime/compiler/opcode.hpp"
+#include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/task_scope.hpp"
 #include "runtime/concurrency/thread_pool.hpp"
+#include "runtime/interpreter/environment.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/native_function_fwd.hpp"
 #include "runtime/vm/vm_constants.hpp"
@@ -132,9 +135,8 @@ class RuntimeError;
 
 // Stack-based virtual machine for executing Luma bytecode.
 //
-// TODO(sandbox): Accept RuntimeConstraints in the VM constructor
-// to enable per-execution resource limits. Currently uses global
-// ResourceLimits directly. See RuntimeConstraints in resource_limits.hpp.
+// Resource limits are read from the process-wide ResourceLimits
+// (common/resource_limits.hpp); there is no per-VM limit set.
 //
 // ═══════════════════════════════════════════════════════════
 // VM error handling conventions
@@ -276,9 +278,21 @@ public:
     VM(EnvPtr global_env, ThreadPool& pool, const std::vector<CompiledFunction>* compiled_fns);
 
     ~VM() {
-        // Null out the thread-local scope pointer to prevent dangling access
-        // if the VM is destroyed with task scopes still active.
-        VMTaskManager::current_scope = nullptr;
+        // VMTaskManager::current_scope is per *thread*, not per VM, and other
+        // VMs may share this thread (the debugger's scratch VM that evaluates
+        // a conditional breakpoint runs on the debuggee's thread inside its
+        // task_scope).  Only touch it when this VM still owns open scopes —
+        // normally every exit path has already retired them — and then hand
+        // back the scope that was current before this VM opened its first one.
+        // Cancel the leftover scopes so their children stop promptly instead
+        // of keeping the pool (joined during destruction) busy.
+        if (!task_manager_.task_scopes.empty()) {
+            for (const auto& scope : task_manager_.task_scopes) {
+                scope->cancel_all();
+            }
+
+            VMTaskManager::current_scope = task_manager_.task_scopes.front()->parent();
+        }
     }
 
     VM(const VM&) = delete;
@@ -295,6 +309,13 @@ public:
     // Execute a compiled function with its associated function list.
     [[nodiscard]] Value execute_function(const CompiledFunction& func,
                                          const std::vector<CompiledFunction>& functions);
+
+    // Takes ownership of one REPL input's compiled functions for the VM's
+    // lifetime and returns the stored table.  Closures created by an input
+    // (e.g. a function declaration bound to a global) outlive its evaluation
+    // and may be called by any later input.
+    [[nodiscard]] const std::vector<CompiledFunction>&
+    retain_compiled_functions(std::vector<CompiledFunction> functions);
 
     [[nodiscard]] EnvPtr global_env() const {
         return global_env_;
@@ -404,10 +425,14 @@ private:
     }
 
     /// Convenience overload that checks the current (top) frame.  Used by the
-    /// run() loop's fetch guard, which must stay active for all bytecode: the
-    /// verifier permits reachable jumps to one-past-the-end and does not require
-    /// a trailing terminator, so this guard is what turns those into a catchable
-    /// runtime error rather than an out-of-bounds read.
+    /// run() loop's fetch guard, which stays active for all bytecode.  The
+    /// verifier rejects jump targets at or beyond the end of the code and
+    /// reports control flow that falls off the end, so verified bytecode never
+    /// trips it; but verification is optional (CompilerProfile::verify, off by
+    /// default), and a deserialized .lumc function that fails it still runs
+    /// unverified.  For such code this guard turns a fetch past the last
+    /// instruction into a catchable runtime error rather than an out-of-bounds
+    /// read.
     inline void ensure_bytecode_available(std::size_t count) const {
         ensure_bytecode_available(stack_.frames.back(), count);
     }
@@ -483,6 +508,44 @@ private:
     [[nodiscard]] bool call_closure(FunctionValue* func, std::uint8_t arg_count);
     void call_native(const NativeFunctionValue& function, int arg_count);
 
+    // The call-depth limit actually enforced: ResourceLimits::max_call_depth
+    // (overridable through LUMA_LIMIT_MAX_CALL_DEPTH) capped at the VM's hard
+    // frame limit VMStack::k_frame_max, so the override can lower the limit but
+    // never raise it past the frame stack's capacity.
+    [[nodiscard]] static std::size_t effective_max_call_depth() noexcept {
+        const auto configured =
+            static_cast<std::size_t>(std::max(ResourceLimits::max_call_depth, 0));
+        return std::min(configured, VMStack::k_frame_max);
+    }
+
+    // Throw the call-stack-overflow error if pushing one more frame would exceed
+    // effective_max_call_depth().  Shared by every frame-pushing call path.
+    void validate_call_depth() const;
+
+    // ─── Cooperative cancellation ───
+    // Throws CancelledException when this VM runs a spawned task whose token
+    // (or an ancestor scope's token) has been cancelled.  Checked at loop
+    // back-edges, function calls, tail calls, and await — one pointer test on
+    // the root VM, which has no token.  A `finally` body entered because of
+    // the cancellation is shielded (see VMExceptionManager) so it runs to
+    // completion; its closing Rethrow re-raises the cancellation.
+    void check_cancellation() const {
+        if (is_self_cancelled() && !exception_handler_.is_cancel_shielded()) [[unlikely]] {
+            throw CancelledException{"task cancelled"};
+        }
+    }
+
+    // ─── Task global environment ───
+    // Environment handed to a task spawned from this VM: an immutable deep-copy
+    // snapshot of the globals, shared by every task spawned while the globals
+    // are unchanged and rebuilt after this VM writes a global.  A task VM's own
+    // environment is already such a snapshot, so nested spawns reuse it.
+    [[nodiscard]] EnvPtr spawn_environment();
+
+    // Reject a global write from a spawned task: its globals are a snapshot
+    // shared read-only with sibling tasks, so writing one would race.
+    void reject_global_write_in_task(std::string_view name) const;
+
     // ─── Dispatch helpers (shared infrastructure) ───
     [[nodiscard]] SourceLocation current_location() const;
     // ─── Run-loop exception dispatch ───
@@ -496,9 +559,52 @@ private:
     // avoids it.  Each returns true if a Luma handler caught the exception and
     // false if the caller must re-raise it (with a bare `throw;` in its catch).
     [[nodiscard]] bool handle_exception(const RuntimeError& e);
+    [[nodiscard]] bool handle_exception(const CancelledException& e);
     [[nodiscard]] bool handle_exception(const std::runtime_error& e);
     [[nodiscard]] bool handle_exception(const std::string& message,
                                         const std::optional<Value>& error_value);
+
+    // Dispatch a CancelledException.  When this VM's own task is being
+    // cancelled, a user `catch` block does not intercept it — cancellation
+    // propagates — but cleanup (`finally`) handlers still run; they receive
+    // the cancellation marker so their closing Op::Rethrow re-raises the
+    // cancellation instead of a plain RuntimeError.  A cancellation observed
+    // from another task (awaiting a cancelled task) stays catchable.
+    [[nodiscard]] bool handle_cancellation(const std::string& message);
+
+    // Shared tail of exception dispatch: unwind to `handler` (retiring task
+    // scopes, frames, and stack values opened after it), push `error_value`
+    // for the handler code, and resume at its catch_ip.
+    void resume_at_handler(const ExceptionHandler& handler, Value error_value);
+
+    // Report a dispatched exception to the debugger's exception hook.
+    void notify_exception_hook(const std::string& message, bool is_caught);
+
+    // True when `handler` (already validated) is a cleanup handler, i.e. the
+    // compiled form of a `finally` clause.  See is_cleanup_handler().
+    [[nodiscard]] bool is_cleanup(const ExceptionHandler& handler) const;
+
+    // The error value a cleanup handler receives when a cancellation unwinds
+    // into it: `none`, which no ordinary error produces (handle_exception
+    // always binds a string), so Op::Rethrow can tell the two apart.
+    [[nodiscard]] static Value cancellation_marker() {
+        return Value{};
+    }
+
+    [[nodiscard]] static bool is_cancellation_marker(const Value& error_value) {
+        return error_value.is_null();
+    }
+
+    // True when this VM runs a spawned task whose token (or an ancestor
+    // scope's token) has been cancelled.
+    [[nodiscard]] bool is_self_cancelled() const noexcept {
+        return cancel_token_ != nullptr && cancel_token_->is_cancelled();
+    }
+
+    // True when `handler` can be resumed: it belongs to a live frame, records
+    // a stack depth/task-scope depth no deeper than the current state, and its
+    // catch_ip lies inside that frame's code.  See handle_exception().
+    [[nodiscard]] bool is_valid_handler(const ExceptionHandler& handler) const noexcept;
 
     // Check debug hooks and handle pause requests.  Returns true if the
     // debugger requested termination (the caller should return Value{}).
@@ -523,6 +629,12 @@ private:
     void handle_contains();
     void handle_make_dict();
     void handle_get_field();
+    void handle_get_field_unique();
+    void handle_index_get_unique();
+    void push_field(std::string_view field_name);
+    // Resolves a qualified global miss `a.b.c` as fields of global `a`; returns
+    // false (pushing nothing) when `a` is not a global either.
+    [[nodiscard]] bool push_global_field_path(std::string_view qualified_name);
     void handle_set_field();
     void handle_get_field_opt();
     void handle_index_get_opt();
@@ -592,8 +704,9 @@ private:
                                       std::vector<Value> args, SourceLocation loc,
                                       const std::vector<CompiledFunction>* compiled_fns, EnvPtr env,
                                       std::shared_ptr<CancellationToken> cancel_token,
-                                      ThreadPool& pool_ref, DebugCallbacks debug_cbs,
-                                      int task_id) -> std::function<void()>;
+                                      std::shared_ptr<TaskCompletion> completion,
+                                      ThreadPool& pool_ref, DebugCallbacks debug_cbs, int task_id)
+        -> std::function<void()>;
 
     /// Configures the child task VM: propagates debug hooks and fires the spawn hook.
     static void prepare_spawn_environment(VM& task_vm, const DebugCallbacks& debug_cbs,
@@ -752,15 +865,23 @@ private:
     void op_set_local_pop();           // Op::SetLocalPop
     void op_get_local_return();        // Op::GetLocalReturn
     void op_int_to_number();           // Op::IntToNumber
+    void op_widen_number();            // Op::WidenNumber
     void op_clone();                   // Op::Clone
+    void op_unique_local();            // Op::UniqueLocal
+    void op_unique_upvalue();          // Op::UniqueUpvalue
+    void op_unique_global();           // Op::UniqueGlobal
+    void op_get_field_unique();        // Op::GetFieldUnique
+    void op_index_get_unique();        // Op::IndexGetUnique
     void op_end_module();              // Op::EndModule
 
     // ─── Template numeric helpers ───
     // Consolidate type-dispatch for unary numeric ops (Negate, Increment, Decrement).
-    // IntOp: (std::int64_t) → Value   (handles overflow internally)
+    // IntOp: (std::int64_t) → std::optional<std::int64_t>, std::nullopt on
+    //        overflow, which raises "integer overflow in <overflow_operation>".
     // NumOp: (double) → Value
     template <typename IntOp, typename NumOp>
-    void handle_unary_numeric(Value& val, IntOp int_op, NumOp num_op, std::string_view op_name);
+    void handle_unary_numeric(Value& val, IntOp int_op, NumOp num_op, std::string_view op_name,
+                              std::string_view overflow_operation);
 
     // Consolidate type-dispatch for binary numeric ops.
     // IntOp: (std::int64_t, std::int64_t) → Value   (handles overflow internally)
@@ -835,8 +956,42 @@ private:
     // outlive the VM execution.  Verified by execute() and execute_function(),
     // which accept the vector by const-reference from the caller's stack.
     const std::vector<CompiledFunction>* compiled_functions_{nullptr};
+    // Function tables kept alive by retain_compiled_functions().  Held by
+    // unique_ptr so each table's address — which closures point into — is
+    // stable as more are added.
+    std::vector<std::unique_ptr<const std::vector<CompiledFunction>>> retained_function_tables_;
     std::int64_t loop_iterations_{0};
     std::size_t base_depth_{0};
+
+    // Cancellation token of the spawned task this VM runs (null on the root
+    // VM).  Owned jointly with the TaskValue handles, so it outlives the VM.
+    std::shared_ptr<CancellationToken> cancel_token_;
+
+    // True for a VM constructed to run a spawned task.  Its global_env_ is a
+    // read-only snapshot shared with sibling tasks.
+    bool is_task_vm_{false};
+
+    // Cached task snapshot of global_env_ (see spawn_environment()): one
+    // layer per scope in the global environment chain, root first.  Each
+    // layer copies its scope's immutable bindings into a base environment
+    // (rebuilt when that scope's binding count changes or the layer below was
+    // rebuilt) and its mutable bindings into a top environment over it
+    // (rebuilt when globals_version_ changes).  The layer's copy cache keeps
+    // each binding's deep copy across rebuilds, keyed by name and
+    // Binding::write_version, so a rebuild re-copies only the bindings written
+    // since.
+    struct TaskSnapshotLayer {
+        const Environment* source{nullptr};
+        std::size_t binding_count{0};
+        bool has_mutable_bindings{false};
+        std::uint64_t version{0};
+        EnvPtr base;
+        EnvPtr top; // `base` itself when the scope has no mutable bindings.
+        BindingCopyCache copies;
+    };
+
+    std::vector<TaskSnapshotLayer> task_snapshot_layers_;
+    std::uint64_t globals_version_{0};
 
     // Callable wrapper for spawned tasks.
     NativeCallable vm_native_callable_;
@@ -944,9 +1099,15 @@ private:
 namespace luma {
 
 template <typename IntOp, typename NumOp>
-void VM::handle_unary_numeric(Value& val, IntOp int_op, NumOp num_op, std::string_view op_name) {
+void VM::handle_unary_numeric(Value& val, IntOp int_op, NumOp num_op, std::string_view op_name,
+                              std::string_view overflow_operation) {
     if (val.is_integer()) [[likely]] {
-        val = int_op(val.as_integer());
+        if (const auto result = int_op(val.as_integer())) [[likely]] {
+            val = Value{*result};
+        } else {
+            runtime_error(vm_errors::integer_overflow_in(overflow_operation),
+                          vm_errors::hint_integer_overflow);
+        }
     } else if (val.is_number()) {
         val = num_op(val.as_number());
     } else [[unlikely]] {

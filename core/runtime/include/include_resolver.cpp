@@ -73,6 +73,27 @@ ParseFileCallback make_default_parse_callback() {
     return default_parse_file;
 }
 
+LoadResult load_fresh_source(SourceManager& source_manager, std::string_view path) {
+    if (!source_manager.is_loaded(path)) {
+        return source_manager.try_load(path);
+    }
+
+    // The Source Manager returns the registered entry for a path it has seen,
+    // so re-read the file through a scratch manager (same open, size-limit,
+    // and BOM handling) and register the fresh text under a new, unique name.
+    SourceManager scratch;
+    const LoadResult fresh = scratch.try_load(path);
+
+    if (!fresh) {
+        return fresh;
+    }
+
+    const auto reload_name =
+        std::format("{} (reload {})", fresh.file->path, source_manager.files().size() + 1);
+
+    return LoadResult{.file = &source_manager.load_virtual(reload_name, fresh.file->text)};
+}
+
 IncludeResolver::IncludeResolver(SourceManager& source_manager)
     : IncludeResolver{source_manager, default_parse_file} {}
 
@@ -81,30 +102,68 @@ IncludeResolver::IncludeResolver(SourceManager& source_manager, ParseFileCallbac
     init_search_paths();
 }
 
+void IncludeResolver::set_session_included(StringSet already_included) {
+    session_included_ = std::move(already_included);
+}
+
 bool IncludeResolver::resolve(Program& program) {
     diagnostics_.clear();
+    included_files_.clear();
 
     // The inclusion stack tracks only nesting depth.  It needs no seed: the
-    // entry file is registered in the Source Manager before resolution begins,
-    // so any include that loops back to it is skipped by the include-once
-    // check in process_include rather than by tracking it here.
+    // entry file already counts as included (it is registered in the Source
+    // Manager, or listed in the session set), so any include that loops back
+    // to it is skipped by the include-once check in process_include rather
+    // than by tracking it here.
     InclusionStack inclusion_stack;
 
     return resolve_includes(program, inclusion_stack);
 }
 
+bool IncludeResolver::is_already_included(const std::string& canonical) const {
+    if (session_included_) {
+        return session_included_->contains(canonical);
+    }
+
+    return source_manager_.is_loaded(canonical);
+}
+
 std::optional<std::string>
 IncludeResolver::resolve_include_file(const IncludeDeclaration& include_decl) {
-    const std::filesystem::path include_fs_path{include_decl.path};
+    // Include paths come from UTF-8 source text; decode them as UTF-8 rather
+    // than in the ANSI code page std::filesystem::path{std::string} uses on MSVC.
+    const auto decoded_path = try_path_from_utf8(include_decl.path);
+
+    if (!decoded_path) {
+        emit_diagnostic(
+            Severity::Error,
+            std::format("include rejected: '{}' is not a valid UTF-8 path", include_decl.path),
+            include_decl.location, "save the source file as UTF-8");
+        return std::nullopt;
+    }
+
+    const auto& include_fs_path = *decoded_path;
 
     // Reject directory traversal before any filesystem interaction.
     if (!reject_traversal(include_fs_path, include_decl)) {
         return std::nullopt;
     }
 
-    // Resolve the relative path against the including file's directory.
-    const std::filesystem::path resolved_fs_path{
-        resolve_path(include_decl.path, include_decl.location.file_id)};
+    // Resolve against the including file's directory (or the working directory
+    // for REPL/stdin input), then LUMA_PATH.
+    const auto resolved_fs_path = resolve_path(include_fs_path, include_decl.location.file_id);
+
+    if (!resolved_fs_path) {
+        const bool anchored = including_directory(include_decl.location.file_id).has_value();
+
+        emit_diagnostic(
+            Severity::Error,
+            std::format("cannot load included file '{}': file not found", include_decl.path),
+            include_decl.location,
+            anchored ? "searched the including file's directory and LUMA_PATH"
+                     : "searched the current working directory and LUMA_PATH");
+        return std::nullopt;
+    }
 
     // Single consolidated symlink check on the entire resolved path chain.
     // This catches both leaf symlinks and intermediate directory symlinks
@@ -113,20 +172,21 @@ IncludeResolver::resolve_include_file(const IncludeDeclaration& include_decl) {
     // Note: true TOCTOU protection is impossible without OS-level guarantees
     // (O_NOFOLLOW etc.).  A single check on the resolved path is the best we
     // can do in portable C++.
-    if (!reject_symlinks(resolved_fs_path, include_decl)) {
+    if (!reject_symlinks(*resolved_fs_path, include_decl)) {
         return std::nullopt;
     }
 
     // Canonicalize, falling back to the raw resolved path if the filesystem
-    // cannot resolve it (e.g. the file does not exist yet).
-    const auto canonical_fs_path = canonicalize_or(resolved_fs_path, resolved_fs_path);
+    // cannot resolve it.
+    const auto canonical_fs_path = canonicalize_or(*resolved_fs_path, *resolved_fs_path);
 
     // Verify the canonical path stays within allowed directories.
     if (!enforce_allowed_root(canonical_fs_path, include_decl)) {
         return std::nullopt;
     }
 
-    return canonical_fs_path.string();
+    // The Source Manager keys and opens files by UTF-8 path strings.
+    return path_to_utf8(canonical_fs_path);
 }
 
 bool IncludeResolver::reject_traversal(const std::filesystem::path& include_path,
@@ -158,14 +218,14 @@ bool IncludeResolver::reject_symlinks(const std::filesystem::path& resolved_path
 
 bool IncludeResolver::enforce_allowed_root(const std::filesystem::path& canonical_path,
                                            const IncludeDeclaration& include_decl) {
-    const auto* source_file = source_manager_.get_file(include_decl.location.file_id);
+    const auto including_dir = including_directory(include_decl.location.file_id);
 
-    if ((source_file == nullptr) || source_file->path.empty()) {
+    if (!including_dir) {
         // No including file on disk (REPL/stdin) — there is no directory to
         // anchor containment against. Relative includes still resolve against
         // the working directory, but an absolute include path could reach
         // anywhere on the filesystem, so reject those explicitly.
-        const std::filesystem::path raw{include_decl.path};
+        const auto raw = path_from_utf8(include_decl.path);
 
         if (raw.is_absolute() || raw.has_root_path()) {
             emit_diagnostic(
@@ -179,11 +239,18 @@ bool IncludeResolver::enforce_allowed_root(const std::filesystem::path& canonica
         return true; // Relative include with no on-disk anchor — allowed.
     }
 
-    const auto base_dir =
-        canonicalize_or(std::filesystem::path{source_file->path}.parent_path(), {});
+    const auto base_dir = canonicalize_or(*including_dir, {});
 
     if (base_dir.empty()) {
-        return true; // Base directory unresolvable — skip the enclosure check.
+        // Fail closed: without a canonical base directory the enclosure check
+        // cannot be performed, and skipping it would accept an absolute
+        // include from anywhere on the filesystem.
+        emit_diagnostic(
+            Severity::Error,
+            std::format("include rejected: cannot resolve the directory of the file including '{}'",
+                        include_decl.path),
+            include_decl.location, "the including file's directory must exist and be accessible");
+        return false;
     }
 
     if (is_within_allowed_directories(canonical_path, base_dir)) {
@@ -246,7 +313,7 @@ bool IncludeResolver::process_include(const IncludeDeclaration& include_decl,
         return false;
     }
 
-    if (source_manager_.is_loaded(*canonical)) {
+    if (is_already_included(*canonical)) {
         return true;
     }
 
@@ -260,6 +327,15 @@ bool IncludeResolver::process_include(const IncludeDeclaration& include_decl,
         return false;
     }
 
+    // Record the file before resolving its own includes, so an include that
+    // loops back to it is skipped.  (Loading already registered it in the
+    // Source Manager, which is the include-once rule outside session mode.)
+    if (session_included_) {
+        session_included_->insert(*canonical);
+    }
+
+    included_files_.push_back(*canonical);
+
     auto included_program = parse_include_file(*source_file, include_decl);
 
     if (!included_program) {
@@ -271,7 +347,10 @@ bool IncludeResolver::process_include(const IncludeDeclaration& include_decl,
 
 const SourceFile* IncludeResolver::load_include_file(const std::string& canonical,
                                                      const IncludeDeclaration& include_decl) {
-    const LoadResult load_result = source_manager_.try_load(canonical);
+    // In session mode a registered path may hold the text of an earlier,
+    // rejected input; re-read it so the include sees the file as it is now.
+    const LoadResult load_result = session_included_ ? load_fresh_source(source_manager_, canonical)
+                                                     : source_manager_.try_load(canonical);
 
     if (!load_result) {
         emit_diagnostic(Severity::Error,
@@ -337,40 +416,86 @@ bool IncludeResolver::merge_include_ast(Program& included_program,
     return true;
 }
 
-std::string IncludeResolver::resolve_path(std::string_view include_path, FileId file_id) const {
+std::optional<std::filesystem::path> IncludeResolver::including_directory(FileId file_id) const {
+    const auto* source_file = source_manager_.get_file(file_id);
+
+    if ((source_file == nullptr) || source_file->path.empty()) {
+        return std::nullopt; // REPL / stdin input (FileId 0) has no file.
+    }
+
+    // A bracketed virtual source such as "<repl:3>" — an input the REPL
+    // registered so runtime errors can show its text — has no file either.
+    // (A real path never normalises to a bracketed name; a virtual reload of a
+    // file keeps its real directory and stays anchored.)
+    if (source_file->is_virtual && source_file->path.starts_with('<')) {
+        return std::nullopt;
+    }
+
+    // The Source Manager stores paths as UTF-8.  A name that does not decode
+    // yields an empty directory, which makes the containment check fail closed.
+    const auto file_path = try_path_from_utf8(source_file->path);
+    auto dir = file_path ? file_path->parent_path() : std::filesystem::path{};
+
+    if (dir.empty() && file_path) {
+        // A bare file name (e.g. a virtual source) lives in the working
+        // directory.  If even that cannot be determined, the empty path makes
+        // the containment check fail closed.
+        std::error_code ec;
+        dir = std::filesystem::current_path(ec);
+
+        if (ec) {
+            dir.clear();
+        }
+    }
+
+    return dir;
+}
+
+std::optional<std::filesystem::path>
+IncludeResolver::resolve_path(const std::filesystem::path& include_path, FileId file_id) const {
     std::error_code ec;
 
     // Return the first existing candidate formed by joining `dir` with the
     // requested include path.  Non-throwing: a filesystem error simply means
     // the candidate does not resolve here, so the caller tries the next dir.
-    const auto try_dir = [&](const std::filesystem::path& dir) -> std::optional<std::string> {
-        const auto candidate = dir / include_path;
+    const auto try_dir =
+        [&](const std::filesystem::path& dir) -> std::optional<std::filesystem::path> {
+        auto candidate = dir / include_path;
 
         if (std::filesystem::exists(candidate, ec)) {
-            return candidate.string();
+            return candidate;
         }
 
         return std::nullopt;
     };
 
-    // First, the including file's own directory.
-    const auto* source_file = source_manager_.get_file(file_id);
+    // First the base directory: the including file's own directory, or — for
+    // REPL/stdin input, which has no file — the current working directory
+    // (Manual §25).  A file-anchored include never falls back to the working
+    // directory: that would load a different file than the including file's
+    // location implies, or misreport a missing file as escaping the tree.
+    if (const auto dir = including_directory(file_id)) {
+        if (auto found = try_dir(*dir)) {
+            return found;
+        }
+    } else {
+        const auto cwd = std::filesystem::current_path(ec);
 
-    if ((source_file != nullptr) && !source_file->path.empty()) {
-        if (auto found = try_dir(std::filesystem::path{source_file->path}.parent_path())) {
-            return *found;
+        if (!ec) {
+            if (auto found = try_dir(cwd)) {
+                return found;
+            }
         }
     }
 
     // Then each LUMA_PATH search directory, in order.
     for (const auto& dir : search_paths_) {
         if (auto found = try_dir(dir)) {
-            return *found;
+            return found;
         }
     }
 
-    // Fallback: treat as relative to the current working directory.
-    return std::string{include_path};
+    return std::nullopt;
 }
 
 bool IncludeResolver::is_within_allowed_directories(const std::filesystem::path& canonical_path,
@@ -412,7 +537,8 @@ void IncludeResolver::init_search_paths() {
         }
 
         std::error_code ec;
-        const std::filesystem::path dir{token};
+        // safe_getenv returns UTF-8, so decode the entry as UTF-8.
+        const auto dir = path_from_utf8(token);
 
         if (!std::filesystem::is_directory(dir, ec)) {
             return; // Skip missing or inaccessible LUMA_PATH entries.

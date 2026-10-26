@@ -1,8 +1,12 @@
 // CLI unit tests — exit codes, levenshtein distance, flag suggestions.
 
+#include <chrono>
+#include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -416,6 +420,88 @@ static void test_run_file_nonstrict_succeeds_on_warning() {
     ASSERT_EQ(run_file(file.path_string(), RunOptions{.strict = false}), exit_code::success);
 }
 
+// Redirects std::cerr into a string for the lifetime of the object.
+class CerrCapture {
+public:
+    CerrCapture() : previous_{std::cerr.rdbuf(buffer_.rdbuf())} {}
+
+    ~CerrCapture() {
+        std::cerr.rdbuf(previous_);
+    }
+
+    CerrCapture(const CerrCapture&) = delete;
+    CerrCapture& operator=(const CerrCapture&) = delete;
+    CerrCapture(CerrCapture&&) = delete;
+    CerrCapture& operator=(CerrCapture&&) = delete;
+
+    // The captured text with ANSI colour sequences removed: the renderer
+    // colours carets when the real stderr is a terminal, even while captured.
+    [[nodiscard]] std::string text() const {
+        const std::string raw = buffer_.str();
+        std::string plain;
+        plain.reserve(raw.size());
+
+        for (std::size_t i = 0; i < raw.size(); ++i) {
+            if (raw[i] == '\x1B' && i + 1 < raw.size() && raw[i + 1] == '[') {
+                i += 2;
+                while (i < raw.size() && raw[i] != 'm') {
+                    ++i;
+                }
+                continue;
+            }
+
+            plain += raw[i];
+        }
+
+        return plain;
+    }
+
+private:
+    std::ostringstream buffer_;
+    std::streambuf* previous_;
+};
+
+static void test_type_error_caret_points_at_token() {
+    // Regression: AST locations point one past their first token, so the type
+    // checker reported `x += 0.5` at the column after `x` and drew the caret
+    // there.  The diagnostic must name and underline the token itself.
+    const TempFile file{"@main\nfunction void main() {\n    mutable integer x = 1\n"
+                        "    x += 0.5\n    print(x)\n}\n"};
+
+    std::string output;
+    {
+        const CerrCapture capture;
+        ASSERT_EQ(check_file(file.path_string()), exit_code::type_error);
+        output = capture.text();
+    }
+
+    // `x` is in column 5: the caret line is "| " plus a 4-space indent.
+    ASSERT_TRUE(output.find(":4:5") != std::string::npos);
+    ASSERT_TRUE(output.find("|" + std::string(5, ' ') + "^\n") != std::string::npos);
+}
+
+static void test_runtime_error_caret_points_at_token() {
+    // The compiler's source map is built from the same AST locations, so a
+    // runtime error used to point one past the operator.  It must underline
+    // the `+` that overflowed, also when the bytecode is served from the cache.
+    const TempFile file{"@main\nfunction void main() {\n    integer big = 9223372036854775807\n"
+                        "    mutable integer x = big\n    x = x + 2\n    print(x)\n}\n"};
+
+    for (int run = 0; run < 2; ++run) {
+        std::string output;
+        {
+            const CerrCapture capture;
+            ASSERT_EQ(run_file(file.path_string(), RunOptions{}), exit_code::runtime_error);
+            output = capture.text();
+        }
+
+        ASSERT_TRUE(output.find("integer overflow in addition") != std::string::npos);
+        ASSERT_TRUE(output.find(":5:11") != std::string::npos);
+        // `+` is in column 11: the caret line is "| " plus a 10-space indent.
+        ASSERT_TRUE(output.find("|" + std::string(11, ' ') + "^\n") != std::string::npos);
+    }
+}
+
 static void test_run_file_strict_bypasses_warm_cache() {
     // Regression: a warm compilation cache must not let a --strict run skip the
     // warning re-check.  Cached artifacts record no warnings, so serving one
@@ -431,6 +517,79 @@ static void test_run_file_strict_bypasses_warm_cache() {
     // the warning-free cached artifact.
     ASSERT_EQ(run_file(file.path_string(), RunOptions{.strict = true}, cache),
               exit_code::type_error);
+}
+
+// A program whose @main fails exactly when the included helper returns true.
+// The entry point never changes in these tests; only the include is edited.
+static constexpr std::string_view k_include_entry_point = "include \"helper.luma\"\n"
+                                                          "@main\n"
+                                                          "function void main() {\n"
+                                                          "    assert(!should_fail())\n"
+                                                          "}\n";
+
+static void write_helper(const std::filesystem::path& path, bool should_fail) {
+    std::ofstream out{path, std::ios::binary | std::ios::trunc};
+    out << "function boolean should_fail() { return " << (should_fail ? "true" : "false") << " }\n";
+}
+
+// Run `program` with stdout/stderr captured so the expected assertion failure
+// does not clutter the test log.
+[[nodiscard]] static int run_quietly(const std::filesystem::path& program,
+                                     CompilationCache& cache) {
+    const CapturedStreams quiet{std::cout, std::cerr};
+
+    return run_file(program.string(), RunOptions{}, cache);
+}
+
+static void test_run_file_memory_cache_invalidated_by_include_edit() {
+    // Regression: the caches keyed on the entry point's text alone, so editing
+    // an included file kept running the old bytecode.
+    const TempDir dir;
+    const TempFile program{dir.path() / "main.luma", std::string{k_include_entry_point}};
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/false);
+
+    CompilationCache cache;
+    ASSERT_EQ(run_quietly(program.path(), cache), exit_code::success);
+
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/true);
+
+    ASSERT_EQ(run_quietly(program.path(), cache), exit_code::runtime_error);
+}
+
+static void test_run_file_disk_cache_invalidated_by_include_edit() {
+    const TempDir dir;
+    const TempFile program{dir.path() / "main.luma", std::string{k_include_entry_point}};
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/false);
+
+    CompilationCache first_process;
+    ASSERT_EQ(run_quietly(program.path(), first_process), exit_code::success);
+    ASSERT_TRUE(std::filesystem::exists(dir.path() / "main.lumc"));
+
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/true);
+
+    // A fresh in-memory cache forces the .lumc lookup, as a new process would.
+    CompilationCache second_process;
+    ASSERT_EQ(run_quietly(program.path(), second_process), exit_code::runtime_error);
+}
+
+static void test_run_file_disk_cache_hit_with_unchanged_include() {
+    const TempDir dir;
+    const TempFile program{dir.path() / "main.luma", std::string{k_include_entry_point}};
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/false);
+
+    CompilationCache first_process;
+    ASSERT_EQ(run_quietly(program.path(), first_process), exit_code::success);
+
+    // Backdate the cache file: a recompile would rewrite it with a current
+    // timestamp, which avoids depending on the filesystem's time resolution.
+    const auto cache_file = dir.path() / "main.lumc";
+    const auto backdated = std::filesystem::last_write_time(cache_file) - std::chrono::hours{1};
+    std::filesystem::last_write_time(cache_file, backdated);
+
+    // An unchanged include must still be served from the .lumc file.
+    CompilationCache second_process;
+    ASSERT_EQ(run_quietly(program.path(), second_process), exit_code::success);
+    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) == backdated);
 }
 
 static void test_run_tests_file_strict_fails_on_warning() {
@@ -478,18 +637,104 @@ static void test_parse_args_file_path() {
 }
 
 static void test_parse_args_program_args_collected_after_file() {
-    // Everything after the file path belongs to the program, even tokens that
-    // would otherwise look like luma flags.
-    ArgvBuilder args{"luma", "program.luma", "alpha", "--strict", "7"};
+    // Arguments after the file that are not Luma flags belong to the program.
+    ArgvBuilder args{"luma", "program.luma", "alpha", "--name", "7"};
 
     const auto parsed = parse_or_fail(args);
 
     ASSERT_EQ(parsed.file_path, "program.luma");
-    ASSERT_FALSE(parsed.strict);
     ASSERT_EQ(parsed.program_args.size(), 3U);
     ASSERT_EQ(parsed.program_args[0], "alpha");
-    ASSERT_EQ(parsed.program_args[1], "--strict");
+    ASSERT_EQ(parsed.program_args[1], "--name");
     ASSERT_EQ(parsed.program_args[2], "7");
+}
+
+static void test_parse_args_flags_after_file_are_honoured() {
+    // Regression: `luma app.luma --test` ran main with "--test" as a program
+    // argument; the Manual says flags may come before or after the file.
+    ArgvBuilder test_after{"luma", "program.luma", "--test"};
+    const auto tested = parse_or_fail(test_after);
+    ASSERT_EQ(tested.command, Command::Test);
+    ASSERT_EQ(tested.file_path, "program.luma");
+    ASSERT_TRUE(tested.program_args.empty());
+
+    ArgvBuilder mixed{"luma", "program.luma", "alpha", "--strict", "-O", "0", "beta"};
+    const auto parsed = parse_or_fail(mixed);
+    ASSERT_TRUE(parsed.strict);
+    ASSERT_EQ(parsed.optimize, 0);
+    ASSERT_EQ(parsed.program_args.size(), 2U);
+    ASSERT_EQ(parsed.program_args[0], "alpha");
+    ASSERT_EQ(parsed.program_args[1], "beta");
+}
+
+static void test_parse_args_double_dash_forwards_verbatim() {
+    // Everything after `--` reaches the program, even Luma flag spellings.
+    ArgvBuilder args{"luma", "--strict", "program.luma", "--", "--test", "-O", "x", "--"};
+
+    const auto parsed = parse_or_fail(args);
+
+    ASSERT_EQ(parsed.command, Command::Run);
+    ASSERT_TRUE(parsed.strict);
+    ASSERT_EQ(parsed.file_path, "program.luma");
+    ASSERT_EQ(parsed.program_args.size(), 4U);
+    ASSERT_EQ(parsed.program_args[0], "--test");
+    ASSERT_EQ(parsed.program_args[1], "-O");
+    ASSERT_EQ(parsed.program_args[2], "x");
+    ASSERT_EQ(parsed.program_args[3], "--");
+}
+
+static void test_parse_args_unknown_option_after_file_is_forwarded() {
+    // Before the file an unknown option is a usage error; after it, the
+    // argument is the program's.
+    ArgvBuilder args{"luma", "program.luma", "--bogus"};
+
+    const auto parsed = parse_or_fail(args);
+
+    ASSERT_EQ(parsed.program_args.size(), 1U);
+    ASSERT_EQ(parsed.program_args[0], "--bogus");
+}
+
+static void test_parse_args_non_level_dash_o_after_file_is_forwarded() {
+    // Regression: after the file every `-O...` argument was taken as Luma's
+    // optimisation flag, so `luma a.luma -Output x` was a usage error.  Only a
+    // valid level is Luma's there; anything else belongs to the program.
+    ArgvBuilder args{"luma", "program.luma", "-Output",    "x", "-O3", "-Ofast",
+                     "-O",   "fast",         "--optimize", "9", "-O"};
+
+    const auto parsed = parse_or_fail(args);
+
+    ASSERT_EQ(parsed.optimize, 1);
+    ASSERT_EQ(parsed.file_path, "program.luma");
+
+    const std::vector<std::string> expected{"-Output", "x",          "-O3", "-Ofast", "-O",
+                                            "fast",    "--optimize", "9",   "-O"};
+    ASSERT_TRUE(parsed.program_args == expected);
+}
+
+static void test_parse_args_valid_level_after_file_is_luma_flag() {
+    ArgvBuilder combined{"luma", "program.luma", "alpha", "-O2"};
+    const auto parsed_combined = parse_or_fail(combined);
+    ASSERT_EQ(parsed_combined.optimize, 2);
+    ASSERT_EQ(parsed_combined.program_args.size(), 1U);
+    ASSERT_EQ(parsed_combined.program_args[0], "alpha");
+
+    ArgvBuilder separated{"luma", "program.luma", "--optimize", "0", "beta"};
+    const auto parsed_separated = parse_or_fail(separated);
+    ASSERT_EQ(parsed_separated.optimize, 0);
+    ASSERT_EQ(parsed_separated.program_args.size(), 1U);
+    ASSERT_EQ(parsed_separated.program_args[0], "beta");
+}
+
+static void test_parse_args_non_level_dash_o_before_file_is_usage_error() {
+    // Before the file there is no program to forward to, so the strict usage
+    // error stays.
+    for (const std::string_view bad : {"-Output", "-O3", "-Ofast"}) {
+        ArgvBuilder args{"luma", std::string{bad}, "program.luma"};
+
+        const CapturedStreams captured{std::cout, std::cerr};
+
+        ASSERT_FALSE(parse_args(args.argc(), args.argv()).has_value());
+    }
 }
 
 static void test_parse_args_help_long_and_short() {
@@ -633,7 +878,7 @@ static void test_parse_args_unknown_flag_emits_suggestion() {
 }
 
 static void test_parse_args_combined_optimize_invalid_returns_nullopt() {
-    // -O5 is not a valid combined optimize form, so it is an unknown option.
+    // -O5 is not a valid combined optimize form, so it is a usage error.
     ArgvBuilder args{"luma", "-O5"};
 
     const CapturedStreams captured{std::cout, std::cerr};
@@ -641,30 +886,161 @@ static void test_parse_args_combined_optimize_invalid_returns_nullopt() {
     ASSERT_FALSE(parse_args(args.argc(), args.argv()).has_value());
 }
 
-static void test_parse_args_optimize_separated_invalid_warns() {
-    // An out-of-range separated level is ignored with a warning; parsing still
-    // succeeds and the optimization level stays at its default.
-    ArgvBuilder args{"luma", "-O", "9"};
+static void test_parse_args_optimize_separated_invalid_is_usage_error() {
+    // Regression: `-O 3 app.luma` warned but left "3" unconsumed, so it became
+    // the file path and app.luma a program argument.  An invalid level is now
+    // a usage error, like the combined -O3 form.
+    ArgvBuilder args{"luma", "-O", "3", "program.luma"};
 
     const CapturedStreams captured{std::cout, std::cerr};
     const auto parsed = parse_args(args.argc(), args.argv());
     const std::string output = captured.str();
 
-    ASSERT_TRUE(parsed.has_value());
-    ASSERT_EQ(parsed->optimize, 1);
+    ASSERT_FALSE(parsed.has_value());
     ASSERT_TRUE(output.find("invalid optimization level") != std::string::npos);
 }
 
-static void test_parse_args_optimize_missing_value_warns() {
+static void test_parse_args_optimize_missing_value_is_usage_error() {
     ArgvBuilder args{"luma", "--optimize"};
 
     const CapturedStreams captured{std::cout, std::cerr};
     const auto parsed = parse_args(args.argc(), args.argv());
     const std::string output = captured.str();
 
-    ASSERT_TRUE(parsed.has_value());
-    ASSERT_EQ(parsed->optimize, 1);
+    ASSERT_FALSE(parsed.has_value());
     ASSERT_TRUE(output.find("requires a level") != std::string::npos);
+}
+
+// ─── validate_file_argument (regression: a missing file or wrong extension
+// surfaced as a runtime error, exit 1, instead of a usage error, exit 5) ───
+
+[[nodiscard]] static ParsedArgs make_args(Command command, std::string file_path) {
+    ParsedArgs args;
+    args.command = command;
+    args.file_path = std::move(file_path);
+    return args;
+}
+
+static void test_validate_file_argument_requires_file_for_test_and_check() {
+    ASSERT_TRUE(validate_file_argument(make_args(Command::Test, "")).has_value());
+    ASSERT_TRUE(validate_file_argument(make_args(Command::Check, "")).has_value());
+    // Plain `luma` with no file starts the REPL — not an error.
+    ASSERT_FALSE(validate_file_argument(make_args(Command::Run, "")).has_value());
+    ASSERT_FALSE(validate_file_argument(make_args(Command::Help, "")).has_value());
+}
+
+static void test_validate_file_argument_rejects_wrong_extension() {
+    const TempDir dir;
+    const TempFile file{dir.path() / "notes.txt", "hello\n"};
+
+    const auto error = validate_file_argument(make_args(Command::Run, file.path_string()));
+
+    ASSERT_TRUE(error.has_value());
+    ASSERT_TRUE(error->find(".luma") != std::string::npos);
+}
+
+static void test_validate_file_argument_rejects_nonexistent_file() {
+    const auto error = validate_file_argument(make_args(Command::Check, "__nonexistent__.luma"));
+
+    ASSERT_TRUE(error.has_value());
+    ASSERT_TRUE(error->find("not found") != std::string::npos);
+}
+
+static void test_validate_file_argument_accepts_existing_luma_file() {
+    const TempFile file{"@main\nfunction void main() {\n}\n"};
+
+    ASSERT_FALSE(validate_file_argument(make_args(Command::Run, file.path_string())).has_value());
+    ASSERT_FALSE(validate_file_argument(make_args(Command::Test, file.path_string())).has_value());
+}
+
+static void test_validate_file_argument_rejects_args_without_file() {
+    ParsedArgs args;
+    args.program_args = {"stray"};
+
+    ASSERT_TRUE(validate_file_argument(args).has_value());
+}
+
+// ─── Non-ASCII entry file: paths are UTF-8 end to end (regression: MSVC
+// decoded narrow paths in the ANSI code page, so a name outside it could not
+// be validated, loaded, or cached) ───
+
+static void test_run_file_non_ascii_path() {
+    const TempDir dir;
+    // "程序_é.luma": CJK is outside every single-byte ANSI code page.
+    const std::string utf8_name = "\xE7\xA8\x8B\xE5\xBA\x8F_\xC3\xA9.luma";
+    const std::string helper_name = "\xE5\x8A\xA9\xE6\x89\x8B.luma"; // "助手.luma"
+    const TempFile helper{dir.path() / path_from_utf8(helper_name),
+                          "function boolean helper_ok() { return true }\n"};
+    const TempFile program{dir.path() / path_from_utf8(utf8_name), "include \"" + helper_name +
+                                                                       "\"\n"
+                                                                       "@main\n"
+                                                                       "function void main() {\n"
+                                                                       "    assert(helper_ok())\n"
+                                                                       "}\n"};
+    const std::string utf8_path = path_to_utf8(program.path());
+
+    ParsedArgs args;
+    args.file_path = utf8_path;
+    ASSERT_FALSE(validate_file_argument(args).has_value());
+
+    CompilationCache first_process;
+    ASSERT_EQ(run_file(utf8_path, RunOptions{}, first_process), exit_code::success);
+    ASSERT_EQ(check_file(utf8_path), exit_code::success);
+
+    // The bytecode cache is written next to the source under the same name.
+    const auto cache_file = dir.path() / path_from_utf8("\xE7\xA8\x8B\xE5\xBA\x8F_\xC3\xA9.lumc");
+    ASSERT_TRUE(std::filesystem::exists(cache_file));
+
+    // A new process is served from the .lumc: the non-ASCII include recorded as
+    // a dependency must be found and judged current (a recompile would rewrite
+    // the backdated file).
+    const auto backdated = std::filesystem::last_write_time(cache_file) - std::chrono::hours{1};
+    std::filesystem::last_write_time(cache_file, backdated);
+
+    CompilationCache second_process;
+    ASSERT_EQ(run_file(utf8_path, RunOptions{}, second_process), exit_code::success);
+    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) == backdated);
+}
+
+// ─── --verify bypasses the compilation caches (regression: a cache hit, e.g. a
+// tampered .lumc whose header still matched, ran without verification) ───
+
+static void test_run_file_verify_bypasses_caches() {
+    const TempDir dir;
+    const TempFile program{dir.path() / "verify_main.luma", "@main\n"
+                                                            "function void main() {\n"
+                                                            "    print(\"ok\")\n"
+                                                            "}\n"};
+
+    // Warm both the in-memory cache and the on-disk .lumc.
+    CompilationCache cache;
+    {
+        const CapturedStreams quiet{std::cout, std::cerr};
+        ASSERT_EQ(run_file(program.path_string(), RunOptions{}, cache), exit_code::success);
+    }
+
+    const auto cache_file = dir.path() / "verify_main.lumc";
+    ASSERT_TRUE(std::filesystem::exists(cache_file));
+
+    // Backdate the .lumc so a recompile (which rewrites it) is observable.
+    const auto backdated = std::filesystem::last_write_time(cache_file) - std::chrono::hours{1};
+    std::filesystem::last_write_time(cache_file, backdated);
+
+    // Without --verify both caches are served: nothing is rewritten.
+    {
+        const CapturedStreams quiet{std::cout, std::cerr};
+        ASSERT_EQ(run_file(program.path_string(), RunOptions{}, cache), exit_code::success);
+    }
+    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) == backdated);
+
+    // With --verify the warm caches are bypassed and the program is compiled
+    // (and verified) afresh, which rewrites the .lumc.
+    {
+        const CapturedStreams quiet{std::cout, std::cerr};
+        ASSERT_EQ(run_file(program.path_string(), RunOptions{.verify = true}, cache),
+                  exit_code::success);
+    }
+    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) != backdated);
 }
 
 // ─── is_known_flag ───
@@ -835,10 +1211,15 @@ int main() {
     RUN(test_check_strict_warnings_strict_without_warning);
     RUN(test_check_strict_warnings_nonstrict_with_warning);
     RUN(test_check_file_strict_fails_on_warning);
+    RUN(test_type_error_caret_points_at_token);
+    RUN(test_runtime_error_caret_points_at_token);
     RUN(test_check_file_nonstrict_succeeds_on_warning);
     RUN(test_run_file_strict_fails_on_warning);
     RUN(test_run_file_nonstrict_succeeds_on_warning);
     RUN(test_run_file_strict_bypasses_warm_cache);
+    RUN(test_run_file_memory_cache_invalidated_by_include_edit);
+    RUN(test_run_file_disk_cache_invalidated_by_include_edit);
+    RUN(test_run_file_disk_cache_hit_with_unchanged_include);
     RUN(test_run_tests_file_strict_fails_on_warning);
     RUN(test_run_tests_file_nonstrict_succeeds_on_warning);
 
@@ -864,8 +1245,27 @@ int main() {
     RUN(test_parse_args_unknown_short_flag_returns_nullopt);
     RUN(test_parse_args_unknown_flag_emits_suggestion);
     RUN(test_parse_args_combined_optimize_invalid_returns_nullopt);
-    RUN(test_parse_args_optimize_separated_invalid_warns);
-    RUN(test_parse_args_optimize_missing_value_warns);
+    RUN(test_parse_args_optimize_separated_invalid_is_usage_error);
+    RUN(test_parse_args_optimize_missing_value_is_usage_error);
+
+    // parse_args — flag position and `--` forwarding.
+    RUN(test_parse_args_flags_after_file_are_honoured);
+    RUN(test_parse_args_double_dash_forwards_verbatim);
+    RUN(test_parse_args_unknown_option_after_file_is_forwarded);
+    RUN(test_parse_args_non_level_dash_o_after_file_is_forwarded);
+    RUN(test_parse_args_valid_level_after_file_is_luma_flag);
+    RUN(test_parse_args_non_level_dash_o_before_file_is_usage_error);
+
+    // validate_file_argument.
+    RUN(test_validate_file_argument_requires_file_for_test_and_check);
+    RUN(test_validate_file_argument_rejects_wrong_extension);
+    RUN(test_validate_file_argument_rejects_nonexistent_file);
+    RUN(test_validate_file_argument_accepts_existing_luma_file);
+    RUN(test_validate_file_argument_rejects_args_without_file);
+    RUN(test_run_file_non_ascii_path);
+
+    // --verify cache bypass.
+    RUN(test_run_file_verify_bypasses_caches);
 
     // is_known_flag.
     RUN(test_is_known_flag_long_forms);

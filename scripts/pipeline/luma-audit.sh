@@ -13,6 +13,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 # shellcheck source=scripts/pipeline/luma-pipeline.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/luma-pipeline.sh"

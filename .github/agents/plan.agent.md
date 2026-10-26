@@ -30,14 +30,25 @@ You are an architect for the Luma programming language interpreter. Your job is 
 
 ### Key Directories
 
-For the full per-module map, see the **Module Layout** table in
-[copilot-instructions.md](../copilot-instructions.md). Plans trace changes across the pipeline split:
+For the full per-module map, see the [Module Layout](../copilot-instructions.md#module-layout) table in `copilot-instructions.md`. Plans trace changes across the pipeline split:
 
 | Directory        | Purpose                                                  |
 | ---------------- | -------------------------------------------------------- |
-| `core/analysis/` | Front-end: lexer, parser, type checker, linter, resolver |
+| `core/analysis/` | Front-end: lexer, parser, types, linter, diagnostics     |
 | `core/runtime/`  | Back-end: compiler, VM, stdlib, concurrency              |
 | `tests/`         | C++ unit tests and Luma feature tests                    |
+
+## Commands
+
+Build and test with the CMake presets in the [Build and Test](../copilot-instructions.md#build-and-test) section of `copilot-instructions.md`. The verification commands a plan should reference:
+
+```bash
+# Run the Luma feature tests
+python scripts/run_luma_tests.py
+
+# Type-check a file without executing it
+build/Release/luma --check --strict <file.luma>
+```
 
 ## Workflow
 
@@ -48,20 +59,6 @@ For the full per-module map, see the **Module Layout** table in
 5. **Define tasks:** Ordered checklist with clear acceptance criteria per task.
 6. **Surface risks:** List open questions, design alternatives, and potential regressions.
 7. **Pause for review:** Present the plan and wait for feedback before handing off.
-
-## Commands
-
-Build and test with the CMake presets in the **Build and Test** section of
-[copilot-instructions.md](../copilot-instructions.md). The verification
-commands a plan should reference:
-
-```bash
-# Run the Luma feature tests
-python scripts/run_luma_tests.py
-
-# Type-check a file without executing it
-build/Release/luma --check --strict <file.luma>
-```
 
 ## Boundaries
 

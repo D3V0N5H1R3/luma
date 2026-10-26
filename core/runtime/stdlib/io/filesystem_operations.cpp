@@ -20,6 +20,7 @@
 #include <system_error>
 
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -89,9 +90,20 @@ void register_filesystem_operations(const EnvPtr& env) {
                 "FileSystem.delete_directory", args[0], loc, true,
                 [](const std::filesystem::path& path) -> Value {
                     if (!std::filesystem::is_directory(path)) {
-                        return make_failure_value(
-                            error_msg("FileSystem", "delete_directory",
-                                      std::format("path is not a directory '{}'", path.string())));
+                        return make_failure_value(error_msg(
+                            "FileSystem", "delete_directory",
+                            std::format("path is not a directory '{}'", path_to_utf8(path))));
+                    }
+
+                    // validate_path accepts the working directory itself ("." is
+                    // "inside" it), so without this guard delete_directory(".")
+                    // would remove_all the entire sandbox root.
+                    if (is_working_directory_or_ancestor(path)) {
+                        return make_failure_value(error_msg(
+                            "FileSystem", "delete_directory",
+                            std::format("refusing to delete the working directory (or one of its "
+                                        "parents) '{}'",
+                                        path_to_utf8(path))));
                     }
 
                     std::filesystem::remove_all(path);
@@ -108,9 +120,9 @@ void register_filesystem_operations(const EnvPtr& env) {
                 args[0].as_string(), "FileSystem.rename_directory", loc, false,
                 [&dst](const std::filesystem::path& src) -> Value {
                     if (!std::filesystem::is_directory(src)) {
-                        return make_failure_value(
-                            error_msg("FileSystem", "rename_directory",
-                                      std::format("path is not a directory '{}'", src.string())));
+                        return make_failure_value(error_msg(
+                            "FileSystem", "rename_directory",
+                            std::format("path is not a directory '{}'", path_to_utf8(src))));
                     }
 
                     std::filesystem::rename(src, dst);
@@ -141,9 +153,9 @@ void register_filesystem_operations(const EnvPtr& env) {
                 args[0].as_string(), "FileSystem.copy_directory", loc, true,
                 [&dst](const std::filesystem::path& src) -> Value {
                     if (!std::filesystem::is_directory(src)) {
-                        return make_failure_value(
-                            error_msg("FileSystem", "copy_directory",
-                                      std::format("path is not a directory '{}'", src.string())));
+                        return make_failure_value(error_msg(
+                            "FileSystem", "copy_directory",
+                            std::format("path is not a directory '{}'", path_to_utf8(src))));
                     }
 
                     // Documented contract: fail rather than merge/overwrite when
@@ -151,7 +163,7 @@ void register_filesystem_operations(const EnvPtr& env) {
                     if (std::filesystem::exists(dst)) {
                         return make_failure_value(error_msg(
                             "FileSystem", "copy_directory",
-                            std::format("destination already exists '{}'", dst.string())));
+                            std::format("destination already exists '{}'", path_to_utf8(dst))));
                     }
 
                     // Recurse into subdirectories but skip symbolic links (a
@@ -178,7 +190,7 @@ void register_filesystem_operations(const EnvPtr& env) {
                         return make_failure_value(
                             error_msg("FileSystem", "create_directories",
                                       std::format("cannot create directory '{}': {}",
-                                                  safe_path.string(), ec.message())));
+                                                  path_to_utf8(safe_path), ec.message())));
                     }
 
                     return make_success_value(Value{true});

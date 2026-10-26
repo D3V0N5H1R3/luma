@@ -23,10 +23,12 @@
 #include <system_error>
 
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/error_messages.hpp"
+#include "runtime/stdlib/common/file_helpers.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/common/path_validator.hpp"
 #include "runtime/stdlib/common/stdlib_error_helpers.hpp"
@@ -44,8 +46,8 @@ inline constexpr std::string_view path_args_hint = "pass file paths as strings";
                                                             std::string_view function_name) {
     std::error_code ec;
     if (std::filesystem::is_symlink(path, ec)) {
-        return make_failure_value(
-            std::format("{}: cannot operate on symbolic link '{}'", function_name, path.string()));
+        return make_failure_value(std::format("{}: cannot operate on symbolic link '{}'",
+                                              function_name, path_to_utf8(path)));
     }
     return std::nullopt;
 }
@@ -63,7 +65,7 @@ template <typename Operation>
         // resolved, so checking *it* for symlink-ness would always pass.  Check
         // the user-supplied path before canonicalisation so a symlinked final
         // component is actually detected (defense-in-depth).
-        if (auto err = reject_if_symlink(std::filesystem::path{path_str}, function_name)) {
+        if (auto err = reject_if_symlink(path_from_user_utf8(path_str, loc), function_name)) {
             return *err;
         }
     }
@@ -109,10 +111,48 @@ template <typename EntryPredicate>
                 ErrorMessages::result_exceeds_maximum_size("FileSystem", function_name));
         }
 
-        arr->elements->emplace_back(entry.path().filename().string());
+        arr->elements->emplace_back(path_to_utf8(entry.path().filename()));
     }
 
     return make_success_value(Value{std::move(arr)});
+}
+
+/// True when `target` is the current working directory or one of its ancestors.
+/// Destructive directory operations must refuse such a target: the sandbox root
+/// passes validate_path (it is "inside" itself), so FileSystem.delete_directory(".")
+/// would otherwise wipe the whole working directory.  Compared by filesystem
+/// identity (std::filesystem::equivalent), so spelling variants such as "./",
+/// "sub/..", a different case on Windows, or a symlinked alias all match.  Fails
+/// closed: if the working directory cannot be determined, every path counts.
+[[nodiscard]] inline bool is_working_directory_or_ancestor(const std::filesystem::path& target) {
+    std::error_code ec;
+    const auto cwd = std::filesystem::current_path(ec);
+
+    if (ec) {
+        return true;
+    }
+
+    auto current = std::filesystem::weakly_canonical(cwd, ec);
+
+    if (ec) {
+        return true;
+    }
+
+    while (true) {
+        std::error_code eq_ec;
+
+        if (std::filesystem::equivalent(target, current, eq_ec)) {
+            return true;
+        }
+
+        auto parent = current.parent_path();
+
+        if (parent.empty() || parent == current) {
+            return false;
+        }
+
+        current = std::move(parent);
+    }
 }
 
 /// Reads a whole file into a result<string>, failing if it cannot be opened or
@@ -127,19 +167,44 @@ template <typename EntryPredicate>
     std::ifstream ifs{safe_path};
 
     if (!ifs) {
-        return make_failure_value(error_msg(
-            "FileSystem", function_name, std::format("cannot read file '{}'", safe_path.string())));
-    }
-
-    if (std::filesystem::file_size(safe_path) > max_bytes) {
         return make_failure_value(
             error_msg("FileSystem", function_name,
-                      std::format("{} '{}'", oversize_detail, safe_path.string())));
+                      std::format("cannot read file '{}'", path_to_utf8(safe_path))));
     }
 
-    std::string file_content{std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}};
+    const auto oversize_failure = [&]() {
+        return make_failure_value(
+            error_msg("FileSystem", function_name,
+                      std::format("{} '{}'", oversize_detail, path_to_utf8(safe_path))));
+    };
 
-    return make_success_value(Value{std::move(file_content)});
+    // Fast, descriptive failure for an obviously oversized file...
+    if (std::filesystem::file_size(safe_path) > max_bytes) {
+        return oversize_failure();
+    }
+
+    ifs.close();
+
+    // ...but the bound itself is enforced while reading, so a file that grows
+    // after the size check (or misreports its size) cannot exceed it.
+    auto read = file_helpers::read_file_bounded(safe_path, max_bytes);
+
+    switch (read.status) {
+        case file_helpers::BoundedReadStatus::Ok:
+            return make_success_value(Value{std::move(read.data)});
+        case file_helpers::BoundedReadStatus::TooLarge:
+            return oversize_failure();
+        case file_helpers::BoundedReadStatus::OpenFailed:
+            return make_failure_value(
+                error_msg("FileSystem", function_name,
+                          std::format("cannot read file '{}'", path_to_utf8(safe_path))));
+        case file_helpers::BoundedReadStatus::ReadError:
+            break;
+    }
+
+    return make_failure_value(
+        error_msg("FileSystem", function_name,
+                  std::format("error reading file '{}'", path_to_utf8(safe_path))));
 }
 
 /// Reads a whole file as raw bytes into a result<array<integer>>, where each
@@ -156,32 +221,43 @@ template <typename EntryPredicate>
     const auto file_bytes = std::filesystem::file_size(safe_path, size_ec);
 
     if (size_ec) {
-        return make_failure_value(error_msg("FileSystem", function_name,
-                                            std::format("cannot determine the size of '{}': {}",
-                                                        safe_path.string(), size_ec.message())));
+        return make_failure_value(
+            error_msg("FileSystem", function_name,
+                      std::format("cannot determine the size of '{}': {}", path_to_utf8(safe_path),
+                                  size_ec.message())));
     }
 
     if (file_bytes > ResourceLimits::max_array_size) {
         return make_failure_value(
             error_msg("FileSystem", function_name,
                       std::format("file '{}' exceeds the maximum readable size of {} bytes",
-                                  safe_path.string(), ResourceLimits::max_array_size)));
+                                  path_to_utf8(safe_path), ResourceLimits::max_array_size)));
     }
 
-    std::ifstream ifs{safe_path, std::ios::binary};
+    // Enforce the bound while reading too: the file may grow after the check.
+    const auto read = file_helpers::read_file_bounded(safe_path, ResourceLimits::max_array_size,
+                                                      std::ios::binary);
 
-    if (!ifs) {
-        return make_failure_value(error_msg(
-            "FileSystem", function_name, std::format("cannot read file '{}'", safe_path.string())));
-    }
-
-    const std::string data{std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}};
-
-    if (ifs.bad()) {
+    if (read.status == file_helpers::BoundedReadStatus::OpenFailed) {
         return make_failure_value(
             error_msg("FileSystem", function_name,
-                      std::format("error reading file '{}'", safe_path.string())));
+                      std::format("cannot read file '{}'", path_to_utf8(safe_path))));
     }
+
+    if (read.status == file_helpers::BoundedReadStatus::TooLarge) {
+        return make_failure_value(
+            error_msg("FileSystem", function_name,
+                      std::format("file '{}' exceeds the maximum readable size of {} bytes",
+                                  path_to_utf8(safe_path), ResourceLimits::max_array_size)));
+    }
+
+    if (read.status == file_helpers::BoundedReadStatus::ReadError) {
+        return make_failure_value(
+            error_msg("FileSystem", function_name,
+                      std::format("error reading file '{}'", path_to_utf8(safe_path))));
+    }
+
+    const std::string& data = read.data;
 
     auto arr = std::make_shared<ArrayValue>();
     arr->elements->reserve(data.size());
@@ -208,7 +284,7 @@ template <typename WriteBody>
     if (!ofs) {
         return make_failure_value(
             error_msg("FileSystem", function_name,
-                      std::format("{} '{}'", open_error_detail, safe_path.string())));
+                      std::format("{} '{}'", open_error_detail, path_to_utf8(safe_path))));
     }
 
     write_body(ofs);
@@ -216,7 +292,7 @@ template <typename WriteBody>
     if (!ofs) {
         return make_failure_value(
             error_msg("FileSystem", function_name,
-                      std::format("{} '{}'", write_error_detail, safe_path.string())));
+                      std::format("{} '{}'", write_error_detail, path_to_utf8(safe_path))));
     }
 
     return make_success_value(Value{true});
@@ -231,7 +307,8 @@ template <typename Project>
 [[nodiscard]] Value pure_path_query(std::span<const Value> args, std::string_view function_name,
                                     const SourceLocation& loc, Project project) {
     expect_all_strings(args, function_name, loc, path_args_hint);
-    return Value{project(std::filesystem::path{args[0].as_string()})};
+    // Luma strings are UTF-8: never let MSVC decode them in the ANSI code page.
+    return Value{project(path_from_user_utf8(args[0].as_string(), loc))};
 }
 
 /// Wraps a FileSystem.FileKind variant name in a ChoiceValue.  The runtime short
@@ -402,9 +479,24 @@ classify_file_kind(const std::filesystem::path& safe_path) {
         return make_io_error_failure(std::make_error_code(std::errc::file_too_large));
     }
 
-    std::string file_content{std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}};
+    ifs.close();
 
-    return make_success_value(Value{std::move(file_content)});
+    // Enforce the bound while reading too: the file may grow after the check.
+    auto read = file_helpers::read_file_bounded(safe_path, ResourceLimits::max_string_size,
+                                                std::ios::binary);
+
+    switch (read.status) {
+        case file_helpers::BoundedReadStatus::Ok:
+            return make_success_value(Value{std::move(read.data)});
+        case file_helpers::BoundedReadStatus::TooLarge:
+            return make_io_error_failure(std::make_error_code(std::errc::file_too_large));
+        case file_helpers::BoundedReadStatus::OpenFailed:
+            return make_io_error_failure(std::make_error_code(std::errc::permission_denied));
+        case file_helpers::BoundedReadStatus::ReadError:
+            break;
+    }
+
+    return make_io_error_failure(std::make_error_code(std::errc::io_error));
 }
 
 } // namespace luma::filesystem_detail

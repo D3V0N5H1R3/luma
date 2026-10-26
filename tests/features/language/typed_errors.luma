@@ -7,21 +7,23 @@
 
 choice MathError { DivisionByZero Overflow }
 
-function result<number, MathError> safe_divide(number a, number b) {
-    if b == 0 {
+function result<number, MathError> safe_divide(number dividend, number divisor) {
+    if divisor == 0 {
         return failure(MathError.DivisionByZero)
     }
 
-    return success(a / b)
+    return success(dividend / divisor)
 }
+
+# ─── Matching on typed results ────────────────────────────
 
 @test
 function void test_typed_error_ok() {
-    result<number, MathError> r = safe_divide(10.0, 2.0)
+    result<number, MathError> quotient = safe_divide(10.0, 2.0)
 
-    number value = match r {
-        success(v) { v }
-        failure(_e) { 0.0 }
+    number value = match quotient {
+        success(value) { value }
+        failure(_error) { 0.0 }
     }
 
     assert(Math.approximately_equal(value, 5.0))
@@ -29,69 +31,69 @@ function void test_typed_error_ok() {
 
 @test
 function void test_typed_error_fail() {
-    result<number, MathError> r = safe_divide(10.0, 0.0)
+    result<number, MathError> quotient = safe_divide(10.0, 0.0)
 
-    boolean is_fail = match r {
-        success(_v) { false }
-        failure(_e) { true }
+    boolean is_failed = match quotient {
+        success(_value) { false }
+        failure(_error) { true }
     }
 
-    assert(is_fail)
+    assert(is_failed)
 }
 
 @test
 function void test_result_string_error_default() {
-    result<number> r = failure("something went wrong")
+    result<number> outcome = failure("something went wrong")
 
-    string message = match r {
-        success(_v) { "ok" }
-        failure(e) { e }
+    string message = match outcome {
+        success(_value) { "ok" }
+        failure(error) { error }
     }
 
     assert(message == "something went wrong")
 }
 
-# ─── Error payload preservation through try/catch ────────
-
-@test
-function void test_try_catch_preserves_error() {
-    mutable string caught_message = ""
-
-    try {
-        integer _val = Result.unwrap(failure("intentional"))
-    } catch(err) {
-        caught_message = err
-    }
-
-    assert(caught_message == "intentional")
-}
-
-# ─── Match on specific error variant ───────────────────────
+# ─── Match on specific error variant ──────────────────────
 
 @test
 function void test_typed_error_match_variant() {
-    result<number, MathError> r = safe_divide(10.0, 0.0)
+    # The failure binding has the declared error type, so it can be matched
+    # against the choice variants directly.
+    result<number, MathError> quotient = safe_divide(10.0, 0.0)
 
-    boolean is_div_zero = match r {
-        success(_v) { false }
-        failure(_e) { true }
+    string kind = match quotient {
+        success(_value) { "none" }
+        failure(error) {
+            match error {
+                case MathError.DivisionByZero { "division by zero" }
+                case MathError.Overflow { "overflow" }
+            }
+        }
     }
 
-    assert(is_div_zero)
+    assert(kind == "division by zero")
+}
+
+@test
+function void test_typed_error_equality() {
+    result<number, MathError> quotient = safe_divide(1.0, 0.0)
+
+    assert(quotient == failure(MathError.DivisionByZero))
+    assert(quotient != failure(MathError.Overflow))
 }
 
 # ─── Typed error with Result.is_failure / Result.is_success ─
 
 @test
 function void test_typed_error_is_success_check() {
-    result<number, MathError> ok = safe_divide(10.0, 5.0)
-    result<number, MathError> err = safe_divide(10.0, 0.0)
+    result<number, MathError> succeeded = safe_divide(10.0, 5.0)
+    result<number, MathError> failed = safe_divide(10.0, 0.0)
 
-    assert(Result.is_success(ok))
-    assert(Result.is_failure(err))
+    assert(Result.is_success(succeeded))
+    assert(Result.is_failure(failed))
 }
 
-# ─── Multiple typed-error choice variants ───────────────────
+# ─── Multiple typed-error choice variants ─────────────────
 
 choice ValidationError { TooShort TooLong InvalidChar }
 
@@ -99,28 +101,36 @@ function result<string, ValidationError> validate_name(string name) {
     if String.length(name) < 2 {
         return failure(ValidationError.TooShort)
     }
+
     if String.length(name) > 50 {
         return failure(ValidationError.TooLong)
     }
+
     return success(name)
 }
 
 @test
 function void test_typed_error_too_short() {
-    result<string, ValidationError> r = validate_name("A")
+    result<string, ValidationError> validated = validate_name("A")
 
-    assert(Result.is_failure(r))
+    assert(validated == failure(ValidationError.TooShort))
+}
+
+@test
+function void test_typed_error_too_long() {
+    result<string, ValidationError> validated = validate_name(Result.unwrap(String.repeat("a", 51)))
+
+    assert(validated == failure(ValidationError.TooLong))
 }
 
 @test
 function void test_typed_error_valid_name() {
-    result<string, ValidationError> r = validate_name("Alice")
+    result<string, ValidationError> validated = validate_name("Alice")
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == "Alice")
+    assert(validated == success("Alice"))
 }
 
-# ─── Typed error through pipe chain ────────────────────────
+# ─── Unwrapping typed results ─────────────────────────────
 
 @test
 function void test_typed_error_unwrap_success() {
@@ -131,13 +141,30 @@ function void test_typed_error_unwrap_success() {
 
 @test
 function void test_typed_error_unwrap_failure_throws() {
-    mutable boolean caught = false
+    # Unwrapping a failure is a programmer error, so it raises a catchable
+    # runtime error.  `catch(err)` always binds a string — for a typed error,
+    # the error value's text.
+    mutable string error_message = ""
 
     try {
-        number _v = safe_divide(1.0, 0.0) |> Result.unwrap()
-    } catch(_err) {
-        caught = true
+        number _value = safe_divide(1.0, 0.0) |> Result.unwrap()
+    } catch(err) {
+        error_message = err
     }
 
-    assert(caught)
+    assert(error_message == "MathError.DivisionByZero")
+    assert(String.length(error_message) == 24, "the binding is usable as a string")
+}
+
+@test
+function void test_try_catch_preserves_error() {
+    mutable string error_message = ""
+
+    try {
+        integer _value = Result.unwrap(failure("intentional"))
+    } catch(err) {
+        error_message = err
+    }
+
+    assert(error_message == "intentional")
 }

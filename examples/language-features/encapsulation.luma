@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════
-# Luma v1.0 — Example: Namespace Encapsulation with 'internal'
+# Namespace Encapsulation with 'internal'
 #
 # Demonstrates how to use the 'internal' keyword to hide
 # implementation details inside a namespace while exposing

@@ -46,9 +46,9 @@ template <typename Range>
     return join_annotations("(", ann.tuple_elements(), ")");
 }
 
-// Render a function TypeAnnotation as "func(P1, P2) -> R".
+// Render a function TypeAnnotation as "function(P1, P2) -> R" (Luma syntax).
 [[nodiscard]] inline std::string function_annotation_to_string(const TypeAnnotation& ann) {
-    std::string s = join_annotations("func(", ann.function_params(), ")");
+    std::string s = join_annotations("function(", ann.function_params(), ")");
     if (ann.return_type_ptr()) {
         s += " -> ";
         s += annotation_to_string(ann.return_type_ref());

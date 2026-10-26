@@ -49,8 +49,11 @@ jobs:
             -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address" \
             -DLUMA_BUILD_FUZZ=ON
 
+      # An explicit job count is required: a bare `--parallel` becomes `make -j`
+      # (unlimited) under the Makefiles generator and OOM-kills the runner,
+      # especially for these ASan-instrumented compiles.
       - name: Build
-        run: cmake --build build-fuzz --parallel
+        run: cmake --build build-fuzz --parallel "$(nproc)"
 
       # Package just the fuzz executables; tar preserves the executable bit
       # that upload-artifact would otherwise drop. A file list (-T) avoids
@@ -86,8 +89,6 @@ jobs:
           - target: fuzz_type_checker
             time: 120
           - target: fuzz_compiler
-            time: 120
-          - target: fuzz_resolver
             time: 120
           - target: fuzz_vm
             time: 120

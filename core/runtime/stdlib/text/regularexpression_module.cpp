@@ -1,6 +1,8 @@
 #include "runtime/stdlib/text/regularexpression_module.hpp"
 
+#include <algorithm>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <iterator>
@@ -55,15 +57,77 @@ void skip_character_class(std::string_view pattern, std::size_t& i) {
 }
 
 // Advance `i` past group-modifier syntax: (?:), (?=), (?!), (?<=),
-// (?<!).  `i` should point at the opening '(' on entry.  The '?' in
-// these constructs is NOT a quantifier.
+// (?<!), and the named-group headers (?<name> / (?P<name>.  `i` should
+// point at the opening '(' on entry.  The '?' in these constructs is NOT a
+// quantifier, and a group name is not the group's first token.
 void skip_group_modifier(std::string_view pattern, std::size_t& i) {
     if (i + 1 < pattern.size() && pattern[i + 1] == '?') {
         i += 2; // advance past '(?'
+
+        const bool python_named =
+            i + 1 < pattern.size() && pattern[i] == 'P' && pattern[i + 1] == '<';
+        const bool dotnet_named = i + 1 < pattern.size() && pattern[i] == '<' &&
+                                  pattern[i + 1] != '=' && pattern[i + 1] != '!';
+
+        if (python_named || dotnet_named) {
+            if (const auto name_end = pattern.find('>', i); name_end != std::string_view::npos) {
+                i = name_end; // the caller's ++i moves past '>'
+                return;
+            }
+        }
+
         if (i < pattern.size() && pattern[i] == '<') {
             ++i; // skip '<' in lookbehind
         }
     }
+}
+
+// Map the character after a backslash to the literal character it stands
+// for, for first-token overlap detection.  Control escapes (\n, \t, ...) map
+// to the control character itself so `(\n|<newline>)+` is seen as a
+// duplicate; every other escape stands for the escaped character.
+[[nodiscard]] char escaped_literal(char esc) {
+    switch (esc) {
+        case 'n':
+            return '\n';
+        case 't':
+            return '\t';
+        case 'r':
+            return '\r';
+        case 'f':
+            return '\f';
+        case 'v':
+            return '\v';
+        case '0':
+            return '\0';
+        default:
+            return esc;
+    }
+}
+
+// True for escapes whose matched character is not the escape letter itself:
+// class escapes (\d \D \w \W \s \S), code-unit escapes (\x41, \u0041, \cJ)
+// that can spell any character, and backreferences (\1-\9) that match
+// whatever the group captured.  All are treated as wildcard first tokens.
+[[nodiscard]] bool is_wildcard_escape(char esc) {
+    switch (esc) {
+        case 'd':
+        case 'D':
+        case 'w':
+        case 'W':
+        case 's':
+        case 'S':
+        case 'x':
+        case 'u':
+        case 'c':
+            return true;
+        default:
+            return esc >= '1' && esc <= '9';
+    }
+}
+
+[[nodiscard]] char ascii_fold(char c) {
+    return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
 }
 
 } // namespace
@@ -71,7 +135,7 @@ void skip_group_modifier(std::string_view pattern, std::size_t& i) {
 // Defined at namespace scope (declared in the header) so unit and fuzz tests can
 // drive this trust-boundary walk directly.  The skip_* helpers above keep
 // internal linkage; this function reaches them within the same translation unit.
-bool has_dangerous_quantifier_nesting(std::string_view pattern) {
+bool has_dangerous_quantifier_nesting(std::string_view pattern, bool case_insensitive) {
     // One entry per open parenthesis (groups[0] is a top-level sentinel).
     struct GroupState {
         bool has_quantifier{false};  // body holds a quantifier (incl. child-propagated)
@@ -89,8 +153,10 @@ bool has_dangerous_quantifier_nesting(std::string_view pattern) {
 
     // Record the first token of the current alternative of the innermost group.
     // `wildcard` marks tokens that can overlap a sibling alternative (a '.', a
-    // [...] class, a \d/\w/\s class escape, or a nested group).
-    const auto note_first_token = [&groups](char literal, bool wildcard) {
+    // [...] class, a \d/\w/\s class escape, a \x/\u/\c code-unit escape, a
+    // backreference, or a nested group).  Under case-insensitive matching the
+    // literal is ASCII-folded so `(a|A)+` is recognised as ambiguous.
+    const auto note_first_token = [&groups, case_insensitive](char literal, bool wildcard) {
         GroupState& g = groups.back();
         if (!g.awaiting_first) {
             return;
@@ -103,24 +169,24 @@ bool has_dangerous_quantifier_nesting(std::string_view pattern) {
             return;
         }
 
-        if (g.first_chars.find(literal) != std::string::npos) {
+        const char key = case_insensitive ? ascii_fold(literal) : literal;
+
+        if (g.first_chars.find(key) != std::string::npos) {
             g.dup_first = true;
         } else {
-            g.first_chars.push_back(literal);
+            g.first_chars.push_back(key);
         }
     };
 
     for (std::size_t i{0}; i < pattern.size(); ++i) {
         const char c = pattern[i];
 
-        // Escaped character: it is this alternative's first token.  \d \D \w \W
-        // \s \S are character classes (wildcard-like); every other escape stands
-        // for the single literal character that follows the backslash.
+        // Escaped character: it is this alternative's first token.  Class,
+        // code-unit, and backreference escapes are wildcard-like; every other
+        // escape stands for a single literal character.
         if (c == '\\' && i + 1 < pattern.size()) {
             const char esc = pattern[i + 1];
-            const bool wild =
-                esc == 'd' || esc == 'D' || esc == 'w' || esc == 'W' || esc == 's' || esc == 'S';
-            note_first_token(esc, wild);
+            note_first_token(escaped_literal(esc), is_wildcard_escape(esc));
             ++i;
             continue;
         }
@@ -234,30 +300,6 @@ std::mutex validated_pattern_mutex;
 [[nodiscard]] std::unordered_set<std::string>& validated_patterns() {
     static std::unordered_set<std::string> patterns;
     return patterns;
-}
-
-// Returns true if the pattern is safe (cached or passes validation).
-// Returns false if the pattern contains dangerous quantifier nesting.
-[[nodiscard]] bool is_pattern_redos_safe(const std::string& pattern) {
-    {
-        const std::scoped_lock lock{validated_pattern_mutex};
-        if (validated_patterns().contains(pattern)) {
-            return true;
-        }
-    }
-
-    if (has_dangerous_quantifier_nesting(pattern)) {
-        return false;
-    }
-
-    {
-        const std::scoped_lock lock{validated_pattern_mutex};
-        if (validated_patterns().size() < k_max_validated_pattern_cache_size) {
-            validated_patterns().insert(pattern);
-        }
-    }
-
-    return true;
 }
 
 // Cache of compiled std::regex objects, keyed by the cleaned pattern string
@@ -426,11 +468,51 @@ struct ParsedPattern { // NOLINT(bugprone-exception-escape)
     return parsed;
 }
 
+// Returns true if the pattern is safe (cached or passes validation), false if
+// it contains dangerous quantifier nesting or ambiguous alternation.
+//
+// The heuristic runs on the *cleaned* pattern — the exact text handed to the
+// regex engine after named-group syntax is stripped — not on the raw user
+// pattern, so a named group such as `(?<n>a|aa)+` cannot hide the `(a|aa)+`
+// the engine actually compiles.  (The DotAll rewrite only turns '.' into the
+// equivalent `[\s\S]` class, which the heuristic already treats identically,
+// so it does not need to be re-validated.)  `case_insensitive` must match the
+// icase flag the pattern is compiled with; it is folded into the cache key so
+// a pattern accepted case-sensitively is still re-checked under icase.
+[[nodiscard]] bool is_pattern_redos_safe(const std::string& pattern,
+                                         bool case_insensitive = false) {
+    const std::string cleaned = parse_named_capture_groups(pattern).cleaned;
+    std::string key = (case_insensitive ? "i:" : "s:") + cleaned;
+
+    {
+        const std::scoped_lock lock{validated_pattern_mutex};
+        if (validated_patterns().contains(key)) {
+            return true;
+        }
+    }
+
+    if (has_dangerous_quantifier_nesting(cleaned, case_insensitive)) {
+        return false;
+    }
+
+    {
+        const std::scoped_lock lock{validated_pattern_mutex};
+        if (validated_patterns().size() < k_max_validated_pattern_cache_size) {
+            validated_patterns().insert(std::move(key));
+        }
+    }
+
+    return true;
+}
+
 // Validate text (args[0]) and pattern (args[1]) are strings, and pattern is within size limit.
 // Returns a failure Value if the pattern exceeds maximum size, std::nullopt otherwise.
+// `case_insensitive` is the icase flag the pattern will be compiled with (the
+// *_with variants), so the ReDoS guard can fold case accordingly.
 [[nodiscard]] std::optional<Value> expect_text_and_pattern(std::string_view name,
                                                            std::span<const Value> args,
-                                                           const SourceLocation& loc) {
+                                                           const SourceLocation& loc,
+                                                           bool case_insensitive = false) {
     if (!args[0].is_string()) {
         throw RuntimeError{
             std::format("{}: text must be a string, got '{}'", name, args[0].display_type_name()),
@@ -452,7 +534,7 @@ struct ParsedPattern { // NOLINT(bugprone-exception-escape)
         return make_failure_value(std::format("{}: regex pattern exceeds maximum size", name));
     }
 
-    if (!is_pattern_redos_safe(args[1].as_string())) {
+    if (!is_pattern_redos_safe(args[1].as_string(), case_insensitive)) {
         return make_failure_value(
             std::format("{}: regex pattern contains nested quantifiers or ambiguous "
                         "alternation which may cause excessive backtracking",
@@ -589,6 +671,12 @@ struct RegexOptions {
     bool dotall{false};
 };
 
+// Whether the options compile the pattern case-insensitively (the ReDoS guard
+// must then fold literal first characters).
+[[nodiscard]] bool is_case_insensitive(const RegexOptions& opts) {
+    return (opts.syntax & std::regex::icase) == std::regex::icase;
+}
+
 // Translate the array<RegularExpression.Flags> argument into a RegexOptions.  An
 // empty array yields the default (flagless) behaviour.  The type checker already
 // constrains the argument, so a non-array element or an unknown variant is a
@@ -684,6 +772,100 @@ struct PreparedRegex {
     return {get_compiled_regex(engine_pattern, opts.syntax), std::move(parsed.group_names)};
 }
 
+// Output iterator that appends to a string but throws once the string would
+// exceed max_string_size.  Lets std::match_results::format expand `$&`, `$1`,
+// `` $` `` and `$'` directly into the result without an unbounded
+// intermediate buffer.
+class BoundedStringAppender {
+public:
+    using iterator_category = std::output_iterator_tag;
+    using value_type = void;
+    using difference_type = std::ptrdiff_t;
+    using pointer = void;
+    using reference = void;
+
+    BoundedStringAppender(std::string& out, std::string_view function, const SourceLocation& loc)
+        : out_{&out}, function_{function}, loc_{&loc} {}
+
+    BoundedStringAppender& operator=(char c) {
+        if (out_->size() >= ResourceLimits::max_string_size) {
+            throw_too_large(function_, *loc_);
+        }
+        out_->push_back(c);
+        return *this;
+    }
+
+    BoundedStringAppender& operator*() {
+        return *this;
+    }
+
+    BoundedStringAppender& operator++() {
+        return *this;
+    }
+
+    BoundedStringAppender& operator++(int) {
+        return *this;
+    }
+
+    [[noreturn]] static void throw_too_large(std::string_view function, const SourceLocation& loc) {
+        throw RuntimeError{
+            std::format("RegularExpression.{}: result exceeds maximum string size", function), loc,
+            "use a more specific pattern or a shorter replacement"};
+    }
+
+private:
+    std::string* out_;
+    std::string_view function_;
+    const SourceLocation* loc_;
+};
+
+// std::regex_replace equivalent whose output is bounded by max_string_size.
+// std::regex_replace builds the whole result unchecked: a pattern matching the
+// empty string (`""`, `x*`) matches at every position, so a 1 MB input with a
+// 1 MB replacement would ask for ~1 TB.  This walks the matches with
+// std::sregex_iterator — which follows the same empty-match advancement rules
+// as regex_replace — appending the unmatched prefix and the formatted
+// replacement with a running size check.  `first_only` mirrors
+// format_first_only.
+[[nodiscard]] std::string bounded_regex_replace(const std::string& text, const std::regex& re,
+                                                const std::string& replacement, bool first_only,
+                                                std::string_view function,
+                                                const SourceLocation& loc) {
+    std::string result{};
+    result.reserve(text.size());
+
+    const auto append_checked = [&](std::string::const_iterator first,
+                                    std::string::const_iterator last) {
+        const auto count = static_cast<std::size_t>(std::distance(first, last));
+
+        if (count > ResourceLimits::max_string_size -
+                        std::min(result.size(), ResourceLimits::max_string_size)) {
+            BoundedStringAppender::throw_too_large(function, loc);
+        }
+
+        result.append(first, last);
+    };
+
+    auto tail = text.cbegin();
+
+    for (auto it = std::sregex_iterator{text.begin(), text.end(), re}; it != std::sregex_iterator{};
+         ++it) {
+        const auto& match = *it;
+
+        append_checked(match.prefix().first, match.prefix().second);
+        (void)match.format(BoundedStringAppender{result, function, loc}, replacement);
+        tail = match.suffix().first;
+
+        if (first_only) {
+            break;
+        }
+    }
+
+    append_checked(tail, text.cend());
+
+    return result;
+}
+
 } // namespace
 
 void register_regularexpression_ns(const EnvPtr& env) {
@@ -776,15 +958,16 @@ void register_regularexpression_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            (void)expect_string(args[2], "RegularExpression.replace", loc);
+            const auto& replacement = expect_string(args[2], "RegularExpression.replace", loc);
 
-            return wrap_result_operation("RegularExpression", "replace", [&]() -> Value {
+            // run_regex_collection (not wrap_result_operation) so the output
+            // size limit propagates as a RuntimeError instead of a failure.
+            return run_regex_collection("replace", [&]() -> Value {
                 const auto re =
                     get_compiled_regex(parse_named_capture_groups(args[1].as_string()).cleaned);
 
-                return make_success_value(
-                    Value{std::regex_replace(args[0].as_string(), *re, args[2].as_string(),
-                                             std::regex_constants::format_first_only)});
+                return make_success_value(Value{bounded_regex_replace(
+                    args[0].as_string(), *re, replacement, /*first_only=*/true, "replace", loc)});
             });
         })
         .func("replace_all", 3)
@@ -793,14 +976,15 @@ void register_regularexpression_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            (void)expect_string(args[2], "RegularExpression.replace_all", loc);
+            const auto& replacement = expect_string(args[2], "RegularExpression.replace_all", loc);
 
-            return wrap_result_operation("RegularExpression", "replace_all", [&]() -> Value {
+            return run_regex_collection("replace_all", [&]() -> Value {
                 const auto re =
                     get_compiled_regex(parse_named_capture_groups(args[1].as_string()).cleaned);
 
                 return make_success_value(
-                    Value{std::regex_replace(args[0].as_string(), *re, args[2].as_string())});
+                    Value{bounded_regex_replace(args[0].as_string(), *re, replacement,
+                                                /*first_only=*/false, "replace_all", loc)});
             });
         })
         .func("split", 2)
@@ -873,11 +1057,12 @@ void register_regularexpression_ns(const EnvPtr& env) {
         // automaton.  The flagless functions above are left untouched.
         .func("matches_with", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (auto err = expect_text_and_pattern("RegularExpression.matches_with", args, loc)) {
+            const auto opts = parse_regex_flags(args[2], "RegularExpression.matches_with", loc);
+
+            if (auto err = expect_text_and_pattern("RegularExpression.matches_with", args, loc,
+                                                   is_case_insensitive(opts))) {
                 return *err;
             }
-
-            const auto opts = parse_regex_flags(args[2], "RegularExpression.matches_with", loc);
 
             return wrap_result_operation("RegularExpression", "matches_with", [&]() -> Value {
                 const auto prepared = prepare_regex(args[1].as_string(), opts);
@@ -888,11 +1073,12 @@ void register_regularexpression_ns(const EnvPtr& env) {
         })
         .func("find_with", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (auto err = expect_text_and_pattern("RegularExpression.find_with", args, loc)) {
+            const auto opts = parse_regex_flags(args[2], "RegularExpression.find_with", loc);
+
+            if (auto err = expect_text_and_pattern("RegularExpression.find_with", args, loc,
+                                                   is_case_insensitive(opts))) {
                 return *err;
             }
-
-            const auto opts = parse_regex_flags(args[2], "RegularExpression.find_with", loc);
 
             return run_regex_collection("find_with", [&]() -> Value {
                 const auto prepared = prepare_regex(args[1].as_string(), opts);
@@ -907,11 +1093,12 @@ void register_regularexpression_ns(const EnvPtr& env) {
         })
         .func("find_all_with", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (auto err = expect_text_and_pattern("RegularExpression.find_all_with", args, loc)) {
+            const auto opts = parse_regex_flags(args[2], "RegularExpression.find_all_with", loc);
+
+            if (auto err = expect_text_and_pattern("RegularExpression.find_all_with", args, loc,
+                                                   is_case_insensitive(opts))) {
                 return *err;
             }
-
-            const auto opts = parse_regex_flags(args[2], "RegularExpression.find_all_with", loc);
 
             return run_regex_collection("find_all_with", [&]() -> Value {
                 const auto prepared = prepare_regex(args[1].as_string(), opts);
@@ -935,47 +1122,51 @@ void register_regularexpression_ns(const EnvPtr& env) {
         })
         .func("replace_with", 4)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (auto err = expect_text_and_pattern("RegularExpression.replace_with", args, loc)) {
+            const auto opts = parse_regex_flags(args[3], "RegularExpression.replace_with", loc);
+
+            if (auto err = expect_text_and_pattern("RegularExpression.replace_with", args, loc,
+                                                   is_case_insensitive(opts))) {
                 return *err;
             }
 
-            (void)expect_string(args[2], "RegularExpression.replace_with", loc);
+            const auto& replacement = expect_string(args[2], "RegularExpression.replace_with", loc);
 
-            const auto opts = parse_regex_flags(args[3], "RegularExpression.replace_with", loc);
-
-            return wrap_result_operation("RegularExpression", "replace_with", [&]() -> Value {
+            return run_regex_collection("replace_with", [&]() -> Value {
                 const auto prepared = prepare_regex(args[1].as_string(), opts);
 
                 return make_success_value(
-                    Value{std::regex_replace(args[0].as_string(), *prepared.re, args[2].as_string(),
-                                             std::regex_constants::format_first_only)});
+                    Value{bounded_regex_replace(args[0].as_string(), *prepared.re, replacement,
+                                                /*first_only=*/true, "replace_with", loc)});
             });
         })
         .func("replace_all_with", 4)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (auto err =
-                    expect_text_and_pattern("RegularExpression.replace_all_with", args, loc)) {
+            const auto opts = parse_regex_flags(args[3], "RegularExpression.replace_all_with", loc);
+
+            if (auto err = expect_text_and_pattern("RegularExpression.replace_all_with", args, loc,
+                                                   is_case_insensitive(opts))) {
                 return *err;
             }
 
-            (void)expect_string(args[2], "RegularExpression.replace_all_with", loc);
+            const auto& replacement =
+                expect_string(args[2], "RegularExpression.replace_all_with", loc);
 
-            const auto opts = parse_regex_flags(args[3], "RegularExpression.replace_all_with", loc);
-
-            return wrap_result_operation("RegularExpression", "replace_all_with", [&]() -> Value {
+            return run_regex_collection("replace_all_with", [&]() -> Value {
                 const auto prepared = prepare_regex(args[1].as_string(), opts);
 
-                return make_success_value(Value{
-                    std::regex_replace(args[0].as_string(), *prepared.re, args[2].as_string())});
+                return make_success_value(
+                    Value{bounded_regex_replace(args[0].as_string(), *prepared.re, replacement,
+                                                /*first_only=*/false, "replace_all_with", loc)});
             });
         })
         .func("split_with", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (auto err = expect_text_and_pattern("RegularExpression.split_with", args, loc)) {
+            const auto opts = parse_regex_flags(args[2], "RegularExpression.split_with", loc);
+
+            if (auto err = expect_text_and_pattern("RegularExpression.split_with", args, loc,
+                                                   is_case_insensitive(opts))) {
                 return *err;
             }
-
-            const auto opts = parse_regex_flags(args[2], "RegularExpression.split_with", loc);
 
             return run_regex_collection("split_with", [&]() -> Value {
                 const auto prepared = prepare_regex(args[1].as_string(), opts);

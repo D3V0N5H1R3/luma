@@ -80,7 +80,10 @@ namespace {
     auto copy = std::make_shared<luma::FunctionValue>();
     copy->name = func.name;
     copy->compiled = func.compiled;
+    copy->function_table = func.function_table;
     copy->upvalues = deep_copy_values(func.upvalues);
+    // A copy is the same function for equality purposes.
+    copy->identity = func.identity;
 
     // Deep-copy mutable upvalue cells — spawned tasks get
     // independent copies so they don't share mutable state.
@@ -116,7 +119,7 @@ namespace luma {
 // ─────────── Value::deep_copy ───────────
 
 Value Value::deep_copy() const {
-    const runtime::RecursionGuard guard{runtime::RecursionKind::deep_copy};
+    const runtime::RecursionGuard guard{runtime::RecursionKind::DeepCopy};
     if (!guard.entered()) {
         throw RuntimeError{"deep_copy: maximum nesting depth exceeded", {}};
     }
@@ -165,7 +168,8 @@ Value Value::deep_copy() const {
         // token is shared so cancellation still propagates to the clone.
         case ValueType::Task: {
             const auto& source = as_task();
-            return Value{std::make_shared<TaskValue>(source->future, source->token)};
+            return Value{
+                std::make_shared<TaskValue>(source->future, source->token, source->completion)};
         }
 
         // Shallow — primitives and opaque handles; a simple copy suffices.
@@ -186,6 +190,33 @@ Value Value::deep_copy() const {
     // This exists only to silence compilers that warn on non-void
     // functions without a return after a fully-covered switch.
     return *this;
+}
+
+// ─────────── Value::make_exclusive ───────────
+
+void Value::make_exclusive() {
+    if (is_array()) {
+        if (as_array().use_count() > 1) {
+            // Share the element vector; ArrayValue::ensure_unique copies it on
+            // the first write, so a shallow copy here costs one allocation.
+            auto copy = std::make_shared<ArrayValue>();
+            copy->elements = as_array()->elements;
+            *this = Value{std::move(copy)};
+        }
+    } else if (is_dictionary()) {
+        if (as_dictionary().use_count() > 1) {
+            auto copy = std::make_shared<DictionaryValue>();
+            copy->entries = as_dictionary()->entries;
+            *this = Value{std::move(copy)};
+        }
+    } else if (is_record()) {
+        if (as_record().use_count() > 1) {
+            auto copy = std::make_shared<RecordValue>();
+            copy->type_name = as_record()->type_name;
+            copy->fields = as_record()->fields;
+            *this = Value{std::move(copy)};
+        }
+    }
 }
 
 // ─────────── XmlValue::deep_clone ───────────

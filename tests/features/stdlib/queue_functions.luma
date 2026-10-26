@@ -5,6 +5,8 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Construction / enqueue / dequeue / peek ─────────────
+
 @test
 function void test_queue_new_is_empty() {
     assert(Queue.new() |> Queue.is_empty())
@@ -13,13 +15,13 @@ function void test_queue_new_is_empty() {
 
 @test
 function void test_queue_enqueue_and_length() {
-    integer len = Queue.new()
+    integer queue_length = Queue.new()
     |> Queue.enqueue(1)
     |> Queue.enqueue(2)
     |> Queue.enqueue(3)
     |> Queue.length()
 
-    assert(len == 3)
+    assert(queue_length == 3)
 }
 
 @test
@@ -30,7 +32,7 @@ function void test_queue_dequeue_fifo() {
     |> Result.unwrap()
 
     assert(front == 10)
-    assert(Queue.length(remaining) == 2)
+    assert(Queue.to_array(remaining) == [20, 30])
 }
 
 @test
@@ -55,7 +57,7 @@ function void test_queue_dequeue_preserves_fifo_order() {
 
     assert(first == 10)
     assert(second == 20)
-    assert(Queue.length(after_second) == 1)
+    assert(Queue.to_array(after_second) == [30])
 }
 
 @test
@@ -64,34 +66,31 @@ function void test_queue_enqueue_is_immutable() {
     queue original = Queue.from_array([1, 2])
     queue extended = Queue.enqueue(original, 3)
 
-    assert(Queue.length(original) == 2)
-    assert(Queue.length(extended) == 3)
+    assert(Queue.to_array(original) == [1, 2])
+    assert(Queue.to_array(extended) == [1, 2, 3])
 }
 
 @test
 function void test_queue_peek_does_not_remove() {
-    # Peek inspects the front element without consuming it.
-    queue q = Queue.from_array([10, 20])
-    integer front = Queue.peek(q) |> Result.unwrap()
+    queue numbers = Queue.from_array([10, 20])
+    integer front = Queue.peek(numbers) |> Result.unwrap()
 
     assert(front == 10)
-    assert(Queue.length(q) == 2)
+    assert(Queue.length(numbers) == 2)
 }
 
 @test
 function void test_queue_to_array() {
-    array<integer> arr = Queue.from_array([1, 2, 3]) |> Queue.to_array()
+    array<integer> items = Queue.from_array([1, 2, 3]) |> Queue.to_array()
 
-    assert(Array.length(arr) == 3)
-    assert(arr[0] == 1)
-    assert(arr[2] == 3)
+    assert(items == [1, 2, 3])
 }
 
 @test
 function void test_queue_from_array_length() {
-    integer len = Queue.from_array([10, 20, 30]) |> Queue.length()
+    integer queue_length = Queue.from_array([10, 20, 30]) |> Queue.length()
 
-    assert(len == 3)
+    assert(queue_length == 3)
 }
 
 @test
@@ -120,26 +119,22 @@ function void test_queue_dequeue_until_empty_then_fails() {
 
 @test
 function void test_queue_map() {
-    array<integer> arr = Queue.from_array([1, 2, 3])
+    array<integer> items = Queue.from_array([1, 2, 3])
     |> Queue.map((integer i) -> i * 10)
     |> Result.unwrap()
     |> Queue.to_array()
 
-    assert(arr[0] == 10)
-    assert(arr[1] == 20)
-    assert(arr[2] == 30)
+    assert(items == [10, 20, 30])
 }
 
 @test
 function void test_queue_filter() {
-    array<integer> arr = Queue.from_array([1, 2, 3, 4])
+    array<integer> items = Queue.from_array([1, 2, 3, 4])
     |> Queue.filter((integer i) -> i > 2)
     |> Result.unwrap()
     |> Queue.to_array()
 
-    assert(Array.length(arr) == 2)
-    assert(arr[0] == 3)
-    assert(arr[1] == 4)
+    assert(items == [3, 4])
 }
 
 @test
@@ -153,50 +148,68 @@ function void test_queue_reduce() {
 
 @test
 function void test_queue_each_success() {
-    result<none> r = Queue.from_array([1, 2, 3])
-    |> Queue.each((integer i) -> { assert(i > 0) })
+    # each visits every element in FIFO order.
+    reference<array<integer>> visited = Reference.new([])
 
-    assert(Result.is_success(r))
+    result<none> each_result = Queue.from_array([1, 2, 3])
+    |> Queue.each((integer i) -> {
+        Reference.update(visited, (array<integer> seen) -> Array.push(seen, i))
+    })
+
+    assert(Result.is_success(each_result))
+    assert(Reference.get(visited) == [1, 2, 3])
+}
+
+@test
+function void test_queue_map_callback_error_is_failure() {
+    # A callback that throws surfaces as a failure result, not a crash.
+    result<queue> mapped = Queue.from_array([1, 2, 3])
+    |> Queue.map((integer i) -> {
+        assert(i < 2, "callback rejected element")
+        return i
+    })
+
+    assert(Result.is_failure(mapped))
 }
 
 # ─── Queue.concat ─────────────────────────────────────────
 
 @test
 function void test_queue_concat_basic() {
-    queue q = Queue.concat(
+    queue combined = Queue.concat(
         Queue.from_array([1, 2]),
         Queue.from_array([3, 4]))
 
-    assert(Queue.length(q) == 4)
+    assert(Queue.to_array(combined) == [1, 2, 3, 4])
 }
 
 @test
 function void test_queue_concat_empty_left() {
-    queue q = Queue.concat(Queue.new(), Queue.from_array([1, 2]))
+    queue combined = Queue.concat(Queue.new(), Queue.from_array([1, 2]))
 
-    assert(Queue.length(q) == 2)
+    assert(Queue.to_array(combined) == [1, 2])
 }
 
 @test
 function void test_queue_concat_both_empty() {
-    queue q = Queue.concat(Queue.new(), Queue.new())
+    queue combined = Queue.concat(Queue.new(), Queue.new())
 
-    assert(Queue.is_empty(q))
+    assert(Queue.is_empty(combined))
 }
 
 # ─── Queue.partition ──────────────────────────────────────
 
 @test
 function void test_queue_partition_basic() {
-    result<(queue, queue)> r = Queue.from_array([1, 2, 3, 4, 5])
+    result<(queue, queue)> partitioned = Queue.from_array([1, 2, 3, 4, 5])
     |> Queue.partition((integer x) -> x > 3)
 
-    assert(Result.is_success(r))
+    assert(Result.is_success(partitioned))
 
-    (queue matches, queue rest) = Result.unwrap(r)
+    (queue matches, queue rest) = Result.unwrap(partitioned)
 
-    assert(Queue.length(matches) == 2)
-    assert(Queue.length(rest) == 3)
+    assert(Queue.to_array(matches) == [4, 5])
+    assert(Queue.to_array(rest) == [1, 2, 3])
 }
 
 @test
@@ -219,25 +232,26 @@ function void test_queue_partition_all_match() {
     assert(Queue.is_empty(rest))
 }
 
-# ─── query / membership / reverse additions ──────────────
+# ─── Queries / membership / reverse ──────────────────────
 
 @test
 function void test_queue_any_all_count() {
-    queue q = Queue.from_array([1, 2, 3, 4])
-    assert(Result.unwrap(Queue.any(q, (integer x) -> x > 3)))
-    assert(!Result.unwrap(Queue.all(q, (integer x) -> x > 3)))
-    assert(Result.unwrap(Queue.count(q, (integer x) -> x > 2)) == 2)
+    queue numbers = Queue.from_array([1, 2, 3, 4])
+
+    assert(Result.unwrap(Queue.any(numbers, (integer x) -> x > 3)))
+    assert(!Result.unwrap(Queue.all(numbers, (integer x) -> x > 3)))
+    assert(Result.unwrap(Queue.count(numbers, (integer x) -> x > 2)) == 2)
 }
 
 @test
 function void test_queue_contains_find_reverse() {
-    queue q = Queue.from_array([5, 6, 7])
-    assert(Queue.contains(q, 6))
-    assert(!Queue.contains(q, 99))
-    assert(Result.unwrap(Queue.find(q, (integer x) -> x > 5)) == 6)
-    assert(Result.is_failure(Queue.find(q, (integer x) -> x > 99)))
-    queue r = Queue.reverse(q)
-    array<integer> arr = Queue.to_array(r)
-    assert(arr[0] == 7)
-    assert(arr[2] == 5)
+    queue numbers = Queue.from_array([5, 6, 7])
+    queue reversed = Queue.reverse(numbers)
+
+    assert(Queue.contains(numbers, 6))
+    assert(!Queue.contains(numbers, 99))
+    assert(Result.unwrap(Queue.find(numbers, (integer x) -> x > 5)) == 6)
+    assert(Result.is_failure(Queue.find(numbers, (integer x) -> x > 99)))
+    assert(Queue.to_array(reversed) == [7, 6, 5])
+    assert(Queue.to_array(numbers) == [5, 6, 7], "reverse leaves the source intact")
 }

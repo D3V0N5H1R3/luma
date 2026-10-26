@@ -11,10 +11,12 @@
 #include <string>
 #include <vector>
 
+#include "analysis/source/source_location.hpp"
 #include "runtime/compiler/bytecode_serializer.hpp"
 #include "runtime/compiler/compiler_limits.hpp"
 #include "runtime/compiler/constant_pool.hpp"
 #include "runtime/compiler/name_table.hpp"
+#include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
@@ -47,7 +49,8 @@ static void put_u64(std::vector<std::uint8_t>& b, std::uint64_t v) {
     }
 }
 
-// Builds a minimal valid header followed by a function count of 1.
+// Builds a minimal valid header and an empty dependency table, followed by the
+// given function count.
 static void put_header(std::vector<std::uint8_t>& b, std::uint32_t func_count) {
     put_u8(b, 'L');
     put_u8(b, 'U');
@@ -57,6 +60,7 @@ static void put_header(std::vector<std::uint8_t>& b, std::uint32_t func_count) {
     put_u32(b, 0);                         // flags
     put_u64(b, 0);                         // source hash
     put_u64(b, 0);                         // timestamp
+    put_u32(b, 0);                         // dependency count
     put_u32(b, func_count);
 }
 
@@ -123,6 +127,29 @@ static void test_round_trip_preserves_function_flags() {
     ASSERT_FALSE(result->functions[1].is_test);
 }
 
+// The start of the token behind each source-map entry must survive the .lumc
+// round-trip, so a runtime error from cached bytecode puts its caret on the
+// token rather than one past it.
+static void test_round_trip_preserves_source_map_token_start() {
+    CompiledFunction top;
+    top.name = "<top-level>";
+    auto& chunk = top.mutable_chunk();
+    chunk.code.push_back(static_cast<std::uint8_t>(Op::EndModule));
+    chunk.source_map.append(
+        0,
+        SourceLocation{.file_id = 0, .line = 5, .column = 12, .start_line = 5, .start_column = 11});
+
+    const auto bytes = BytecodeSerializer::serialize(top, {}, /*source_hash=*/0);
+    const auto result = BytecodeSerializer::deserialize(bytes);
+
+    ASSERT_TRUE(static_cast<bool>(result));
+    const auto loc = result->top_level.chunk().source_map.location_at(0);
+    ASSERT_EQ(loc.line, 5);
+    ASSERT_EQ(loc.column, 12);
+    ASSERT_EQ(loc.start_line, 5);
+    ASSERT_EQ(loc.start_column, 11);
+}
+
 // ─── Malformed input: oversized source-map count ───
 //
 // Regression test for a fuzz-found out-of-memory: a u32 source-map entry count
@@ -150,7 +177,7 @@ static void test_rejects_truncated_source_map() {
     std::vector<std::uint8_t> bytes;
     put_header(bytes, /*func_count=*/1);
     put_empty_function_prefix(bytes);
-    put_u32(bytes, 4); // claims 4 entries (64 bytes) but provides none
+    put_u32(bytes, 4); // claims 4 entries (96 bytes) but provides none
 
     const auto result = BytecodeSerializer::deserialize(bytes);
 
@@ -467,11 +494,69 @@ static void test_round_trip_large_string_constant() {
     ASSERT_EQ(round_tripped[sentinel_index].as_string(), std::string{"sentinel"});
 }
 
+// ─── Dependency table ───
+//
+// The dependency table records the included files a program was compiled from,
+// so the cache can reject bytecode built from an include that was later edited.
+
+static void test_round_trip_preserves_dependencies() {
+    CompiledFunction top;
+    top.name = "<top-level>";
+
+    const std::vector<SourceDependency> dependencies{
+        {.path = "/project/helpers.luma", .content_hash = 0x0123456789ABCDEFULL},
+        {.path = "/project/lib/models.luma", .content_hash = 42}};
+
+    const auto bytes = BytecodeSerializer::serialize(top, {}, /*source_hash=*/7,
+                                                     /*timestamp=*/0, dependencies);
+    const auto result = BytecodeSerializer::deserialize(bytes);
+
+    ASSERT_TRUE(static_cast<bool>(result));
+    ASSERT_TRUE(result->dependencies == dependencies);
+    ASSERT_EQ(result->top_level.name, std::string{"<top-level>"});
+}
+
+// The dependency count is read from untrusted bytes, so a count above the cap
+// must be rejected before the deserializer reserves storage for it.
+static void test_rejects_oversized_dependency_count() {
+    std::vector<std::uint8_t> bytes;
+    put_header(bytes, /*func_count=*/1);
+    // Overwrite the empty dependency count written by put_header.
+    bytes.resize(bytes.size() - 8);
+    put_u32(bytes, SerializerLimits::k_max_dependency_count + 1);
+    put_u32(bytes, 1); // function count
+
+    const auto result = BytecodeSerializer::deserialize(bytes);
+
+    ASSERT_FALSE(static_cast<bool>(result));
+    ASSERT_TRUE(result.error == DeserializeError::BadDependencyTable);
+}
+
+// A dependency count within the cap but larger than the remaining input can
+// hold must also be rejected (no truncated or partial read).
+static void test_rejects_dependency_count_exceeding_input() {
+    std::vector<std::uint8_t> bytes;
+    put_header(bytes, /*func_count=*/1);
+    bytes.resize(bytes.size() - 8);
+    put_u32(bytes, 3); // claims three dependencies…
+    put_u32(bytes, 0); // …but only one empty path follows
+    put_u64(bytes, 0);
+
+    const auto result = BytecodeSerializer::deserialize(bytes);
+
+    ASSERT_FALSE(static_cast<bool>(result));
+    ASSERT_TRUE(result.error == DeserializeError::BadDependencyTable);
+}
+
 // ─── main ───
 
 int main() {
     RUN(test_round_trip_minimal);
     RUN(test_round_trip_preserves_function_flags);
+    RUN(test_round_trip_preserves_source_map_token_start);
+    RUN(test_round_trip_preserves_dependencies);
+    RUN(test_rejects_oversized_dependency_count);
+    RUN(test_rejects_dependency_count_exceeding_input);
     RUN(test_rejects_oversized_source_map_count);
     RUN(test_rejects_truncated_source_map);
     RUN(test_rejects_oversized_name_count);

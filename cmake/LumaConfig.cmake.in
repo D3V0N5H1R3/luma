@@ -7,7 +7,8 @@
 #
 # Usage:
 #   find_package(Luma REQUIRED)
-#   message(STATUS "Luma interpreter: $<TARGET_FILE:Luma::luma>")
+#   message(STATUS "Luma interpreter: ${LUMA_EXECUTABLE}")
+#   add_custom_target(run_script COMMAND Luma::luma script.luma)
 
 @PACKAGE_INIT@
 
@@ -22,12 +23,13 @@ if(NOT _luma_targets_file)
     return()
 endif()
 
-# Convenience variables.
+# Convenience variables. The export file only sets the per-configuration
+# IMPORTED_LOCATION_<CONFIG>; LOCATION resolves whichever configuration exists.
 if(TARGET Luma::luma)
-    get_target_property(LUMA_EXECUTABLE Luma::luma IMPORTED_LOCATION)
+    get_target_property(LUMA_EXECUTABLE Luma::luma LOCATION)
 endif()
 
-set(LUMA_EXAMPLES_DIR "${PACKAGE_PREFIX_DIR}/share/luma/examples")
+set(LUMA_EXAMPLES_DIR "@PACKAGE_LUMA_INSTALL_EXAMPLES_DIR@")
 
 check_required_components(Luma)
 

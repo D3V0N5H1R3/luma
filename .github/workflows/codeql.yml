@@ -2,11 +2,12 @@
 # Luma — CodeQL Analysis Workflow (advanced setup)
 #
 # Runs CodeQL static analysis on every push and PR targeting main,
-# plus a weekly scheduled scan. Each first-party language is
-# analysed with CodeQL's buildless extractor (build-mode: none):
-# no project build is required, which keeps the scan fast and
-# robust. For slightly higher C/C++ precision you can switch the
-# c-cpp entry to build-mode: manual (see the commented block).
+# plus a weekly scheduled scan. C/C++ uses build-mode: manual — the
+# project is built with the default CMake preset so CodeQL observes
+# the real compilations. The other languages (actions,
+# javascript-typescript, python, rust) use the buildless extractor
+# (build-mode: none). Query suite and path exclusions live in
+# .github/codeql/codeql-config.yml.
 # ─────────────────────────────────────────────────────────────
 
 name: "CodeQL Advanced"
@@ -18,16 +19,18 @@ on:
     branches: [main]
   schedule:
     - cron: "23 4 * * 1" # Weekly Monday 04:23 UTC.
+  workflow_dispatch:
 
 permissions:
-  actions: read
+  actions: read # Needed by codeql-action only if the repository is private.
   contents: read
-  packages: read
   security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only supersede PR runs: on main, a push must not cancel the
+  # weekly scheduled scan (or vice versa).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
@@ -47,6 +50,8 @@ jobs:
             build-mode: none
           - language: python
             build-mode: none
+          - language: rust
+            build-mode: none
 
     steps:
       - name: Checkout source
@@ -54,8 +59,19 @@ jobs:
         with:
           persist-credentials: false
 
+      # paths-ignore cannot exclude compiled sources in manual build mode.
+      # Building the vendored libraries before CodeQL starts tracing keeps
+      # Mbed TLS and miniz out of the database. Tests are not built: their
+      # alerts are not actionable and they add many traced translation
+      # units (and memory pressure on the runner).
+      - name: Pre-build vendored libraries (untraced)
+        if: matrix.language == 'c-cpp'
+        run: |
+          cmake --preset default -DLUMA_BUILD_TESTS=OFF
+          cmake --build --preset default --target mbedtls_lib miniz_lib --parallel "$(nproc)"
+
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -63,15 +79,17 @@ jobs:
 
       - name: Build C++ (CodeQL manual mode)
         if: matrix.language == 'c-cpp'
-        run: |
-          cmake --preset default
-          cmake --build --preset default -- -j2
+        run: cmake --build --preset default --parallel "$(nproc)"
 
+      # Workaround: the c-cpp pre-finalize trap-cache reader aborts with
+      # "No such file or directory" when this directory was never created
+      # (no trap cache is written). Re-check whether it is still needed
+      # when bumping github/codeql-action.
       - name: Ensure CodeQL trap cache directory exists
         if: matrix.language == 'c-cpp'
         run: mkdir -p "$RUNNER_TEMP/trapCaches/cpp/tarballs"
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:${{ matrix.language }}"

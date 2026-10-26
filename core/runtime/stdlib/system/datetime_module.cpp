@@ -1252,7 +1252,7 @@ static void register_datetime_parsing(const EnvPtr& env) {
             }
 
             auto rec = std::make_shared<RecordValue>();
-            rec->type_name = "Interval";
+            rec->type_name = "DateTime.Interval";
             rec->fields.emplace_back("start", Value{start});
             rec->fields.emplace_back("end", Value{end});
 

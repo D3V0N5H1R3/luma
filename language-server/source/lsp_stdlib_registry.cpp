@@ -24,7 +24,7 @@ void populate_modules(const StringMap<TypeInfo>& signatures, const stdlib::Catal
                       const StringSet& constants, ModuleMap& modules) {
     for (const auto& [qualified_name, type_info] : signatures) {
         // Split "Module.function" into module and function name.
-        const auto split = split_module(qualified_name);
+        const auto split = symbols::split_module(qualified_name);
         if (!split) {
             continue;
         }

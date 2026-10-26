@@ -20,11 +20,14 @@ namespace luma {
 //     children are cancelled, and the exception is re-thrown.
 //   - Results are collected in spawn order and returned as an array.
 //
-// Scopes nest: a TaskScope records its parent so that cancellation can
-// propagate upward if needed.
+// Scopes nest: a TaskScope records its parent so the VM can restore the
+// enclosing scope when this one ends.  A scope opened inside a spawned task
+// chains its cancellation token to that task's token, so cancelling the task
+// also cancels the scope's children.
 class TaskScope {
 public:
-    explicit TaskScope(TaskScope* parent = nullptr);
+    explicit TaskScope(TaskScope* parent = nullptr,
+                       std::shared_ptr<const CancellationToken> parent_token = nullptr);
 
     ~TaskScope() = default;
 
@@ -35,8 +38,11 @@ public:
     void add_child(std::shared_ptr<TaskValue> task);
 
     // Block until all children finish.  Returns an array of results
-    // in registration order.  If any child threw, cancel_all() is called
-    // on remaining siblings and the first exception is re-thrown.
+    // in registration order.  Fail-fast: children are collected in the order
+    // they complete, and the first child that fails with a genuine error
+    // (not a cancellation) immediately cancels its siblings; that error is
+    // re-thrown once every child has finished.  A cancelled child contributes
+    // `none` to the results and is not treated as a failure.
     //
     // NOTE: join_all() is terminal — the children vector is moved out
     // during iteration.  Do not add more children after calling this.

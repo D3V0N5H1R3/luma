@@ -20,20 +20,20 @@ function BenchResult run_collection_benchmarks(BenchResult state) {
 
     st = time_it(st, "array map", 5000, () -> {
         array<integer> _result = numbers
-        |> Array.map((integer x) -> x * 2)
-        |> Result.unwrap_or([])
+            |> Array.map((integer x) -> x * 2)
+            |> Result.unwrap_or([])
     })
 
     st = time_it(st, "array filter", 5000, () -> {
         array<integer> _result = numbers
-        |> Array.filter((integer x) -> x > 5)
-        |> Result.unwrap_or([])
+            |> Array.filter((integer x) -> x > 5)
+            |> Result.unwrap_or([])
     })
 
     st = time_it(st, "array reduce", 5000, () -> {
         integer _result = numbers
-        |> Array.reduce(0, (integer acc, integer x) -> acc + x)
-        |> Result.unwrap_or(0)
+            |> Array.reduce(0, (integer acc, integer x) -> acc + x)
+            |> Result.unwrap_or(0)
     })
 
     # Inputs reused across the operation benchmarks below (built once, outside
@@ -43,8 +43,8 @@ function BenchResult run_collection_benchmarks(BenchResult state) {
 
     st = time_it(st, "array sort", 5000, () -> {
         array<integer> _sorted = unsorted
-        |> Array.sort((integer a, integer b) -> a - b)
-        |> Result.unwrap_or([])
+            |> Array.sort((integer a, integer b) -> a - b)
+            |> Result.unwrap_or([])
     })
 
     st = time_it(st, "array concat", 5000, () -> {
@@ -67,14 +67,14 @@ function BenchResult run_collection_benchmarks(BenchResult state) {
     array<integer> sorted_input = Array.range(0, 100) |> Result.unwrap_or([])
     st = time_it(st, "array binary_search", 10000, () -> {
         integer _idx = sorted_input
-        |> Array.binary_search(64)
-        |> Result.unwrap_or(-1)
+            |> Array.binary_search(64)
+            |> Result.unwrap_or(-1)
     })
 
     st = time_it(st, "array group_by", 5000, () -> {
         dictionary<array<integer>> _groups = unsorted
-        |> Array.group_by((integer x) -> Converter.to_string(x % 2))
-        |> Result.unwrap_or({})
+            |> Array.group_by((integer x) -> Converter.to_string(x % 2))
+            |> Result.unwrap_or({})
     })
 
     # --- Dictionary ---
@@ -119,20 +119,20 @@ function BenchResult run_collection_benchmarks(BenchResult state) {
 
     st = time_it(st, "dictionary map", 5000, () -> {
         dictionary<integer> _mapped = ops_dict
-        |> Dictionary.map((string _k, integer v) -> v * 2)
-        |> Result.unwrap_or({})
+            |> Dictionary.map((string _k, integer v) -> v * 2)
+            |> Result.unwrap_or({})
     })
 
     st = time_it(st, "dictionary filter", 5000, () -> {
         dictionary<integer> _filtered = ops_dict
-        |> Dictionary.filter((string _k, integer v) -> v > 5)
-        |> Result.unwrap_or({})
+            |> Dictionary.filter((string _k, integer v) -> v > 5)
+            |> Result.unwrap_or({})
     })
 
     st = time_it(st, "dictionary reduce", 5000, () -> {
         integer _sum = ops_dict
-        |> Dictionary.reduce(0, (integer acc, string _k, integer v) -> acc + v)
-        |> Result.unwrap_or(0)
+            |> Dictionary.reduce(0, (integer acc, string _k, integer v) -> acc + v)
+            |> Result.unwrap_or(0)
     })
 
     # deep_merge recurses into nested dictionaries, so it is benchmarked on a
@@ -186,10 +186,10 @@ function BenchResult run_collection_benchmarks(BenchResult state) {
 
     st = time_it(st, "Queue enqueue pipe (3 elem)", 5000, () -> {
         integer _len = Queue.new()
-        |> Queue.enqueue(1)
-        |> Queue.enqueue(2)
-        |> Queue.enqueue(3)
-        |> Queue.length()
+            |> Queue.enqueue(1)
+            |> Queue.enqueue(2)
+            |> Queue.enqueue(3)
+            |> Queue.length()
     })
 
     # Dequeue rebuilds the backing store (O(n)); drain a prebuilt queue so the
@@ -207,10 +207,10 @@ function BenchResult run_collection_benchmarks(BenchResult state) {
 
     st = time_it(st, "Stack push pipe (3 elem)", 5000, () -> {
         integer _len = Stack.new()
-        |> Stack.push(1)
-        |> Stack.push(2)
-        |> Stack.push(3)
-        |> Stack.length()
+            |> Stack.push(1)
+            |> Stack.push(2)
+            |> Stack.push(3)
+            |> Stack.length()
     })
 
     # Pop rebuilds the backing store (O(n)); drain a prebuilt stack so the

@@ -31,6 +31,32 @@ LUMA_TEST(calculus_limit) {
     ASSERT_TRUE(n > 1.9 && n < 2.1);
 }
 
+LUMA_TEST(calculus_limit_divergent_fails) {
+    // The two sides of 1/x at 0 run off to ±infinity; their average (0) is not a limit.
+    ASSERT_RESULT_FAILURE(eval("Calculus.limit(0.0, (number x) -> 1.0 / x)"));
+    ASSERT_RESULT_FAILURE(eval("Calculus.limit(0.0, (number x) -> 1.0 / (x * x))"));
+}
+
+LUMA_TEST(calculus_limit_slow_convergence) {
+    // √|x| settles only as √h, so the estimate needs many halvings to converge.
+    const auto v = eval("Calculus.limit(0.0, (number x) -> "
+                        "Result.unwrap(Math.square_root(Result.unwrap(Math.absolute(x)))))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 0.0, 1e-3);
+}
+
+LUMA_TEST(calculus_limit_large_target) {
+    // The step scales with the target, so precision does not run out first.
+    const auto constant = eval("Calculus.limit(1e17, (number x) -> 5.0)");
+    ASSERT_RESULT_SUCCESS(constant);
+    ASSERT_NEAR(constant.as_result()->owned_inner->as_number(), 5.0, 1e-9);
+
+    const auto linear = eval("Calculus.limit(1e16, (number x) -> x / 1e16)");
+    ASSERT_RESULT_SUCCESS(linear);
+    ASSERT_NEAR(linear.as_result()->owned_inner->as_number(), 1.0, 1e-9);
+}
+
 LUMA_TEST(calculus_module) {
     const auto env = luma::test::make_std_env();
 

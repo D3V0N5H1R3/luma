@@ -131,25 +131,8 @@ void TypeChecker::push_scope() {
 
 void TypeChecker::pop_scope() {
     if (ctx_.current_scope) {
-        // Warn about unused variables.
-        for (const auto& [name, info] : ctx_.current_scope->locals()) {
-            if (name.starts_with('_')) {
-                continue;
-            }
-
-            if (!info.is_read && !info.is_parameter) {
-                warn(std::format("unused variable '{}'", name), info.location,
-                     "prefix with '_' to suppress this warning", DiagnosticCode::UnusedVariable);
-            }
-
-            // Warn about mutable variables/parameters that are never mutated.
-            if (info.is_mutable && !info.is_written) {
-                const auto* const label = info.is_parameter ? "parameter" : "variable";
-                warn(std::format("{} '{}' is declared mutable but never mutated", label, name),
-                     info.location, "remove the 'mutable' keyword",
-                     DiagnosticCode::MutableNeverMutated);
-            }
-        }
+        // Unused (W0001) and never-mutated (W0004) variables are reported by the
+        // linter; reporting them here as well duplicated every warning.
 
         // Warn about unique variables that leave scope without being consumed.
         for (const auto& [name, info] : ctx_.current_scope->unconsumed_unique_locals()) {
@@ -191,6 +174,10 @@ void TypeChecker::check_match_exhaustiveness(const std::vector<MatchArm>& arms,
 
 bool TypeChecker::definitely_returns(const std::vector<StatementPtr>& stmts) const {
     return stmt_checker_->definitely_returns(stmts);
+}
+
+bool TypeChecker::never_falls_through(const std::vector<StatementPtr>& stmts) const {
+    return stmt_checker_->never_falls_through(stmts);
 }
 
 TypeInfo TypeChecker::infer_expression_type(const Expression& expr) {
@@ -248,9 +235,11 @@ void TypeChecker::reset_state() {
     symbols_.clear();
     resolving_aliases_.clear();
     internal_members_.clear();
+    internal_access_reported_.clear();
     called_functions_.clear();
     resolved_type_cache_.clear();
     ctx_.reset();
+    expr_checker_->reset_pass_state();
     generics_.reset();
     registry_.reset();
 }
@@ -261,7 +250,103 @@ void TypeChecker::reset_state() {
 
 std::vector<Diagnostic> TypeChecker::check(const Program& program, bool require_main) {
     reset_state();
+    incremental_.has_pending_input = false;
 
+    initialize_global_scope();
+    check_program(program);
+
+    if (require_main && ctx_.main_count == 0) {
+        error("no @main function found", SourceLocation{},
+              "add '@main' before a function to mark it as the entry point");
+    }
+
+    // Linter: warn about unused user-defined functions.
+    // Skip @main, @test, functions in namespaces (public API), and
+    // functions whose name starts with '_'.
+    // Only emit when require_main is set (real programs, not test/library files).
+    if (require_main) {
+        for (const auto& [name, func] : symbols_.functions) {
+            if (func->is_main || func->is_test) {
+                continue;
+            }
+
+            if (name.starts_with('_')) {
+                continue;
+            }
+
+            if (!called_functions_.contains(name)) {
+                warn(std::format("function '{}' is declared but never called", name),
+                     func->location, "prefix the name with '_' to suppress this warning",
+                     DiagnosticCode::UnusedFunction);
+            }
+        }
+    }
+
+    return take_diagnostics();
+}
+
+std::vector<Diagnostic> TypeChecker::check_incremental(const Program& program) {
+    if (!incremental_.committed_scope) {
+        reset_state();
+        initialize_global_scope();
+
+        incremental_.committed_scope = ctx_.current_scope;
+        incremental_.committed_symbols = symbols_;
+        incremental_.committed_internal_members = internal_members_;
+        incremental_.committed_alias_params = generics_.alias_params();
+    }
+
+    // Restart from the last committed input, dropping anything an uncommitted
+    // one registered — its AST, which the symbol tables point into, may be gone.
+    clear_diagnostics();
+    warnings_.clear();
+    resolving_aliases_.clear();
+    called_functions_.clear();
+    resolved_type_cache_.clear();
+    internal_access_reported_.clear();
+    expr_checker_->reset_pass_state();
+    symbols_ = incremental_.committed_symbols;
+    internal_members_ = incremental_.committed_internal_members;
+    generics_.alias_params() = incremental_.committed_alias_params;
+
+    for (const auto& [scope, ownership] : incremental_.committed_ownership) {
+        scope->restore_local_ownership(ownership);
+    }
+
+    ctx_.reset();
+    ctx_.current_scope = std::make_shared<TypeScope>(incremental_.committed_scope);
+    incremental_.has_pending_input = true;
+
+    check_program(program);
+
+    return take_diagnostics();
+}
+
+void TypeChecker::commit_incremental() {
+    if (!incremental_.has_pending_input) {
+        return;
+    }
+
+    incremental_.committed_scope = ctx_.current_scope;
+    incremental_.committed_symbols = symbols_;
+    incremental_.committed_internal_members = internal_members_;
+    incremental_.committed_alias_params = generics_.alias_params();
+    incremental_.has_pending_input = false;
+
+    incremental_.committed_ownership.clear();
+
+    for (auto scope = incremental_.committed_scope; scope; scope = scope->parent()) {
+        if (auto ownership = scope->snapshot_local_ownership(); !ownership.empty()) {
+            incremental_.committed_ownership.emplace_back(scope, std::move(ownership));
+        }
+    }
+}
+
+void TypeChecker::reset_incremental() {
+    incremental_ = IncrementalState{};
+}
+
+void TypeChecker::initialize_global_scope() {
     stdlib_handler_.initialize();
     stdlib_signatures_cache_ = stdlib_handler_.build_signature_map();
 
@@ -294,7 +379,9 @@ std::vector<Diagnostic> TypeChecker::check(const Program& program, bool require_
     for (const auto& ns : stdlib_handler_.namespaces()) {
         ctx_.current_scope->define(ns, TypeInfo::make(TypeInfo::Kind::Namespace), {});
     }
+}
 
+void TypeChecker::check_program(const Program& program) {
     register_declarations(program.declarations);
 
     for (const auto& decl : program.declarations) {
@@ -310,35 +397,6 @@ std::vector<Diagnostic> TypeChecker::check(const Program& program, bool require_
         error("multiple @main functions found; exactly one is required", SourceLocation{},
               "remove extra @main annotations so only one entry point remains");
     }
-
-    if (require_main && ctx_.main_count == 0) {
-        error("no @main function found", SourceLocation{},
-              "add '@main' before a function to mark it as the entry point");
-    }
-
-    // Linter: warn about unused user-defined functions.
-    // Skip @main, @test, functions in namespaces (public API), and
-    // functions whose name starts with '_'.
-    // Only emit when require_main is set (real programs, not test/library files).
-    if (require_main) {
-        for (const auto& [name, func] : symbols_.functions) {
-            if (func->is_main || func->is_test) {
-                continue;
-            }
-
-            if (name.starts_with('_')) {
-                continue;
-            }
-
-            if (!called_functions_.contains(name)) {
-                warn(std::format("function '{}' is declared but never called", name),
-                     func->location, "prefix the name with '_' to suppress this warning",
-                     DiagnosticCode::UnusedFunction);
-            }
-        }
-    }
-
-    return take_diagnostics();
 }
 
 } // namespace luma

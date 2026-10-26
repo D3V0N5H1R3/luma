@@ -19,7 +19,7 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `fibonacci`                | Recursion, `@test` annotation, basic assertions                                   | 🟢 Beginner       |
 | `control_flow`             | `while` loops, `break`, `continue`, dictionary iteration, match multi-patterns    | 🟢 Beginner       |
 | `data_structures`          | Arrays, dictionaries, tuples, queues, stacks                                      | 🟢 Beginner       |
-| `operators_and_literals`   | Hex/binary literals, bitwise ops, compound assignment, `++`/`--`, `in`, slicing   | 🟢 Beginner       |
+| `operators_and_literals`   | Hex/binary literals, `Bits` ops, compound assignment, `++`/`--`, `in`, slicing    | 🟢 Beginner       |
 | `records`                  | Records: declaration, default fields, value semantics, equality, `with` overrides | 🟢 Beginner       |
 | `strings`                  | String interpolation `${}`, escape sequences, multi-line (triple-quoted) strings  | 🟢 Beginner       |
 | `choice_types`             | Choice types (ADTs), pattern matching on variants                                 | 🟡 Intermediate   |
@@ -28,8 +28,8 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `decimal_arithmetic`       | Decimal module — arbitrary-precision arithmetic (financial, currency)             | 🟡 Intermediate   |
 | `encoding`                 | Base64, URL-safe Base64, URL percent-encoding (Encoder module)                    | 🟡 Intermediate   |
 | `error_handling`           | `result<T>`, typed errors, `!>` pipe, `?` propagation, `try/catch/finally`        | 🟡 Intermediate   |
-| `hashing`                  | Hash module — SHA-256, MD5, HMAC, CRC32                                           | 🟡 Intermediate   |
-| `math_functions`           | Math module — trig, rounding, roots, statistics, primes, constants                | 🟡 Intermediate   |
+| `hashing`                  | Hash module — MD5, SHA-1, SHA-256, CRC32, HMAC, digest verification               | 🟡 Intermediate   |
+| `math_functions`           | Math module — constants, trig, rounding, roots, logarithms, primes                | 🟡 Intermediate   |
 | `multi_file` / `_utils`    | `include` directive for multi-file projects                                       | 🟡 Intermediate   |
 | `optional_values`          | `optional<T>`, `some`/`none`, `?.`, `??`, pattern matching                        | 🟡 Intermediate   |
 | `ordering`                 | Order module — comparisons, multi-key sort orders, `Ordering` choice type         | 🟡 Intermediate   |
@@ -39,10 +39,10 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `string_functions`         | String module — trim, case, split/join, search, replace, pad, template, parse     | 🟡 Intermediate   |
 | `text_processing`          | RegularExpression and Set modules                                                 | 🟡 Intermediate   |
 | `type_system`              | Interfaces, generics, type aliases, `downcast`, `is<T>`                           | 🟡 Intermediate   |
-| `advanced_data_structures` | Binary trees, graphs, hash sets, linked lists, partition/filter/reduce operations | 🔴 Advanced       |
+| `advanced_data_structures` | Set, Queue, Stack, Dictionary; partition/filter/reduce operations                 | 🔴 Advanced       |
 | `advanced_functions`       | Optional/default parameters, named arguments, mutable parameters, lambda storage  | 🔴 Advanced       |
 | `advanced_types`           | `with` expression, default fields, bounded generics, generic interfaces, `use`    | 🔴 Advanced       |
-| `concurrency`              | Channels, tasks, `task_scope`, cooperative concurrency                            | 🔴 Advanced       |
+| `concurrency`              | `spawn`/`await`, `task_scope`, channels, `Task.race`, `Task.timeout`              | 🔴 Advanced       |
 | `encapsulation`            | Namespaces, `internal` visibility, qualified access                               | 🔴 Advanced       |
 | `linear_algebra`           | LinearAlgebra module — vectors, matrices, operations                              | 🔴 Advanced       |
 | `numerical_calculus`       | Calculus module — derivatives, integrals                                          | 🔴 Advanced       |
@@ -55,7 +55,7 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | File                   | Description                                        | Difficulty         |
 | ---------------------- | -------------------------------------------------- | ------------------ |
 | `guess_the_number`     | Number guessing game with Random                   | 🟢 Beginner       |
-| `quiz_game`            | Interactive quiz game                              | 🟢 Beginner       |
+| `quiz_game`            | Scripted quiz rounds with choice types             | 🟢 Beginner       |
 | `todo_list`            | Console-based todo list                            | 🟢 Beginner       |
 | `word_counter`         | Word frequency counter                             | 🟢 Beginner       |
 | `bank_accounts`        | Bank account ledger with typed domain errors       | 🟡 Intermediate   |
@@ -102,24 +102,24 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 
 Minimal programs that exercise the debugger and stepping workflows described in the [Luma Debugger guide](../documents/Luma_Debugger.md). Each keeps its Luma code deliberately small so the focus stays on a single debugging scenario rather than the program itself. Every example has an `@main` entry point, so the [example runner](#running-and-verifying-every-example) also runs each one end to end.
 
-| File                  | Demonstrates                                           |
-| --------------------- | ------------------------------------------------------ |
-| `breakpoint_basic`    | Setting a line breakpoint on a single statement        |
-| `conditional_loop`    | Conditional breakpoints gated on a loop variable       |
-| `step_into_function`  | Stepping into a function call from `main`              |
-| `step_over_loop`      | Stepping over the iterations of a loop                 |
-| `variables_basic`     | Inspecting variables across the built-in types         |
-| `structured_values`   | Records and choice types expand in the variable view   |
-| `closure_variables`   | Captured variables shown in a dedicated Closure scope  |
-| `set_variable`        | Modifying mutable variables from the debugger          |
-| `recursive_stack`     | Deep, multi-frame call stacks from recursion           |
-| `concurrent_tasks`    | Multiple threads via `task_scope` for thread debugging |
-| `long_loop`           | A long-running loop for async pause / interrupt        |
-| `exception_caught`    | A division-by-zero handled by `try` / `catch`          |
-| `exception_unhandled` | An unhandled division by zero that halts execution     |
-| `global_scope`        | Evaluating compound expressions that resolve top-level functions in a nested frame |
-| `infinite_eval`       | Expression-evaluation timeout — a non-terminating call aborts at the deadline       |
-| `task_stress`         | Rapid task spawn/exit churn for concurrent task-thread inspection                   |
+| File                  | Demonstrates                                              |
+| --------------------- | --------------------------------------------------------- |
+| `breakpoint_basic`    | Setting a line breakpoint on a single statement           |
+| `conditional_loop`    | Conditional breakpoints gated on a running total          |
+| `step_into_function`  | Stepping into a function call from `main`                 |
+| `step_over_loop`      | Stepping over the iterations of a loop                    |
+| `variables_basic`     | Inspecting variables across the built-in types            |
+| `structured_values`   | Records and choice types expand in the variable view      |
+| `closure_variables`   | Captured variables shown in a dedicated Closure scope     |
+| `set_variable`        | Modifying mutable variables from the debugger             |
+| `recursive_stack`     | Deep, multi-frame call stacks from recursion              |
+| `concurrent_tasks`    | Multiple threads via `task_scope` for thread debugging    |
+| `long_loop`           | A long-running loop for async pause / interrupt           |
+| `exception_caught`    | A division-by-zero handled by `try` / `catch`             |
+| `exception_unhandled` | An unhandled division by zero that halts execution        |
+| `global_scope`        | Evaluating calls to top-level functions in a nested frame |
+| `infinite_eval`       | Evaluation timeout: a non-terminating call is aborted     |
+| `task_stress`         | Rapid task spawn/exit churn for task-thread inspection    |
 
 ## Usage
 

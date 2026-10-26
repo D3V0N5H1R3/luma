@@ -1,12 +1,15 @@
 // Standard library tests: FileSystem (and Sandbox gating).
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
+#include "runtime/stdlib/common/file_helpers.hpp"
 #include "stdlib_test_helpers.hpp"
 
 static void test_filesystem_absolute_path() {
@@ -399,6 +402,104 @@ static void test_filesystem_read_lines_rejects_oversized_file() {
     ASSERT_RESULT_FAILURE(v);
 }
 
+static void test_read_file_bounded_enforces_limit_while_reading() {
+    // Regression: the size limit was checked with file_size() and the file was
+    // then slurped without a bound, so a file that grew after the check (or a
+    // /proc entry reporting size 0) bypassed it.  The helper must enforce the
+    // bound on the bytes actually read.
+    const LumaTempFile file{"_test_read_bounded.txt", std::string(100, 'x')};
+
+    using file_helpers::BoundedReadStatus;
+
+    const auto over = file_helpers::read_file_bounded("_test_read_bounded.txt", 99);
+    ASSERT_TRUE(over.status == BoundedReadStatus::TooLarge);
+    ASSERT_TRUE(over.data.empty());
+
+    const auto exact = file_helpers::read_file_bounded("_test_read_bounded.txt", 100);
+    ASSERT_TRUE(exact.status == BoundedReadStatus::Ok);
+    ASSERT_EQ(exact.data.size(), std::size_t{100});
+
+    const auto missing = file_helpers::read_file_bounded("_test_read_bounded_missing.txt", 100);
+    ASSERT_TRUE(missing.status == BoundedReadStatus::OpenFailed);
+}
+
+static void test_filesystem_utf8_file_names_reach_the_disk_intact() {
+    // Regression: stdlib paths were built from Luma strings (UTF-8) with the
+    // MSVC ANSI code page, so "测试" became mojibake (or failed outright).
+    // Check the name on disk directly, not just a Luma-level round trip.
+    namespace fs = std::filesystem;
+
+    const std::string dir_utf8 = "_fs_utf8_\xE6\xB5\x8B\xE8\xAF\x95_\xC3\xA9_unit";
+    const std::string name_utf8 = "\xE6\x95\xB0\xE6\x8D\xAE_\xC3\xBC_unit.txt";
+    const std::string file_utf8 = dir_utf8 + "/" + name_utf8;
+    const fs::path on_disk = path_from_utf8(dir_utf8) / path_from_utf8(name_utf8);
+
+    ASSERT_RESULT_SUCCESS(eval("FileSystem.create_directory(\"" + dir_utf8 + "\")"));
+    ASSERT_RESULT_SUCCESS(eval("FileSystem.write_file(\"" + file_utf8 + "\", \"data\")"));
+
+    const bool exists_on_disk = fs::exists(on_disk);
+    const auto listed = eval("FileSystem.list_files(\"" + dir_utf8 + "\")");
+    const auto read = eval("FileSystem.read_file(\"" + file_utf8 + "\")");
+    const auto absolute = eval("FileSystem.absolute_path(\"" + file_utf8 + "\")");
+    const auto deleted = eval("FileSystem.delete(\"" + file_utf8 + "\")");
+    const bool gone = !fs::exists(on_disk);
+
+    std::error_code ignored;
+    fs::remove_all(path_from_utf8(dir_utf8), ignored);
+
+    ASSERT_TRUE(exists_on_disk);
+    ASSERT_RESULT_SUCCESS(listed);
+
+    const auto& names = *listed.as_result()->owned_inner->as_array()->elements;
+    ASSERT_EQ(names.size(), std::size_t{1});
+    ASSERT_EQ(names[0].as_string(), name_utf8);
+
+    ASSERT_RESULT_SUCCESS(read);
+    ASSERT_EQ(read.as_result()->owned_inner->as_string(), "data");
+    ASSERT_RESULT_SUCCESS(absolute);
+    ASSERT_TRUE(absolute.as_result()->owned_inner->as_string().find(name_utf8) !=
+                std::string::npos);
+    ASSERT_RESULT_SUCCESS(deleted);
+    ASSERT_TRUE(gone);
+}
+
+static void test_filesystem_delete_directory_refuses_working_directory() {
+    // Regression: validate_path treats the working directory as "inside" itself,
+    // so delete_directory(".") used to remove_all the entire sandbox root.  Run
+    // from a scratch directory so a regression could only ever wipe that.
+    namespace fs = std::filesystem;
+
+    const auto original_cwd = fs::current_path();
+    const fs::path scratch = original_cwd / "_test_fs_cwd_guard";
+    fs::create_directories(scratch / "sub");
+    { std::ofstream{scratch / "marker.txt"} << "keep"; }
+
+    fs::current_path(scratch);
+
+    bool all_refused{true};
+
+    for (const char* const target : {".", "./", "sub/.."}) {
+        const auto v = eval(std::string{"FileSystem.delete_directory(\""} + target + "\")");
+        all_refused = all_refused && v.is_result() && !v.as_result()->is_success;
+    }
+
+    // A genuine subdirectory can still be deleted.
+    const auto sub = eval(R"(FileSystem.delete_directory("sub"))");
+
+    fs::current_path(original_cwd);
+
+    const bool marker_survived = fs::exists(scratch / "marker.txt");
+    const bool sub_removed = !fs::exists(scratch / "sub");
+
+    std::error_code ignored;
+    fs::remove_all(scratch, ignored);
+
+    ASSERT_TRUE(all_refused);
+    ASSERT_TRUE(marker_survived);
+    ASSERT_RESULT_SUCCESS(sub);
+    ASSERT_TRUE(sub_removed);
+}
+
 static void test_sandbox_disables_dangerous_modules() {
     const auto env = luma::test::make_std_env(true);
 
@@ -758,6 +859,9 @@ int main() {
     RUN(test_filesystem_absolute_path);
     RUN(test_filesystem_absolute_path_rejects_escape);
     RUN(test_filesystem_delete_directory_not_a_dir);
+    RUN(test_filesystem_delete_directory_refuses_working_directory);
+    RUN(test_filesystem_utf8_file_names_reach_the_disk_intact);
+    RUN(test_read_file_bounded_enforces_limit_while_reading);
     RUN(test_filesystem_exists_returns_result);
     RUN(test_filesystem_is_absolute);
     RUN(test_filesystem_rename_directory_not_a_dir);

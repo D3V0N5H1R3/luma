@@ -12,27 +12,27 @@ function void main() {
 
     # Build and inspect a queue.
     integer count = Queue.new()
-    |> Queue.enqueue("compile")
-    |> Queue.enqueue("test")
-    |> Queue.enqueue("deploy")
-    |> Queue.enqueue("notify")
-    |> Queue.length()
+        |> Queue.enqueue("compile")
+        |> Queue.enqueue("test")
+        |> Queue.enqueue("deploy")
+        |> Queue.enqueue("notify")
+        |> Queue.length()
 
     print("${count} tasks queued")
 
     # Peek at the front element.
     string front = Queue.from_array(["compile", "test", "deploy"])
-    |> Queue.peek()
-    |> Result.unwrap()
+        |> Queue.peek()
+        |> Result.unwrap()
 
     print("Front: ${front}")
 
     # Convert to array.
     array<string> names = Queue.new()
-    |> Queue.enqueue("Alice")
-    |> Queue.enqueue("Bob")
-    |> Queue.enqueue("Carol")
-    |> Queue.to_array()
+        |> Queue.enqueue("Alice")
+        |> Queue.enqueue("Bob")
+        |> Queue.enqueue("Carol")
+        |> Queue.to_array()
 
     result<none> _ = names |> Array.each((string name) -> print("  ${name}"))
 
@@ -41,11 +41,11 @@ function void main() {
 
     # Build a stack and peek at the top.
     string top = Stack.new()
-    |> Stack.push("first")
-    |> Stack.push("second")
-    |> Stack.push("third")
-    |> Stack.peek()
-    |> Result.unwrap()
+        |> Stack.push("first")
+        |> Stack.push("second")
+        |> Stack.push("third")
+        |> Stack.peek()
+        |> Result.unwrap()
 
     print("Top of stack: ${top}")
 

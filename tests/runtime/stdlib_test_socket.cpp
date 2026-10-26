@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "runtime/stdlib/io/socket_io.hpp"
+#include "runtime/stdlib/io/winsock_init.hpp"
 #include "stdlib_test_helpers.hpp"
 
 static void test_socket_connect_invalid_host() {
@@ -225,6 +227,83 @@ static void test_socket_tcp_remote_address_matches_server() {
                         "Socket.close(conn)\n"
                         "Socket.close(server)\n"
                         "remote == saddr\n");
+
+    ASSERT_TRUE(v.is_bool());
+    ASSERT_TRUE(v.as_bool());
+}
+
+// ─── Socket: connect tries every resolved address ───
+
+// Bind a TCP socket to an ephemeral loopback port; returns the socket and fills
+// `addr` with the bound address.
+[[nodiscard]] static SocketHandle bind_loopback(sockaddr_in& addr) {
+    const SocketHandle sock = platform_socket::create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+    addr = sockaddr_in{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0;
+
+    (void)::bind(sock, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
+
+    socklen_t len = sizeof(addr);
+    (void)::getsockname(sock, reinterpret_cast<sockaddr*>(&addr), &len);
+
+    return sock;
+}
+
+static void test_tcp_connect_any_falls_back_to_later_address() {
+    // Regression: Socket/Http connect used only the FIRST getaddrinfo result,
+    // so e.g. "localhost" resolving to ::1 first failed against a server that
+    // listens only on 127.0.0.1.  Model that with a two-entry list whose first
+    // candidate refuses the connection.
+    ensure_winsock();
+
+    sockaddr_in live{};
+    const SocketHandle server = bind_loopback(live);
+    ASSERT_TRUE(server != invalid_socket_handle);
+    ASSERT_EQ(::listen(server, 4), 0);
+
+    // A loopback port with nothing listening on it any more.
+    sockaddr_in dead{};
+    platform_socket::close(bind_loopback(dead));
+
+    addrinfo second{};
+    second.ai_family = AF_INET;
+    second.ai_socktype = SOCK_STREAM;
+    second.ai_protocol = IPPROTO_TCP;
+    second.ai_addr = reinterpret_cast<sockaddr*>(&live);
+    second.ai_addrlen = sizeof(live);
+
+    addrinfo first = second;
+    first.ai_addr = reinterpret_cast<sockaddr*>(&dead);
+    first.ai_next = &second;
+
+    TcpConnectFailure failure{};
+    const SocketHandle client = tcp_connect_any(&first, 1000, &failure);
+    const bool connected = client != invalid_socket_handle;
+
+    if (connected) {
+        platform_socket::close(client);
+    }
+
+    platform_socket::close(server);
+
+    ASSERT_TRUE(connected);
+}
+
+static void test_socket_connect_localhost_reaches_ipv4_listener() {
+    // End to end through Socket.connect_timeout: whichever address family the
+    // resolver lists first for "localhost", the IPv4 listener is reached.
+    const auto v =
+        eval("socket server = Result.unwrap(Socket.listen(\"127.0.0.1\", 0))\n"
+             "array<string> parts = String.split("
+             "Result.unwrap(Socket.local_address(server)), \":\")\n"
+             "integer port = Result.unwrap(Converter.to_integer(parts[1]))\n"
+             "result<socket> client = Socket.connect_timeout(\"localhost\", port, 2000)\n"
+             "boolean ok = Result.is_success(client)\n"
+             "Socket.close(server)\n"
+             "ok\n");
 
     ASSERT_TRUE(v.is_bool());
     ASSERT_TRUE(v.as_bool());
@@ -584,6 +663,8 @@ int main() {
     RUN(test_socket_set_timeout_returns_true);
     RUN(test_socket_tcp_remote_address_matches_server);
     RUN(test_socket_tcp_send_receive_roundtrip);
+    RUN(test_tcp_connect_any_falls_back_to_later_address);
+    RUN(test_socket_connect_localhost_reaches_ipv4_listener);
     RUN(test_socket_type_of);
     RUN(test_socket_parse_ipv4);
     RUN(test_socket_parse_ipv6);

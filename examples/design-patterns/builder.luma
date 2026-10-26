@@ -49,18 +49,19 @@ function ServerConfig with_log_path(ServerConfig cfg, string path) {
 
 # ─── Display ──────────────────────────────────────────────
 
-function string protocol_name(Protocol p) {
-    return match p {
+function string protocol_name(Protocol protocol) {
+    return match protocol {
     case Protocol.Http { "http" }
     case Protocol.Https { "https" }
     }
 }
 
 function string describe(ServerConfig cfg) {
-    string proto = protocol_name(cfg.protocol)
-    string opts = "max=${cfg.max_connections}, verbose=${cfg.is_verbose}, log=${cfg.log_path}"
+    string scheme = protocol_name(cfg.protocol)
+    string max_connections = String.format_number(cfg.max_connections, 0)
+    string options = "max=${max_connections}, verbose=${cfg.is_verbose}, log=${cfg.log_path}"
 
-    return "${proto}://${cfg.host}:${cfg.port} (${opts})"
+    return "${scheme}://${cfg.host}:${String.format_number(cfg.port, 0)} (${options})"
 }
 
 # ─── Main ─────────────────────────────────────────────────

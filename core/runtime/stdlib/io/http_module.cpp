@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <format>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -30,6 +31,7 @@
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
@@ -42,6 +44,15 @@ namespace {
 
 // Default request timeout for the Http module.
 constexpr int k_http_default_timeout_ms = 30000;
+
+// Clamp a caller-supplied request timeout (milliseconds) into [1, INT_MAX].  A
+// timeout of 0 (or a negative one) made every request fail immediately with a
+// timeout, and a value above INT_MAX wrapped to a negative int when narrowed,
+// which select() / setsockopt then rejected.
+[[nodiscard]] int clamp_http_timeout(std::int64_t timeout_ms) {
+    return static_cast<int>(
+        std::clamp<std::int64_t>(timeout_ms, 1, std::numeric_limits<int>::max()));
+}
 
 // Resolves an `Http.Method` choice variant to its uppercase HTTP verb.  Backs
 // Http.method_to_string, which lets a program name a verb type-safely (autocomplete,
@@ -392,9 +403,7 @@ void register_http_ns(const EnvPtr& env) {
 
             if (!timeout_str.empty()) {
                 try {
-                    timeout = std::stoi(timeout_str);
-
-                    timeout = std::max(timeout, 0);
+                    timeout = clamp_http_timeout(std::stoll(timeout_str));
                 } catch (const std::invalid_argument&) { // NOLINT(bugprone-empty-catch)
                     // Malformed timeout value — use default.
                 } catch (const std::out_of_range&) { // NOLINT(bugprone-empty-catch)
@@ -498,7 +507,8 @@ void register_http_ns(const EnvPtr& env) {
                                        k_http_default_timeout_ms);
         })
         // Http.request_with(method, url, headers, body, timeout_ms) -> Http.Request
-        // Builds a fully-specified typed request.  A negative timeout is clamped to 0.
+        // Builds a fully-specified typed request.  The timeout is clamped to
+        // [1, 2147483647] milliseconds.
         .func("request_with", 5)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             if (!args[0].is_choice()) {
@@ -511,8 +521,7 @@ void register_http_ns(const EnvPtr& env) {
             const auto& body = expect_string(args[3], "Http.request_with", loc);
             const auto timeout_ms = expect_integer(args[4], "Http.request_with", loc);
 
-            return make_request_record(args[0], url, args[2], body,
-                                       std::max<std::int64_t>(timeout_ms, 0));
+            return make_request_record(args[0], url, args[2], body, clamp_http_timeout(timeout_ms));
         })
         // Http.send(request) -> result<Http.Response>
         // Performs the request described by an Http.Request record and returns the typed
@@ -548,7 +557,7 @@ void register_http_ns(const EnvPtr& env) {
             int timeout{k_http_default_timeout_ms};
 
             if (timeout_val != nullptr && timeout_val->is_integer()) {
-                timeout = static_cast<int>(std::max<std::int64_t>(timeout_val->as_integer(), 0));
+                timeout = clamp_http_timeout(timeout_val->as_integer());
             }
 
             std::vector<std::pair<std::string, std::string>> headers;
@@ -605,15 +614,15 @@ void register_http_ns(const EnvPtr& env) {
             std::ofstream out{safe, std::ios::binary};
 
             if (!out.is_open()) {
-                return make_failure_value(
-                    error_msg("Http", "download", std::format("cannot write '{}'", safe.string())));
+                return make_failure_value(error_msg(
+                    "Http", "download", std::format("cannot write '{}'", path_to_utf8(safe))));
             }
 
             const auto& body = body_val->as_string();
 
             out.write(body.data(), static_cast<std::streamsize>(body.size()));
 
-            return make_success_value(Value{safe.string()});
+            return make_success_value(Value{path_to_utf8(safe)});
         });
 
     // Named status-code constants for readable exact-code comparisons

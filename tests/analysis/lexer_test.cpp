@@ -7,6 +7,7 @@
 #include "analysis/diagnostics/diagnostic_collector.hpp"
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/lexer/token_type.hpp"
+#include "analysis/source/source_location.hpp"
 #include "common/resource_limits.hpp"
 #include "common/utf8.hpp"
 #include "test_framework.hpp"
@@ -881,6 +882,198 @@ TEST_F(LexerTestFixture, test_triple_quoted_string_unterminated_recovers) {
     ASSERT_EQ(std::get<std::string>(REQUIRE_VALUE(tokens[0].literal)), "hello");
 }
 
+// ─── Triple-quoted dedent, escapes, numbers, identifiers, token positions ───
+
+TEST_F(LexerTestFixture, test_triple_quoted_dedent_across_interpolations) {
+    // Regression: the indent was computed per piece, so the piece after
+    // `${name}` kept its 4-space indent ("Dear Alice,\n    Thank you.").
+    const auto tokens = fixture.lex("\"\"\"\n    Dear ${name},\n    Thank you.\n    \"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens[0].type, TokenType::StringStart);
+    ASSERT_EQ(tokens[0].lexeme, std::string{"Dear "});
+    ASSERT_EQ(tokens[4].type, TokenType::StringEnd);
+    ASSERT_EQ(tokens[4].lexeme, std::string{",\nThank you."});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_whitespace_between_interpolations_kept) {
+    // Regression: whitespace-only pieces were deleted (`"""${a} ${b}"""` gave "ab").
+    const auto same_line = fixture.lex("\"\"\"${a} ${b}\"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(same_line[0].lexeme, std::string{""});
+    ASSERT_EQ(same_line[4].type, TokenType::StringMiddle);
+    ASSERT_EQ(same_line[4].lexeme, std::string{" "});
+    ASSERT_EQ(same_line[8].type, TokenType::StringEnd);
+    ASSERT_EQ(same_line[8].lexeme, std::string{""});
+
+    const auto separate_lines = fixture.lex("\"\"\"\n    ${a}\n    ${b}\n    \"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(separate_lines[0].lexeme, std::string{""});
+    ASSERT_EQ(separate_lines[4].lexeme, std::string{"\n"});
+    ASSERT_EQ(separate_lines[8].lexeme, std::string{""});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_relative_indent_before_interpolation) {
+    // Extra indentation in front of an interpolation is kept relative to the
+    // common indent; only the first and last blank lines are dropped.
+    const auto tokens = fixture.lex("\"\"\"\n    a\n      ${x} b\n    \"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens[0].lexeme, std::string{"a\n  "});
+    ASSERT_EQ(tokens[4].lexeme, std::string{" b"});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_escaped_dollar_suppresses_interpolation) {
+    // Regression: triple-quoted bodies were copied raw, so `\${x}` still
+    // interpolated.
+    const auto tokens = fixture.lex("\"\"\"cost: \\${x} \\\"q\\\"\"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens.size(), 2U); // StringLiteral + EOF
+    ASSERT_EQ(tokens[0].type, TokenType::StringLiteral);
+    ASSERT_EQ(std::get<std::string>(REQUIRE_VALUE(tokens[0].literal)),
+              std::string{"cost: ${x} \"q\""});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_escapes_resolved_after_dedent) {
+    // An escaped tab at the start of a line is content, not indentation.
+    const auto tokens = fixture.lex("\"\"\"\n    \\tx\n    y\\n\n    \"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(std::get<std::string>(REQUIRE_VALUE(tokens[0].literal)), std::string{"\tx\ny\n"});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_unknown_escape_reported) {
+    (void)fixture.lex("\"\"\"C:\\Users\"\"\"");
+
+    ASSERT_TRUE(fixture.had_error());
+}
+
+TEST_F(LexerTestFixture, test_tuple_member_after_dot_lexes_digits_only) {
+    // Regression: `t.0.1` lexed `0.1` as a decimal number.
+    const auto tokens = fixture.lex("t.0.1 ?.2");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens.size(), 8U);
+    ASSERT_EQ(tokens[2].type, TokenType::IntegerLiteral);
+    ASSERT_EQ(tokens[2].lexeme, std::string{"0"});
+    ASSERT_EQ(tokens[3].type, TokenType::Dot);
+    ASSERT_EQ(tokens[4].type, TokenType::IntegerLiteral);
+    ASSERT_EQ(tokens[4].lexeme, std::string{"1"});
+    ASSERT_EQ(tokens[5].type, TokenType::QuestionDot);
+    ASSERT_EQ(tokens[6].type, TokenType::IntegerLiteral);
+}
+
+TEST_F(LexerTestFixture, test_decimal_point_requires_fraction_digit) {
+    // `1.` is not a number literal: the '.' must be followed by a digit.
+    const auto tokens = fixture.lex("1.");
+
+    ASSERT_EQ(tokens[0].type, TokenType::IntegerLiteral);
+    ASSERT_EQ(tokens[1].type, TokenType::Dot);
+}
+
+TEST_F(LexerTestFixture, test_number_glued_to_identifier_chars_is_error) {
+    const auto decimal = fixture.lex("123abc");
+
+    ASSERT_TRUE(fixture.had_error());
+    ASSERT_EQ(decimal.size(), 2U); // one (recovered) literal + EOF
+    ASSERT_EQ(decimal[0].type, TokenType::IntegerLiteral);
+
+    const auto binary = fixture.lex("0b102");
+
+    ASSERT_TRUE(fixture.had_error());
+    ASSERT_EQ(binary.size(), 2U);
+    ASSERT_EQ(std::get<std::int64_t>(REQUIRE_VALUE(binary[0].literal)), 2);
+}
+
+TEST_F(LexerTestFixture, test_octal_literal) {
+    const auto tokens = fixture.lex("0o17 0O755");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(std::get<std::int64_t>(REQUIRE_VALUE(tokens[0].literal)), 15);
+    ASSERT_EQ(std::get<std::int64_t>(REQUIRE_VALUE(tokens[1].literal)), 0755);
+
+    (void)fixture.lex("0o8");
+
+    ASSERT_TRUE(fixture.had_error());
+}
+
+TEST_F(LexerTestFixture, test_identifier_rejects_malformed_utf8_and_unicode_spaces) {
+    // Valid UTF-8 letters remain identifier characters.
+    const auto letters = fixture.lex("caf\xC3\xA9");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(letters[0].type, TokenType::Identifier);
+
+    // A lone continuation/invalid byte is not a letter.
+    (void)fixture.lex("a\xFF");
+
+    ASSERT_TRUE(fixture.had_error());
+
+    // U+00A0 NO-BREAK SPACE is whitespace, not part of an identifier.
+    const auto nbsp = fixture.lex("a\xC2\xA0"
+                                  "b");
+
+    ASSERT_TRUE(fixture.had_error());
+    ASSERT_EQ(nbsp[0].type, TokenType::Identifier);
+    ASSERT_EQ(nbsp[0].lexeme, std::string{"a"});
+}
+
+TEST_F(LexerTestFixture, test_unexpected_control_character_is_escaped_in_message) {
+    // A raw ESC byte must not reach the terminal through the diagnostic text.
+    (void)fixture.lex("\x1B[31m");
+
+    ASSERT_TRUE(fixture.had_error());
+
+    const auto& message = fixture.collector.diagnostics().front().message;
+
+    ASSERT_TRUE(message.find("\\x1B") != std::string::npos);
+    ASSERT_TRUE(message.find('\x1B') == std::string::npos);
+}
+
+TEST_F(LexerTestFixture, test_token_start_location_and_newline_flag) {
+    const auto tokens = fixture.lex("  foo +\nbar(\"s\")");
+
+    // `location` is one past the token; `start_location` is its first char.
+    ASSERT_EQ(tokens[0].start_location.column, 3);
+    ASSERT_EQ(tokens[0].location.column, 6);
+    ASSERT_EQ(tokens[1].start_location.column, 7);
+    ASSERT_EQ(tokens[4].start_location.column, 5); // the string's opening quote
+
+    ASSERT_FALSE(tokens[0].preceded_by_newline);
+    ASSERT_FALSE(tokens[1].preceded_by_newline);
+    ASSERT_TRUE(tokens[2].preceded_by_newline);
+    ASSERT_FALSE(tokens[3].preceded_by_newline);
+}
+
+TEST_F(LexerTestFixture, test_token_location_carries_token_start) {
+    // Regression: AST nodes copy a token's `location`, which points one past the
+    // token, so type-checker and runtime carets landed after the offending
+    // token.  The location itself now records where the token starts.
+    const auto tokens = fixture.lex("integer value = \"\"\"\n  ab\n  \"\"\"");
+
+    ASSERT_EQ(tokens[1].lexeme, "value");
+    ASSERT_EQ(tokens[1].location.column, 14);
+    ASSERT_TRUE(tokens[1].location.has_start());
+    ASSERT_EQ(tokens[1].location.start_line, 1);
+    ASSERT_EQ(tokens[1].location.start_column, 9);
+    ASSERT_EQ(tokens[1].location.start().column, 9);
+
+    // A multi-line string token starts on an earlier line than it ends.
+    const auto& text = tokens[3];
+    ASSERT_EQ(text.location.line, 3);
+    ASSERT_EQ(text.location.start_line, 1);
+    ASSERT_EQ(text.location.start_column, 17);
+
+    // The start is display metadata: equality still compares (file, line, column).
+    const SourceLocation bare{.file_id = text.location.file_id,
+                              .line = text.location.line,
+                              .column = text.location.column};
+    ASSERT_TRUE(bare == text.location);
+}
+
 // ─── Keyword classification predicates ───
 
 TEST_F(LexerTestFixture, test_keyword_classification_predicates) {
@@ -1001,6 +1194,22 @@ int main() {
     RUN(test_triple_quoted_string_interpolation);
     RUN(test_triple_quoted_string_unterminated_recovers);
     RUN(test_keyword_classification_predicates);
+
+    // Triple-quoted dedent/escapes, number forms, identifiers, token positions.
+    RUN(test_triple_quoted_dedent_across_interpolations);
+    RUN(test_triple_quoted_whitespace_between_interpolations_kept);
+    RUN(test_triple_quoted_relative_indent_before_interpolation);
+    RUN(test_triple_quoted_escaped_dollar_suppresses_interpolation);
+    RUN(test_triple_quoted_escapes_resolved_after_dedent);
+    RUN(test_triple_quoted_unknown_escape_reported);
+    RUN(test_tuple_member_after_dot_lexes_digits_only);
+    RUN(test_decimal_point_requires_fraction_digit);
+    RUN(test_number_glued_to_identifier_chars_is_error);
+    RUN(test_octal_literal);
+    RUN(test_identifier_rejects_malformed_utf8_and_unicode_spaces);
+    RUN(test_unexpected_control_character_is_escaped_in_message);
+    RUN(test_token_start_location_and_newline_flag);
+    RUN(test_token_location_carries_token_start);
 
     return SUMMARY();
 }

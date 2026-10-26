@@ -30,8 +30,10 @@
 //
 //   TRANSIENT (log and continue to the next message)
 //     • protocol::ParseError (other than ResyncError) — a single message
-//       had bad framing or invalid JSON.  The transport layer resyncs to
-//       the next Content-Length boundary automatically (up to 1 000 lines).
+//       had bad framing.  The transport resyncs to the next
+//       Content-Length boundary automatically (up to 1 000 lines).
+//       Oversized and invalid-JSON messages never reach the loop as
+//       exceptions: the transport skips them in place (see below).
 //     • Handler/dispatch exceptions — a bug or unexpected input in
 //       request processing.  The server sends an error response
 //       (DAP) or logs (LSP) and continues.
@@ -40,11 +42,15 @@
 //
 // ─── Recovery mechanisms ─────────────────────────────────────────────
 //
-// 1. Transport-level resync (Transport::resync_to_next_message)
-//    After a parse error, the transport scans forward discarding
-//    bytes until a valid Content-Length header is found, then buffers
-//    it for the next read_message() call.  This is capped at
-//    k_default_max_resync_iterations (1 000 lines) to prevent
+// 1. Transport-level recovery (Transport::read_message)
+//    An oversized message (Content-Length above the limit) is skipped by
+//    discarding exactly its body bytes, and an invalid-JSON body has
+//    already been read in full, so both leave the stream aligned on the
+//    next frame.  Only malformed headers, where the frame boundary is
+//    unknown, trigger Transport::resync_to_next_message, which scans
+//    forward discarding lines until a valid Content-Length header is
+//    found and buffers it for the next read_message() call.  The scan is
+//    capped at k_default_max_resync_iterations (1 000 lines) to prevent
 //    runaway scanning on non-protocol streams.
 //
 // 2. Consecutive-error tracking (this header)
@@ -98,21 +104,21 @@ inline constexpr std::size_t k_default_max_consecutive_errors = 50;
 enum class ErrorSeverity {
     // The error is scoped to a single message.  Log it, skip the
     // message, and continue.  The transport layer may resync.
-    transient,
+    Transient,
 
     // The transport is broken beyond repair.  Exit the message loop
     // and begin orderly shutdown.
-    fatal,
+    Fatal,
 };
 
 // ─── Recovery action ─────────────────────────────────────────────────
 
 enum class RecoveryAction {
     // Skip the current message and read the next one.
-    skip_and_continue,
+    SkipAndContinue,
 
     // Shut down the server cleanly.
-    shutdown,
+    Shutdown,
 };
 
 // ─── Exception classification ────────────────────────────────────────
@@ -147,7 +153,7 @@ enum class RecoveryAction {
 //           dispatch(message);
 //       } catch (const std::exception& e) {
 //           auto action = recovery.on_error(classify_read_error(e));
-//           if (action == RecoveryAction::shutdown) break;
+//           if (action == RecoveryAction::Shutdown) break;
 //           // else: continue
 //       }
 //   }
@@ -169,17 +175,17 @@ public:
     // shutdown.  Transient errors produce skip_and_continue until
     // the consecutive-error threshold is reached.
     [[nodiscard]] RecoveryAction on_error(ErrorSeverity severity) noexcept {
-        if (severity == ErrorSeverity::fatal) {
-            return RecoveryAction::shutdown;
+        if (severity == ErrorSeverity::Fatal) {
+            return RecoveryAction::Shutdown;
         }
 
         ++consecutive_errors_;
 
         if (consecutive_errors_ >= max_consecutive_errors_) {
-            return RecoveryAction::shutdown;
+            return RecoveryAction::Shutdown;
         }
 
-        return RecoveryAction::skip_and_continue;
+        return RecoveryAction::SkipAndContinue;
     }
 
     // Current consecutive transient error count.

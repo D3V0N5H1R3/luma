@@ -232,6 +232,11 @@ private:
     // variable (e.g. 'get_point().x').
     void mark_target_mutated(const Expression& target);
 
+    // Declares a local in the current scope, first warning (W0012) when it
+    // shadows a variable in an enclosing scope. Names starting with '_' are
+    // exempt, as they opt out of usage tracking.
+    void declare_local(std::string_view name, SourceLocation loc, bool is_mutable = false);
+
     // ─── Diagnostics ────────────────────────────────────────────────────
     void warn(std::string_view message, SourceLocation loc, std::string_view hint = "",
               DiagnosticCode code = DiagnosticCode::None);

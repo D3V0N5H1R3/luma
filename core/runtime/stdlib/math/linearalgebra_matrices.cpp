@@ -175,22 +175,6 @@ struct LuDecomp {
     return std::nullopt;
 }
 
-// Guard a matrix allocation of rows × cols elements against the array-size
-// limit.  The comparison divides rather than multiplies so the product can
-// never overflow.  from_mat requires callers to validate the element count
-// first, so every matrix constructor — and multiply, whose result is
-// rows(a) × cols(b) — routes through this one guard.
-void require_matrix_within_limit(std::uint64_t rows, std::uint64_t cols, std::string_view function,
-                                 std::string_view subject, std::string_view hint,
-                                 const SourceLocation& loc) {
-    if (rows != 0 && cols > ResourceLimits::max_array_size / rows) {
-        throw RuntimeError{error_msg("LinearAlgebra", function,
-                                     std::format("{} exceeds maximum matrix element count ({})",
-                                                 subject, ResourceLimits::max_array_size)),
-                           loc, std::string{hint}};
-    }
-}
-
 } // namespace
 
 // Matrix construction and operations.

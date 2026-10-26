@@ -39,7 +39,7 @@ void bind_arm_names(TypeCheckingServices& tc, const MatchArm& arm, const TypeInf
             define_binding((subject_type.kind == TypeInfo::Kind::Result &&
                             subject_type.inner_types.size() >= 2)
                                ? subject_type.result_error_type()
-                               : TypeInfo::make(TypeInfo::Kind::String));
+                               : TypeInfo::make(TypeInfo::Kind::StdlibAny));
             break;
         case MatchArm::Kind::SomeCase:
             define_binding(
@@ -220,23 +220,102 @@ void bind_record_fields(TypeCheckingServices& tc, std::string_view record_type,
     }
 }
 
-void merge_arm_ownership(TypeCheckingServices& tc, const TypeScope::OwnershipSnapshot& before,
-                         const std::vector<TypeScope::OwnershipSnapshot>& arm_snapshots) {
-    // Conservatively prevent use-after-move across arms: if any arm consumed a
-    // variable that was still live before the match, mark it consumed here too.
-    for (const auto& [name, was_consumed_before] : before) {
-        if (was_consumed_before) {
-            continue;
+void merge_branch_ownership(TypeCheckingServices& tc, const TypeScope::OwnershipSnapshot& before,
+                            const std::vector<TypeScope::OwnershipSnapshot>& branch_snapshots) {
+    // No branch falls through: the code after the if/match is unreachable, so
+    // its ownership state is irrelevant — keep the pre-branch state.
+    if (branch_snapshots.empty()) {
+        tc.context().current_scope->restore_ownership(before);
+        return;
+    }
+
+    // Conservatively prevent use-after-move across branches: a unique variable
+    // consumed on any path is consumed afterwards.  A branch that left a
+    // variable untouched keeps its pre-branch state.
+    for (const auto& entry : before) {
+        // Plain locals rather than a structured binding captured by the lambda
+        // below: clang-analyzer mis-models a captured structured-binding
+        // reference as an undefined pointer (a core.NullDereference false
+        // positive).
+        const auto& name = entry.first;
+        const bool was_consumed_before = entry.second;
+
+        const auto consumed_after = [&](const TypeScope::OwnershipSnapshot& snapshot) {
+            const auto found = std::ranges::find(snapshot, name, &TypeScope::OwnershipEntry::first);
+            return found != snapshot.end() ? found->second : was_consumed_before;
+        };
+
+        tc.context().current_scope->mark_consumed(
+            name, std::ranges::any_of(branch_snapshots, consumed_after));
+    }
+}
+
+void check_arm_comparison(TypeCheckingServices& tc, const MatchArm& arm,
+                          const TypeInfo& subject_type, const SourceLocation& match_location) {
+    const bool is_dynamic_subject = subject_type.kind == TypeInfo::Kind::StdlibAny ||
+                                    subject_type.kind == TypeInfo::Kind::Unknown;
+    const auto& arm_location = arm.location.value_or(match_location);
+
+    // Checks one pattern of the arm — the arm itself or a `case A | B`
+    // alternative.  Integer, string, and range patterns carry their value
+    // in the pattern itself; only comparison patterns hold an expression.
+    const auto check_pattern = [&](const MatchPattern& pattern) {
+        std::optional<TypeInfo> value_type;
+
+        if (pattern.comparison_value()) {
+            value_type = tc.infer_expression_type(*pattern.comparison_value());
         }
 
-        const bool consumed_in_any = std::ranges::any_of(arm_snapshots, [&](const auto& snap) {
-            return std::ranges::any_of(
-                snap, [&](const auto& entry) { return entry.first == name && entry.second; });
-        });
-
-        if (consumed_in_any) {
-            tc.context().current_scope->mark_consumed(name, true);
+        if (is_dynamic_subject) {
+            return;
         }
+
+        switch (pattern.kind()) {
+            case MatchArm::Kind::IntegerRangeCase:
+                if (subject_type.kind != TypeInfo::Kind::Integer) {
+                    tc.error(std::format("match arm has range case but subject is '{}'",
+                                         subject_type.to_string()),
+                             pattern.range_location(),
+                             "range case arms can only match integer values");
+                }
+                break;
+
+            case MatchArm::Kind::IntegerCase:
+                if (subject_type.kind != TypeInfo::Kind::Integer) {
+                    tc.error(std::format("match arm has integer case but subject is '{}'",
+                                         subject_type.to_string()),
+                             arm_location, "integer case arms can only match integer values");
+                }
+                break;
+
+            case MatchArm::Kind::StringCase:
+                if (subject_type.kind != TypeInfo::Kind::String) {
+                    tc.error(std::format("match arm has string case but subject is '{}'",
+                                         subject_type.to_string()),
+                             arm_location, "string case arms can only match string values");
+                }
+                break;
+
+            case MatchArm::Kind::Comparison:
+                if (value_type && !tc.is_assignable(subject_type, *value_type) &&
+                    !tc.is_assignable(*value_type, subject_type)) {
+                    tc.error(std::format("match comparison type '{}' is not compatible with "
+                                         "subject type '{}'",
+                                         value_type->to_string(), subject_type.to_string()),
+                             pattern.comparison_value()->location,
+                             "ensure the case value type matches the match subject type");
+                }
+                break;
+
+            default:
+                break;
+        }
+    };
+
+    check_pattern(arm);
+
+    for (const auto& alternative : arm.alternatives) {
+        check_pattern(alternative);
     }
 }
 

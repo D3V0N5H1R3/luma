@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 
+#include "runtime/stdlib/io/console_module.hpp"
 #include "stdlib_test_helpers.hpp"
 
 static void test_console_prompt_eof_fails() {
@@ -229,6 +230,64 @@ static void test_console_prompt_with_default() {
     }
 }
 
+// ─── Bounded line reads (read_bounded_line) ───
+// std::getline used to buffer an entire newline-free line before any size
+// check, and prompt_integer / prompt_number / confirm had no check at all.
+
+static void test_read_bounded_line_stops_at_limit_and_resyncs() {
+    using luma::console_detail::LineStatus;
+    using luma::console_detail::read_bounded_line;
+
+    std::istringstream in{"0123456789ABCDEF\nok\n"};
+    std::string line{};
+
+    ASSERT_TRUE(read_bounded_line(in, 8, line) == LineStatus::TooLong);
+    ASSERT_TRUE(line.size() <= 8U);
+
+    // The rest of the oversized line was discarded: the next read is "ok".
+    ASSERT_TRUE(read_bounded_line(in, 8, line) == LineStatus::Ok);
+    ASSERT_EQ(line, "ok");
+    ASSERT_TRUE(read_bounded_line(in, 8, line) == LineStatus::EndOfInput);
+}
+
+static void test_read_bounded_line_matches_getline_semantics() {
+    using luma::console_detail::LineStatus;
+    using luma::console_detail::read_bounded_line;
+
+    // A line exactly at the limit is accepted; a final unterminated line is
+    // still a line; an empty line is a line; end of input is reported once
+    // nothing is left.
+    std::istringstream in{"12345678\n\ntail"};
+    std::string line{};
+
+    ASSERT_TRUE(read_bounded_line(in, 8, line) == LineStatus::Ok);
+    ASSERT_EQ(line, "12345678");
+    ASSERT_TRUE(read_bounded_line(in, 8, line) == LineStatus::Ok);
+    ASSERT_EQ(line, "");
+    ASSERT_TRUE(read_bounded_line(in, 8, line) == LineStatus::Ok);
+    ASSERT_EQ(line, "tail");
+    ASSERT_TRUE(read_bounded_line(in, 8, line) == LineStatus::EndOfInput);
+}
+
+static void test_console_line_functions_enforce_max_string_size() {
+    const LimitGuard limit{ResourceLimits::max_string_size, static_cast<std::size_t>(16)};
+    const std::string oversized = std::string(64, '7') + "\n";
+
+    for (const char* const call :
+         {"Console.read_line()", "Console.prompt(\"> \")", "Console.prompt_integer(\"> \")",
+          "Console.prompt_number(\"> \")", "Console.confirm(\"> \")",
+          "Console.prompt_with_default(\"> \", \"d\")", "Console.read_lines()"}) {
+        std::istringstream fake_stdin{oversized};
+        const StdinRedirect guard{fake_stdin.rdbuf()};
+        const CapturedStream captured{std::cout};
+
+        const auto v = eval(call);
+
+        ASSERT_RESULT_FAILURE(v);
+        ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("maximum") != std::string::npos);
+    }
+}
+
 static void test_console_new_functions_registered() {
     const auto env = luma::test::make_std_env();
 
@@ -264,6 +323,9 @@ int main() {
     RUN(test_console_confirm_yes_no);
     RUN(test_console_confirm_error_message_uses_trimmed_original_case);
     RUN(test_console_prompt_with_default);
+    RUN(test_read_bounded_line_stops_at_limit_and_resyncs);
+    RUN(test_read_bounded_line_matches_getline_semantics);
+    RUN(test_console_line_functions_enforce_max_string_size);
     RUN(test_console_new_functions_registered);
 
     return SUMMARY();

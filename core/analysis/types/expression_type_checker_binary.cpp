@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <format>
+#include <optional>
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/expression.hpp"
@@ -27,6 +28,24 @@ namespace {
 [[nodiscard]] bool is_error_or_unknown(const TypeInfo& left, const TypeInfo& right) {
     return left.kind == TypeInfo::Kind::StdlibAny || right.kind == TypeInfo::Kind::StdlibAny ||
            left.kind == TypeInfo::Kind::Unknown || right.kind == TypeInfo::Kind::Unknown;
+}
+
+// The value of an integer literal, also seeing through a unary minus: Luma has
+// no negative integer literals, so `-3` parses as negation of `3`.
+[[nodiscard]] std::optional<std::int64_t> get_signed_integer_value(const Expression& expr) {
+    if (expr.kind == ExpressionKind::Unary) {
+        const auto& unary = static_cast<const UnaryExpression&>(expr);
+
+        if (unary.op == TokenType::Minus) {
+            if (const auto magnitude = get_integer_value(*unary.operand)) {
+                return -*magnitude;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    return get_integer_value(expr);
 }
 
 } // namespace
@@ -110,9 +129,10 @@ void ExpressionTypeChecker::check_binary_constant_folding(const BinaryExpression
     }
 
     // String repeat: detect negative or excessive literal repeat count.
-    if (expr.op == TokenType::Star && left_type.kind == TypeInfo::Kind::String && right_int) {
+    const auto repeat_count = get_signed_integer_value(*expr.right);
+    if (expr.op == TokenType::Star && left_type.kind == TypeInfo::Kind::String && repeat_count) {
         const auto msg = compile_time_arithmetic::check_string_repeat(
-            *right_int, static_cast<std::size_t>(ResourceLimits::max_string_repeat));
+            *repeat_count, static_cast<std::size_t>(ResourceLimits::max_string_repeat));
         if (msg) {
             emit_err(*msg, expr.location, "reduce the repeat count to avoid excessive memory usage",
                      DiagnosticCode::InvalidRepeatCount);
@@ -331,6 +351,7 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
             // Chaining: optional<T> ?? optional<T>  →  optional<T>
             if (right.kind == TypeInfo::Kind::Optional && !right.inner_types.empty() &&
                 tc_.is_assignable(*inner, right.element_type())) {
+                type_check_helpers::mark_numeric_widening(tc_, *expr.right, left, right);
                 return left;
             }
 
@@ -342,6 +363,8 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
                           expr.location,
                           "ensure the default value matches the type inside the optional",
                           DiagnosticCode::TypeMismatch);
+            } else {
+                type_check_helpers::mark_numeric_widening(tc_, *expr.right, *inner, right);
             }
 
             return *inner;
@@ -356,6 +379,7 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
         // Chaining: result<T> ?? result<T>  →  result<T>
         if (right.kind == TypeInfo::Kind::Result && !right.inner_types.empty() &&
             tc_.is_assignable(inner, right.result_value_type())) {
+            type_check_helpers::mark_numeric_widening(tc_, *expr.right, left, right);
             return left;
         }
 
@@ -367,6 +391,8 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
                       expr.location,
                       "ensure the default value matches the success type of the result",
                       DiagnosticCode::TypeMismatch);
+        } else {
+            type_check_helpers::mark_numeric_widening(tc_, *expr.right, inner, right);
         }
 
         return inner;
@@ -377,6 +403,13 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
     }
 
     if (left.kind != TypeInfo::Kind::StdlibAny && left.kind != TypeInfo::Kind::Unknown) {
+        // A value that is neither optional nor a result is never missing, so
+        // the default could never be used — almost certainly a mistake.
+        tc_.error(std::format("'?\?' requires an optional or result value on the left, got '{}'",
+                              left.to_string()),
+                  expr.left->location,
+                  "remove the '?\?' default, or make the value optional<T> or result<T>",
+                  DiagnosticCode::InvalidOperand);
         return left;
     }
 

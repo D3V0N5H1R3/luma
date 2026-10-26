@@ -51,8 +51,13 @@ void VM::move_from(VM&& other) noexcept {
 void VM::transfer_state(VM&& other) noexcept {
     global_env_ = std::move(other.global_env_);
     compiled_functions_ = std::exchange(other.compiled_functions_, nullptr);
+    retained_function_tables_ = std::move(other.retained_function_tables_);
     loop_iterations_ = other.loop_iterations_;
     base_depth_ = other.base_depth_;
+    cancel_token_ = std::move(other.cancel_token_);
+    is_task_vm_ = other.is_task_vm_;
+    task_snapshot_layers_ = std::move(other.task_snapshot_layers_);
+    globals_version_ = other.globals_version_;
     exception_handler_ = std::move(other.exception_handler_);
     global_cache_ = std::move(other.global_cache_);
     global_index_cache_ = std::move(other.global_index_cache_);
@@ -75,6 +80,88 @@ void VM::transfer_state(VM&& other) noexcept {
 
 Binding* VM::lookup_global_cache(std::string_view name) {
     return global_cache_.lookup(name, *global_env_);
+}
+
+// ─────────── Task global environment ───────────
+
+// Spawned tasks must not share the parent's live global Environment: its
+// binding map and values are unsynchronised, so a global written by the parent
+// (or by a task) while another thread reads it is a data race.  Each task
+// instead receives a deep-copied snapshot (Architecture §12.5), shared
+// read-only by every task spawned while this VM's globals are unchanged.
+// Tasks never write their snapshot (see reject_global_write_in_task), so
+// sharing it is safe.
+//
+// Each scope of the global chain (normally just the root; embedders such as
+// the test harness layer the program's globals over a shared stdlib scope)
+// becomes one snapshot layer of two environments, so re-snapshotting stays
+// cheap: the scope's immutable bindings (the stdlib — large, but never
+// reassigned) form a base environment that is rebuilt only when the scope
+// grows, and its mutable bindings (every user global: SetGlobal defines
+// globals as mutable, since the bytecode does not record declared
+// mutability) a top environment that is rebuilt after this VM writes a global
+// (globals_version_).  A rebuild deep-copies only the bindings written since
+// their cached copy was made (Binding::write_version); every other binding —
+// a function, a large array that is never written — shares its earlier copy.
+EnvPtr VM::spawn_environment() {
+    if (is_task_vm_) {
+        // Already an immutable snapshot — nested spawns can share it.
+        return global_env_;
+    }
+
+    std::vector<const Environment*> chain;
+
+    for (const auto* scope = global_env_.get(); scope != nullptr; scope = scope->parent().get()) {
+        chain.push_back(scope);
+    }
+
+    std::ranges::reverse(chain); // Root first: each layer is the parent of the next.
+
+    if (task_snapshot_layers_.size() != chain.size()) {
+        task_snapshot_layers_.clear();
+        task_snapshot_layers_.resize(chain.size());
+    }
+
+    EnvPtr parent;
+    bool parent_rebuilt = false;
+
+    for (std::size_t i{0}; i < chain.size(); ++i) {
+        const auto& scope = *chain[i];
+        auto& layer = task_snapshot_layers_[i];
+        const auto binding_count = scope.local_binding_count();
+
+        if (parent_rebuilt || !layer.base || layer.source != &scope ||
+            layer.binding_count != binding_count) {
+            layer.base = scope.copy_bindings(parent, /*mutable_bindings=*/false, layer.copies);
+            layer.source = &scope;
+            layer.binding_count = binding_count;
+            layer.has_mutable_bindings = scope.has_mutable_bindings();
+            layer.top.reset();
+        }
+
+        if (!layer.top || layer.version != globals_version_) {
+            auto top =
+                layer.has_mutable_bindings
+                    ? scope.copy_bindings(layer.base, /*mutable_bindings=*/true, layer.copies)
+                    : layer.base;
+            parent_rebuilt = top != layer.top;
+            layer.top = std::move(top);
+            layer.version = globals_version_;
+        } else {
+            parent_rebuilt = false;
+        }
+
+        parent = layer.top;
+    }
+
+    return parent;
+}
+
+void VM::reject_global_write_in_task(std::string_view name) const {
+    if (is_task_vm_) [[unlikely]] {
+        runtime_error(vm_errors::cannot_assign_global_in_task(name),
+                      vm_errors::hint_global_write_in_task);
+    }
 }
 
 // Lazily resolve (and cache on the frame) the per-function global binding
@@ -113,18 +200,7 @@ bool VM::call_closure(FunctionValue* func, std::uint8_t arg_count) {
         return false;
     }
 
-    if (stack_.frames.size() >= static_cast<std::size_t>(ResourceLimits::max_call_depth))
-        [[unlikely]] {
-        runtime_error(vm_errors::call_stack_overflow_recursion(ResourceLimits::max_call_depth),
-                      vm_errors::hint_check_recursion);
-        return false;
-    }
-
-    if (stack_.frames.size() >= VMStack::k_frame_max) [[unlikely]] {
-        runtime_error(vm_errors::call_frame_overflow(func->compiled->name, VMStack::k_frame_max),
-                      vm_errors::hint_deep_recursion);
-        return false;
-    }
+    validate_call_depth();
 
     stack_.frames.push_back({
         .function = func->compiled,

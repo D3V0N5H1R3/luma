@@ -9,44 +9,44 @@
 
 @test
 function void test_reference_new_and_get() {
-    reference<integer> r = Reference.new(42)
-    integer value = Reference.get(r)
+    reference<integer> cell = Reference.new(42)
+    integer value = Reference.get(cell)
 
     assert(value == 42)
 }
 
 @test
 function void test_reference_set() {
-    reference<string> r = Reference.new("hello")
-    Reference.set(r, "world")
+    reference<string> cell = Reference.new("hello")
+    Reference.set(cell, "world")
 
-    assert(Reference.get(r) == "world")
+    assert(Reference.get(cell) == "world")
 }
 
 @test
 function void test_reference_update() {
-    reference<integer> r = Reference.new(10)
-    Reference.update(r, (integer x) -> x * 2)
+    reference<integer> cell = Reference.new(10)
+    Reference.update(cell, (integer x) -> x * 2)
 
-    assert(Reference.get(r) == 20)
+    assert(Reference.get(cell) == 20)
 }
 
 @test
 function void test_reference_swap() {
-    reference<integer> a = Reference.new(1)
-    reference<integer> b = Reference.new(2)
-    Reference.swap(a, b)
+    reference<integer> first = Reference.new(1)
+    reference<integer> second = Reference.new(2)
+    Reference.swap(first, second)
 
-    assert(Reference.get(a) == 2)
-    assert(Reference.get(b) == 1)
+    assert(Reference.get(first) == 2)
+    assert(Reference.get(second) == 1)
 }
 
 @test
 function void test_reference_inspect() {
-    reference<integer> r = Reference.new(42)
-    string s = Reference.inspect(r)
+    reference<integer> cell = Reference.new(42)
+    string text = Reference.inspect(cell)
 
-    assert(s == "ref(42)")
+    assert(text == "ref(42)")
 }
 
 # ─── Shared identity across closures ─────────────────────
@@ -88,8 +88,8 @@ function void test_multiple_closures_share_reference() {
 function void test_reference_with_string_value() {
     reference<string> label = Reference.new("initial")
 
-    function(string) -> none set_label = (string s) -> {
-        Reference.set(label, s)
+    function(string) -> none set_label = (string text) -> {
+        Reference.set(label, text)
     }
 
     set_label("updated")
@@ -119,12 +119,12 @@ function void test_reference_with_array_value() {
     reference<array<integer>> items = Reference.new([1, 2, 3])
     array<integer> current = Reference.get(items)
 
-    assert(Array.length(current) == 3)
+    assert(current == [1, 2, 3])
 
     Reference.set(items, [1, 2, 3, 4, 5])
     array<integer> updated = Reference.get(items)
 
-    assert(Array.length(updated) == 5)
+    assert(updated == [1, 2, 3, 4, 5])
 }
 
 # ─── Pipe operator ───────────────────────────────────────
@@ -138,9 +138,9 @@ function void test_reference_pipe_get() {
 
 @test
 function void test_reference_pipe_inspect() {
-    string s = Reference.new(7) |> Reference.inspect()
+    string text = Reference.new(7) |> Reference.inspect()
 
-    assert(s == "ref(7)")
+    assert(text == "ref(7)")
 }
 
 # ─── Callback-style pattern (TUI use case) ───────────────
@@ -166,21 +166,21 @@ function void test_callback_counter_pattern() {
 function void test_callback_state_pattern() {
     reference<string> state = Reference.new("idle")
 
-    function() -> none start_fn = () -> {
+    function() -> none start = () -> {
         Reference.set(state, "running")
     }
 
-    function() -> none stop_fn = () -> {
+    function() -> none stop = () -> {
         Reference.set(state, "stopped")
     }
 
     assert(Reference.get(state) == "idle")
 
-    start_fn()
+    start()
 
     assert(Reference.get(state) == "running")
 
-    stop_fn()
+    stop()
 
     assert(Reference.get(state) == "stopped")
 }
@@ -191,11 +191,11 @@ function void test_callback_state_pattern() {
 function void test_reference_update_is_reentrant() {
     # Reference.update holds the cell's lock across the callback, so reading the
     # same cell inside the callback only works because the lock is re-entrant.
-    reference<integer> r = Reference.new(5)
+    reference<integer> cell = Reference.new(5)
 
-    Reference.update(r, (integer current) -> Reference.get(r) + current)
+    Reference.update(cell, (integer current) -> Reference.get(cell) + current)
 
-    assert(Reference.get(r) == 10)
+    assert(Reference.get(cell) == 10)
 }
 
 @test
@@ -212,94 +212,92 @@ function void test_reference_nested_cells() {
 @test
 function void test_reference_cells_are_independent() {
     # Two cells created from the same value do not share storage.
-    reference<integer> a = Reference.new(7)
-    reference<integer> b = Reference.new(7)
+    reference<integer> first = Reference.new(7)
+    reference<integer> second = Reference.new(7)
 
-    Reference.set(a, 100)
+    Reference.set(first, 100)
 
-    assert(Reference.get(a) == 100)
-    assert(Reference.get(b) == 7)
+    assert(Reference.get(first) == 100)
+    assert(Reference.get(second) == 7)
 }
 
 @test
 function void test_reference_swap_twice_restores_values() {
-    reference<integer> a = Reference.new(1)
-    reference<integer> b = Reference.new(2)
+    reference<integer> first = Reference.new(1)
+    reference<integer> second = Reference.new(2)
 
-    Reference.swap(a, b)
-    Reference.swap(a, b)
+    Reference.swap(first, second)
+    Reference.swap(first, second)
 
-    assert(Reference.get(a) == 1)
-    assert(Reference.get(b) == 2)
+    assert(Reference.get(first) == 1)
+    assert(Reference.get(second) == 2)
 }
 
 @test
 function void test_reference_array_accumulator_across_closures() {
-    reference<array<integer>> acc = Reference.new([])
+    reference<array<integer>> accumulator = Reference.new([])
 
     function(integer) -> none collect = (integer n) -> {
-        Reference.update(acc, (array<integer> xs) -> Array.push(xs, n))
+        Reference.update(accumulator, (array<integer> xs) -> Array.push(xs, n))
     }
 
     collect(1)
     collect(2)
     collect(3)
 
-    array<integer> collected = Reference.get(acc)
+    array<integer> collected = Reference.get(accumulator)
 
-    assert(Array.length(collected) == 3)
-    assert(collected[0] == 1)
-    assert(collected[2] == 3)
+    assert(collected == [1, 2, 3])
 }
 
-# ─── Negative tests ──────────────────────────────────────
+# ─── Errors and edge cases ───────────────────────────────
 
 @test
 function void test_reference_update_error_preserves_value() {
     # If the update function throws, the original value must be preserved.
-    reference<integer> r = Reference.new(10)
-    mutable string caught = ""
+    reference<integer> cell = Reference.new(10)
+    mutable string error_message = ""
 
     try {
-        Reference.update(r, (integer v) -> {
+        Reference.update(cell, (integer current) -> {
             assert(false, "force error")
-            return v
+            return current
         })
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.length(caught) > 0, "update should have thrown")
-    assert(Reference.get(r) == 10, "value should be unchanged after failed update")
+    assert(String.length(error_message) > 0, "update should have thrown")
+    assert(Reference.get(cell) == 10, "value should be unchanged after failed update")
 }
 
 @test
 function void test_reference_swap_same_ref() {
     # Swapping a reference with itself should leave the value unchanged.
-    reference<integer> r = Reference.new(42)
+    reference<integer> cell = Reference.new(42)
 
-    Reference.swap(r, r)
+    Reference.swap(cell, cell)
 
-    assert(Reference.get(r) == 42)
+    assert(Reference.get(cell) == 42)
 }
 
 @test
 function void test_reference_update_runtime_error_preserves_value() {
     # A runtime error (not an assert) raised inside the callback must also leave
     # the stored value untouched, because the write happens only on success.
-    reference<integer> r = Reference.new(50)
-    mutable boolean threw = false
+    reference<integer> cell = Reference.new(50)
+    mutable boolean has_thrown = false
 
     try {
-        Reference.update(r, (integer v) -> {
-            integer zero = v - v
-            integer bad = v // zero
-            return bad
+        Reference.update(cell, (integer current) -> {
+            integer zero = current - current
+            integer quotient = current // zero
+            return quotient
         })
     } catch(_err) {
-        threw = true
+        has_thrown = true
     }
 
-    assert(threw, "division by zero should have thrown")
-    assert(Reference.get(r) == 50, "value preserved after runtime error in update")
+    assert(has_thrown, "division by zero should have thrown")
+    assert(Reference.get(cell) == 50, "value preserved after runtime error in update")
 }

@@ -1,53 +1,53 @@
 [
     {
         "label": "CMake: Configure",
-        "command": "cmake",
-        "args": ["--preset", "default"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "default"]
     },
     {
         "label": "CMake: Build",
-        "command": "cmake",
-        "args": ["--build", "--preset", "default"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "default", "--if-needed", "--build"]
     },
     {
         "label": "CMake: Configure (Debug)",
-        "command": "cmake",
-        "args": ["--preset", "debug"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "debug"]
     },
     {
         "label": "CMake: Build (Debug)",
-        "command": "cmake",
-        "args": ["--build", "--preset", "debug"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "debug", "--if-needed", "--build"]
     },
     {
         "label": "CMake: Configure (RelWithDebInfo)",
-        "command": "cmake",
-        "args": ["--preset", "relwithdebinfo"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "relwithdebinfo"]
     },
     {
         "label": "CMake: Build (RelWithDebInfo)",
-        "command": "cmake",
-        "args": ["--build", "--preset", "relwithdebinfo"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "relwithdebinfo", "--if-needed", "--build"]
     },
     {
         "label": "CMake: Configure (Sanitizers)",
-        "command": "cmake",
-        "args": ["--preset", "sanitize"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "sanitize"]
     },
     {
         "label": "CMake: Build (Sanitizers)",
-        "command": "cmake",
-        "args": ["--build", "--preset", "sanitize"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "sanitize", "--if-needed", "--build"]
     },
     {
         "label": "CMake: Configure (Coverage)",
-        "command": "cmake",
-        "args": ["--preset", "coverage"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "coverage"]
     },
     {
         "label": "CMake: Build (Coverage)",
-        "command": "cmake",
-        "args": ["--build", "--preset", "coverage"]
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/configure.py", "coverage", "--if-needed", "--build"]
     },
     {
         "label": "CTest: Run All Tests",
@@ -79,12 +79,12 @@
     {
         "label": "Luma: Test Current File (Windows)",
         "command": "$ZED_WORKTREE_ROOT/build/Release/luma.exe",
-        "args": ["--test", "$ZED_FILE"]
+        "args": ["--strict", "--test", "$ZED_FILE"]
     },
     {
         "label": "Luma: Test Current File (Unix)",
         "command": "$ZED_WORKTREE_ROOT/build/luma",
-        "args": ["--test", "$ZED_FILE"]
+        "args": ["--strict", "--test", "$ZED_FILE"]
     },
     {
         "label": "Lint: All",

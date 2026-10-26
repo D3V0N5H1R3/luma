@@ -50,11 +50,11 @@ void register_json_ns(const EnvPtr& env) {
         })
         .func("pretty", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.pretty", loc);
+            const auto& json_text = expect_string(args[0], "Json.pretty", loc);
 
             // Reformat an existing JSON string: parse then re-emit indented.
             return wrap_result_operation("Json", "pretty", [&]() -> Value {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
                 std::string out;
                 out.reserve(512);
@@ -65,11 +65,11 @@ void register_json_ns(const EnvPtr& env) {
         })
         .func("minify", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.minify", loc);
+            const auto& json_text = expect_string(args[0], "Json.minify", loc);
 
             // Reformat an existing JSON string: parse then re-emit compact.
             return wrap_result_operation("Json", "minify", [&]() -> Value {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
                 std::string out;
                 out.reserve(256);
@@ -80,14 +80,14 @@ void register_json_ns(const EnvPtr& env) {
         })
         .func("equals", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.equals", loc);
-            (void)expect_string(args[1], "Json.equals", loc);
+            const auto& left_text = expect_string(args[0], "Json.equals", loc);
+            const auto& right_text = expect_string(args[1], "Json.equals", loc);
 
             // Semantic comparison: parse both and compare structurally (object key
             // order and whitespace are ignored), unlike a raw string ==.
             return wrap_result_operation("Json", "equals", [&]() -> Value {
-                auto a = json_parse_string(args[0].as_string());
-                auto b = json_parse_string(args[1].as_string());
+                auto a = json_parse_string(left_text);
+                auto b = json_parse_string(right_text);
 
                 return make_success_value(Value{a.equals(b)});
             });
@@ -105,22 +105,22 @@ void register_json_parser(const EnvPtr& env) {
     ModuleBuilder{"Json", env}
         .func("deserialize", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.deserialize", loc);
+            const auto& json_text = expect_string(args[0], "Json.deserialize", loc);
 
-            if (args[0].as_string().size() > ResourceLimits::max_string_size) {
+            if (json_text.size() > ResourceLimits::max_string_size) {
                 return make_failure_value(std::string{"Json.deserialize: input too large"});
             }
 
             return wrap_result_operation("Json", "deserialize", [&]() -> Value {
-                return make_success_value(json_parse_string(args[0].as_string()));
+                return make_success_value(json_parse_string(json_text));
             });
         })
         .func("is_valid", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.is_valid", loc);
+            const auto& json_text = expect_string(args[0], "Json.is_valid", loc);
 
             try {
-                static_cast<void>(json_parse_string(args[0].as_string()));
+                static_cast<void>(json_parse_string(json_text));
 
                 return Value{true};
             } catch (...) {
@@ -129,21 +129,21 @@ void register_json_parser(const EnvPtr& env) {
         })
         .func("get", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.get", loc);
+            const auto& json_text = expect_string(args[0], "Json.get", loc);
 
-            (void)expect_string(args[1], "Json.get", loc);
+            const auto& path = expect_string(args[1], "Json.get", loc);
 
             return wrap_result_operation("Json", "get", [&]() -> Value {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
-                const auto segments = json_path::split_dot_path(args[1].as_string());
+                const auto segments = json_path::split_dot_path(path);
 
                 if (segments.empty()) {
                     return make_success_value(std::move(root));
                 }
 
                 auto nav = json_path::navigate_path(root, segments, segments.size(),
-                                                    json_path::ArrayKeyError::invalid_array_index);
+                                                    json_path::ArrayKeyError::InvalidArrayIndex);
 
                 if (!nav.value) {
                     return make_failure_value(nav.error);
@@ -154,14 +154,13 @@ void register_json_parser(const EnvPtr& env) {
         })
         .func("set", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.set", loc);
+            const auto& json_text = expect_string(args[0], "Json.set", loc);
 
-            (void)expect_string(args[1], "Json.set", loc);
+            const auto& path = expect_string(args[1], "Json.set", loc);
 
             return wrap_result_operation("Json", "set", [&]() -> Value {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
-                const auto& path = args[1].as_string();
                 const auto& new_val = args[2];
 
                 const auto segments = json_path::split_dot_path(path);
@@ -174,8 +173,8 @@ void register_json_parser(const EnvPtr& env) {
                 // dictionary-only walk (indexing arrays mid-path is Json.set_path's
                 // job); set_path shares this same walker with arrays allowed.
                 auto nav = json_path::navigate_path(root, segments, segments.size() - 1,
-                                                    json_path::ArrayKeyError::cannot_use_key,
-                                                    json_path::NavigateArrays::reject);
+                                                    json_path::ArrayKeyError::CannotUseKey,
+                                                    json_path::NavigateArrays::Reject);
 
                 if (!nav.value) {
                     return make_failure_value(nav.error);
@@ -198,12 +197,12 @@ void register_json_parser(const EnvPtr& env) {
         })
         .func("merge", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.merge", loc);
-            (void)expect_string(args[1], "Json.merge", loc);
+            const auto& left_text = expect_string(args[0], "Json.merge", loc);
+            const auto& right_text = expect_string(args[1], "Json.merge", loc);
 
             return wrap_result_operation("Json", "merge", [&]() -> Value {
-                auto a = json_parse_string(args[0].as_string());
-                auto b = json_parse_string(args[1].as_string());
+                auto a = json_parse_string(left_text);
+                auto b = json_parse_string(right_text);
 
                 if (!a.is_dictionary() || !b.is_dictionary()) {
                     return make_failure_value("Json.merge: both inputs must be JSON objects");
@@ -227,13 +226,13 @@ void register_json_parser(const EnvPtr& env) {
         })
         .func("get_path", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.get_path", loc);
-            (void)expect_string(args[1], "Json.get_path", loc);
+            const auto& json_text = expect_string(args[0], "Json.get_path", loc);
+            const auto& path = expect_string(args[1], "Json.get_path", loc);
 
             return wrap_result_operation("Json", "get_path", [&]() -> Value {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
-                const auto segments = json_path::parse_path_segments(args[1].as_string());
+                const auto segments = json_path::parse_path_segments(path);
 
                 if (segments.empty()) {
                     return make_success_value(std::move(root));
@@ -250,13 +249,13 @@ void register_json_parser(const EnvPtr& env) {
         })
         .func("set_path", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.set_path", loc);
-            (void)expect_string(args[1], "Json.set_path", loc);
+            const auto& json_text = expect_string(args[0], "Json.set_path", loc);
+            const auto& path = expect_string(args[1], "Json.set_path", loc);
 
             return wrap_result_operation("Json", "set_path", [&]() -> Value {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
-                const auto segments = json_path::parse_path_segments(args[1].as_string());
+                const auto segments = json_path::parse_path_segments(path);
 
                 if (segments.empty()) {
                     return make_failure_value("Json.set_path: empty path");
@@ -290,7 +289,7 @@ void register_json_parser(const EnvPtr& env) {
                 } else if (parent->is_array()) {
                     auto& elems = *parent->as_array()->elements;
                     auto resolved = json_path::resolve_array_index(
-                        last.key, elems, json_path::ArrayKeyError::cannot_use_key);
+                        last.key, elems, json_path::ArrayKeyError::CannotUseKey);
 
                     if (!resolved.ok) {
                         return make_failure_value(error_msg("Json", "set_path", resolved.error));
@@ -311,8 +310,8 @@ void register_json_parser(const EnvPtr& env) {
         })
         .func("get_or", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.get_or", loc);
-            (void)expect_string(args[1], "Json.get_or", loc);
+            const auto& json_text = expect_string(args[0], "Json.get_or", loc);
+            const auto& path = expect_string(args[1], "Json.get_or", loc);
 
             // Read the value at the path, or return the default when the path is
             // missing or the JSON is invalid.  Never fails — the softened,
@@ -320,9 +319,9 @@ void register_json_parser(const EnvPtr& env) {
             const Value& fallback = args[2];
 
             try {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
-                const auto segments = json_path::parse_path_segments(args[1].as_string());
+                const auto segments = json_path::parse_path_segments(path);
 
                 if (segments.empty()) {
                     return root;
@@ -341,15 +340,15 @@ void register_json_parser(const EnvPtr& env) {
         })
         .func("has_path", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.has_path", loc);
-            (void)expect_string(args[1], "Json.has_path", loc);
+            const auto& json_text = expect_string(args[0], "Json.has_path", loc);
+            const auto& path = expect_string(args[1], "Json.has_path", loc);
 
             // Whether the dot/[index] path exists.  Infallible: invalid JSON or a
             // missing path is simply false.
             try {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
-                const auto segments = json_path::parse_path_segments(args[1].as_string());
+                const auto segments = json_path::parse_path_segments(path);
 
                 if (segments.empty()) {
                     return Value{true};
@@ -364,13 +363,13 @@ void register_json_parser(const EnvPtr& env) {
         })
         .func("remove_path", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Json.remove_path", loc);
-            (void)expect_string(args[1], "Json.remove_path", loc);
+            const auto& json_text = expect_string(args[0], "Json.remove_path", loc);
+            const auto& path = expect_string(args[1], "Json.remove_path", loc);
 
             return wrap_result_operation("Json", "remove_path", [&]() -> Value {
-                auto root = json_parse_string(args[0].as_string());
+                auto root = json_parse_string(json_text);
 
-                const auto segments = json_path::parse_path_segments(args[1].as_string());
+                const auto segments = json_path::parse_path_segments(path);
 
                 if (segments.empty()) {
                     return make_failure_value("Json.remove_path: empty path");

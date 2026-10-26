@@ -19,7 +19,7 @@ function void test_array_out_of_bounds_error_message() {
         caught = err
     }
 
-    assert(String.contains(caught, "out of bounds"))
+    assert(String.contains(caught, "Index 5 out of bounds"))
 }
 
 @test
@@ -34,7 +34,7 @@ function void test_array_negative_index_error_message() {
         caught = err
     }
 
-    assert(String.contains(caught, "out of bounds"))
+    assert(String.contains(caught, "Index -1 out of bounds"))
 }
 
 # ─── Division by Zero ────────────────────────────────────
@@ -45,13 +45,14 @@ function void test_division_by_zero_error() {
 
     integer zero = 0
 
+    # `/` on integers is true division (yields a number), distinct from `//`.
     try {
-        integer _ = 42 // zero
+        number _ = 42 / zero
     } catch(err) {
         caught = err
     }
 
-    assert(String.contains(caught, "division by zero"))
+    assert(String.contains(caught, "Division: division by zero"))
 }
 
 @test
@@ -66,7 +67,7 @@ function void test_modulo_by_zero_error() {
         caught = err
     }
 
-    assert(String.contains(caught, "division by zero"))
+    assert(String.contains(caught, "Modulo: division by zero"))
 }
 
 @test
@@ -81,35 +82,35 @@ function void test_integer_division_by_zero_error() {
         caught = err
     }
 
-    assert(String.contains(caught, "division by zero"))
+    assert(String.contains(caught, "Integer division: division by zero"))
 }
 
 # ─── String Interpolation ────────────────────────────────
 
 @test
 function void test_string_interpolation_expression() {
-    integer x = 42
+    integer answer = 42
 
-    string s = "value is ${x}"
+    string message = "value is ${answer}"
 
-    assert(s == "value is 42")
+    assert(message == "value is 42")
 }
 
 @test
 function void test_string_interpolation_complex_expression() {
-    integer a = 10
-    integer b = 20
+    integer first_term = 10
+    integer second_term = 20
 
-    string s = "sum is ${a + b}"
+    string message = "sum is ${first_term + second_term}"
 
-    assert(s == "sum is 30")
+    assert(message == "sum is 30")
 }
 
 @test
 function void test_string_interpolation_with_function_call() {
-    string s = "length is ${String.length("hello")}"
+    string message = "length is ${String.length("hello")}"
 
-    assert(s == "length is 5")
+    assert(message == "length is 5")
 }
 
 # ─── Safe Array Access ───────────────────────────────────
@@ -118,19 +119,18 @@ function void test_string_interpolation_with_function_call() {
 function void test_safe_array_access_success() {
     array<integer> values = [10, 20, 30]
 
-    optional<integer> r = Array.get(values, 1)
+    optional<integer> found = Array.get(values, 1)
 
-    assert(Optional.is_some(r))
-    assert(Optional.unwrap(r) == 20)
+    assert(found == some(20))
 }
 
 @test
 function void test_safe_array_access_out_of_bounds() {
     array<integer> values = [10, 20, 30]
 
-    optional<integer> r = Array.get(values, 10)
+    optional<integer> missing = Array.get(values, 10)
 
-    assert(Optional.is_none(r))
+    assert(Optional.is_none(missing))
 }
 
 # ─── Range Bounds ────────────────────────────────────────
@@ -153,9 +153,9 @@ function void test_result_unwrap_failure_error() {
     mutable string caught = ""
 
     try {
-        result<integer> r = failure("something went wrong")
+        result<integer> outcome = failure("something went wrong")
 
-        integer _ = Result.unwrap(r)
+        integer _ = Result.unwrap(outcome)
     } catch(err) {
         caught = err
     }
@@ -177,7 +177,7 @@ function void test_number_division_by_zero_error() {
         caught = err
     }
 
-    assert(String.contains(caught, "division by zero"))
+    assert(String.contains(caught, "Division: division by zero"))
 }
 
 @test
@@ -192,7 +192,7 @@ function void test_number_overflow_error() {
         caught = err
     }
 
-    assert(String.contains(caught, "overflow"))
+    assert(String.contains(caught, "number overflow"))
 }
 
 # ─── Optional Unwrap on none ─────────────────────────────
@@ -209,7 +209,7 @@ function void test_optional_unwrap_none_error() {
         caught = err
     }
 
-    assert(String.contains(caught, "none"))
+    assert(String.contains(caught, "called on none"))
 }
 
 # ─── Assertion Failure ───────────────────────────────────

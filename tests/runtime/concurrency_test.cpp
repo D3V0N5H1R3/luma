@@ -2,12 +2,18 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <exception>
+#include <future>
+#include <memory>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
 #include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/channel.hpp"
+#include "runtime/concurrency/task_completion.hpp"
 #include "runtime/concurrency/task_scope.hpp"
 #include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/runtime_exceptions.hpp"
@@ -327,6 +333,51 @@ static void test_cancellation_token_throw_if_cancelled() {
     ASSERT_THROWS(token.throw_if_cancelled());
 }
 
+// ─── TaskCompletion tests ───
+
+static void test_task_completion_subscription_released_on_scope_exit() {
+    // Regression: Task.race/Task.any left their signal registered on every
+    // losing task, so racing a long-running task in a loop grew its subscriber
+    // list by one per call until the task finished.
+    const auto completion = std::make_shared<TaskCompletion>();
+
+    for (int i = 0; i < 3; ++i) {
+        const CompletionSubscription subscription{{completion, completion}};
+        ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(2));
+    }
+
+    ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(0));
+}
+
+static void test_task_completion_wakes_waiter() {
+    const auto completion = std::make_shared<TaskCompletion>();
+    const CompletionSubscription subscription{{completion}};
+
+    std::thread producer{[&completion] { completion->mark_complete(); }};
+
+    // A generous timeout: a missed notification would make the wait run to it.
+    const auto start = std::chrono::steady_clock::now();
+    subscription.wait_for(std::chrono::seconds{10});
+    const auto waited = std::chrono::steady_clock::now() - start;
+
+    producer.join();
+
+    ASSERT_TRUE(waited < std::chrono::seconds{5});
+    ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(0));
+}
+
+static void test_task_completion_subscribe_after_completion_notifies() {
+    const auto completion = std::make_shared<TaskCompletion>();
+    completion->mark_complete();
+
+    const CompletionSubscription subscription{{completion}};
+
+    const auto start = std::chrono::steady_clock::now();
+    subscription.wait_for(std::chrono::seconds{10});
+
+    ASSERT_TRUE(std::chrono::steady_clock::now() - start < std::chrono::seconds{5});
+}
+
 // ─── TaskScope tests ───
 
 static void test_task_scope_join_empty() {
@@ -509,9 +560,7 @@ static void test_task_cancellation_during_execution() {
     token->cancel();
 
     std::atomic<bool> observed_cancel{false};
-    std::thread observer{[&] {
-        observed_cancel = token->is_cancelled();
-    }};
+    std::thread observer{[&] { observed_cancel = token->is_cancelled(); }};
     observer.join();
 
     ASSERT_TRUE(observed_cancel.load());
@@ -631,6 +680,139 @@ static void test_channel_bounded_ring_wraparound() {
     ASSERT_THROWS_AS(channel.try_receive(), ChannelEmptyError);
 }
 
+// ─── Review regressions ───
+
+// Review #1: a worker blocked inside a BlockingRegion while the work it waits
+// for is still queued must not deadlock the pool — the pool starts a
+// compensating worker.  A one-worker pool reproduces the deadlock directly.
+static void test_thread_pool_compensates_for_blocked_worker() {
+    ThreadPool pool{1};
+
+    std::promise<void> release;
+    const auto released = release.get_future().share();
+    std::promise<void> finish;
+    auto finished = finish.get_future();
+
+    pool.enqueue([released, &finish] {
+        const ThreadPool::BlockingRegion blocking;
+        released.wait(); // Blocks the pool's only base worker.
+        finish.set_value();
+    });
+    pool.enqueue([&release] { release.set_value(); });
+
+    const bool completed = finished.wait_for(std::chrono::seconds{10}) == std::future_status::ready;
+
+    if (!completed) {
+        // Unblock the stuck worker so the pool can shut down and the failure is
+        // reported instead of hanging the test binary.
+        release.set_value();
+    }
+
+    ASSERT_TRUE(completed);
+    ASSERT_TRUE(pool.worker_count() >= static_cast<std::size_t>(2));
+}
+
+// Review #3: tokens form a tree — cancelling a task's own token leaves its
+// siblings alone, while cancelling the parent (scope) token reaches every
+// child.
+static void test_cancellation_token_parent_chain() {
+    const auto scope_token = std::make_shared<CancellationToken>();
+    const auto first = std::make_shared<CancellationToken>(scope_token);
+    const auto second = std::make_shared<CancellationToken>(scope_token);
+
+    first->cancel();
+
+    ASSERT_TRUE(first->is_cancelled());
+    ASSERT_FALSE(second->is_cancelled());
+    ASSERT_FALSE(scope_token->is_cancelled());
+
+    scope_token->cancel();
+
+    ASSERT_TRUE(second->is_cancelled());
+}
+
+// Review #3/#6: a child that ends with CancelledException contributes `none`;
+// it is neither a failure nor a reason to cancel its siblings.
+static void test_task_scope_cancelled_child_is_not_a_failure() {
+    TaskScope scope;
+
+    std::promise<Value> cancelled_promise;
+    scope.add_child(
+        std::make_shared<TaskValue>(cancelled_promise.get_future().share(), scope.token()));
+    std::promise<Value> ok_promise;
+    scope.add_child(std::make_shared<TaskValue>(ok_promise.get_future().share(), scope.token()));
+
+    cancelled_promise.set_exception(std::make_exception_ptr(CancelledException{"task cancelled"}));
+    ok_promise.set_value(Value{5});
+
+    const auto results = scope.join_all();
+
+    ASSERT_EQ(results.size(), static_cast<std::size_t>(2));
+    ASSERT_TRUE(results[0].is_null());
+    ASSERT_EQ(results[1].to_string(), "5");
+    ASSERT_FALSE(scope.token()->is_cancelled());
+}
+
+// Review #7: join_all is fail-fast in completion order.  Child 0 only finishes
+// once the scope is cancelled; child 1 fails immediately.  Joining in spawn
+// order waited on child 0 forever because the cancellation that would release
+// it only happened after child 0 completed.
+static void test_task_scope_fail_fast_in_completion_order() {
+    TaskScope scope;
+
+    const auto waiting_promise = std::make_shared<std::promise<Value>>();
+    scope.add_child(
+        std::make_shared<TaskValue>(waiting_promise->get_future().share(), scope.token()));
+    const auto failing_promise = std::make_shared<std::promise<Value>>();
+    scope.add_child(
+        std::make_shared<TaskValue>(failing_promise->get_future().share(), scope.token()));
+
+    const auto token = scope.token();
+    std::atomic<bool> give_up{false};
+    std::thread waiter{[waiting_promise, token, &give_up] {
+        while (!token->is_cancelled() && !give_up.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+        waiting_promise->set_exception(
+            std::make_exception_ptr(CancelledException{"task cancelled"}));
+    }};
+
+    failing_promise->set_exception(std::make_exception_ptr(std::runtime_error{"child failed"}));
+
+    // Bound the wait so a regression fails instead of hanging the test binary.
+    auto joined = std::async(std::launch::async, [&scope] {
+        try {
+            (void)scope.join_all();
+        } catch (const std::runtime_error& error) {
+            return std::string{error.what()};
+        }
+        return std::string{};
+    });
+
+    const bool finished = joined.wait_for(std::chrono::seconds{10}) == std::future_status::ready;
+    give_up.store(true);
+    waiter.join();
+
+    ASSERT_TRUE(finished);
+    ASSERT_EQ(joined.get(), std::string{"child failed"});
+    ASSERT_TRUE(token->is_cancelled());
+}
+
+// Review #8: a blocking channel wait with a cancellation token gives up with
+// CancelledException once the token is cancelled.
+static void test_channel_receive_is_cancellable() {
+    Channel channel;
+    CancellationToken token;
+
+    std::thread canceller{[&token] {
+        std::this_thread::sleep_for(std::chrono::milliseconds{20});
+        token.cancel();
+    }};
+
+    ASSERT_THROWS_AS((void)channel.receive(&token), CancelledException);
+    canceller.join();
+}
+
 int main() {
     // Channel tests
     RUN(test_channel_send_receive);
@@ -661,6 +843,11 @@ int main() {
     RUN(test_cancellation_token_cancel);
     RUN(test_cancellation_token_throw_if_cancelled);
 
+    // TaskCompletion tests
+    RUN(test_task_completion_subscription_released_on_scope_exit);
+    RUN(test_task_completion_wakes_waiter);
+    RUN(test_task_completion_subscribe_after_completion_notifies);
+
     // TaskScope tests
     RUN(test_task_scope_join_empty);
     RUN(test_task_scope_join_collects_results);
@@ -684,5 +871,12 @@ int main() {
     RUN(test_channel_receive_timeout_on_closed_throws);
     RUN(test_channel_send_timeout_on_closed_throws);
     RUN(test_channel_bounded_ring_wraparound);
+
+    // Review regressions.
+    RUN(test_thread_pool_compensates_for_blocked_worker);
+    RUN(test_cancellation_token_parent_chain);
+    RUN(test_task_scope_cancelled_child_is_not_a_failure);
+    RUN(test_task_scope_fail_fast_in_completion_order);
+    RUN(test_channel_receive_is_cancellable);
     return SUMMARY();
 }

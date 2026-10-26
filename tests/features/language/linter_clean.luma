@@ -1,26 +1,26 @@
 # ═══════════════════════════════════════════════════════════
 # Luma v1.0 — Feature Tests — Linter Precision (no false positives)
 #
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+#
 # Every Luma feature test is executed with `--strict --test`, so warnings
 # are fatal here. This file therefore doubles as an executable assertion
 # that the linter does NOT warn on correct code: it concentrates the idioms
 # that are the common false-positive risks for each lint rule (W0001–W0016).
 # If the linter regresses and starts flagging valid code, this test fails
 # under --strict before a single assertion runs.
-#
-# Feature Tests are based on Luma_Initial_Concept.md and
-# Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
 # ─── W0003: underscore-prefixed parameters are intentionally unused ───
 
-function integer _first_of_two(integer a, integer _b) {
+function integer first_of_two(integer a, integer _b) {
     return a
 }
 
 @test
 function void test_unused_parameter_underscore_is_clean() {
-    assert(_first_of_two(7, 9) == 7)
+    assert(first_of_two(7, 9) == 7)
 }
 
 # ─── W0001: underscore-prefixed locals are intentionally unused ───
@@ -33,45 +33,91 @@ function void test_unused_local_underscore_is_clean() {
     assert(used == 1)
 }
 
+# ─── W0002: a helper called only from a test is used ───
+
+function string describe_parity(integer value) {
+    if value % 2 == 0 {
+        return "even"
+    }
+
+    return "odd"
+}
+
+@test
+function void test_helper_called_only_from_test_is_clean() {
+    assert(describe_parity(4) == "even")
+    assert(describe_parity(7) == "odd")
+}
+
 # ─── W0004: a mutable mutated through every form is not "never mutated" ───
 
 @test
 function void test_mutable_reassigned_is_clean() {
-    mutable integer x = 0
+    mutable integer counter = 0
 
-    x = 5
+    counter = 5
 
-    assert(x == 5)
+    assert(counter == 5)
 }
 
 @test
 function void test_mutable_compound_and_step_is_clean() {
-    mutable integer x = 0
+    mutable integer counter = 0
 
-    x += 2
-    x++
-    x--
+    counter += 2
+    counter++
+    counter--
 
-    assert(x == 2)
+    assert(counter == 2)
 }
 
 @test
 function void test_mutable_element_mutation_is_clean() {
-    mutable array<integer> a = [1, 2, 3]
+    mutable array<integer> values = [1, 2, 3]
 
-    a[0] = 10
+    values[0] = 10
 
-    assert(a[0] == 10)
+    assert(values[0] == 10)
+}
+
+# ─── W0005: assigning a different variable is not self-assignment ───
+
+@test
+function void test_assignment_from_other_variable_is_clean() {
+    integer source = 3
+    mutable integer target = 0
+
+    target = source
+
+    assert(target == 3)
+}
+
+# ─── W0006: code after a return inside a loop is reachable ───
+
+function integer first_even_or_minus_one(array<integer> values) {
+    for value in values {
+        if value % 2 == 0 {
+            return value
+        }
+    }
+
+    return -1
+}
+
+@test
+function void test_fallback_return_after_loop_is_clean() {
+    assert(first_even_or_minus_one([1, 3, 4]) == 4)
+    assert(first_even_or_minus_one([1, 3]) == -1)
 }
 
 # ─── W0008: variable-driven conditions are not constant ───
 
 @test
 function void test_non_constant_condition_is_clean() {
-    integer n = 3
+    integer count = 3
     mutable string label = ""
 
-    if n > 0 {
+    if count > 0 {
         label = "positive"
     } else {
         label = "non-positive"
@@ -84,10 +130,10 @@ function void test_non_constant_condition_is_clean() {
 
 @test
 function void test_integer_equality_is_clean() {
-    integer a = 2
-    integer b = 2
+    integer left = 2
+    integer right = 2
 
-    assert(a == b)
+    assert(left == right)
 }
 
 # ─── W0010: a consumed result is not a discarded result ───
@@ -96,14 +142,14 @@ function void test_integer_equality_is_clean() {
 function void test_consumed_result_is_clean() {
     array<integer> values = [10, 20, 30]
 
-    optional<integer> r = Array.get(values, 1)
+    optional<integer> second = Array.get(values, 1)
 
-    assert(Optional.unwrap(r) == 20)
+    assert(Optional.unwrap(second) == 20)
 }
 
 # ─── W0011: an if that returns needs no else (no redundant else) ───
 
-function integer _absolute(integer x) {
+function integer absolute_value(integer x) {
     if x < 0 {
         return -x
     }
@@ -113,8 +159,8 @@ function integer _absolute(integer x) {
 
 @test
 function void test_no_redundant_else_is_clean() {
-    assert(_absolute(-4) == 4)
-    assert(_absolute(4) == 4)
+    assert(absolute_value(-4) == 4)
+    assert(absolute_value(4) == 4)
 }
 
 # ─── W0012: distinct names across nested scopes do not shadow ───
@@ -139,9 +185,9 @@ function void test_non_empty_catch_is_clean() {
     mutable string caught = ""
 
     try {
-        result<integer> r = failure("boom")
+        result<integer> parsed = failure("boom")
 
-        integer _ = Result.unwrap(r)
+        integer _ = Result.unwrap(parsed)
     } catch(err) {
         caught = err
     }
@@ -153,20 +199,20 @@ function void test_non_empty_catch_is_clean() {
 
 @test
 function void test_safe_division_is_clean() {
-    integer a = 20
-    integer d = 4
+    integer dividend = 20
+    integer divisor = 4
 
-    assert(a / d == 5)
-    assert(a / 2 == 10)
+    assert(dividend / divisor == 5)
+    assert(dividend / 2 == 10)
 }
 
 # ─── W0015: a single negation is not a double negation ───
 
 @test
 function void test_single_negation_is_clean() {
-    boolean flag = false
+    boolean is_done = false
 
-    assert(!flag)
+    assert(!is_done)
 }
 
 # ─── W0006 / W0007: loop bodies are non-empty with no unreachable tail ───
@@ -175,7 +221,7 @@ function void test_single_negation_is_clean() {
 function void test_clean_loop_is_clean() {
     mutable integer sum = 0
 
-    for i in 1 .. 4 {
+    for i in 1..4 {
         sum += i
     }
 

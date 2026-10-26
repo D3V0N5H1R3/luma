@@ -150,6 +150,32 @@ static void test_primary_location_empty() {
     ASSERT_EQ(loc.column, 1);
 }
 
+static void test_builder_anchors_token_location_at_its_start() {
+    // A location copied from a token points one past it and records its start.
+    // The span must start at the token and end one past it, so the caret and
+    // the reported column name the token itself.
+    const SourceLocation token_loc{
+        .file_id = 1, .line = 4, .column = 18, .start_line = 4, .start_column = 13};
+
+    auto d = diag::error("type mismatch").primary(token_loc).build();
+
+    ASSERT_EQ(d.primary_location().line, 4);
+    ASSERT_EQ(d.primary_location().column, 13);
+    ASSERT_EQ(d.spans[0].end.column, 18);
+    ASSERT_FALSE(d.spans[0].start.has_start());
+}
+
+static void test_builder_keeps_location_without_start() {
+    // Hand-built locations carry no start and stay exactly where they were put.
+    const SourceLocation loc{.file_id = 1, .line = 2, .column = 7};
+
+    auto d = diag::error("no start").primary(loc).secondary(loc, "also here").build();
+
+    ASSERT_EQ(d.spans[0].start.column, 7);
+    ASSERT_EQ(d.spans[0].end.column, 7);
+    ASSERT_EQ(d.spans[1].start.column, 7);
+}
+
 static void test_has_errors_and_warnings() {
     auto err = diag::error("test error").build();
     ASSERT_EQ(err.severity, Severity::Error);
@@ -232,6 +258,25 @@ static void test_renderer_caret_hostile_column_is_bounded() {
     const auto output = renderer.format(d);
     ASSERT_TRUE(output.find("hostile span") != std::string::npos);
     ASSERT_TRUE(output.size() < static_cast<std::size_t>(64 * 1024));
+}
+
+static void test_renderer_caret_underlines_token_from_its_start() {
+    // Regression: type-checker, linter and runtime diagnostics are anchored on
+    // AST/source-map locations copied from tokens, which point one past the
+    // token, so the caret used to sit just after it.  It must start at the
+    // token and underline all of it.
+    const TempFile file{"    integer value = 1\n"};
+    SourceManager sm;
+    const auto file_id = sm.load(file.path().string()).file_id;
+    const DiagnosticRenderer renderer{sm};
+
+    const SourceLocation value_loc{
+        .file_id = file_id, .line = 1, .column = 18, .start_line = 1, .start_column = 13};
+    auto d = diag::error("unused").category(DiagnosticCategory::Type).primary(value_loc).build();
+
+    const auto output = renderer.format(d);
+    ASSERT_TRUE(output.find(":1:13") != std::string::npos);
+    ASSERT_TRUE(output.find("| " + std::string(12, ' ') + "^^^^^\n") != std::string::npos);
 }
 
 static void test_renderer_hostile_line_is_safe() {
@@ -339,12 +384,15 @@ int main() {
     RUN(test_diagnostic_warning_builder);
     RUN(test_primary_location);
     RUN(test_primary_location_empty);
+    RUN(test_builder_anchors_token_location_at_its_start);
+    RUN(test_builder_keeps_location_without_start);
     RUN(test_has_errors_and_warnings);
     RUN(test_fix_replace);
     RUN(test_fix_insert);
     RUN(test_renderer_format_produces_output);
     RUN(test_renderer_format_includes_code);
     RUN(test_renderer_caret_hostile_column_is_bounded);
+    RUN(test_renderer_caret_underlines_token_from_its_start);
     RUN(test_renderer_hostile_line_is_safe);
     RUN(test_snapshot_error_type_mismatch);
     RUN(test_snapshot_error_with_hint);

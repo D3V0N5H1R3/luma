@@ -29,7 +29,7 @@ template <typename Provider> [[nodiscard]] std::string generate_function(Provide
             params += ", ";
         }
         // Optionally mark the parameter mutable to reach mutable-parameter
-        // handling in the resolver, compiler, and VM.
+        // handling in the type checker, compiler, and VM.
         if (fdp.ConsumeBool()) {
             params += "mutable ";
         }

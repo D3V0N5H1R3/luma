@@ -97,7 +97,7 @@ using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
         return AddrInfoPtr{nullptr, freeaddrinfo};
     }
 
-    struct addrinfo hints {};
+    struct addrinfo hints{};
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = socktype;
@@ -444,6 +444,193 @@ constexpr std::int64_t k_max_port = 65535;
     return std::nullopt;
 }
 
+// ─── Shared connect / listen plumbing ────────────────────────────────────────
+//
+// The connect* and listen* entry points differ only in their timeout and in how
+// they report a failure (an opaque message vs. a Socket.Error choice), so the
+// resolve → limit check → create → connect/bind sequence lives here once and
+// each entry point keeps only its error-mapping layer.
+
+// Which step of opening a TCP socket failed.
+enum class OpenStep {
+    None,    // Success.
+    Resolve, // getaddrinfo() failed (or the host name is too long).
+    Limit,   // The process-wide open-socket limit is reached.
+    Create,  // socket() failed for every candidate address.
+    Connect, // connect() failed or timed out for every candidate address.
+    Bind,    // bind() failed for every candidate address.
+    Listen,  // listen() failed.
+};
+
+struct OpenTcpResult {
+    SocketHandle sock{invalid_socket_handle};
+    OpenStep failed_step{OpenStep::None};
+    bool timed_out{false}; // Only meaningful for OpenStep::Connect.
+    int error_code{0};     // Platform-native error code of the failing step.
+};
+
+// Resolve host:port and connect to the first reachable candidate address
+// (tcp_connect_any tries each one in turn, so a dual-stack "localhost" works
+// whichever family the server listens on).  Caller owns the returned socket.
+[[nodiscard]] OpenTcpResult open_tcp_client(const std::string& host, int port, int timeout_ms) {
+    OpenTcpResult result{};
+
+    const auto info = resolve_address(host, port, SOCK_STREAM, false);
+
+    if (!info) {
+        result.failed_step = OpenStep::Resolve;
+
+        return result;
+    }
+
+    if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
+        result.failed_step = OpenStep::Limit;
+
+        return result;
+    }
+
+    TcpConnectFailure failure{};
+    result.sock = tcp_connect_any(info.get(), timeout_ms, &failure);
+
+    if (result.sock == invalid_socket_handle) {
+        result.failed_step = failure.socket_failed ? OpenStep::Create : OpenStep::Connect;
+        result.timed_out = failure.timed_out;
+        result.error_code = failure.error_code;
+    }
+
+    return result;
+}
+
+// Resolve host:port (passive) and bind + listen on the first candidate address
+// that accepts the bind.  Caller owns the returned socket.
+[[nodiscard]] OpenTcpResult open_tcp_server(const std::string& host, int port) {
+    OpenTcpResult result{};
+
+    const auto info = resolve_address(host, port, SOCK_STREAM, true);
+
+    if (!info) {
+        result.failed_step = OpenStep::Resolve;
+
+        return result;
+    }
+
+    if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
+        result.failed_step = OpenStep::Limit;
+
+        return result;
+    }
+
+    result.failed_step = OpenStep::Create;
+
+    for (const auto* ai = info.get(); ai != nullptr; ai = ai->ai_next) {
+        const SocketHandle sock =
+            platform_socket::create_socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+
+        if (sock == invalid_socket_handle) {
+            result.failed_step = OpenStep::Create;
+            result.error_code = platform_socket::last_error_code();
+
+            continue;
+        }
+
+        SocketGuard guard{sock};
+
+        platform_socket::set_listen_address_policy(sock);
+
+        if (::bind(sock, ai->ai_addr,
+                   static_cast<platform_socket::addr_length_t>(ai->ai_addrlen)) != 0) {
+            result.failed_step = OpenStep::Bind;
+            result.error_code = platform_socket::last_error_code();
+
+            continue;
+        }
+
+        if (::listen(sock, SOMAXCONN) != 0) {
+            result.failed_step = OpenStep::Listen;
+            result.error_code = platform_socket::last_error_code();
+
+            return result;
+        }
+
+        guard.release();
+
+        result.sock = sock;
+        result.failed_step = OpenStep::None;
+        result.error_code = 0;
+
+        return result;
+    }
+
+    return result;
+}
+
+// Wrap a freshly opened handle in a SocketValue, closing it if the allocation
+// throws so the descriptor cannot leak.
+[[nodiscard]] Value socket_success(SocketHandle sock, SocketRole role) {
+    SocketGuard guard{sock};
+
+    auto sv = std::make_shared<SocketValue>(sock, role);
+
+    guard.release();
+
+    return make_success_value(Value{std::move(sv)});
+}
+
+// String-error mapping for open_tcp_client / open_tcp_server, matching the
+// historical "failed to <step>: <system error>" messages.
+[[nodiscard]] Value open_result_value(const OpenTcpResult& result, SocketRole role,
+                                      std::string_view fn_name, const std::string& host) {
+    const auto step_failure = [&](std::string_view step) {
+        return make_failure_value(
+            std::format("failed to {}: {}", step,
+                        result.timed_out ? std::string{"connection timed out"}
+                                         : platform_socket::error_string(result.error_code)));
+    };
+
+    switch (result.failed_step) {
+        case OpenStep::None:
+            return socket_success(result.sock, role);
+        case OpenStep::Resolve:
+            return resolve_host_failure(host);
+        case OpenStep::Limit:
+            return make_failure_value(std::format("{}: too many open sockets", fn_name));
+        case OpenStep::Create:
+            return step_failure("create socket");
+        case OpenStep::Connect:
+            return step_failure("connect");
+        case OpenStep::Bind:
+            return step_failure("bind");
+        case OpenStep::Listen:
+            return step_failure("listen");
+    }
+
+    return step_failure("open socket");
+}
+
+// Typed (Socket.Error) mapping for open_tcp_client / open_tcp_server.
+[[nodiscard]] Value open_result_value_typed(const OpenTcpResult& result, SocketRole role) {
+    switch (result.failed_step) {
+        case OpenStep::None:
+            return socket_success(result.sock, role);
+        case OpenStep::Resolve:
+            return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
+        case OpenStep::Limit:
+            return socket_error_failure(platform_socket::ErrorCategory::Other);
+        case OpenStep::Connect:
+            if (result.timed_out) {
+                return socket_error_failure(platform_socket::ErrorCategory::TimedOut);
+            }
+
+            break;
+        case OpenStep::Create:
+        case OpenStep::Bind:
+        case OpenStep::Listen:
+            break;
+    }
+
+    return socket_error_failure(platform_socket::classify_error(result.error_code));
+}
+
 } // namespace
 
 // ─── Module registration ─────────────────────────────────────────────────────
@@ -455,47 +642,19 @@ static void register_socket_client(const EnvPtr& env) {
         // A 30-second connect timeout is applied automatically.
         .func("connect", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Socket.connect", loc);
+            const auto& host = expect_string(args[0], "Socket.connect", loc);
 
             ensure_winsock();
 
-            const auto& host = args[0].as_string();
             const auto port_val = expect_integer(args[1], "Socket.connect", loc);
 
             if (auto err = validate_port(port_val)) {
                 return *err;
             }
 
-            const auto port = static_cast<int>(port_val);
-
-            auto info = resolve_address(host, port, SOCK_STREAM, false);
-
-            if (!info) {
-                return resolve_host_failure(host);
-            }
-
-            if (auto err = check_socket_limit("Socket.connect")) {
-                return *err;
-            }
-
-            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-
-            if (sock == invalid_socket_handle) {
-                return socket_failure("create socket");
-            }
-
-            SocketGuard guard{sock};
-
-            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
-                                          k_connect_timeout_ms)) {
-                return socket_failure("connect");
-            }
-
-            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
-
-            guard.release();
-
-            return make_success_value(Value{std::move(sv)});
+            return open_result_value(
+                open_tcp_client(host, static_cast<int>(port_val), k_connect_timeout_ms),
+                SocketRole::Client, "Socket.connect", host);
         })
         // Socket.connect_typed(string host, integer port) -> result<socket, Socket.Error>
         // Opt-in typed-error variant of Socket.connect: a transport failure is
@@ -506,68 +665,32 @@ static void register_socket_client(const EnvPtr& env) {
         // is left untouched.
         .func("connect_typed", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Socket.connect_typed", loc);
+            const auto& host = expect_string(args[0], "Socket.connect_typed", loc);
 
             ensure_winsock();
 
-            const auto& host = args[0].as_string();
             const auto port_val = expect_integer(args[1], "Socket.connect_typed", loc);
 
             if (port_val < 0 || port_val > k_max_port) {
                 return socket_error_failure(platform_socket::ErrorCategory::Other);
             }
 
-            const auto port = static_cast<int>(port_val);
-
-            auto info = resolve_address(host, port, SOCK_STREAM, false);
-
-            if (!info) {
-                return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
-            }
-
-            if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
-                return socket_error_failure(platform_socket::ErrorCategory::Other);
-            }
-
-            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-
-            if (sock == invalid_socket_handle) {
-                return socket_error_failure_from_last();
-            }
-
-            SocketGuard guard{sock};
-
-            bool timed_out = false;
-            int error_code = 0;
-
-            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
-                                          k_connect_timeout_ms, &timed_out, &error_code)) {
-                if (timed_out) {
-                    return socket_error_failure(platform_socket::ErrorCategory::TimedOut);
-                }
-
-                return socket_error_failure(platform_socket::classify_error(error_code));
-            }
-
-            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
-
-            guard.release();
-
-            return make_success_value(Value{std::move(sv)});
+            return open_result_value_typed(
+                open_tcp_client(host, static_cast<int>(port_val), k_connect_timeout_ms),
+                SocketRole::Client);
         })
         // Socket.connect_timeout(string host, integer port, integer timeout_ms)
         //     -> result<socket>
         // Establish a TCP connection with an explicit connect timeout (in
-        // milliseconds) via a non-blocking connect and select() on the fd, failing
+        // milliseconds) via a non-blocking connect and poll() on the fd, failing
         // if the deadline elapses.  Like Socket.connect but with a caller-chosen
         // timeout instead of the fixed 30-second default.
         .func("connect_timeout", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Socket.connect_timeout", loc);
+            const auto& host = expect_string(args[0], "Socket.connect_timeout", loc);
 
             ensure_winsock();
 
-            const auto& host = args[0].as_string();
             const auto port_val = expect_integer(args[1], "Socket.connect_timeout", loc);
 
             if (auto err = validate_port(port_val)) {
@@ -580,36 +703,9 @@ static void register_socket_client(const EnvPtr& env) {
                 return make_failure_value("timeout value out of range");
             }
 
-            const auto port = static_cast<int>(port_val);
-
-            auto info = resolve_address(host, port, SOCK_STREAM, false);
-
-            if (!info) {
-                return resolve_host_failure(host);
-            }
-
-            if (auto err = check_socket_limit("Socket.connect_timeout")) {
-                return *err;
-            }
-
-            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-
-            if (sock == invalid_socket_handle) {
-                return socket_failure("create socket");
-            }
-
-            SocketGuard guard{sock};
-
-            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
-                                          static_cast<int>(timeout_val))) {
-                return socket_failure("connect");
-            }
-
-            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
-
-            guard.release();
-
-            return make_success_value(Value{std::move(sv)});
+            return open_result_value(
+                open_tcp_client(host, static_cast<int>(port_val), static_cast<int>(timeout_val)),
+                SocketRole::Client, "Socket.connect_timeout", host);
         })
         // Socket.connect_timeout_typed(string host, integer port, integer timeout_ms)
         //     -> result<socket, Socket.Error>
@@ -619,11 +715,10 @@ static void register_socket_client(const EnvPtr& env) {
         // Socket.connect_timeout is left untouched.
         .func("connect_timeout_typed", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Socket.connect_timeout_typed", loc);
+            const auto& host = expect_string(args[0], "Socket.connect_timeout_typed", loc);
 
             ensure_winsock();
 
-            const auto& host = args[0].as_string();
             const auto port_val = expect_integer(args[1], "Socket.connect_timeout_typed", loc);
 
             if (port_val < 0 || port_val > k_max_port) {
@@ -636,43 +731,9 @@ static void register_socket_client(const EnvPtr& env) {
                 return socket_error_failure(platform_socket::ErrorCategory::Other);
             }
 
-            const auto port = static_cast<int>(port_val);
-
-            auto info = resolve_address(host, port, SOCK_STREAM, false);
-
-            if (!info) {
-                return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
-            }
-
-            if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
-                return socket_error_failure(platform_socket::ErrorCategory::Other);
-            }
-
-            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-
-            if (sock == invalid_socket_handle) {
-                return socket_error_failure_from_last();
-            }
-
-            SocketGuard guard{sock};
-
-            bool timed_out = false;
-            int error_code = 0;
-
-            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
-                                          static_cast<int>(timeout_val), &timed_out, &error_code)) {
-                if (timed_out) {
-                    return socket_error_failure(platform_socket::ErrorCategory::TimedOut);
-                }
-
-                return socket_error_failure(platform_socket::classify_error(error_code));
-            }
-
-            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
-
-            guard.release();
-
-            return make_success_value(Value{std::move(sv)});
+            return open_result_value_typed(
+                open_tcp_client(host, static_cast<int>(port_val), static_cast<int>(timeout_val)),
+                SocketRole::Client);
         });
 }
 
@@ -682,57 +743,18 @@ static void register_socket_server(const EnvPtr& env) {
         // Create a TCP server socket bound to the given address and port.
         .func("listen", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Socket.listen", loc);
+            const auto& host = expect_string(args[0], "Socket.listen", loc);
 
             ensure_winsock();
 
-            const auto& host = args[0].as_string();
             const auto port_val = expect_integer(args[1], "Socket.listen", loc);
 
             if (auto err = validate_port(port_val)) {
                 return *err;
             }
 
-            const auto port = static_cast<int>(port_val);
-
-            auto info = resolve_address(host, port, SOCK_STREAM, true);
-
-            if (!info) {
-                return resolve_host_failure(host);
-            }
-
-            if (auto err = check_socket_limit("Socket.listen")) {
-                return *err;
-            }
-
-            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-
-            if (sock == invalid_socket_handle) {
-                return socket_failure("create socket");
-            }
-
-            SocketGuard guard{sock};
-
-            // Allow address reuse to avoid bind failures on restart.
-            const int opt{1};
-
-            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt),
-                       sizeof(opt));
-
-            if (::bind(sock, info->ai_addr,
-                       static_cast<platform_socket::addr_length_t>(info->ai_addrlen)) != 0) {
-                return socket_failure("bind");
-            }
-
-            if (::listen(sock, SOMAXCONN) != 0) {
-                return socket_failure("listen");
-            }
-
-            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Server);
-
-            guard.release();
-
-            return make_success_value(Value{std::move(sv)});
+            return open_result_value(open_tcp_server(host, static_cast<int>(port_val)),
+                                     SocketRole::Server, "Socket.listen", host);
         })
         // Socket.listen_typed(string host, integer port) -> result<socket, Socket.Error>
         // Opt-in typed-error variant of Socket.listen: a bind clash on an already-
@@ -741,56 +763,18 @@ static void register_socket_server(const EnvPtr& env) {
         // Socket.listen is left untouched.
         .func("listen_typed", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Socket.listen_typed", loc);
+            const auto& host = expect_string(args[0], "Socket.listen_typed", loc);
 
             ensure_winsock();
 
-            const auto& host = args[0].as_string();
             const auto port_val = expect_integer(args[1], "Socket.listen_typed", loc);
 
             if (port_val < 0 || port_val > k_max_port) {
                 return socket_error_failure(platform_socket::ErrorCategory::Other);
             }
 
-            const auto port = static_cast<int>(port_val);
-
-            auto info = resolve_address(host, port, SOCK_STREAM, true);
-
-            if (!info) {
-                return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
-            }
-
-            if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
-                return socket_error_failure(platform_socket::ErrorCategory::Other);
-            }
-
-            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-
-            if (sock == invalid_socket_handle) {
-                return socket_error_failure_from_last();
-            }
-
-            SocketGuard guard{sock};
-
-            const int opt{1};
-
-            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt),
-                       sizeof(opt));
-
-            if (::bind(sock, info->ai_addr,
-                       static_cast<platform_socket::addr_length_t>(info->ai_addrlen)) != 0) {
-                return socket_error_failure_from_last();
-            }
-
-            if (::listen(sock, SOMAXCONN) != 0) {
-                return socket_error_failure_from_last();
-            }
-
-            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Server);
-
-            guard.release();
-
-            return make_success_value(Value{std::move(sv)});
+            return open_result_value_typed(open_tcp_server(host, static_cast<int>(port_val)),
+                                           SocketRole::Server);
         })
         // Socket.accept(socket server) -> result<socket>
         // Accept an incoming connection on a server socket.
@@ -806,12 +790,12 @@ static void register_socket_server(const EnvPtr& env) {
                 return make_failure_value("socket is not a server socket");
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
-            const SocketHandle client =
-                ::accept(sv->handle.load(), reinterpret_cast<struct sockaddr*>(&addr), &addr_len);
+            const SocketHandle client = platform_socket::accept_socket(
+                sv->handle.load(), reinterpret_cast<struct sockaddr*>(&addr), &addr_len);
 
             if (client == invalid_socket_handle) {
                 return socket_failure("accept");
@@ -1215,7 +1199,7 @@ static void register_socket_introspection(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1238,7 +1222,7 @@ static void register_socket_introspection(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1262,7 +1246,7 @@ static void register_socket_introspection(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1283,7 +1267,7 @@ static void register_socket_introspection(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1308,7 +1292,8 @@ static void register_socket_udp(const EnvPtr& env) {
                 return *err;
             }
 
-            const SocketHandle sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            const SocketHandle sock =
+                platform_socket::create_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
             if (sock == invalid_socket_handle) {
                 return socket_failure("create UDP socket");

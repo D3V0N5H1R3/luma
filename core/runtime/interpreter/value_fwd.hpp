@@ -41,6 +41,7 @@ namespace luma {
 
 // Forward declarations.
 class CancellationToken;
+class TaskCompletion;
 class Environment;
 using EnvPtr = std::shared_ptr<Environment>;
 

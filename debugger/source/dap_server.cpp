@@ -133,9 +133,7 @@ DapProtocolHandler::HandlerResult DapServer::convert_result(HandlerResult result
             };
             break;
         case PostResponseAction::Disconnect:
-            proto_result.post_response_action = [this]() {
-                protocol_handler_.signal_disconnect();
-            };
+            proto_result.post_response_action = [this]() { protocol_handler_.signal_disconnect(); };
             break;
         case PostResponseAction::None:
             break;

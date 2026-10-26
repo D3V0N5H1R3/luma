@@ -21,8 +21,8 @@ Luma has not yet reached a stable 1.0 release. Security fixes are applied only t
 
 | Version | Supported |
 | ------- | --------- |
-| 0.15.x   | ✓         |
-| < 0.15   | ✗         |
+| 0.15.x  | ✓         |
+| < 0.15  | ✗         |
 
 ---
 
@@ -82,10 +82,8 @@ The following are in scope:
 - The `luma` interpreter binary (all phases: lexer, parser, include resolver, type checker, linter, compiler, VM).
 - The `luma_dap` debugger binary (DAP protocol handling, debug session management).
 - The `luma_lsp` language server binary.
-- The standard library (`core/runtime/stdlib/`), especially modules with OS access:
-  `Console`, `Csv`, `FileSystem`, `Http`, `KeyValueStore`, `Process`, `Socket`, `Xml`.
-- Individually sandboxed functions in otherwise-safe modules:
-  `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, `Hash.sha512_file`, `Log.set_output`.
+- The standard library (`core/runtime/stdlib/`), especially modules with OS access: `Console`, `Csv`, `FileSystem`, `Http`, `KeyValueStore`, `Process`, `Socket`, `Xml`.
+- Individually sandboxed functions in otherwise-safe modules: `Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`.
 - Sandbox mode (`--box`) bypass — any code path that allows sandboxed functions to access the filesystem, network, or processes must be reported.
 
 The following are **out of scope**:
@@ -99,11 +97,6 @@ The following are **out of scope**:
 
 ### Zed Extension Binary Download
 
-The Zed extension downloads LSP and DAP binaries from GitHub releases over
-HTTPS but **does not verify checksums**. This is because the Zed WASM
-extension sandbox does not provide cryptographic primitives or raw HTTP
-access needed for checksum verification.
+The Zed extension downloads LSP and DAP binaries from GitHub releases over HTTPS but **does not verify checksums**. This is because the Zed WASM extension sandbox does not provide cryptographic primitives or raw HTTP access needed for checksum verification.
 
-HTTPS provides transport-layer integrity, which mitigates most tampering
-risks. The VS Code extension performs SHA-256 checksum verification after
-download.
+HTTPS provides transport-layer integrity, which mitigates most tampering risks. The VS Code extension performs SHA-256 checksum verification after download.

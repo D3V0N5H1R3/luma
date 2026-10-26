@@ -5,17 +5,17 @@
 # matrix operations, and solving linear systems.
 # ═══════════════════════════════════════════════════════════
 
-function void print_vector(string label, array<number> v) {
-    array<string> parts = (v |> Array.map((number x) -> String.format_number(x, 2))) ?? []
+function void print_vector(string label, array<number> vector) {
+    array<string> parts = (vector |> Array.map((number x) -> String.format_number(x, 2))) ?? []
     string formatted = String.join(parts, ", ")
 
     print("${label} = [${formatted}]")
 }
 
-function void print_matrix(string label, array<array<number>> m) {
+function void print_matrix(string label, array<array<number>> matrix) {
     print("${label}:")
 
-    result<none> _ = m |> Array.each((array<number> row) -> {
+    result<none> _ = matrix |> Array.each((array<number> row) -> {
         array<string> parts = (row |> Array.map((number x) -> String.format_number(x, 4))) ?? []
         string formatted = String.join(parts, "  ")
 
@@ -52,30 +52,30 @@ function void main() {
     # ── Matrix operations ──
     print("\n=== Matrices ===")
 
-    array<array<number>> m = [[1.0, 2.0], [3.0, 4.0]]
-    print_matrix("M", m)
+    array<array<number>> matrix = [[1.0, 2.0], [3.0, 4.0]]
+    print_matrix("M", matrix)
 
-    array<array<number>> m_transpose = LinearAlgebra.transpose(m)
-    print_matrix("M^T", m_transpose)
+    array<array<number>> transposed = LinearAlgebra.transpose(matrix)
+    print_matrix("M^T", transposed)
 
-    number det = LinearAlgebra.determinant(m) |> Result.unwrap()
-    print("det(M) = ${String.format_number(det, 1)}")
+    number determinant = LinearAlgebra.determinant(matrix) |> Result.unwrap()
+    print("det(M) = ${String.format_number(determinant, 1)}")
 
-    array<array<number>> inv = LinearAlgebra.inverse(m) |> Result.unwrap()
-    print_matrix("M^-1", inv)
+    array<array<number>> inverse = LinearAlgebra.inverse(matrix) |> Result.unwrap()
+    print_matrix("M^-1", inverse)
 
     # ── Solve a linear system ──
     print("\n=== Solve Ax = b ===")
 
     # 2x +  y =  5
     #  x + 3y = 10
-    array<array<number>> coeff = [[2.0, 1.0], [1.0, 3.0]]
-    array<number> rhs = [5.0, 10.0]
+    array<array<number>> coefficients = [[2.0, 1.0], [1.0, 3.0]]
+    array<number> constants = [5.0, 10.0]
 
-    print_matrix("A", coeff)
-    print_vector("b", rhs)
+    print_matrix("A", coefficients)
+    print_vector("b", constants)
 
-    array<number> x = LinearAlgebra.solve(coeff, rhs) |> Result.unwrap()
+    array<number> x = LinearAlgebra.solve(coefficients, constants) |> Result.unwrap()
     print_vector("x", x)
 
     string x0 = String.format_number(x[0], 1)

@@ -15,6 +15,7 @@
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/escape.hpp"
+#include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -262,13 +263,13 @@ void register_xml_serializer(const EnvPtr& env) {
         .func("find", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.find", loc);
+            const auto& tag = expect_string(args[1], "Xml.find", loc);
             std::vector<std::shared_ptr<XmlValue>> results;
 
-            find_by_tag(node, args[1].as_string(), results);
+            find_by_tag(node, tag, results);
 
             if (results.empty()) {
-                return failure_msg("Xml", "find",
-                                   std::format("element '{}' not found", args[1].as_string()),
+                return failure_msg("Xml", "find", std::format("element '{}' not found", tag),
                                    error_codes::not_found);
             }
 
@@ -277,9 +278,10 @@ void register_xml_serializer(const EnvPtr& env) {
         .func("find_all", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.find_all", loc);
+            const auto& tag = expect_string(args[1], "Xml.find_all", loc);
             std::vector<std::shared_ptr<XmlValue>> results;
 
-            find_by_tag(node, args[1].as_string(), results);
+            find_by_tag(node, tag, results);
 
             auto arr = std::make_shared<ArrayValue>();
 
@@ -292,15 +294,17 @@ void register_xml_serializer(const EnvPtr& env) {
         .func("find_by_attribute", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.find_by_attribute", loc);
+            const auto& name = expect_string(args[1], "Xml.find_by_attribute", loc);
+            const auto& value = expect_string(args[2], "Xml.find_by_attribute", loc);
             std::vector<std::shared_ptr<XmlValue>> results;
 
-            find_by_attr(node, args[1].as_string(), args[2].as_string(), results);
+            find_by_attr(node, name, value, results);
 
             if (results.empty()) {
-                return failure_msg("Xml", "find_by_attribute",
-                                   std::format("no element with attribute '{}' = '{}' found",
-                                               args[1].as_string(), args[2].as_string()),
-                                   error_codes::not_found);
+                return failure_msg(
+                    "Xml", "find_by_attribute",
+                    std::format("no element with attribute '{}' = '{}' found", name, value),
+                    error_codes::not_found);
             }
 
             return make_success_value(Value{results[0]->deep_clone()});
@@ -308,11 +312,11 @@ void register_xml_serializer(const EnvPtr& env) {
         .func("at", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.at", loc);
-            auto result = navigate_path(node, args[1].as_string());
+            const auto& path = expect_string(args[1], "Xml.at", loc);
+            auto result = navigate_path(node, path);
 
             if (!result) {
-                return failure_msg("Xml", "at",
-                                   std::format("path '{}' not found", args[1].as_string()),
+                return failure_msg("Xml", "at", std::format("path '{}' not found", path),
                                    error_codes::not_found);
             }
 
@@ -321,19 +325,18 @@ void register_xml_serializer(const EnvPtr& env) {
         .func("text_at", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto node = expect_xml(args[0], "Xml.text_at", loc);
-            auto result = navigate_path(node, args[1].as_string());
+            const auto& path = expect_string(args[1], "Xml.text_at", loc);
+            auto result = navigate_path(node, path);
 
             if (!result) {
-                return failure_msg("Xml", "text_at",
-                                   std::format("path '{}' not found", args[1].as_string()),
+                return failure_msg("Xml", "text_at", std::format("path '{}' not found", path),
                                    error_codes::not_found);
             }
 
             auto content = xml_detail::get_text_content(*result);
 
             if (content.empty()) {
-                return failure_msg("Xml", "text_at",
-                                   std::format("no text content at '{}'", args[1].as_string()),
+                return failure_msg("Xml", "text_at", std::format("no text content at '{}'", path),
                                    error_codes::not_found);
             }
 
@@ -359,7 +362,8 @@ void register_xml_serializer(const EnvPtr& env) {
         })
         .func("write_file", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            auto safe_path = validate_path(args[0].as_string(), loc);
+            const auto& path = expect_string(args[0], "Xml.write_file", loc);
+            auto safe_path = validate_path(path, loc);
 
             auto node = expect_xml(args[1], "Xml.write_file", loc);
             std::string out;
@@ -370,7 +374,7 @@ void register_xml_serializer(const EnvPtr& env) {
 
             if (!file.is_open()) {
                 return failure_msg("Xml", "write_file",
-                                   std::format("cannot open '{}'", safe_path.string()),
+                                   std::format("cannot open '{}'", path_to_utf8(safe_path)),
                                    error_codes::io_error);
             }
 

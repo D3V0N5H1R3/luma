@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "common/string_utils.hpp"
 
@@ -25,19 +26,35 @@ namespace luma {
 
 namespace {
 
+// Convert a caller-supplied path string to a filesystem path.  Paths are UTF-8
+// throughout: on MSVC, constructing a std::filesystem::path from a narrow
+// std::string (or calling path::string()) goes through the ANSI code page,
+// which mangles — or throws on — non-ASCII file names.  Returns std::nullopt
+// when `path` is not well-formed UTF-8 (only possible on MSVC; a POSIX path is
+// any byte string), which callers report as a load failure.
+std::optional<std::filesystem::path> to_fs_path(std::string_view path) {
+    return try_path_from_utf8(path);
+}
+
 // Normalise a file path so that different textual representations of
 // the same file map to the same cache key.  Falls back to the raw
 // path if canonical resolution fails (e.g. the file does not yet
-// exist on disk).
+// exist on disk, or the path is not valid UTF-8).  The result is UTF-8.
 std::string normalize_path(std::string_view path) {
+    const auto fs_path = to_fs_path(path);
+
+    if (!fs_path) {
+        return std::string{path};
+    }
+
     std::error_code ec;
-    auto canonical = std::filesystem::weakly_canonical(std::filesystem::path{path}, ec);
+    auto canonical = std::filesystem::weakly_canonical(*fs_path, ec);
 
     if (ec) {
         return std::string{path};
     }
 
-    return canonical.string();
+    return path_to_utf8(canonical);
 }
 
 // Compute the byte offset within `text` of the start of each line.  Line
@@ -92,7 +109,15 @@ LoadResult SourceManager::try_load(std::string_view path) {
     // while the size check below sees raw bytes, and byte offsets into `text`
     // would not match the file.  The lexer already treats '\r' as whitespace
     // and get_line() strips a trailing '\r', so retaining CRLF is harmless.
-    std::ifstream file_stream{normalized, std::ios::binary};
+    const auto fs_path = to_fs_path(normalized);
+
+    if (!fs_path) {
+        return LoadResult{.file = nullptr,
+                          .error =
+                              std::format("cannot open file '{}': path is not valid UTF-8", path)};
+    }
+
+    std::ifstream file_stream{*fs_path, std::ios::binary};
 
     if (!file_stream) {
         return LoadResult{.file = nullptr, .error = std::format("cannot open file '{}'", path)};
@@ -207,6 +232,7 @@ const SourceFile& SourceManager::load_virtual(std::string_view name, std::string
     path_to_id_[key] = file_id;
 
     files_.emplace_back(file_id, key, std::move(text));
+    files_.back().is_virtual = true;
 
     return files_.back();
 }

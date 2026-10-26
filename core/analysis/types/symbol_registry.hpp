@@ -18,7 +18,8 @@
 //   helpers.
 // ─────────────────────────────────────────────────────────────────────────────
 
-#pragma once
+#ifndef LUMA_TYPES_SYMBOL_REGISTRY_HPP
+#define LUMA_TYPES_SYMBOL_REGISTRY_HPP
 
 #include <cstddef>
 #include <optional>
@@ -131,3 +132,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_SYMBOL_REGISTRY_HPP

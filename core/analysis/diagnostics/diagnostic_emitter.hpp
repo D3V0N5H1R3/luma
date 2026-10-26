@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_DIAGNOSTICS_DIAGNOSTIC_EMITTER_HPP
+#define LUMA_DIAGNOSTICS_DIAGNOSTIC_EMITTER_HPP
 
 #include <cstddef>
 #include <optional>
@@ -123,3 +124,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_DIAGNOSTICS_DIAGNOSTIC_EMITTER_HPP

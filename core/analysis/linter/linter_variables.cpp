@@ -9,20 +9,28 @@ namespace luma {
 // ─────────── Variable & assignment statement handlers ───────────
 
 void Linter::visit_variable_declaration(const VariableDeclStatement& var) {
-    // Check for shadowed variables.
-    if (!var.name.empty() && !var.name.starts_with("_")) {
-        if (tracker_.is_shadowed(var.name)) {
-            warn(std::format("Variable '{}' shadows a variable in an outer scope", var.name),
-                 var.location, "consider renaming, or prefix with '_' if shadowing is intentional",
-                 DiagnosticCode::ShadowedVariable);
-        }
-
-        tracker_.track_variable(var.name, var.location, false, var.is_mutable);
-    }
-
+    // Lint the initializer BEFORE declaring the new name: in a shadowing
+    // declaration such as `integer count = count + 1` the initializer reads the
+    // OUTER `count`, so it must be marked used before the inner one exists.
     if (var.initializer) {
         lint_expression(*var.initializer);
     }
+
+    declare_local(var.name, var.location, var.is_mutable);
+}
+
+void Linter::declare_local(std::string_view name, SourceLocation loc, bool is_mutable) {
+    if (name.empty() || name.starts_with("_")) {
+        return;
+    }
+
+    if (tracker_.is_shadowed(name)) {
+        warn(std::format("Variable '{}' shadows a variable in an outer scope", name), loc,
+             "consider renaming, or prefix with '_' if shadowing is intentional",
+             DiagnosticCode::ShadowedVariable);
+    }
+
+    tracker_.track_variable(name, loc, false, is_mutable);
 }
 
 void Linter::visit_assignment(const AssignmentStatement& assign) {

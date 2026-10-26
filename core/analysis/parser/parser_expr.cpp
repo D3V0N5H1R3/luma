@@ -182,7 +182,9 @@ ExpressionPtr Parser::parse_postfix() {
 
             expression = std::make_unique<IndexAccessExpression>(location, std::move(expression),
                                                                  std::move(index), true);
-        } else if (check(TokenType::LeftBracket)) {
+        } else if (check(TokenType::LeftBracket) && !current().preceded_by_newline) {
+            // A '[' that starts a new line begins an array literal statement,
+            // never an index into the previous line's expression.
             const auto location = current().location;
 
             advance();
@@ -193,9 +195,16 @@ ExpressionPtr Parser::parse_postfix() {
 
             expression = std::make_unique<IndexAccessExpression>(location, std::move(expression),
                                                                  std::move(index), false);
-        } else if (check(TokenType::LeftParen) &&
+        } else if (check(TokenType::LeftParen) && !current().preceded_by_newline &&
                    (expression->kind == ExpressionKind::Variable ||
-                    expression->kind == ExpressionKind::FieldAccess)) {
+                    expression->kind == ExpressionKind::FieldAccess ||
+                    expression->kind == ExpressionKind::Lambda ||
+                    expression->kind == ExpressionKind::Call)) {
+            // A call on a name or field, a parenthesised lambda, or a call's
+            // result: `f(x)`, `((x) -> x)(1)`, `make_adder(1)(2)`.  Luma has no
+            // statement terminator, so a '(' that starts a new line begins a
+            // new statement (e.g. a tuple destructuring) and is never
+            // swallowed as arguments.
             expression = parse_call(std::move(expression));
         } else if (check(TokenType::ColonColon) && check_at(1, TokenType::Less) &&
                    (expression->kind == ExpressionKind::Variable ||
@@ -222,8 +231,7 @@ ExpressionPtr Parser::parse_postfix() {
             expression = std::make_unique<RangeExpression>(location, std::move(expression),
                                                            std::move(end), inclusive);
         } else if (check(TokenType::QuestionMark) &&
-                   (peek_at(1).location.line > current().location.line ||
-                    !can_start_expression(peek_at(1).type))) {
+                   (peek_at(1).preceded_by_newline || !can_start_expression(peek_at(1).type))) {
             // Postfix ? for propagation on result/optional values. When the next
             // token sits on a later line it marks a statement boundary, so the ?
             // always propagates there; on the same line it only propagates when
@@ -247,11 +255,16 @@ ExpressionPtr Parser::parse_postfix() {
 ExpressionPtr Parser::parse_field_access(ExpressionPtr receiver, const SourceLocation& op_loc,
                                          bool is_optional) {
     // After '.' / '?.', allow identifiers, keywords, and integer literals as
-    // field names (e.g. Resource.with, tuple.0), but reject operators and
-    // punctuation.
+    // field names (e.g. Resource.with, tuple.0), but reject everything else —
+    // operators, punctuation, and also string literals and annotations, whose
+    // lexemes look like names once their quotes / '@' are stripped.
     const std::string_view op_spelling = is_optional ? "?." : ".";
+    const TokenType type = current().type;
+    const bool is_field_name = type == TokenType::Identifier || type == TokenType::IntegerLiteral ||
+                               type == TokenType::BooleanLiteral ||
+                               type == TokenType::NoneLiteral || is_keyword_token_type(type);
 
-    if (is_at_end() || !first_is_letter_or_digit(current().lexeme)) {
+    if (is_at_end() || !is_field_name) {
         syntax_error(
             std::format("expected field name after '{}', got '{}'", op_spelling, current().lexeme),
             current().location,
@@ -774,7 +787,10 @@ bool Parser::is_generic_record_creation() const {
     while (depth > 0) {
         const TokenType type = token_type_at(offset);
 
-        if (type == TokenType::EndOfFile) {
+        // Stop at the first token that cannot be part of a type argument (this
+        // includes end-of-file), so a comparison such as `MAX < x` is settled
+        // without scanning the rest of the file for a closing '>'.
+        if (!error_recovery::can_appear_in_type(type)) {
             return false;
         }
 

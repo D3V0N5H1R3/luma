@@ -32,7 +32,42 @@ public:
     /// @note The queue size limit is a soft cap — see thread_pool.cpp for details.
     void enqueue(std::function<void()>&& task);
 
+    // RAII marker for a pool worker that is about to block until other pool
+    // work finishes (await, task_scope join, a blocking channel wait, …).
+    //
+    // A fixed-size pool deadlocks when every worker blocks on work that is
+    // still queued: nothing is left to run it.  While a region is active the
+    // worker counts as blocked; when every worker is blocked and work is
+    // pending (or arrives later), the pool starts a compensating worker so the
+    // queued work can make progress.  On a thread that is not a pool worker
+    // (e.g. the main VM thread) the region is a no-op.
+    class BlockingRegion {
+    public:
+        BlockingRegion();
+        ~BlockingRegion();
+
+        BlockingRegion(const BlockingRegion&) = delete;
+        BlockingRegion& operator=(const BlockingRegion&) = delete;
+        BlockingRegion(BlockingRegion&&) = delete;
+        BlockingRegion& operator=(BlockingRegion&&) = delete;
+
+    private:
+        ThreadPool* pool_;
+    };
+
+    // Number of worker threads currently running (base workers plus any
+    // compensating workers started for blocked workers).  For tests and
+    // diagnostics.
+    [[nodiscard]] std::size_t worker_count() const noexcept;
+
 private:
+    // Upper bound on compensating workers started on top of the base pool, so
+    // a program that blocks unboundedly cannot exhaust OS threads.
+    static constexpr std::size_t k_max_compensating_workers{256};
+
+    // Start one more worker if every live worker is blocked and work is
+    // pending.  Safe to call from any thread; a no-op once stopping.
+    void maybe_add_compensating_worker();
     // Signal all workers to stop and join every joinable worker.  Shared by
     // the destructor and the constructor's failure path so the concurrency-
     // critical "store should_stop_ under mutex_, notify, then join" sequence
@@ -64,8 +99,10 @@ private:
     // Check whether any worker queue has pending tasks.
     [[nodiscard]] bool has_any_work() const;
 
-    // Per-worker data — each worker has its own queue and mutex to reduce
+    // Per-worker data — each base worker has its own queue and mutex to reduce
     // contention.  Workers first drain their own queue, then steal from others.
+    // The vector is fixed-size after construction (compensating workers own no
+    // queue), so it is safe to scan without a lock.
     struct WorkerState {
         std::deque<std::function<void()>> local_queue;
         mutable std::mutex local_mutex;
@@ -76,12 +113,14 @@ private:
         std::atomic<std::size_t> queue_size{0};
     };
 
-    std::vector<std::thread> workers_;
+    std::vector<std::thread> workers_; // Grows only under mutex_ (compensation).
     std::vector<std::unique_ptr<WorkerState>> worker_states_;
     std::atomic<std::size_t> total_task_count_{0}; // Atomic pending task counter.
     std::mutex mutex_;                             // Guards the condition variable.
     std::condition_variable task_available_cv_;
     std::atomic<bool> should_stop_{false};
+    std::atomic<std::size_t> live_workers_{0};    // Started worker threads.
+    std::atomic<std::size_t> blocked_workers_{0}; // Workers inside a BlockingRegion.
 };
 
 } // namespace luma

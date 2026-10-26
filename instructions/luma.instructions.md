@@ -70,7 +70,7 @@ function void main() {
 
 `boolean`, `integer`, `number`, `string`.
 
-- `integer` and `number` are distinct. Integer division truncates; mixed arithmetic promotes integers.
+- `integer` and `number` are distinct. `/` always yields a `number` (`7 / 2 == 3.5`); use `//` for integer floor division. Mixed arithmetic promotes integers.
 - **`integer` is for indices and range bounds.** Use `integer` for array subscripts, string offsets, loop counters that index into collections, and range end-points (`0..n`). Use `number` for all other numeric values — counts, sizes, quantities, scores, IDs, measurements, and computations.
 
 ### Collections
@@ -91,7 +91,7 @@ function void main() {
 
 - `result<T>` — either `success(value)` or `failure(message)`. Primary error-handling mechanism.
 - `optional<T>` — either `some(value)` or `none`. Use to represent values that may be absent.
-    - Match exhaustively with `some(x)` and `none` arms, or unwrap with `??`.
+    - Match exhaustively with `case some(x)` and `case none` arms, or unwrap with `??`.
 
 ---
 
@@ -297,7 +297,7 @@ print("fibonacci(" + Converter.to_string(i) + ") = " + Converter.to_string(fibon
 Use `|>` for chaining operations. It passes the left-hand value as the first argument to the right-hand function.
 
 ```luma
-string result = "  Hello, World!  "
+string greeting = "  Hello, World!  "
     |> String.trim()
     |> String.lowercase()
     |> String.replace("world", "luma")
@@ -315,9 +315,9 @@ All use the pipe-first calling convention: `value |> Module.function()`.
 
 ### Sandbox Mode
 
-When running with `--box`, modules that access OS resources are disabled: `Console`, `Csv`, `FileSystem`, `Http`, `KeyValueStore`, `Process`, `Socket`, `Xml`. Individual file-I/O functions in safe modules are also disabled: `Compression.gunzip_file`, `Compression.gzip_file`, `Hash.sha256_file`, `Hash.sha512_file`, `Log.set_output`.
+When running with `--box`, modules that access OS resources are disabled: `Console`, `Csv`, `FileSystem`, `Http`, `KeyValueStore`, `Process`, `Socket`, `Xml`. Individual file-I/O functions in safe modules are also disabled: `Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`.
 
-Accessing a sandboxed function produces the error: `'Module.function' is not available in sandbox mode (--box)`.
+Calling any of these functions produces the error: `'Module.function' is not available in sandbox mode (--box)`.
 
 ### Resource Limits
 
@@ -329,16 +329,18 @@ The interpreter enforces limits on pending tasks (100,000), open sockets (1,000)
 
 ### Spawn and Await
 
-Use `spawn` to run a function call asynchronously and `await` to retrieve the result.
+Use `spawn` inside a `task_scope` to run a function call asynchronously and `await` to retrieve the result.
 
 ```luma
-task<integer> t = spawn compute(42)
-integer result = await t
+task_scope {
+    task<integer> t = spawn compute(42)
+    integer value = await t
+}
 ```
 
 ### Structured Concurrency with `task_scope`
 
-Prefer `task_scope` over bare `spawn`/`await`. A `task_scope` block waits for all spawned tasks, cancels siblings on first failure, and returns an `array` of results.
+A `task_scope` block waits for all spawned tasks, cancels siblings on first failure, and returns an `array` of results.
 
 ```luma
 array<integer> results = task_scope {
@@ -349,7 +351,7 @@ array<integer> results = task_scope {
 ```
 
 - `task_scope` blocks can be nested; inner scopes are independent of outer scopes.
-- The type checker emits a warning for `spawn` outside a `task_scope`.
+- `spawn` outside a `task_scope` is a compile error.
 - Use `Task.cancel(t)` and `Task.is_cancelled(t)` for cooperative cancellation.
 
 ### Channels
@@ -359,7 +361,7 @@ Use channels for inter-task communication.
 ```luma
 channel<integer> ch = Channel.new()
 boolean _ = Channel.send(ch, 42)
-integer received = Channel.receive(ch)
+result<integer> received = Channel.receive(ch) # failure once closed and drained
 ```
 
 ---
@@ -393,7 +395,7 @@ result<array<integer>> positive = Array.filter(nums, (integer x) -> x > 0)
 
 ### Horizontal Spacing
 
-- Place a space after keywords: `if (`, `for (`, `match (`.
+- Place a space after keywords and do not wrap conditions in parentheses: `if x > 0 {`, `for item in items {`, `match value {`.
 - Place a space around binary operators: `a + b`, `x == y`, `i < n`.
 - No space after unary operators: `!flag`, `++i`.
 - No space inside parentheses: `func(a, b)`, not `func( a, b )`.
@@ -420,7 +422,7 @@ function integer sum_positive(array<integer> numbers) {
 
             return total
         }
-        failure(msg) { return 0 }
+        failure(_) { return 0 }
     }
 }
 

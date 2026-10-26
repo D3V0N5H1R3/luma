@@ -5,8 +5,10 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -15,6 +17,7 @@
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/parser/parser.hpp"
 #include "analysis/source/source_manager.hpp"
+#include "common/path_utils.hpp"
 #include "runtime/include/include_resolver.hpp"
 #include "runtime/include/include_resolver_detail.hpp"
 #include "test_framework.hpp"
@@ -833,6 +836,279 @@ static void test_include_depth_limit_exceeded() {
 
 // ─── main ───
 
+// Parse `source` as input with no file of its own (FileId 0), as the REPL and
+// `--eval` do.
+[[nodiscard]] static Program parse_unanchored(const std::string& source) {
+    DiagnosticCollector discarded;
+    Lexer lexer{source, discarded, FileId{0}};
+    auto tokens = lexer.tokenize();
+    Parser parser{std::move(tokens)};
+    return parser.parse();
+}
+
+// Parse a file already loaded into `sm`.
+[[nodiscard]] static Program parse_loaded(const SourceFile& source_file) {
+    DiagnosticCollector discarded;
+    Lexer lexer{source_file.text, discarded, source_file.file_id};
+    auto tokens = lexer.tokenize();
+    Parser parser{std::move(tokens)};
+    return parser.parse();
+}
+
+namespace {
+
+// Switches the working directory for the guard's lifetime.
+class ScopedCwd {
+public:
+    explicit ScopedCwd(const std::filesystem::path& dir)
+        : previous_{std::filesystem::current_path()} {
+        std::filesystem::current_path(dir);
+    }
+
+    ~ScopedCwd() noexcept {
+        std::error_code ec;
+        std::filesystem::current_path(previous_, ec);
+    }
+
+    ScopedCwd(const ScopedCwd&) = delete;
+    ScopedCwd& operator=(const ScopedCwd&) = delete;
+    ScopedCwd(ScopedCwd&&) = delete;
+    ScopedCwd& operator=(ScopedCwd&&) = delete;
+
+private:
+    std::filesystem::path previous_;
+};
+
+[[nodiscard]] bool any_message_contains(const std::vector<Diagnostic>& diagnostics,
+                                        std::string_view needle) {
+    return std::ranges::any_of(diagnostics, [needle](const Diagnostic& d) {
+        return d.message.find(needle) != std::string::npos;
+    });
+}
+
+} // namespace
+
+// ─── Regression: a file-anchored include must not fall back to the CWD ───
+
+static void test_anchored_include_does_not_fall_back_to_cwd() {
+    // Previously a missing include was retried relative to the working
+    // directory: it could load an unrelated file of the same name there, or
+    // misreport a simple missing file as escaping the allowed tree.
+    const TempDir temp;
+    const auto app = temp.path() / "anchor_app";
+    const auto elsewhere = temp.path() / "anchor_elsewhere";
+    std::filesystem::create_directories(app);
+    std::filesystem::create_directories(elsewhere);
+
+    TempFile decoy{elsewhere / "anchor_only_in_cwd.luma",
+                   "function integer anchor_decoy() { return 1 }\n"};
+    TempFile main_file{app / "anchor_main.luma", "include \"anchor_only_in_cwd.luma\"\n"};
+
+    const ScopedCwd cwd{elsewhere};
+    SourceManager sm;
+    auto program = parse_loaded(sm.load(main_file.path_string()));
+
+    IncludeResolver resolver{sm};
+    ASSERT_FALSE(resolver.resolve(program));
+    ASSERT_TRUE(any_message_contains(resolver.get_diagnostics(), "file not found"));
+    ASSERT_FALSE(any_message_contains(resolver.get_diagnostics(), "outside"));
+}
+
+// ─── Regression: unanchored (REPL/stdin) includes search the CWD first ───
+
+static void test_unanchored_include_searches_cwd_before_luma_path() {
+    const TempDir temp;
+    const auto cwd_dir = temp.path() / "order_cwd";
+    const auto lib_dir = temp.path() / "order_lib";
+    std::filesystem::create_directories(cwd_dir);
+    std::filesystem::create_directories(lib_dir);
+
+    TempFile in_cwd{cwd_dir / "order_helper.luma", "function integer order_value() { return 1 }\n"};
+    TempFile in_lib{lib_dir / "order_helper.luma", "function integer order_value() { return 2 }\n"};
+
+    const ScopedEnv luma_path{"LUMA_PATH", lib_dir.string()};
+    const ScopedCwd cwd{cwd_dir};
+
+    SourceManager sm;
+    auto program = parse_unanchored("include \"order_helper.luma\"\n");
+
+    IncludeResolver resolver{sm};
+    ASSERT_TRUE(resolver.resolve(program));
+    ASSERT_EQ(sm.files().size(), 1U);
+    ASSERT_TRUE(sm.files().front().text.find("return 1") != std::string::npos);
+}
+
+static void test_unanchored_include_falls_back_to_luma_path() {
+    const TempDir temp;
+    const auto cwd_dir = temp.path() / "fallback_cwd";
+    const auto lib_dir = temp.path() / "fallback_lib";
+    std::filesystem::create_directories(cwd_dir);
+    std::filesystem::create_directories(lib_dir);
+
+    TempFile in_lib{lib_dir / "fallback_helper.luma", "function integer fb() { return 2 }\n"};
+
+    const ScopedEnv luma_path{"LUMA_PATH", lib_dir.string()};
+    const ScopedCwd cwd{cwd_dir};
+
+    SourceManager sm;
+    auto program = parse_unanchored("include \"fallback_helper.luma\"\n");
+
+    IncludeResolver resolver{sm};
+    ASSERT_TRUE(resolver.resolve(program));
+    ASSERT_EQ(count_declarations(program, DeclarationKind::Function), 1);
+}
+
+// ─── Regression: include paths are UTF-8 end to end (MSVC used the ANSI
+// code page, turning "café.luma" into mojibake or failing outright) ───
+
+static void test_non_ascii_include_path_resolves() {
+    const TempDir temp;
+    const auto dir = temp.path() / "utf8_inc";
+    std::filesystem::create_directories(dir);
+
+    // "café_日本_helper.luma": 'é' is in Windows-1252 but the CJK characters
+    // are in no single-byte ANSI code page, so any remaining ANSI conversion
+    // fails here regardless of the machine's code page.
+    const std::string utf8_name = "caf\xC3\xA9_\xE6\x97\xA5\xE6\x9C\xAC_helper.luma";
+    TempFile helper{dir / path_from_utf8(utf8_name), "function integer cafe() { return 3 }\n"};
+    TempFile main_file{dir / "utf8_main.luma", "include \"" + utf8_name + "\"\n"};
+
+    SourceManager sm;
+    auto program = parse_loaded(sm.load(path_to_utf8(main_file.path())));
+
+    IncludeResolver resolver{sm};
+    const bool resolved = resolver.resolve(program);
+
+    for (const auto& d : resolver.get_diagnostics()) {
+        std::cerr << "diagnostic: " << d.message << "\n";
+    }
+
+    ASSERT_TRUE(resolved);
+    ASSERT_EQ(count_declarations(program, DeclarationKind::Function), 1);
+
+    // The included file is registered under its UTF-8 path.
+    const auto included = std::ranges::find_if(sm.files(), [](const SourceFile& file) {
+        return file.text.find("cafe()") != std::string::npos;
+    });
+    ASSERT_TRUE(included != sm.files().end());
+    ASSERT_TRUE(included->path.find(utf8_name) != std::string::npos);
+}
+
+// ─── Regression: containment fails closed when the including file's
+// directory cannot be canonicalised (previously the check was skipped) ───
+
+static void test_containment_fails_closed_for_unresolvable_base() {
+#ifdef _WIN32
+    // A device path the OS cannot resolve: weakly_canonical reports an error
+    // for its parent directory.  The include itself is found on LUMA_PATH, so
+    // only the containment check stands between it and being accepted.
+    const TempDir temp;
+    const auto lib_dir = temp.path() / "closed_lib";
+    std::filesystem::create_directories(lib_dir);
+    TempFile in_lib{lib_dir / "closed_helper.luma", "function integer closed() { return 4 }\n"};
+
+    const ScopedEnv luma_path{"LUMA_PATH", lib_dir.string()};
+
+    SourceManager sm;
+    const auto& source_file = sm.load_virtual("\\\\.\\nul\\closed_dir\\closed_main.luma",
+                                              "include \"closed_helper.luma\"\n");
+    auto program = parse_loaded(source_file);
+
+    IncludeResolver resolver{sm};
+    ASSERT_FALSE(resolver.resolve(program));
+    ASSERT_TRUE(any_message_contains(resolver.get_diagnostics(), "cannot resolve the directory"));
+#endif
+}
+
+// ─── Session mode (regression: the REPL used SourceManager registration as its
+// include-once rule, so a file read by a rejected input was skipped forever) ───
+
+static void test_session_mode_rereads_registered_file() {
+    const TempDir temp;
+    TempFile main_file{temp.path() / "session_main.luma", "include \"session_helper.luma\"\n"};
+    TempFile helper{temp.path() / "session_helper.luma",
+                    "function integer session_value() { return 1 }\n"};
+
+    SourceManager sm;
+    (void)load_and_resolve(main_file.path_string(), sm);
+
+    {
+        std::ofstream out{helper.path(), std::ios::binary | std::ios::trunc};
+        out << "function integer session_value() { return 2 }\n";
+    }
+
+    // Default mode: the registered helper counts as included and is skipped.
+    auto skipped = parse_loaded(sm.load(main_file.path_string()));
+    IncludeResolver default_resolver{sm};
+    ASSERT_TRUE(default_resolver.resolve(skipped));
+    ASSERT_EQ(count_declarations(skipped, DeclarationKind::Function), 0);
+    ASSERT_TRUE(default_resolver.included_files().empty());
+
+    // Session mode: only the entry file counts; the helper is re-read from disk.
+    const auto entry = sm.load(main_file.path_string()).path;
+    auto reread = parse_loaded(sm.load(main_file.path_string()));
+    IncludeResolver session_resolver{sm};
+    session_resolver.set_session_included(StringSet{entry});
+    ASSERT_TRUE(session_resolver.resolve(reread));
+    ASSERT_EQ(count_declarations(reread, DeclarationKind::Function), 1);
+    ASSERT_EQ(session_resolver.included_files().size(), 1U);
+    ASSERT_TRUE(sm.files().back().text.find("return 2") != std::string::npos);
+}
+
+static void test_session_mode_skips_listed_and_repeated_files() {
+    const TempDir temp;
+    TempFile main_file{temp.path() / "listed_main.luma",
+                       "include \"listed_a.luma\"\ninclude \"listed_b.luma\"\n"
+                       "include \"listed_b.luma\"\n"};
+    TempFile a{temp.path() / "listed_a.luma", "function integer listed_a() { return 1 }\n"};
+    TempFile b{temp.path() / "listed_b.luma",
+               "include \"listed_main.luma\"\nfunction integer listed_b() { return 2 }\n"};
+
+    SourceManager sm;
+    const auto& source_file = sm.load(main_file.path_string());
+    auto program = parse_loaded(source_file);
+
+    // listed_a counts as already included; listed_b is entered once, and its
+    // include of the entry file is skipped.
+    std::error_code ec;
+    const auto canonical_a = path_to_utf8(std::filesystem::weakly_canonical(a.path(), ec));
+
+    IncludeResolver resolver{sm};
+    resolver.set_session_included(StringSet{source_file.path, canonical_a});
+    ASSERT_TRUE(resolver.resolve(program));
+    ASSERT_EQ(count_declarations(program, DeclarationKind::Function), 1);
+    ASSERT_EQ(resolver.included_files().size(), 1U);
+}
+
+static void test_bracketed_virtual_source_is_unanchored() {
+    // A REPL input registered as "<repl:N>" resolves includes against the
+    // working directory, exactly like unregistered (file id 0) input.
+    const TempDir temp;
+    TempFile helper{temp.path() / "bracket_helper.luma",
+                    "function integer bracket_value() { return 1 }\n"};
+    const ScopedCwd cwd{temp.path()};
+
+    SourceManager sm;
+    const auto& input = sm.load_virtual("<repl:1>", "include \"bracket_helper.luma\"\n");
+    auto program = parse_loaded(input);
+
+    IncludeResolver resolver{sm};
+    ASSERT_TRUE(resolver.resolve(program));
+    ASSERT_EQ(count_declarations(program, DeclarationKind::Function), 1);
+
+    // An absolute path is still rejected, as for any input with no file.
+    // Forward slashes: a backslash would be an escape in the Luma string.
+    auto absolute_path = path_to_utf8(helper.path());
+    std::ranges::replace(absolute_path, '\\', '/');
+    const auto absolute = std::format("include \"{}\"\n", absolute_path);
+    const auto& absolute_input = sm.load_virtual("<repl:2>", absolute);
+    auto absolute_program = parse_loaded(absolute_input);
+
+    IncludeResolver absolute_resolver{sm};
+    ASSERT_FALSE(absolute_resolver.resolve(absolute_program));
+    ASSERT_TRUE(any_message_contains(absolute_resolver.get_diagnostics(), "absolute path"));
+}
+
 int main() {
     RUN(test_program_without_includes);
     RUN(test_single_include);
@@ -860,5 +1136,13 @@ int main() {
     RUN(test_include_with_parse_errors);
     RUN(test_absolute_path_escape_rejected);
     RUN(test_include_depth_limit_exceeded);
+    RUN(test_anchored_include_does_not_fall_back_to_cwd);
+    RUN(test_unanchored_include_searches_cwd_before_luma_path);
+    RUN(test_unanchored_include_falls_back_to_luma_path);
+    RUN(test_non_ascii_include_path_resolves);
+    RUN(test_containment_fails_closed_for_unresolvable_base);
+    RUN(test_session_mode_rereads_registered_file);
+    RUN(test_session_mode_skips_listed_and_repeated_files);
+    RUN(test_bracketed_virtual_source_is_unanchored);
     return SUMMARY();
 }

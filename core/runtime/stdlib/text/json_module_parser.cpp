@@ -448,7 +448,16 @@ private:
 
             auto val = parse_value();
 
+            // Duplicate keys are rejected, exactly as Json.parse (the shared
+            // luma::json parser) rejects them — silently keeping the last value
+            // would hide malformed input and make the two entry points disagree.
+            const auto entries_before = dict->entries.size();
             dict->set(key, std::move(val));
+
+            if (dict->entries.size() == entries_before) {
+                throw std::runtime_error{
+                    std::format("duplicate key '{}' in object at position {}", key, pos_)};
+            }
 
             if (dict->entries.size() > ResourceLimits::max_dictionary_size) {
                 throw std::runtime_error{"JSON object exceeds maximum size"};

@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────
 # Luma — Release Workflow
 #
-# Triggered on version tags (v*.*.*). Builds release binaries
+# Triggered on version tags (vMAJOR.MINOR.PATCH). Builds release binaries
 # for all platforms (Linux x86_64, Linux aarch64/Raspberry Pi,
 # macOS, Windows), validates on Debian, Kali Linux, Fedora,
 # and Arch Linux, then creates a GitHub Release with an
@@ -17,7 +17,10 @@ name: Release
 
 on:
   push:
-    tags: ["v*.*.*"]
+    # Digits only: a `v*.*.*` glob would also match the editor-extension tags
+    # (`vscode-v1.2.3` = "v" + "scode-v1" + ".2.3"), cutting a core release on
+    # the tag release-vscode.yml publishes to.
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 permissions:
   contents: read
@@ -27,6 +30,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # tag-release.yml validates the tag against VERSION, but a hand-pushed tag
+  # bypasses it. Runs alongside the builds, gating only the publish step.
+  verify-version:
+    name: Verify tag matches VERSION
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compare tag with VERSION
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' does not match VERSION file ('v${version}')."
+            exit 1
+          fi
+          echo "Tag '${GITHUB_REF_NAME}' matches VERSION."
+
   build:
     name: Build — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -34,8 +59,10 @@ jobs:
     # executable), the CTest suite, and packaging. The Windows/MSVC runner is the
     # slowest and cannot finish a cold build within 15 minutes — the previous
     # limit cancelled it mid-compile, failing the build job and skipping the whole
-    # release. 45 matches ci.yml's ceiling for the same cold-cache build on the
-    # slowest runner; warm-cache runs finish well under it.
+    # release. 45 matches ci.yml's ceiling for the same cold build on the
+    # slowest runner. Release builds deliberately start from a clean tree (no
+    # build cache) so published binaries never inherit a stale CMakeCache.txt
+    # or objects from an earlier run.
     timeout-minutes: 45
 
     strategy:
@@ -61,14 +88,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Cache build directory
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build
-          key: cmake-release-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'core/**', 'shared/**', 'debugger/**', 'language-server/**') }}
-          restore-keys: |
-            cmake-release-${{ runner.os }}-
 
       - name: Configure and build
         uses: ./.github/actions/cmake-build
@@ -152,7 +171,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [build, build-rpi, validate-linux-distros, vscode-extension]
+    needs: [verify-version, build, build-rpi, validate-linux-distros, vscode-extension]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -170,9 +189,12 @@ jobs:
         with:
           path: artifacts/
 
+      # The previous release is the nearest core-release tag reachable from the
+      # tagged commit's parent. Sorting all tags would pick up vscode-v*/zed-v*
+      # tags and, for a patch on an older line, the wrong predecessor.
       - name: Generate changelog
         run: |
-          prev_tag=$(git tag --sort=-v:refname | sed -n '2p')
+          prev_tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^ 2>/dev/null || true)
           if [ -z "$prev_tag" ]; then
             git log --pretty=format:"- %s (%h)" --no-merges > release-notes.md
           else
@@ -194,6 +216,7 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           body_path: release-notes.md
+          fail_on_unmatched_files: true
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip

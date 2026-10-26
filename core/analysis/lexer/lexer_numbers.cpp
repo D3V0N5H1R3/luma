@@ -8,6 +8,7 @@
 
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/diagnostics/diagnostic_emitter.hpp"
+#include "analysis/diagnostics/display_text.hpp"
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/lexer/token.hpp"
 #include "analysis/source/source_location.hpp"
@@ -76,13 +77,13 @@ template <typename Parser, typename Sentinel>
 TokenLiteral Lexer::parse_integer_literal(const std::string& lexeme, int base) {
     return parse_number(
         lexeme, [base](const std::string& s) { return std::stoll(s, nullptr, base); },
-        std::int64_t{0}, NumberKind::Integer, *this, current_location());
+        std::int64_t{0}, NumberKind::Integer, *this, token_start_);
 }
 
 TokenLiteral Lexer::parse_float_literal(const std::string& lexeme) {
     return parse_number(
         lexeme, [](const std::string& s) { return std::stod(s); }, 0.0, NumberKind::Floating, *this,
-        current_location());
+        token_start_);
 }
 
 bool Lexer::has_valid_exponent() const {
@@ -124,18 +125,68 @@ void Lexer::scan_prefixed_literal(bool (*is_valid_digit)(char), int base,
         advance();
     }
 
-    if (cursor_.position() == digit_start) {
-        emit_syntax_error(std::format("{} literal has no digits", kind_name), current_location(),
-                          std::format("add {} digits after '{}', e.g. {}", kind_name,
-                                      cursor_.source().substr(start, 2), hint_example),
-                          DiagnosticCode::InvalidNumber);
+    const std::size_t digit_end{cursor_.position()};
+    const bool has_invalid_suffix = consume_invalid_number_suffix(kind_name, token_start_);
+    const auto lexeme = cursor_.source().substr(start, cursor_.position() - start);
+
+    if (digit_end == digit_start) {
+        if (!has_invalid_suffix) {
+            emit_syntax_error(std::format("{} literal has no digits", kind_name), token_start_,
+                              std::format("add {} digits after '{}', e.g. {}", kind_name,
+                                          cursor_.source().substr(start, 2), hint_example),
+                              DiagnosticCode::InvalidNumber);
+        }
+
+        // Emit a placeholder literal so the parser can continue past the error.
+        add_token(TokenType::IntegerLiteral, lexeme, TokenLiteral{std::int64_t{0}});
         return;
     }
 
-    const auto lexeme = cursor_.source().substr(start, cursor_.position() - start);
-    const auto digits = cursor_.source().substr(digit_start, cursor_.position() - digit_start);
+    const auto digits = cursor_.source().substr(digit_start, digit_end - digit_start);
 
     auto literal = parse_integer_literal(digits, base);
+    add_token(TokenType::IntegerLiteral, lexeme, std::move(literal));
+}
+
+bool Lexer::consume_invalid_number_suffix(std::string_view kind_name, SourceLocation start) {
+    if (identifier_char_width(/*allow_digit=*/true) == 0) {
+        return false;
+    }
+
+    const std::size_t suffix_start{cursor_.position()};
+
+    consume_identifier_chars();
+
+    const auto suffix = cursor_.source().substr(suffix_start, cursor_.position() - suffix_start);
+    const bool is_digit_suffix = is_digit(suffix.front());
+
+    emit_syntax_error(
+        is_digit_suffix ? std::format("invalid digit '{}' in {} literal", suffix.front(), kind_name)
+                        : std::format("invalid suffix '{}' on {} literal",
+                                      sanitize_for_terminal(suffix), kind_name),
+        start,
+        is_digit_suffix ? "remove the digits that are not valid in this base"
+                        : "separate the number from the following name with a space or operator",
+        DiagnosticCode::InvalidNumber);
+
+    return true;
+}
+
+void Lexer::scan_member_index() {
+    const std::size_t start{cursor_.position()};
+
+    while (!is_at_end() && is_digit(current())) {
+        advance();
+    }
+
+    const std::size_t digit_end{cursor_.position()};
+
+    (void)consume_invalid_number_suffix("tuple index", token_start_);
+
+    const auto lexeme = cursor_.source().substr(start, cursor_.position() - start);
+    const auto digits = cursor_.source().substr(start, digit_end - start);
+
+    auto literal = parse_integer_literal(digits);
     add_token(TokenType::IntegerLiteral, lexeme, std::move(literal));
 }
 
@@ -149,6 +200,14 @@ void Lexer::scan_number() {
                 return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
             },
             16, "hex", "0xFF", start);
+
+        return;
+    }
+
+    // Octal literal: 0o... or 0O...
+    if (is_prefixed_literal('o')) {
+        scan_prefixed_literal([](char c) { return c >= '0' && c <= '7'; }, 8, "octal", "0o755",
+                              start);
 
         return;
     }
@@ -168,7 +227,9 @@ void Lexer::scan_number() {
         advance();
     }
 
-    if (!is_at_end() && current() == '.' && peek_next() != '.') {
+    // A fractional part needs a digit after the '.', as in the grammar's
+    // DIGIT "." DIGIT: `1.` is not a number, and `1..5` is a range.
+    if (!is_at_end() && current() == '.' && is_digit(peek_next())) {
         is_float = true;
 
         advance();
@@ -183,13 +244,18 @@ void Lexer::scan_number() {
         consume_exponent();
     }
 
+    const std::size_t number_end{cursor_.position()};
+
+    (void)consume_invalid_number_suffix(is_float ? "number" : "integer", token_start_);
+
     const auto lexeme = cursor_.source().substr(start, cursor_.position() - start);
+    const auto number_text = cursor_.source().substr(start, number_end - start);
 
     if (is_float) {
-        auto literal = parse_float_literal(lexeme);
+        auto literal = parse_float_literal(number_text);
         add_token(TokenType::NumberLiteral, lexeme, std::move(literal));
     } else {
-        auto literal = parse_integer_literal(lexeme);
+        auto literal = parse_integer_literal(number_text);
         add_token(TokenType::IntegerLiteral, lexeme, std::move(literal));
     }
 }

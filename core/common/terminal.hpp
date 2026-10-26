@@ -1,0 +1,167 @@
+#ifndef LUMA_COMMON_TERMINAL_HPP
+#define LUMA_COMMON_TERMINAL_HPP
+
+// TTY detection, ANSI colour helpers, and Windows virtual-terminal setup.
+// Lives in core/common so both the analysis front-end (diagnostic renderer)
+// and the runtime back-end (CLI, REPL, VM) can use it without the front-end
+// depending on the runtime.  Header-only; all functions are inline.
+
+#include <string_view>
+
+#include "common/platform_utils.hpp"
+
+namespace luma::term {
+
+// Returns true when stderr is connected to an interactive terminal.
+[[nodiscard]] inline bool stderr_is_tty() noexcept {
+    return is_stderr_terminal();
+}
+
+// Returns true when stdout is connected to an interactive terminal.
+[[nodiscard]] inline bool stdout_is_tty() noexcept {
+    return is_stdout_terminal();
+}
+
+// Named ANSI escape-code constants.
+namespace ansi {
+
+inline constexpr const char* red = "\033[31m";
+inline constexpr const char* green = "\033[32m";
+inline constexpr const char* yellow = "\033[33m";
+inline constexpr const char* cyan = "\033[36m";
+inline constexpr const char* dim = "\033[2m";
+inline constexpr const char* bold = "\033[1m";
+inline constexpr const char* bold_red = "\033[1;31m";
+inline constexpr const char* bold_yellow = "\033[1;33m";
+inline constexpr const char* bold_cyan = "\033[1;36m";
+inline constexpr const char* reset = "\033[0m";
+
+// Cursor and screen control sequences (used by the REPL line editor).
+inline constexpr const char* csi = "\033[";
+inline constexpr const char* clear_line = "\r\033[2K";
+inline constexpr const char* clear_screen_home = "\033[2J\033[H";
+
+} // namespace ansi
+
+// ANSI escape sequences — return empty strings when colour is disabled.
+// Each function checks a cached flag so the TTY query runs at most once.
+
+namespace detail {
+
+[[nodiscard]] inline bool colour_enabled_stderr() noexcept {
+    static const bool enabled = stderr_is_tty();
+
+    return enabled;
+}
+
+[[nodiscard]] inline bool colour_enabled_stdout() noexcept {
+    static const bool enabled = stdout_is_tty();
+
+    return enabled;
+}
+
+// Returns `code` when colour is enabled for the given stream, otherwise "".
+[[nodiscard]] inline std::string_view ansi(const char* code, bool enabled) noexcept {
+    return enabled ? code : "";
+}
+
+[[nodiscard]] inline std::string_view err(const char* code) noexcept {
+    return ansi(code, colour_enabled_stderr());
+}
+
+[[nodiscard]] inline std::string_view out(const char* code) noexcept {
+    return ansi(code, colour_enabled_stdout());
+}
+
+} // namespace detail
+
+// ─── Colours for stderr (error diagnostics) ───
+
+[[nodiscard]] inline std::string_view red() noexcept {
+    return detail::err(ansi::red);
+}
+
+[[nodiscard]] inline std::string_view yellow() noexcept {
+    return detail::err(ansi::yellow);
+}
+
+[[nodiscard]] inline std::string_view green() noexcept {
+    return detail::err(ansi::green);
+}
+
+[[nodiscard]] inline std::string_view cyan() noexcept {
+    return detail::err(ansi::cyan);
+}
+
+[[nodiscard]] inline std::string_view dim() noexcept {
+    return detail::err(ansi::dim);
+}
+
+[[nodiscard]] inline std::string_view bold() noexcept {
+    return detail::err(ansi::bold);
+}
+
+[[nodiscard]] inline std::string_view bold_red() noexcept {
+    return detail::err(ansi::bold_red);
+}
+
+[[nodiscard]] inline std::string_view bold_yellow() noexcept {
+    return detail::err(ansi::bold_yellow);
+}
+
+[[nodiscard]] inline std::string_view bold_cyan() noexcept {
+    return detail::err(ansi::bold_cyan);
+}
+
+[[nodiscard]] inline std::string_view reset() noexcept {
+    return detail::err(ansi::reset);
+}
+
+// ─── Colours for stdout (test results, REPL) ───
+
+[[nodiscard]] inline std::string_view out_green() noexcept {
+    return detail::out(ansi::green);
+}
+
+[[nodiscard]] inline std::string_view out_red() noexcept {
+    return detail::out(ansi::red);
+}
+
+[[nodiscard]] inline std::string_view out_bold() noexcept {
+    return detail::out(ansi::bold);
+}
+
+[[nodiscard]] inline std::string_view out_cyan() noexcept {
+    return detail::out(ansi::cyan);
+}
+
+[[nodiscard]] inline std::string_view out_reset() noexcept {
+    return detail::out(ansi::reset);
+}
+
+// Enable ANSI escape processing on Windows 10+.
+// Call once from main() before any coloured output.  Defined inline here:
+// platform_utils.hpp already brings in <windows.h> on Windows, so a separate
+// translation unit would not keep it out of this header's includers anyway.
+inline void enable_ansi_escapes() noexcept {
+#ifdef _WIN32
+    const auto enable_vt = [](DWORD handle_id) {
+        HANDLE handle = GetStdHandle(handle_id);
+
+        if (handle != INVALID_HANDLE_VALUE && handle != nullptr) {
+            DWORD mode = 0;
+
+            if (GetConsoleMode(handle, &mode)) {
+                SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            }
+        }
+    };
+
+    enable_vt(STD_OUTPUT_HANDLE);
+    enable_vt(STD_ERROR_HANDLE);
+#endif
+}
+
+} // namespace luma::term
+
+#endif // LUMA_COMMON_TERMINAL_HPP

@@ -5,13 +5,10 @@ argument-hint: "A target app or example to improve, e.g. 'examples/applications/
 
 # UX Improve
 
-Follow the workflow defined in the Luma prompt file below, which is the single
-source of truth for this command. Read it in full and carry out its steps in the
-order given.
+Follow the workflow defined in the Luma prompt file below, which is the single source of truth for this command. Read it in full and carry out its steps in the order given.
 
 @.github/prompts/ux-improve.prompt.md
 
-Use the text below as this command's argument. If it is empty, follow the
-prompt's default, no-argument behaviour:
+Use the text below as this command's argument. If it is empty and the argument is optional, use the prompt's full default scope; if the argument is required, ask for it before starting.
 
 $ARGUMENTS

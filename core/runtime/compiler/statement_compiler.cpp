@@ -119,6 +119,17 @@ void Compiler::emit_try_unwind(std::size_t count, SourceLocation loc) {
 void Compiler::emit_loop_scope_unwind(SourceLocation loc) {
     const auto& loop_ctx = current_scope().loop_context;
 
+    // Unwind exception handlers and emit finally blocks for try blocks nested
+    // inside the current loop FIRST.  The finally bodies are compiled against
+    // the current local layout, so the loop body's locals must still be on the
+    // operand stack while they run: popping them first would make a finally
+    // body read (or declare locals into) slots that no longer exist.  Each
+    // finally body's own locals are popped by its scope guard, so the stack is
+    // back at the loop body's layout afterwards.
+    auto tries_inside =
+        current_scope().exception_context.depth() - loop_ctx.current_try_depth_at_entry();
+    emit_try_unwind(tries_inside, loc);
+
     // Pop locals from inner scopes before jumping out of the loop.
     for (auto& local : std::views::reverse(current_scope().locals)) {
         if (local.depth <= loop_ctx.current_scope_depth()) {
@@ -127,12 +138,6 @@ void Compiler::emit_loop_scope_unwind(SourceLocation loc) {
 
         emit(Op::Pop, loc);
     }
-
-    // Unwind exception handlers and emit finally blocks for try
-    // blocks nested inside the current loop.
-    auto tries_inside =
-        current_scope().exception_context.depth() - loop_ctx.current_try_depth_at_entry();
-    emit_try_unwind(tries_inside, loc);
 }
 
 void Compiler::compile_variable_decl(const VariableDeclStatement& stmt) {
@@ -177,7 +182,10 @@ void Compiler::compile_return(const ReturnStatement& stmt) {
     // TailCall instead of Call + Return.
     const bool inside_try = current_scope().exception_context.is_active();
 
-    if (stmt.value && stmt.value->kind == ExpressionKind::Call && !inside_try) {
+    // A return value that must be widened to `number` needs code after the
+    // call, so it cannot become a tail call.
+    if (stmt.value && stmt.value->kind == ExpressionKind::Call && !inside_try &&
+        !stmt.value->numeric_widening) {
         const auto& call = static_cast<const CallExpression&>(*stmt.value);
 
         // Only optimize simple calls (no named arguments).
@@ -221,7 +229,13 @@ void Compiler::compile_return(const ReturnStatement& stmt) {
     // If we are inside one or more try blocks, emit TryEnd (and any
     // pending finally blocks) before returning so that exception handlers
     // are properly unwound and cleanup code runs even on early return.
-    emit_try_unwind(current_scope().exception_context.depth(), stmt.location);
+    // The return value stays on the operand stack while the finally bodies
+    // run, so reserve a scratch slot for it: otherwise a local declared in a
+    // finally body is assigned the return value's slot and reads it back.
+    if (current_scope().exception_context.is_active()) {
+        const ScratchSlotGuard scratch{access_, 1, stmt.location};
+        emit_try_unwind(current_scope().exception_context.depth(), stmt.location);
+    }
 
     emit(Op::Return, stmt.location);
 }

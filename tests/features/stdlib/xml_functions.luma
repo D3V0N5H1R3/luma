@@ -5,6 +5,8 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Parsing, building and attributes ──────────────────────
+
 @test
 function void test_xml_parse_basic() {
     string tag = Xml.deserialize("<root><item>hello</item></root>")
@@ -24,41 +26,41 @@ function void test_xml_element() {
 
 @test
 function void test_xml_set_attribute() {
-    string attr = Xml.element("div")
+    string class_name = Xml.element("div")
     |> Xml.set_attribute("class", "main")
     |> Xml.attribute("class")
     |> Result.unwrap()
 
-    assert(attr == "main")
+    assert(class_name == "main")
 }
 
 @test
 function void test_xml_has_attribute() {
-    boolean has = Xml.element("div")
+    boolean has_id = Xml.element("div")
     |> Xml.set_attribute("id", "test")
     |> Xml.has_attribute("id")
 
-    assert(has)
+    assert(has_id)
 }
 
 @test
 function void test_xml_attributes() {
-    dictionary<string> attrs = Xml.element("div")
+    dictionary<string> attributes = Xml.element("div")
     |> Xml.set_attribute("id", "main")
     |> Xml.set_attribute("class", "container")
     |> Xml.attributes()
 
-    assert(Dictionary.has(attrs, "id"))
-    assert(Dictionary.has(attrs, "class"))
-    assert(attrs["id"] == "main")
-    assert(attrs["class"] == "container")
+    assert(Dictionary.has(attributes, "id"))
+    assert(Dictionary.has(attributes, "class"))
+    assert(attributes["id"] == "main")
+    assert(attributes["class"] == "container")
 }
 
 @test
 function void test_xml_attributes_empty() {
-    dictionary<string> attrs = Xml.element("span") |> Xml.attributes()
+    dictionary<string> attributes = Xml.element("span") |> Xml.attributes()
 
-    assert(Dictionary.length(attrs) == 0)
+    assert(Dictionary.length(attributes) == 0)
 }
 
 @test
@@ -73,31 +75,45 @@ function void test_xml_set_text() {
 
 @test
 function void test_xml_add_child_count() {
-    integer count = Xml.element("div")
+    integer child_count = Xml.element("div")
     |> Xml.add_child(Xml.element("span"))
     |> Xml.child_count()
 
-    assert(count == 1)
+    assert(child_count == 1)
 }
 
 @test
 function void test_xml_children() {
-    array<xml> kids = Xml.deserialize("<root><a/><b/><c/></root>")
+    array<string> child_tags = Xml.deserialize("<root><a/><b/><c/></root>")
+    |> Result.unwrap()
+    |> Xml.children()
+    |> Array.map((xml child) -> Xml.tag(child))
+    |> Result.unwrap()
+
+    assert(child_tags == ["a", "b", "c"], "children are returned in document order")
+}
+
+@test
+function void test_xml_children_skips_non_element_nodes() {
+    # Text, comments and CDATA are not element children; only Xml.to_node
+    # exposes them.
+    array<xml> children = Xml.deserialize("<r>text<!--note--><a/><![CDATA[raw]]><b/></r>")
     |> Result.unwrap()
     |> Xml.children()
 
-    assert(Array.length(kids) == 3)
+    assert(Array.length(children) == 2, "only the <a/> and <b/> elements are returned")
 }
 
 @test
 function void test_xml_find() {
-    string tag = Xml.deserialize("<root><item id=\"1\"/><item id=\"2\"/></root>")
+    string id = Xml.deserialize("<root><item id=\"1\"/><item id=\"2\"/></root>")
     |> Result.unwrap()
     |> Xml.find("item")
     |> Result.unwrap()
-    |> Xml.tag()
+    |> Xml.attribute("id")
+    |> Result.unwrap()
 
-    assert(tag == "item")
+    assert(id == "1", "find returns the first matching child")
 }
 
 @test
@@ -111,9 +127,9 @@ function void test_xml_find_all() {
 
 @test
 function void test_xml_serialize() {
-    string s = Xml.element("br") |> Xml.serialize()
+    string serialized = Xml.element("br") |> Xml.serialize()
 
-    assert(s == "<br/>")
+    assert(serialized == "<br/>")
 }
 
 @test
@@ -126,21 +142,21 @@ function void test_xml_is_valid() {
 
 @test
 function void test_xml_remove_attribute() {
-    boolean has = Xml.element("div")
+    boolean has_id = Xml.element("div")
     |> Xml.set_attribute("id", "main")
     |> Xml.remove_attribute("id")
     |> Xml.has_attribute("id")
 
-    assert(!has)
+    assert(!has_id)
 }
 
 @test
 function void test_xml_children_by_tag() {
-    array<xml> as_ = Xml.deserialize("<root><a/><b/><a/></root>")
+    array<xml> a_children = Xml.deserialize("<root><a/><b/><a/></root>")
     |> Result.unwrap()
     |> Xml.children_by_tag("a")
 
-    assert(Array.length(as_) == 2)
+    assert(Array.length(a_children) == 2)
 }
 
 @test
@@ -152,7 +168,7 @@ function void test_xml_has_child() {
     )
 }
 
-# ─── set_cdata ───────────────────────────────────────────
+# ─── set_cdata ─────────────────────────────────────────────
 
 @test
 function void test_xml_set_cdata() {
@@ -165,7 +181,7 @@ function void test_xml_set_cdata() {
     assert(String.contains(serialized, "var x = 1 < 2;"))
 }
 
-# ─── add_comment ─────────────────────────────────────────
+# ─── add_comment ───────────────────────────────────────────
 
 @test
 function void test_xml_add_comment() {
@@ -177,7 +193,7 @@ function void test_xml_add_comment() {
     assert(String.contains(serialized, "<!-- a comment -->"))
 }
 
-# ─── text_at ─────────────────────────────────────────────
+# ─── text_at ───────────────────────────────────────────────
 
 @test
 function void test_xml_text_at() {
@@ -191,14 +207,14 @@ function void test_xml_text_at() {
 
 @test
 function void test_xml_text_at_missing_path() {
-    result<string> r = Xml.deserialize("<root/>")
+    result<string> text_result = Xml.deserialize("<root/>")
     |> Result.unwrap()
     |> Xml.text_at("root/missing")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(text_result))
 }
 
-# ─── find_by_attribute ───────────────────────────────────
+# ─── find_by_attribute ─────────────────────────────────────
 
 @test
 function void test_xml_find_by_attribute() {
@@ -214,14 +230,14 @@ function void test_xml_find_by_attribute() {
 
 @test
 function void test_xml_find_by_attribute_not_found() {
-    result<xml> r = Xml.deserialize("<root><item class=\"a\"/></root>")
+    result<xml> find_result = Xml.deserialize("<root><item class=\"a\"/></root>")
     |> Result.unwrap()
     |> Xml.find_by_attribute("id", "99")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(find_result))
 }
 
-# ─── at (path navigation) ────────────────────────────────
+# ─── at (path navigation) ──────────────────────────────────
 
 @test
 function void test_xml_at() {
@@ -236,52 +252,53 @@ function void test_xml_at() {
 
 @test
 function void test_xml_at_missing_path() {
-    result<xml> r = Xml.deserialize("<root/>")
+    result<xml> path_result = Xml.deserialize("<root/>")
     |> Result.unwrap()
     |> Xml.at("root/missing")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(path_result))
 }
 
-# ─── to_dictionary / from_dictionary ─────────────────────
+# ─── to_dictionary / from_dictionary ───────────────────────
 
 @test
-function void test_xml_to_dictionary_roundtrip() {
+function void test_xml_to_dictionary() {
     xml original = Xml.element("person")
     |> Xml.add_child(Xml.element("name") |> Xml.set_text("Alice"))
     |> Xml.add_child(Xml.element("age") |> Xml.set_text("30"))
 
-    dictionary<string> d = Xml.to_dictionary(original)
+    dictionary<string> fields = Xml.to_dictionary(original)
 
-    assert(Dictionary.has(d, "name"))
-    assert(d["name"] == "Alice")
-    assert(d["age"] == "30")
+    assert(Dictionary.length(fields) == 2, "one entry per child element")
+    assert(fields["name"] == "Alice")
+    assert(fields["age"] == "30")
 }
 
 @test
 function void test_xml_from_dictionary() {
-    dictionary<string> d = {"value": "hello"}
+    # Each entry becomes a child element whose text is the value, so
+    # to_dictionary recovers the original map.
+    dictionary<string> fields = {"value": "hello"}
 
-    xml node = Xml.from_dictionary("item", d)
+    xml node = Xml.from_dictionary("item", fields)
 
-    assert(type_of(node) == "xml")
+    assert(Xml.serialize(node) == "<item><value>hello</value></item>")
+    assert(Xml.to_dictionary(node) == fields, "from_dictionary and to_dictionary round-trip")
 }
 
-# ─── serialize_pretty ────────────────────────────────────
+# ─── serialize_pretty ──────────────────────────────────────
 
 @test
 function void test_xml_serialize_pretty() {
     xml node = Xml.element("root")
     |> Xml.add_child(Xml.element("child"))
 
-    string s = Xml.serialize_pretty(node)
+    string pretty = Xml.serialize_pretty(node)
 
-    assert(String.contains(s, "\n"))
-    assert(String.contains(s, "root"))
-    assert(String.contains(s, "child"))
+    assert(pretty == "<root>\n  <child/>\n</root>", "one element per line, children indented")
 }
 
-# ─── set_tag ─────────────────────────────────────────────
+# ─── set_tag ───────────────────────────────────────────────
 
 @test
 function void test_xml_set_tag() {
@@ -290,41 +307,40 @@ function void test_xml_set_tag() {
     assert(Xml.tag(node) == "new")
 }
 
-# ─── parse_file (error case) ─────────────────────────────
+# ─── deserialize_file / write_file ─────────────────────────
 
 @test
 function void test_xml_parse_file_missing() {
-    result<xml> r = Xml.deserialize_file("nonexistent_file.xml")
+    string missing_path = "_test_xml_missing_${Random.generate_uuid()}.xml"
+    result<xml> parse_result = Xml.deserialize_file(missing_path)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(parse_result))
 }
-
-# ─── write_file (error path) ─────────────────────────────
 
 @test
 function void test_xml_write_file_then_parse() {
-    string test_file = "luma_xml_test_tmp.xml"
-
-    # Ensure clean state
-    result<boolean> _cleanup = FileSystem.delete(test_file)
+    # A per-run unique name keeps parallel ctest runs from colliding, and
+    # `finally` removes the file even when an assertion fails.
+    string test_file = "_test_xml_write_${Random.generate_uuid()}.xml"
 
     xml node = Xml.element("data")
     |> Xml.set_attribute("version", "1")
 
-    result<void> write_result = Xml.write_file(test_file, node)
+    try {
+        result<void> write_result = Xml.write_file(test_file, node)
 
-    assert(Result.is_success(write_result))
+        assert(Result.is_success(write_result))
 
-    result<xml> parsed = Xml.deserialize_file(test_file)
+        xml parsed = Result.unwrap(Xml.deserialize_file(test_file))
 
-    assert(Result.is_success(parsed))
-    assert(Xml.tag(Result.unwrap(parsed)) == "data")
-
-    # Clean up
-    result<boolean> _ = FileSystem.delete(test_file)
+        assert(Xml.tag(parsed) == "data")
+        assert(Xml.attribute(parsed, "version") == success("1"))
+    } finally {
+        result<boolean> _deleted = FileSystem.delete(test_file)
+    }
 }
 
-# ─── Entity decoding and escaping round-trips ────────────
+# ─── Entity decoding and escaping round-trips ──────────────
 
 @test
 function void test_xml_entity_decode() {
@@ -338,11 +354,11 @@ function void test_xml_entity_decode() {
 
 @test
 function void test_xml_serialize_escapes_text() {
-    string s = Xml.element("r")
+    string serialized = Xml.element("r")
     |> Xml.set_text("a<b&c")
     |> Xml.serialize()
 
-    assert(s == "<r>a&lt;b&amp;c</r>")
+    assert(serialized == "<r>a&lt;b&amp;c</r>")
 }
 
 @test
@@ -360,24 +376,25 @@ function void test_xml_attribute_entity_roundtrip() {
     assert(value == "a<b>&\"'")
 }
 
-# ─── CDATA / comment / declaration round-trips ───────────
+# ─── CDATA / comment / declaration round-trips ─────────────
 
 @test
 function void test_xml_cdata_roundtrip() {
-    string s = Xml.deserialize("<s><![CDATA[x<y&z]]></s>")
+    # CDATA content is kept raw — neither escaped nor merged into plain text.
+    string serialized = Xml.deserialize("<s><![CDATA[x<y&z]]></s>")
     |> Result.unwrap()
     |> Xml.serialize()
 
-    assert(String.contains(s, "<![CDATA[x<y&z]]>"))
+    assert(serialized == "<s><![CDATA[x<y&z]]></s>")
 }
 
 @test
 function void test_xml_comment_roundtrip() {
-    string s = Xml.deserialize("<d><!--note--></d>")
+    string serialized = Xml.deserialize("<d><!--note--></d>")
     |> Result.unwrap()
     |> Xml.serialize()
 
-    assert(String.contains(s, "<!--note-->"))
+    assert(serialized == "<d><!--note--></d>")
 }
 
 @test
@@ -389,24 +406,24 @@ function void test_xml_declaration_skipped() {
     assert(tag == "r")
 }
 
-# ─── Self-closing, nested compact, and unicode ───────────
+# ─── Self-closing, nested compact, and unicode ─────────────
 
 @test
 function void test_xml_self_closing_serialize() {
-    string s = Xml.deserialize("<a/>")
+    string serialized = Xml.deserialize("<a/>")
     |> Result.unwrap()
     |> Xml.serialize()
 
-    assert(s == "<a/>")
+    assert(serialized == "<a/>")
 }
 
 @test
 function void test_xml_nested_compact_serialize() {
-    string s = Xml.deserialize("<r><a>x</a></r>")
+    string serialized = Xml.deserialize("<r><a>x</a></r>")
     |> Result.unwrap()
     |> Xml.serialize()
 
-    assert(s == "<r><a>x</a></r>")
+    assert(serialized == "<r><a>x</a></r>")
 }
 
 @test
@@ -419,34 +436,34 @@ function void test_xml_unicode_text() {
     assert(text == "café — naïve")
 }
 
-# ─── Negative: malformed input rejected ──────────────────
+# ─── Negative: malformed input rejected ────────────────────
 
 @test
 function void test_xml_deserialize_unclosed() {
-    result<xml> r = Xml.deserialize("<root>")
+    result<xml> parse_result = Xml.deserialize("<root>")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(parse_result))
 }
 
 @test
 function void test_xml_deserialize_empty() {
-    result<xml> r = Xml.deserialize("")
+    result<xml> parse_result = Xml.deserialize("")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(parse_result))
 }
 
 @test
 function void test_xml_deserialize_mismatched_tag() {
-    result<xml> r = Xml.deserialize("<a></b>")
+    result<xml> parse_result = Xml.deserialize("<a></b>")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(parse_result))
 }
 
 @test
 function void test_xml_deserialize_trailing_content() {
-    result<xml> r = Xml.deserialize("<a/>junk")
+    result<xml> parse_result = Xml.deserialize("<a/>junk")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(parse_result))
 }
 
 @test
@@ -454,59 +471,60 @@ function void test_xml_deserialize_error_code() {
     # Parse failures carry the machine-readable parse_error code and the
     # originating stdlib function, so callers can branch on the error category
     # rather than matching message text.
-    result<xml> r = Xml.deserialize("<a></b>")
+    result<xml> parse_result = Xml.deserialize("<a></b>")
 
-    assert(Result.is_failure(r))
-    assert(Result.error_code(r) == "parse_error")
-    assert(Result.source_function(r) == "Xml.deserialize")
+    assert(Result.is_failure(parse_result))
+    assert(Result.error_code(parse_result) == "parse_error")
+    assert(Result.source_function(parse_result) == "Xml.deserialize")
 }
 
-# ─── Negative: security (DOCTYPE rejected) ───────────────
+# ─── Negative: security (DOCTYPE rejected) ─────────────────
 
 @test
 function void test_xml_deserialize_doctype_rejected() {
-    result<xml> r = Xml.deserialize("<!DOCTYPE html><r/>")
+    result<xml> parse_result = Xml.deserialize("<!DOCTYPE html><r/>")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(parse_result))
     assert(!Xml.is_valid("<!DOCTYPE html><r/>"))
 }
 
-# ─── Negative: depth limit rejected ──────────────────────
+# ─── Negative: depth limit rejected ────────────────────────
 
 @test
 function void test_xml_deserialize_too_deep() {
     string opens = String.repeat("<a>", 200) |> Result.unwrap()
     string closes = String.repeat("</a>", 200) |> Result.unwrap()
+    string deep_document = "${opens}${closes}"
 
-    assert(!Xml.is_valid(opens + closes))
-    assert(Result.is_failure(Xml.deserialize(opens + closes)))
+    assert(!Xml.is_valid(deep_document))
+    assert(Result.is_failure(Xml.deserialize(deep_document)))
 }
 
-# ─── Negative: query failures ────────────────────────────
+# ─── Negative: query failures ──────────────────────────────
 
 @test
 function void test_xml_attribute_not_found() {
-    result<string> r = Xml.deserialize("<r/>")
+    result<string> attribute_result = Xml.deserialize("<r/>")
     |> Result.unwrap()
     |> Xml.attribute("missing")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(attribute_result))
 }
 
 @test
 function void test_xml_text_no_content() {
-    result<string> r = Xml.element("empty") |> Xml.text()
+    result<string> text_result = Xml.element("empty") |> Xml.text()
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(text_result))
 }
 
 @test
 function void test_xml_find_not_found() {
-    result<xml> r = Xml.deserialize("<r/>")
+    result<xml> find_result = Xml.deserialize("<r/>")
     |> Result.unwrap()
     |> Xml.find("nope")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(find_result))
 }
 
 @test
@@ -529,7 +547,7 @@ function void test_xml_deep_nesting_rejected() {
     assert(String.contains(caught, "too deep"), "deep XML nesting should be rejected")
 }
 
-# ─── Negative: invalid XML names rejected ────────────────
+# ─── Negative: invalid XML names rejected ──────────────────
 
 @test
 function void test_xml_invalid_name_rejected() {
@@ -549,16 +567,14 @@ function void test_xml_invalid_name_rejected() {
            "invalid XML tag name should be rejected")
 }
 
-# ───────────────────────────────────────────────────────────
-# Xml.Node / Xml.to_node
-# ───────────────────────────────────────────────────────────
+# ─── Xml.Node / Xml.to_node ────────────────────────────────
 
 # Exhaustive match over every Xml.Node variant.  Beyond labelling a node, this
 # doubles as a compile-time check that the recursive Xml.Node choice is fully
 # registered, exhaustively matchable, and usable as a parameter type — and that
 # all four payload variants bind their payloads (Element binds three fields).
-function string node_label(Xml.Node n) {
-    return match n {
+function string node_label(Xml.Node node) {
+    return match node {
     case Xml.Node.Element(tag, _attrs, kids) { "element:${tag}:${Array.length(kids)}" }
     case Xml.Node.Text(content)             { "text:${content}" }
     case Xml.Node.Comment(content)          { "comment:${content}" }
@@ -663,15 +679,16 @@ function void test_xml_to_node_leaf() {
     assert(node_label(node) == "element:root:0")
 }
 
-# ─── Located parse errors (Xml.deserialize_detailed / Xml.ParseError) ───
+# ─── Located parse errors (deserialize_detailed) ───────────
 
 @test
 function void test_xml_deserialize_detailed_success() {
-    result<Xml.Node, Xml.ParseError> r = Xml.deserialize_detailed("<root><a/></root>")
+    result<Xml.Node, Xml.ParseError> parse_result = Xml.deserialize_detailed("<root><a/></root>")
 
-    assert(Result.is_success(r), "well-formed XML should parse")
+    assert(Result.is_success(parse_result), "well-formed XML should parse")
 
-    Xml.Node node = Result.unwrap(r)
+    Xml.Node node = Result.unwrap(parse_result)
+
     match node {
     case Xml.Node.Element(tag, _attrs, kids) {
         assert(tag == "root", "the root tag is decoded")
@@ -685,21 +702,37 @@ function void test_xml_deserialize_detailed_success() {
 
 @test
 function void test_xml_deserialize_detailed_failure_location() {
-    result<Xml.Node, Xml.ParseError> r = Xml.deserialize_detailed("<root>")
+    # Input ends right after "<root>", so the error points one past its last
+    # character: line 1, column 7.
+    result<Xml.Node, Xml.ParseError> parse_result = Xml.deserialize_detailed("<root>")
 
-    match r {
-        success(_n) { assert(false, "an unclosed root should not parse") }
-        failure(e) {
-            assert(e.line >= 1, "the line is 1-based")
-            assert(e.column >= 1, "the column is 1-based")
-            assert(String.length(e.message) > 0, "the message is populated")
+    match parse_result {
+        success(_node) { assert(false, "an unclosed root should not parse") }
+        failure(error) {
+            assert(error.line == 1, "the error is on the first line")
+            assert(error.column == 7, "the column is 1-based, just past the input")
+            assert(String.length(error.message) > 0, "the message is populated")
         }
     }
 }
 
-# ───────────────────────────────────────────────────────────
-# Descendant search, path navigation, child edits, text and entities
-# ───────────────────────────────────────────────────────────
+@test
+function void test_xml_deserialize_detailed_failure_on_later_line() {
+    # Lines are counted across newlines: the stray </c> starts at column 9 of
+    # line 2 (columns are 1-based, after two spaces of indentation and <b>).
+    result<Xml.Node, Xml.ParseError> parse_result = Xml.deserialize_detailed("<a>\n  <b></c>\n</a>")
+
+    match parse_result {
+        success(_node) { assert(false, "a mismatched closing tag should not parse") }
+        failure(error) {
+            assert(error.line == 2, "the mismatch is reported on line 2")
+            assert(error.column == 9, "the column points at the stray closing tag")
+            assert("</c>" in error.message, "the message names the offending tag")
+        }
+    }
+}
+
+# ─── Descendant search, path navigation, child edits ───────
 
 @test
 function void test_xml_find_descendant() {
@@ -723,11 +756,15 @@ function void test_xml_find_descendant_not_found() {
 
 @test
 function void test_xml_find_all_descendants() {
-    array<xml> items = Xml.deserialize("<r><item/><a><item/></a><item/></r>")
+    # Matches at every depth, returned in document (pre-order) order.
+    array<string> ids = Xml.deserialize(
+        "<r><item id=\"1\"/><a><item id=\"2\"/></a><item id=\"3\"/></r>")
     |> Result.unwrap()
     |> Xml.find_all_descendants("item")
+    |> Array.map((xml item) -> Result.unwrap(Xml.attribute(item, "id")))
+    |> Result.unwrap()
 
-    assert(Array.length(items) == 3, "collects matches at every depth")
+    assert(ids == ["1", "2", "3"], "collects matches at every depth in document order")
 }
 
 @test
@@ -757,52 +794,54 @@ function void test_xml_get_path_indexed() {
 
 @test
 function void test_xml_get_path_missing() {
-    result<xml> r = Xml.deserialize("<r><a/></r>")
+    result<xml> path_result = Xml.deserialize("<r><a/></r>")
     |> Result.unwrap()
     |> Xml.get_path("a/missing")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(path_result))
 }
 
 @test
 function void test_xml_remove_child() {
-    integer count = Xml.deserialize("<r><a/><b/><c/></r>")
+    string serialized = Xml.deserialize("<r><a/><b/><c/></r>")
     |> Result.unwrap()
     |> Xml.remove_child(1)
     |> Result.unwrap()
-    |> Xml.child_count()
+    |> Xml.serialize()
 
-    assert(count == 2)
+    assert(serialized == "<r><a/><c/></r>", "the child at 0-based index 1 is removed")
 }
 
 @test
 function void test_xml_remove_child_out_of_bounds() {
-    result<xml> r = Xml.deserialize("<r><a/></r>")
+    result<xml> remove_result = Xml.deserialize("<r><a/></r>")
     |> Result.unwrap()
     |> Xml.remove_child(9)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(remove_result))
 }
 
 @test
 function void test_xml_replace_child() {
-    string s = Xml.deserialize("<r><a/><b/></r>")
+    string serialized = Xml.deserialize("<r><a/><b/></r>")
     |> Result.unwrap()
     |> Xml.replace_child(0, Xml.element("z"))
     |> Result.unwrap()
     |> Xml.serialize()
 
-    assert(s == "<r><z/><b/></r>")
+    assert(serialized == "<r><z/><b/></r>")
 }
 
 @test
 function void test_xml_replace_child_out_of_bounds() {
-    result<xml> r = Xml.deserialize("<r><a/></r>")
+    result<xml> replace_result = Xml.deserialize("<r><a/></r>")
     |> Result.unwrap()
     |> Xml.replace_child(4, Xml.element("z"))
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(replace_result))
 }
+
+# ─── Text content and entity escaping ──────────────────────
 
 @test
 function void test_xml_inner_text() {
@@ -814,18 +853,29 @@ function void test_xml_inner_text() {
 }
 
 @test
-function void test_xml_escape() {
-    string s = Xml.escape("a<b>&\"'c")
+function void test_xml_text_reads_only_direct_text() {
+    # Unlike inner_text, Xml.text ignores text nested inside child elements.
+    string text = Xml.deserialize("<r>a<b>b</b>c</r>")
+    |> Result.unwrap()
+    |> Xml.text()
+    |> Result.unwrap()
 
-    assert(s == "a&lt;b&gt;&amp;&quot;&apos;c")
+    assert(text == "ac", "only the element's own text children are read")
+}
+
+@test
+function void test_xml_escape() {
+    string escaped = Xml.escape("a<b>&\"'c")
+
+    assert(escaped == "a&lt;b&gt;&amp;&quot;&apos;c")
 }
 
 @test
 function void test_xml_unescape() {
-    string s = Xml.unescape("a&lt;b&gt;&amp;&quot;&apos;c")
+    string unescaped = Xml.unescape("a&lt;b&gt;&amp;&quot;&apos;c")
     |> Result.unwrap()
 
-    assert(s == "a<b>&\"'c")
+    assert(unescaped == "a<b>&\"'c")
 }
 
 @test
@@ -841,9 +891,9 @@ function void test_xml_escape_unescape_roundtrip() {
 
 @test
 function void test_xml_unescape_numeric() {
-    string s = Xml.unescape("&#65;&#x42;") |> Result.unwrap()
+    string unescaped = Xml.unescape("&#65;&#x42;") |> Result.unwrap()
 
-    assert(s == "AB")
+    assert(unescaped == "AB", "decimal and hexadecimal references both decode")
 }
 
 @test

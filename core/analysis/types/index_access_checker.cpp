@@ -41,8 +41,18 @@ TypeInfo ExpressionTypeChecker::visit_index_access(const IndexAccessExpression& 
         return with_optional_null(check_tuple_index(expr, object_type));
     }
 
-    // Optional chaining: optional<T>[i] — unwrap T and check indexability.
+    // Optional chaining: optional<T>[i] — unwrap T and check indexability.  A
+    // plain `[i]` fails at runtime when the value is none, so it requires `?[`.
     if (object_type.kind == TypeInfo::Kind::Optional && !object_type.inner_types.empty()) {
+        if (!expr.is_optional) {
+            tc_.error(std::format("cannot index into '{}' — the value may be none",
+                                  object_type.to_string()),
+                      expr.location,
+                      "use '?[' for optional indexing, or unwrap the value first with '?\?' or "
+                      "match",
+                      DiagnosticCode::TypeMismatch);
+        }
+
         return with_optional_null(check_optional_index(object_type));
     }
 

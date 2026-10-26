@@ -640,7 +640,26 @@ static void test_xml_deserialize_detailed_failure_location() {
     ASSERT_TRUE(err->find_field("column")->as_integer() >= 1);
 }
 
+static void test_xml_secondary_args_are_type_checked() {
+    // Regression: Xml functions read later arguments with unchecked
+    // as_string()/as_integer(); a wrong type (smuggled past the type checker
+    // through array<any>) surfaced as an opaque internal error instead of a
+    // qualified type error.
+    const auto v = eval(R"(
+        array<any> mixed = [42]
+        mutable string message = ""
+        try {
+            boolean found = Xml.has_attribute(Xml.element("a"), mixed[0])
+        } catch (e) {
+            message = e
+        }
+        message
+    )");
+    ASSERT_EQ(v.as_string(), std::string{"Xml.has_attribute: expected string, got 'integer'"});
+}
+
 int main() {
+    RUN(test_xml_secondary_args_are_type_checked);
     RUN(test_xml_add_child);
     RUN(test_xml_attribute);
     RUN(test_xml_child_count);

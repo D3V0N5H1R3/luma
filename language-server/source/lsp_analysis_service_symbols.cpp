@@ -139,7 +139,7 @@ void register_local_variable(AnalysisResult& result, const std::string& name,
 void register_qualified_definition(AnalysisResult& result, std::string_view prefix,
                                    const std::string& name, const SourceLocation& location,
                                    const std::string& type_str) {
-    const std::string qname = make_qualified(prefix, name);
+    const std::string qname = symbols::make_qualified(prefix, name);
     result.semantic.symbols.definitions[qname] =
         SymbolDefinition{.location = location, .type_string = type_str, .is_mutable = false};
     if (!prefix.empty()) {
@@ -215,7 +215,7 @@ template <typename CollectLocalVarsFn>
 void handle_function_declaration(const FunctionDeclaration& func, AnalysisResult& result,
                                  std::string_view prefix,
                                  CollectLocalVarsFn&& collect_local_vars_fn) {
-    const std::string qname = make_qualified(prefix, func.name);
+    const std::string qname = symbols::make_qualified(prefix, func.name);
 
     std::string ret_type;
     std::string params_sig;
@@ -275,7 +275,7 @@ void handle_interface_declaration(const InterfaceDeclaration& iface, AnalysisRes
                                                        std::string_view prefix) {
     result.semantic.symbols.definitions[ns.name] =
         SymbolDefinition{.location = ns.location, .type_string = "namespace", .is_mutable = false};
-    return make_qualified(prefix, ns.name);
+    return symbols::make_qualified(prefix, ns.name);
 }
 
 void handle_record_declaration(const RecordDeclaration& rec, AnalysisResult& result,
@@ -528,9 +528,8 @@ void process_while_locals(const WhileStatement& ws, AnalysisResult& result,
 void LspAnalysisService::collect_ast_symbols(const std::vector<std::unique_ptr<Declaration>>& decls,
                                              AnalysisResult& result, std::string_view prefix) {
     auto local_vars_fn = [this](const std::vector<std::unique_ptr<Statement>>& stmts,
-                                AnalysisResult& res, const std::string& fn, int start, int end) {
-        collect_local_vars(stmts, res, fn, start, end);
-    };
+                                AnalysisResult& res, const std::string& fn, int start,
+                                int end) { collect_local_vars(stmts, res, fn, start, end); };
 
     for (const auto& decl_ptr : decls) {
         if (!decl_ptr) {
@@ -585,9 +584,8 @@ void LspAnalysisService::collect_local_vars(const std::vector<std::unique_ptr<St
                                             const std::string& enclosing_function, int scope_start,
                                             int scope_end) {
     auto local_vars_fn = [this](const std::vector<std::unique_ptr<Statement>>& s,
-                                AnalysisResult& res, const std::string& fn, int start, int end) {
-        collect_local_vars(s, res, fn, start, end);
-    };
+                                AnalysisResult& res, const std::string& fn, int start,
+                                int end) { collect_local_vars(s, res, fn, start, end); };
 
     for (const auto& stmt_ptr : stmts) {
         if (!stmt_ptr) {
@@ -659,8 +657,8 @@ void LspAnalysisService::symbol_phase(const Program& program, AnalysisResult& re
 
     // Build reverse map: short name → qualified names for O(1) lookup.
     for (const auto& [qualified_name, fn_info] : result.semantic.symbols.user_functions) {
-        if (is_qualified_name(qualified_name)) {
-            const std::string short_name{qualified_member(qualified_name)};
+        if (symbols::is_qualified_name(qualified_name)) {
+            const std::string short_name{symbols::qualified_member(qualified_name)};
             result.semantic.symbols.function_short_names[short_name].push_back(qualified_name);
         }
     }

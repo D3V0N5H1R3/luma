@@ -1,103 +1,102 @@
 # KeyValueStore benchmarks: open, set, get, has, remove, bulk operations.
-# Uses a temporary, process-unique file that is cleaned up after each benchmark.
+#
+# Mutations are copy-on-write: KeyValueStore.set/remove/set_many return a new
+# store and leave their input untouched, so every write is threaded through the
+# returned store. Read-only cases run against a store populated once outside
+# the timed body. All stores share one process-unique temporary path, which is
+# destroyed at the end.
 
 function string bench_kvs_temp_path() {
     return "__bench_kvs_tmp_${Process.get_process_id()}.kvs"
 }
 
+function key_value_store bench_kvs_populated(integer count, string key_prefix) {
+    mutable key_value_store store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
+
+    for i in 0 .. count {
+        store = KeyValueStore.set(store, "${key_prefix}${i}", "value") |> Result.unwrap()
+    }
+
+    return store
+}
+
 function BenchResult run_keyvaluestore_benchmarks(BenchResult state) {
     mutable BenchResult st = state
+
+    key_value_store empty_store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
+    key_value_store store20 = bench_kvs_populated(20, "")
+    key_value_store store30 = bench_kvs_populated(30, "")
+    key_value_store store40 = bench_kvs_populated(40, "user_")
+    key_value_store store50 = bench_kvs_populated(50, "")
+
+    array<string> keys20 = Array.range(0, 20)
+        |> Result.unwrap()
+        |> Array.map((integer i) -> "${i}")
+        |> Result.unwrap()
+    array<string> keys50 = Array.range(0, 50)
+        |> Result.unwrap()
+        |> Array.map((integer i) -> "${i}")
+        |> Result.unwrap()
+    dictionary<string> batch20 = Dictionary.from_keys(keys20, "v")
 
     # --- Set / Get ---
 
     st = time_it(st, "KVS set (50 keys)", 200, () -> {
-        key_value_store store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
-        for i in 0 .. 50 {
-            result<key_value_store> _s = KeyValueStore.set(store, Converter.to_string(i), "value")
+        mutable key_value_store store = empty_store
+        for key in keys50 {
+            store = KeyValueStore.set(store, key, "value") |> Result.unwrap()
         }
-        result<string> _d = KeyValueStore.destroy(store)
     })
 
     st = time_it(st, "KVS get (50 keys)", 200, () -> {
-        key_value_store store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
-        for i in 0 .. 50 {
-            result<key_value_store> _s = KeyValueStore.set(store, Converter.to_string(i), "value")
+        for key in keys50 {
+            result<string> _v = KeyValueStore.get(store50, key)
         }
-        for i in 0 .. 50 {
-            result<string> _v = KeyValueStore.get(store, Converter.to_string(i))
-        }
-        result<string> _d = KeyValueStore.destroy(store)
     })
 
     # --- Has / Remove ---
 
     st = time_it(st, "KVS has/remove (20 keys)", 500, () -> {
-        key_value_store store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
-        for i in 0 .. 20 {
-            result<key_value_store> _s = KeyValueStore.set(store, Converter.to_string(i), "val")
+        for key in keys20 {
+            boolean _h = KeyValueStore.has(store20, key)
         }
-        for i in 0 .. 20 {
-            boolean _h = KeyValueStore.has(store, Converter.to_string(i))
-        }
+
+        mutable key_value_store store = store20
         for i in 0 .. 10 {
-            result<key_value_store> _r = KeyValueStore.remove(store, Converter.to_string(i))
+            store = KeyValueStore.remove(store, keys20[i]) |> Result.unwrap()
         }
-        result<string> _d = KeyValueStore.destroy(store)
     })
 
     # --- Bulk operations ---
 
     st = time_it(st, "KVS set_many/get_many (20 keys)", 200, () -> {
-        key_value_store store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
-        mutable dictionary<string> batch = {}
-        for i in 0 .. 20 {
-            batch = Dictionary.set(batch, Converter.to_string(i), "v")
-        }
-        result<key_value_store> _s = KeyValueStore.set_many(store, batch)
-        mutable array<string> key_arr = []
-        for i in 0 .. 20 {
-            key_arr = Array.push(key_arr, Converter.to_string(i))
-        }
-        dictionary<string> _vals = KeyValueStore.get_many(store, key_arr)
-        result<string> _d = KeyValueStore.destroy(store)
+        key_value_store store = KeyValueStore.set_many(empty_store, batch20) |> Result.unwrap()
+        dictionary<string> _vals = KeyValueStore.get_many(store, keys20)
     })
 
     # --- Iteration ---
 
     st = time_it(st, "KVS keys/values/count (30 keys)", 200, () -> {
-        key_value_store store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
-        for i in 0 .. 30 {
-            result<key_value_store> _s = KeyValueStore.set(store, Converter.to_string(i), "v")
-        }
-        array<string> _keys = KeyValueStore.keys(store)
-        array<string> _vals = KeyValueStore.values(store)
-        integer _count = KeyValueStore.count(store)
-        result<string> _d = KeyValueStore.destroy(store)
+        array<string> _keys = KeyValueStore.keys(store30)
+        array<string> _vals = KeyValueStore.values(store30)
+        integer _count = KeyValueStore.count(store30)
     })
 
     # --- Persistence (save / reload through the .kv file codec) ---
 
     st = time_it(st, "KVS save/reload (30 keys)", 100, () -> {
-        mutable key_value_store store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
-        for i in 0 .. 30 {
-            store = KeyValueStore.set(store, Converter.to_string(i), "value") |> Result.unwrap()
-        }
-        result<string> _saved = KeyValueStore.save(store)
-        key_value_store reloaded = KeyValueStore.reload(store) |> Result.unwrap()
+        result<string> _saved = KeyValueStore.save(store30)
+        key_value_store reloaded = KeyValueStore.reload(store30) |> Result.unwrap()
         integer _count = KeyValueStore.count(reloaded)
-        result<string> _d = KeyValueStore.destroy(store)
     })
 
     # --- Pattern search (glob matcher over every key) ---
 
     st = time_it(st, "KVS find_by_pattern (40 keys)", 200, () -> {
-        mutable key_value_store store = KeyValueStore.open(bench_kvs_temp_path()) |> Result.unwrap()
-        for i in 0 .. 40 {
-            store = KeyValueStore.set(store, "user_${i}", "v") |> Result.unwrap()
-        }
-        dictionary<string> _matched = KeyValueStore.find_by_pattern(store, "user_1*")
-        result<string> _d = KeyValueStore.destroy(store)
+        dictionary<string> _matched = KeyValueStore.find_by_pattern(store40, "user_1*")
     })
+
+    result<string> _destroyed = KeyValueStore.destroy(store30)
 
     return st
 }

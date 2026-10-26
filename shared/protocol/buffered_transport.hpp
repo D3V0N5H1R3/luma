@@ -25,19 +25,11 @@ protected:
     [[nodiscard]] std::optional<std::string> read_line() override;
     [[nodiscard]] std::string read_exact(std::size_t count) override;
 
-    // Read up to buf.size() bytes into buf.
-    // Returns the number of bytes actually read.
-    // Returns 0 on EOF or timeout (no data available).
+    // Read up to buf.size() bytes into buf, blocking until at least one byte
+    // is available.  Returns the number of bytes actually read; 0 means EOF
+    // (read_line() and read_exact() treat it as the end of the stream, so an
+    // implementation must never return 0 merely because no data is ready yet).
     // Throws on I/O error.
-    //
-    // Timeout behaviour is defined per subclass.  StdioTransport supports an
-    // opt-in read timeout via set_read_timeout() (implemented with poll() on
-    // POSIX and WaitForSingleObject() on Windows); when unset it blocks until
-    // data arrives or EOF.  There is intentionally no portable base-class
-    // timeout — a generic solution would require a watchdog thread or
-    // per-transport platform I/O, which is more invasive than warranted.  The
-    // DAP and LSP servers rely on the editor closing the pipe to signal
-    // shutdown, so the practical risk of an infinite hang is low.
     [[nodiscard]] virtual std::size_t read_raw(std::span<char> buf) = 0;
 
 private:

@@ -93,9 +93,9 @@ function BenchResult run_string_benchmarks(BenchResult state) {
     # Large join stresses buffer growth: exercises the result reserve and the
     # per-element string-append path across many string operands.
     array<string> big_join_parts = Array.range(0, 128)
-    |> Result.unwrap_or([])
-    |> Array.map((integer i) -> "item_${i}")
-    |> Result.unwrap_or([])
+        |> Result.unwrap_or([])
+        |> Array.map((integer i) -> "item_${i}")
+        |> Result.unwrap_or([])
     st = time_it(st, "String.join (large)", 20000, () -> {
         string _j = String.join(big_join_parts, ", ")
     })

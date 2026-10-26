@@ -2,6 +2,12 @@
 // interface fields, interpolation, dictionary, unary, tuple index, bitwise,
 // record defaults, match string, unused result, trusted_downcast, internal, error-pipe, ADTs.
 
+#include <algorithm>
+#include <cstddef>
+#include <string>
+
+#include "analysis/ast/expression.hpp"
+#include "analysis/ast/statement.hpp"
 #include "type_checker_test_helpers.hpp"
 
 // ─── Statistics return-type signatures ───
@@ -26,6 +32,46 @@ static void test_statistics_variance_returns_result_number() {
 
 static void test_statistics_standard_deviation_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.standard_deviation([1.0, 2.0, 3.0])\n"));
+}
+
+// Stdlib signatures declare result<void>; the documentation spells it
+// result<none>.  Both annotations accept either.
+static void test_result_none_and_result_void_are_interchangeable() {
+    ASSERT_TRUE(passes("result<none> r = Process.set_environment_variable(\"A\", \"1\")\n"));
+    ASSERT_TRUE(passes("result<void> r = Process.set_environment_variable(\"A\", \"1\")\n"));
+    ASSERT_TRUE(passes("result<void> r = success(none)\n"));
+    ASSERT_TRUE(passes("function result<none> set() {\n"
+                       "  return Process.set_environment_variable(\"A\", \"1\")\n"
+                       "}\n"));
+    // Only the "no value" spellings are interchangeable.
+    ASSERT_TRUE(fails("result<integer> r = Process.set_environment_variable(\"A\", \"1\")\n"));
+}
+
+// ─── Stdlib records sharing a short name ───
+
+// Math.Interval and DateTime.Interval are both named "Interval" but have
+// different fields, so they must be distinct types.
+static void test_math_and_datetime_intervals_are_distinct_types() {
+    ASSERT_TRUE(fails("function result<number> f() {\n"
+                      "  DateTime.Interval wrong = Math.interval(1.0, 5.0)?\n"
+                      "  return success(wrong.start)\n"
+                      "}\n"));
+    ASSERT_TRUE(fails("function result<number> f() {\n"
+                      "  Math.Interval wrong = DateTime.interval(1.0, 5.0)?\n"
+                      "  return success(wrong.minimum)\n"
+                      "}\n"));
+}
+
+// A field that only the other interval record has is rejected statically.
+static void test_math_interval_field_access_is_checked() {
+    ASSERT_TRUE(passes("function result<number> f() {\n"
+                       "  Math.Interval range = Math.interval(1.0, 5.0)?\n"
+                       "  return success(range.maximum - range.minimum)\n"
+                       "}\n"));
+    ASSERT_TRUE(fails("function result<number> f() {\n"
+                      "  Math.Interval range = Math.interval(1.0, 5.0)?\n"
+                      "  return success(range.start)\n"
+                      "}\n"));
 }
 
 // ─── None type ───
@@ -287,6 +333,43 @@ static void test_unused_result_suppressed_with_wildcard() {
                               "result<string> _ = get()\n"));
 }
 
+static void test_unused_result_suppressed_with_discard_assignment() {
+    // '_ = expr' with no '_' in scope discards the value without declaring it.
+    const std::string source = "function result<string> get() { return success(\"hi\") }\n"
+                               "function void main() {\n"
+                               "    _ = get()\n"
+                               "}\n";
+    ASSERT_FALSE(fails(source));
+    ASSERT_FALSE(has_warnings(source));
+}
+
+static void test_discard_assignment_still_checks_value() {
+    ASSERT_TRUE(fails("function void main() {\n"
+                      "    _ = missing_name\n"
+                      "}\n"));
+}
+
+static void test_declared_underscore_assignment_is_type_checked() {
+    // A declared mutable '_' keeps ordinary assignment semantics, including type checks.
+    ASSERT_TRUE(fails("function void main() {\n"
+                      "    mutable integer _ = 1\n"
+                      "    _ = \"text\"\n"
+                      "}\n"));
+}
+
+static void test_discard_assignment_inside_underscore_loop() {
+    // An immutable '_' (here the loop variable) cannot be assigned, so '_ = expr'
+    // discards instead of reporting an immutable assignment.
+    const std::string source = "function result<string> get() { return success(\"hi\") }\n"
+                               "function void main() {\n"
+                               "    for _ in 0..3 {\n"
+                               "        _ = get()\n"
+                               "    }\n"
+                               "}\n";
+    ASSERT_FALSE(fails(source));
+    ASSERT_FALSE(has_warnings(source));
+}
+
 static void test_unused_void_no_warn() {
     ASSERT_FALSE(has_warnings("function void side_effect() { print(\"hi\") }\n"
                               "side_effect()\n"));
@@ -413,6 +496,78 @@ static void test_non_internal_members_still_accessible() {
                        "    internal function string secret(string s) { return s }\n"
                        "}\n"
                        "string r = Util.process(\"hello\")\n"));
+}
+
+// ─── Regression: nested namespaces resolve their own members ───
+
+static void test_nested_namespace_member_types_resolve() {
+    // Members of a nested namespace are registered under the full path
+    // (Outer.Inner.Item); a bare sibling name used to be retried as
+    // Inner.Item and reported as an unknown type.
+    ASSERT_TRUE(passes("namespace Outer {\n"
+                       "    namespace Inner {\n"
+                       "        record Item { integer n }\n"
+                       "        function integer get(Item it) { return it.n }\n"
+                       "    }\n"
+                       "}\n"));
+}
+
+static void test_nested_namespace_internal_type_usable_inside() {
+    ASSERT_TRUE(passes("namespace Outer {\n"
+                       "    namespace Inner {\n"
+                       "        internal record Secret { integer n }\n"
+                       "        function integer reveal(Secret s) { return s.n }\n"
+                       "        function integer reveal_all(array<Outer.Inner.Secret> s) {\n"
+                       "            return Array.length(s)\n"
+                       "        }\n"
+                       "    }\n"
+                       "}\n"));
+}
+
+static void test_nested_namespace_internal_type_blocked_outside() {
+    ASSERT_TRUE(fails_with_message("namespace Outer {\n"
+                                   "    namespace Inner {\n"
+                                   "        internal record Secret { integer n }\n"
+                                   "    }\n"
+                                   "}\n"
+                                   "array<Outer.Inner.Secret> s = []\n",
+                                   "is internal to namespace 'Outer.Inner'"));
+}
+
+// ─── Regression: an internal-access error is reported once, where it occurs ───
+
+static void test_internal_type_in_annotation_reported_once_with_location() {
+    const auto diagnostics = check("namespace Geo {\n"
+                                   "    internal record Secret { integer n }\n"
+                                   "}\n"
+                                   "array<Geo.Secret> s = []\n");
+
+    const auto is_internal = [](const Diagnostic& d) {
+        return d.message.find("is internal to namespace 'Geo'") != std::string::npos;
+    };
+
+    ASSERT_EQ(std::ranges::count_if(diagnostics, is_internal), std::ptrdiff_t{1});
+
+    const auto it = std::ranges::find_if(diagnostics, is_internal);
+    ASSERT_TRUE(it != diagnostics.end());
+    ASSERT_EQ(it->primary_location().line, 4);
+}
+
+static void test_internal_type_in_signature_reported_once_with_location() {
+    const auto diagnostics = check("namespace Geo {\n"
+                                   "    internal record Secret { integer n }\n"
+                                   "}\n"
+                                   "function integer peek(Geo.Secret s) { return 0 }\n");
+
+    const auto is_internal = [](const Diagnostic& d) {
+        return d.message.find("is internal to namespace 'Geo'") != std::string::npos;
+    };
+
+    ASSERT_EQ(std::ranges::count_if(diagnostics, is_internal), std::ptrdiff_t{1});
+
+    const auto it = std::ranges::find_if(diagnostics, is_internal);
+    ASSERT_TRUE(it != diagnostics.end());
+    ASSERT_EQ(it->primary_location().line, 4);
 }
 
 // ─── !> error-pipe operator type checking ───
@@ -595,6 +750,134 @@ static void test_record_match_pattern_generic_valid() {
                        "print(got)\n"));
 }
 
+// ─── Regression: integer compound assignment with a number value ───
+
+static void test_integer_compound_assignment_with_number_fails() {
+    ASSERT_TRUE(fails_with("mutable integer x = 1\n"
+                           "x += 0.5\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(fails("mutable integer y = 4\n"
+                      "y *= 1.5\n"));
+    ASSERT_TRUE(passes("mutable integer z = 1\n"
+                       "z += 2\n"
+                       "mutable number w = 1.0\n"
+                       "w += 1\n"));
+}
+
+// ─── Regression: element type of queue/stack/set/key_value_store ───
+
+static void test_builtin_container_type_argument_is_kept() {
+    ASSERT_TRUE(fails("queue<integer> q = Queue.new()\n"
+                      "queue<string> r = q\n"));
+    ASSERT_TRUE(fails("set<integer> s = Set.new()\n"
+                      "set<string> t = s\n"));
+    ASSERT_TRUE(passes("stack<integer> s = Stack.new()\n"
+                       "stack<integer> t = s\n"));
+}
+
+// ─── Regression: match expression arm patterns are checked ───
+
+static void test_match_expression_integer_case_on_string_subject_fails() {
+    ASSERT_TRUE(fails_with_message("string name = \"a\"\n"
+                                   "string r = match name {\n"
+                                   "    case 5 { \"five\" }\n"
+                                   "    else { \"other\" }\n"
+                                   "}\n",
+                                   "integer case but subject is 'string'"));
+}
+
+static void test_match_expression_range_on_number_subject_fails() {
+    ASSERT_TRUE(fails_with_message("number v = 1.5\n"
+                                   "string r = match v {\n"
+                                   "    case 0..=9 { \"low\" }\n"
+                                   "    else { \"high\" }\n"
+                                   "}\n",
+                                   "range case but subject is 'number'"));
+}
+
+// ─── Regression: '?' checks the propagated error type ───
+
+static void test_question_mark_propagates_incompatible_error_type_fails() {
+    ASSERT_TRUE(fails_with("record MathError { string reason }\n"
+                           "function result<integer, string> parse() { return success(1) }\n"
+                           "function result<integer, MathError> compute() {\n"
+                           "    integer n = parse()?\n"
+                           "    return success(n)\n"
+                           "}\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("record MathError { string reason }\n"
+                       "function result<integer, MathError> parse() { return success(1) }\n"
+                       "function result<integer, MathError> compute() {\n"
+                       "    integer n = parse()?\n"
+                       "    return success(n)\n"
+                       "}\n"));
+}
+
+// ─── Regression: the default error type of result<T> is string ───
+
+static void test_result_default_error_type_is_string() {
+    ASSERT_TRUE(fails("result<integer> r = failure(42)\n"));
+    ASSERT_TRUE(passes("result<integer> r = failure(\"bad input\")\n"
+                       "result<integer, string> same = r\n"));
+    ASSERT_TRUE(fails("result<integer> r = failure(\"bad input\")\n"
+                      "match r {\n"
+                      "    case success(v) { print(v) }\n"
+                      "    case failure(e) { integer n = e }\n"
+                      "}\n"));
+}
+
+// ─── Regression: plain '.' and '[ ]' on an optional ───
+
+static void test_plain_field_access_on_optional_fails() {
+    ASSERT_TRUE(fails_with_message("record User { string name }\n"
+                                   "optional<User> u = none\n"
+                                   "string n = u.name\n",
+                                   "may be none"));
+    ASSERT_TRUE(passes("record User { string name }\n"
+                       "optional<User> u = none\n"
+                       "string n = u?.name ?? \"nobody\"\n"));
+}
+
+static void test_plain_index_access_on_optional_fails() {
+    ASSERT_TRUE(fails_with_message("optional<array<integer>> xs = none\n"
+                                   "integer first = xs[0]\n",
+                                   "may be none"));
+    ASSERT_TRUE(passes("optional<array<integer>> xs = none\n"
+                       "integer first = xs?[0] ?? 0\n"));
+}
+
+// ─── Regression: destructuring a value that is not a tuple ───
+
+static void test_tuple_destructuring_non_tuple_fails() {
+    ASSERT_TRUE(fails_with_message("(integer a, integer b) = 5\n", "cannot destructure"));
+}
+
+static void test_for_destructuring_non_tuple_elements_fails() {
+    ASSERT_TRUE(fails_with_message("for (a, b) in [1, 2] {\n"
+                                   "    print(a)\n"
+                                   "}\n",
+                                   "cannot destructure"));
+}
+
+// ─── Regression: '??' needs an optional or result on the left ───
+
+static void test_null_coalescing_on_plain_value_fails() {
+    ASSERT_TRUE(fails_with("integer x = 5 ?? 0\n", DiagnosticCode::InvalidOperand));
+}
+
+static void test_null_coalescing_chain_widens_right_side() {
+    // The right optional's integer is widened when it lands in optional<number>.
+    const auto program = parse("optional<number> a = none\n"
+                               "optional<integer> b = some(1)\n"
+                               "optional<number> c = a ?? b\n");
+    TypeChecker checker;
+    ASSERT_TRUE(checker.check(program, false).empty());
+
+    const auto& decl = static_cast<const VariableDeclStatement&>(*program.statements[2]);
+    const auto& coalesce = static_cast<const BinaryExpression&>(*decl.initializer);
+    ASSERT_TRUE(coalesce.right->numeric_widening != nullptr);
+}
+
 int main() {
     // ─── Statistics return-type signatures ───
 
@@ -603,6 +886,9 @@ int main() {
     RUN(test_statistics_mode_returns_result_number);
     RUN(test_statistics_variance_returns_result_number);
     RUN(test_statistics_standard_deviation_returns_result_number);
+    RUN(test_result_none_and_result_void_are_interchangeable);
+    RUN(test_math_and_datetime_intervals_are_distinct_types);
+    RUN(test_math_interval_field_access_is_checked);
 
     // ─── None/Optional type ───
 
@@ -674,6 +960,10 @@ int main() {
     RUN(test_unused_result_errors);
     RUN(test_unused_result_assigned_no_warn);
     RUN(test_unused_result_suppressed_with_wildcard);
+    RUN(test_unused_result_suppressed_with_discard_assignment);
+    RUN(test_discard_assignment_still_checks_value);
+    RUN(test_declared_underscore_assignment_is_type_checked);
+    RUN(test_discard_assignment_inside_underscore_loop);
     RUN(test_unused_void_no_warn);
 
     // ─── trusted_downcast on StdlibAny emits warning ───
@@ -693,6 +983,11 @@ int main() {
     RUN(test_internal_type_alias_usable_within_namespace);
     RUN(test_internal_not_imported_by_use);
     RUN(test_internal_at_top_level_is_syntax_error);
+    RUN(test_nested_namespace_member_types_resolve);
+    RUN(test_nested_namespace_internal_type_usable_inside);
+    RUN(test_nested_namespace_internal_type_blocked_outside);
+    RUN(test_internal_type_in_annotation_reported_once_with_location);
+    RUN(test_internal_type_in_signature_reported_once_with_location);
     RUN(test_non_internal_members_still_accessible);
 
     // ─── !> error-pipe operator type checking ───
@@ -725,5 +1020,20 @@ int main() {
     RUN(test_record_match_pattern_wrong_type_fails);
     RUN(test_record_match_pattern_on_non_record_fails);
     RUN(test_record_match_pattern_generic_valid);
+
+    // ─── Regression: compound assignment, containers, match, results, optionals, destructuring ───
+
+    RUN(test_integer_compound_assignment_with_number_fails);
+    RUN(test_builtin_container_type_argument_is_kept);
+    RUN(test_match_expression_integer_case_on_string_subject_fails);
+    RUN(test_match_expression_range_on_number_subject_fails);
+    RUN(test_question_mark_propagates_incompatible_error_type_fails);
+    RUN(test_result_default_error_type_is_string);
+    RUN(test_plain_field_access_on_optional_fails);
+    RUN(test_plain_index_access_on_optional_fails);
+    RUN(test_tuple_destructuring_non_tuple_fails);
+    RUN(test_for_destructuring_non_tuple_elements_fails);
+    RUN(test_null_coalescing_on_plain_value_fails);
+    RUN(test_null_coalescing_chain_widens_right_side);
     return SUMMARY();
 }

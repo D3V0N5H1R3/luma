@@ -21,9 +21,7 @@ namespace luma::lsp {
 namespace {
 
 // Predicate that accepts every token — used for full semantic token encoding.
-constexpr auto k_accept_all = [](const Token&) {
-    return true;
-};
+constexpr auto k_accept_all = [](const Token&) { return true; };
 
 // Return the document's stored content hash, falling back to hashing the
 // current content only when no stored hash is available. Lets freshly computed

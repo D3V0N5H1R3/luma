@@ -44,8 +44,8 @@ function BenchResult run_partitioning_benchmarks(BenchResult state) {
     array<integer> array100 = Array.range(0, 100) |> Result.unwrap()
     st = time_it(st, "Array.partition (100 elem)", 2000, () -> {
         (array<integer> _evens, array<integer> _odds) = array100
-        |> Array.partition((integer x) -> x % 2 == 0)
-        |> Result.unwrap()
+            |> Array.partition((integer x) -> x % 2 == 0)
+            |> Result.unwrap()
     })
 
     # --- Dictionary.partition ---
@@ -53,8 +53,8 @@ function BenchResult run_partitioning_benchmarks(BenchResult state) {
     dictionary<integer> dict20 = bench_build_int_dict(20)
     st = time_it(st, "Dictionary.partition (20 keys)", 1000, () -> {
         (dictionary<integer> _small, dictionary<integer> _large) = dict20
-        |> Dictionary.partition((string _k, integer v) -> v < 10)
-        |> Result.unwrap()
+            |> Dictionary.partition((string _k, integer v) -> v < 10)
+            |> Result.unwrap()
     })
 
     # --- Set.filter / reduce / partition ---
@@ -63,20 +63,20 @@ function BenchResult run_partitioning_benchmarks(BenchResult state) {
 
     st = time_it(st, "Set.filter (50 elem)", 2000, () -> {
         set _filtered = set50
-        |> Set.filter((integer x) -> x > 25)
-        |> Result.unwrap()
+            |> Set.filter((integer x) -> x > 25)
+            |> Result.unwrap()
     })
 
     st = time_it(st, "Set.reduce (50 elem)", 2000, () -> {
         integer _total = set50
-        |> Set.reduce(0, (integer acc, integer x) -> acc + x)
-        |> Result.unwrap()
+            |> Set.reduce(0, (integer acc, integer x) -> acc + x)
+            |> Result.unwrap()
     })
 
     st = time_it(st, "Set.partition (50 elem)", 2000, () -> {
         (set _small, set _large) = set50
-        |> Set.partition((integer x) -> x < 25)
-        |> Result.unwrap()
+            |> Set.partition((integer x) -> x < 25)
+            |> Result.unwrap()
     })
 
     # --- Queue.concat / partition ---
@@ -90,8 +90,8 @@ function BenchResult run_partitioning_benchmarks(BenchResult state) {
     queue<integer> queue50 = bench_build_queue(50, 0)
     st = time_it(st, "Queue.partition (50 elem)", 1000, () -> {
         (queue<integer> _small, queue<integer> _large) = queue50
-        |> Queue.partition((integer x) -> x < 25)
-        |> Result.unwrap()
+            |> Queue.partition((integer x) -> x < 25)
+            |> Result.unwrap()
     })
 
     # --- Stack.concat / partition ---
@@ -105,8 +105,8 @@ function BenchResult run_partitioning_benchmarks(BenchResult state) {
     stack<integer> stack50 = bench_build_stack(50, 0)
     st = time_it(st, "Stack.partition (50 elem)", 1000, () -> {
         (stack<integer> _small, stack<integer> _large) = stack50
-        |> Stack.partition((integer x) -> x < 25)
-        |> Result.unwrap()
+            |> Stack.partition((integer x) -> x < 25)
+            |> Result.unwrap()
     })
 
     return st

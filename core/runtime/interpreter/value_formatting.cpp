@@ -51,11 +51,9 @@ void append_display_value(std::string& out, const luma::Value& v) {
         return std::format("success({})", res.owned_inner->to_string());
     }
 
-    if (res.has_failure_location) {
-        return std::format("failure([{}:{}] {})", res.failure_location.line,
-                           res.failure_location.column, res.owned_inner->to_string());
-    }
-
+    // The recorded failure location is deliberately left out: it is debugging
+    // context for the Result.unwrap error, not part of the value, and showing
+    // it made printed failures (e.g. from Task.retry) carry a [line:col] prefix.
     return std::format("failure({})", res.owned_inner->to_string());
 }
 
@@ -104,7 +102,7 @@ namespace luma {
 // ─────────── Value::to_string ───────────
 
 std::string Value::to_string() const {
-    const runtime::RecursionGuard guard{runtime::RecursionKind::to_string};
+    const runtime::RecursionGuard guard{runtime::RecursionKind::ToString};
     if (!guard.entered()) {
         return "...";
     }

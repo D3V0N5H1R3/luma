@@ -21,9 +21,7 @@ auto make_line_hook(HookInstallationContext ctx) {
 }
 
 auto make_pause_hook(HookInstallationContext ctx) {
-    return [ctx]() -> bool {
-        return ctx.execution_engine->wait_for_resume();
-    };
+    return [ctx]() -> bool { return ctx.execution_engine->wait_for_resume(); };
 }
 
 auto make_exception_hook(HookInstallationContext ctx) {

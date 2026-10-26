@@ -1,8 +1,14 @@
 // Compilation cache unit tests.
 
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <vector>
 
+#include "analysis/source/source_manager.hpp"
+#include "common/lru_cache.hpp"
 #include "runtime/compiler/compilation_cache.hpp"
+#include "runtime/compiler/source_dependency.hpp"
 #include "test_framework.hpp"
 
 using namespace luma;
@@ -15,6 +21,22 @@ static CompileArtifact make_result(const std::string& name) {
     func.name = name;
     artifact.functions.push_back(std::move(func));
     return artifact;
+}
+
+static void overwrite_file(const std::filesystem::path& path, const std::string& content) {
+    std::ofstream out{path, std::ios::binary | std::ios::trunc};
+    out << content;
+}
+
+// Load `root` and `include` through a SourceManager, as a compile would, and
+// return the dependencies recorded for `root`.
+static std::vector<SourceDependency> dependencies_of(const TempFile& root,
+                                                     const TempFile& include) {
+    SourceManager source_manager;
+    const auto& root_file = source_manager.load(root.path_string());
+    (void)source_manager.load(include.path_string());
+
+    return collect_source_dependencies(source_manager, root_file.file_id);
 }
 
 // ─── Basic put/get ───
@@ -88,18 +110,51 @@ static void test_cache_options_differentiation() {
     auto result_opt = make_result("optimized");
     auto result_dbg = make_result("debug");
 
-    cache.put("file.luma", "code", result_opt, {true, false});
-    cache.put("file.luma", "code", result_dbg, {true, true});
+    const CompilationCache::Options opt{.optimization_level = OptimizationLevel::Full,
+                                        .debug_info = false};
+    const CompilationCache::Options dbg{.optimization_level = OptimizationLevel::Full,
+                                        .debug_info = true};
+
+    cache.put("file.luma", "code", result_opt, opt);
+    cache.put("file.luma", "code", result_dbg, dbg);
 
     ASSERT_EQ(cache.size(), 2U);
 
-    auto cached_opt = cache.get("file.luma", "code", {true, false});
-    auto cached_dbg = cache.get("file.luma", "code", {true, true});
+    auto cached_opt = cache.get("file.luma", "code", opt);
+    auto cached_dbg = cache.get("file.luma", "code", dbg);
 
     ASSERT_TRUE(cached_opt.has_value());
     ASSERT_TRUE(cached_dbg.has_value());
     ASSERT_EQ(cached_opt->functions[0].name, "optimized");
     ASSERT_EQ(cached_dbg->functions[0].name, "debug");
+}
+
+// Regression: the key used to store only "optimized or not", so within one
+// process an -O1 artifact was served for -O2 (and vice versa) even though the
+// two levels produce different bytecode.
+static void test_cache_options_distinguish_optimization_levels() {
+    CompilationCache cache;
+
+    const CompilationCache::Options o0{.optimization_level = OptimizationLevel::None};
+    const CompilationCache::Options o1{.optimization_level = OptimizationLevel::Peephole};
+    const CompilationCache::Options o2{.optimization_level = OptimizationLevel::Full};
+
+    cache.put("file.luma", "code", make_result("O1"), o1);
+
+    ASSERT_FALSE(cache.get("file.luma", "code", o2).has_value());
+    ASSERT_FALSE(cache.get("file.luma", "code", o0).has_value());
+
+    cache.put("file.luma", "code", make_result("O2"), o2);
+
+    ASSERT_EQ(cache.size(), 2U);
+
+    const auto cached_o1 = cache.get("file.luma", "code", o1);
+    const auto cached_o2 = cache.get("file.luma", "code", o2);
+
+    ASSERT_TRUE(cached_o1.has_value());
+    ASSERT_TRUE(cached_o2.has_value());
+    ASSERT_EQ(cached_o1->functions[0].name, "O1");
+    ASSERT_EQ(cached_o2->functions[0].name, "O2");
 }
 
 // ─── LRU eviction ───
@@ -181,6 +236,22 @@ static void test_cache_max_entries() {
     ASSERT_EQ(default_cache.max_entries(), CompilationCache::default_max_entries);
 }
 
+// ─── Zero capacity (regression: LruCache(0) was guarded only by an assert, so
+// a release build hit undefined behaviour on the first put) ───
+
+static void test_lru_cache_rejects_zero_capacity() {
+    ASSERT_THROWS_AS((LruCache<std::string, int>{0}), std::invalid_argument);
+    ASSERT_THROWS_AS(CompilationCache{0}, std::invalid_argument);
+
+    // A capacity of one is the smallest valid cache and still evicts.
+    LruCache<std::string, int> single{1};
+    (void)single.put("a", 1);
+    (void)single.put("b", 2);
+    ASSERT_EQ(single.size(), 1U);
+    ASSERT_FALSE(single.contains("a"));
+    ASSERT_TRUE(single.contains("b"));
+}
+
 // ─── Content-hash invalidation (TS-5) ───
 
 static void test_cache_content_hash_invalidation_flow() {
@@ -214,6 +285,79 @@ static void test_cache_content_hash_invalidation_flow() {
     ASSERT_FALSE(old_lookup.has_value());
 }
 
+// ─── Source dependencies (included files) ───
+
+static void test_dependencies_skip_root_and_virtual_sources() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"function integer helper() { return 1 }\n"};
+
+    SourceManager source_manager;
+    const auto& root_file = source_manager.load(root.path_string());
+    (void)source_manager.load(include.path_string());
+    (void)source_manager.load_virtual("<prelude>", "function integer injected() { return 0 }");
+
+    const auto dependencies = collect_source_dependencies(source_manager, root_file.file_id);
+
+    ASSERT_EQ(dependencies.size(), 1U);
+    ASSERT_EQ(dependencies[0].path, source_manager.files()[1].path);
+    ASSERT_TRUE(are_source_dependencies_current(dependencies));
+}
+
+static void test_dependencies_stale_after_edit() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"function integer helper() { return 1 }\n"};
+    const auto dependencies = dependencies_of(root, include);
+
+    overwrite_file(include.path(), "function integer helper() { return 2 }\n");
+
+    ASSERT_FALSE(are_source_dependencies_current(dependencies));
+}
+
+static void test_dependencies_stale_after_delete() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"function integer helper() { return 1 }\n"};
+    const auto dependencies = dependencies_of(root, include);
+
+    std::filesystem::remove(include.path());
+
+    ASSERT_FALSE(are_source_dependencies_current(dependencies));
+}
+
+// SourceManager strips a UTF-8 BOM before the text is hashed, so the freshness
+// check must strip it too — otherwise every BOM-prefixed include would read as
+// edited and never hit the cache.
+static void test_dependencies_current_with_utf8_bom() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"\xEF\xBB\xBF"
+                           "function integer helper() { return 1 }\n"};
+
+    ASSERT_TRUE(are_source_dependencies_current(dependencies_of(root, include)));
+}
+
+// A dependency path read from an untrusted .lumc file may name something that
+// is not a regular file; it must read as stale rather than be opened.
+static void test_dependencies_stale_for_non_regular_file() {
+    const TempDir dir;
+    const std::vector<SourceDependency> dependencies{
+        {.path = dir.path_string(), .content_hash = 0}};
+
+    ASSERT_FALSE(are_source_dependencies_current(dependencies));
+}
+
+static void test_cache_miss_when_dependency_changes() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"function integer helper() { return 1 }\n"};
+    CompilationCache cache;
+
+    cache.put("app.luma", "source", make_result("v1"), {}, dependencies_of(root, include));
+    ASSERT_TRUE(cache.get("app.luma", "source").has_value());
+
+    // The entry point is unchanged, but an included file was edited.
+    overwrite_file(include.path(), "function integer helper() { return 2 }\n");
+
+    ASSERT_FALSE(cache.get("app.luma", "source").has_value());
+}
+
 // ─── main ───
 
 int main() {
@@ -223,10 +367,18 @@ int main() {
     RUN(test_cache_invalidate);
     RUN(test_cache_clear);
     RUN(test_cache_options_differentiation);
+    RUN(test_cache_options_distinguish_optimization_levels);
     RUN(test_cache_lru_eviction);
     RUN(test_cache_lru_access_refreshes);
     RUN(test_cache_lru_update_refreshes);
     RUN(test_cache_max_entries);
+    RUN(test_lru_cache_rejects_zero_capacity);
     RUN(test_cache_content_hash_invalidation_flow);
+    RUN(test_dependencies_skip_root_and_virtual_sources);
+    RUN(test_dependencies_stale_after_edit);
+    RUN(test_dependencies_stale_after_delete);
+    RUN(test_dependencies_current_with_utf8_bom);
+    RUN(test_dependencies_stale_for_non_regular_file);
+    RUN(test_cache_miss_when_dependency_changes);
     return SUMMARY();
 }

@@ -7,7 +7,9 @@
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
+#include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/channel.hpp"
+#include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/runtime_exceptions.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -31,6 +33,13 @@ namespace {
     }
 
     return std::chrono::milliseconds{ms};
+}
+
+// Cancellation token of the spawned task running on this thread (nullptr on the
+// main thread), so blocking channel waits inside a cancelled task give up
+// instead of blocking forever.
+[[nodiscard]] const CancellationToken* active_task_token() noexcept {
+    return detail::active_cancel_token != nullptr ? detail::active_cancel_token->get() : nullptr;
 }
 
 } // namespace
@@ -70,7 +79,8 @@ void register_channel_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& ch = expect_channel(args[0], "Channel.send", loc)->channel;
             try {
-                ch->send(args[1].deep_copy());
+                const ThreadPool::BlockingRegion blocking;
+                ch->send(args[1].deep_copy(), active_task_token());
                 return Value{true};
             } catch (const ChannelClosedError&) {
                 return Value{false};
@@ -130,7 +140,8 @@ void register_channel_ns(const EnvPtr& env) {
             const auto& ch = expect_channel(args[0], "Channel.receive", loc)->channel;
 
             try {
-                auto val = ch->receive();
+                const ThreadPool::BlockingRegion blocking;
+                auto val = ch->receive(active_task_token());
                 return make_success_value(std::move(val));
             } catch (const ChannelClosedError&) {
                 return failure_msg("Channel", "receive", "channel closed",
@@ -252,9 +263,10 @@ void register_channel_ns(const EnvPtr& env) {
             const auto& arr = expect_array(args[1], "Channel.send_all", loc);
 
             std::int64_t sent{0};
+            const ThreadPool::BlockingRegion blocking;
             for (const auto& elem : *arr->elements) {
                 try {
-                    ch->send(elem.deep_copy());
+                    ch->send(elem.deep_copy(), active_task_token());
                     ++sent;
                 } catch (const ChannelClosedError&) {
                     break; // channel closed mid-send — stop, report the partial count
@@ -286,7 +298,8 @@ void register_channel_ns(const EnvPtr& env) {
                 std::vector<Value> call_args(1);
                 while (true) {
                     try {
-                        call_args[0] = ch->receive();
+                        const ThreadPool::BlockingRegion blocking;
+                        call_args[0] = ch->receive(active_task_token());
                     } catch (const ChannelClosedError&) {
                         break; // closed and drained
                     }
@@ -309,8 +322,14 @@ void register_channel_ns(const EnvPtr& env) {
             }
 
             BackoffTimer backoff;
+            const ThreadPool::BlockingRegion blocking;
+            const auto* cancel = active_task_token();
 
             while (true) {
+                if (cancel != nullptr) {
+                    cancel->throw_if_cancelled();
+                }
+
                 bool any_open = false;
 
                 for (std::size_t i = 0; i < arr->elements->size(); ++i) {

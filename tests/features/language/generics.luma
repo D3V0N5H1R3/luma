@@ -21,23 +21,23 @@ function<T> array<T> wrap_in_array(T value) {
 
 @test
 function void test_generic_function_integer() {
-    integer n = identity(42)
+    integer number_value = identity(42)
 
-    assert(n == 42)
+    assert(number_value == 42)
 }
 
 @test
 function void test_generic_function_string() {
-    string s = identity("hello")
+    string text = identity("hello")
 
-    assert(s == "hello")
+    assert(text == "hello")
 }
 
 @test
 function void test_generic_function_boolean() {
-    boolean b = identity(true)
+    boolean flag = identity(true)
 
-    assert(b)
+    assert(flag)
 }
 
 @test
@@ -50,10 +50,10 @@ function void test_generic_function_two_type_params() {
 
 @test
 function void test_generic_function_returns_generic_array() {
-    array<integer> arr = wrap_in_array(42)
+    array<integer> wrapped = wrap_in_array(42)
 
-    assert(Array.length(arr) == 1)
-    assert(arr[0] == 42)
+    assert(Array.length(wrapped) == 1)
+    assert(wrapped[0] == 42)
 }
 
 @test
@@ -61,8 +61,7 @@ function void test_generic_function_with_array_arg() {
     array<string> original = ["a", "b", "c"]
     array<string> same = identity(original)
 
-    assert(Array.length(same) == 3)
-    assert(same[0] == "a")
+    assert(same == original)
 }
 
 # ─── Generic Records ─────────────────────────────────────
@@ -115,11 +114,12 @@ function void test_generic_record_with_array_type_param() {
 
 # ─── Generic Type Aliases ────────────────────────────────
 
-type HomoPair<T> = (T, T)
+type UniformPair<T> = (T, T)
+type Wrapper<T> = array<T>
 
 @test
 function void test_generic_type_alias() {
-    HomoPair<integer> coords = (10, 20)
+    UniformPair<integer> coords = (10, 20)
 
     assert(coords.0 == 10)
     assert(coords.1 == 20)
@@ -127,10 +127,38 @@ function void test_generic_type_alias() {
 
 @test
 function void test_generic_type_alias_string() {
-    HomoPair<string> names = ("Alice", "Bob")
+    UniformPair<string> names = ("Alice", "Bob")
 
     assert(names.0 == "Alice")
     assert(names.1 == "Bob")
+}
+
+@test
+function void test_generic_type_alias_integer_pair() {
+    UniformPair<integer> pair = (10, 20)
+
+    # An alias is interchangeable with the type it names.
+    (integer, integer) plain_tuple = pair
+
+    assert(plain_tuple == (10, 20))
+}
+
+@test
+function void test_generic_type_alias_string_pair() {
+    UniformPair<string> pair = ("hello", "world")
+
+    (string first, string second) = pair
+
+    assert(first == "hello")
+    assert(second == "world")
+}
+
+@test
+function void test_generic_type_alias_array_wrapper() {
+    Wrapper<integer> wrapped = [1, 2, 3]
+
+    assert(Array.length(wrapped) == 3)
+    assert(wrapped[0] == 1)
 }
 
 # ─── Generic Interfaces ──────────────────────────────────
@@ -155,34 +183,34 @@ function<T> T extract(Container<T> container) {
 function void test_generic_interface_integer() {
     IntContainer box = IntContainer { value = 7 }
 
-    integer val = extract(box)
+    integer extracted = extract(box)
 
-    assert(val == 7)
+    assert(extracted == 7)
 }
 
 @test
 function void test_generic_interface_string() {
     StringContainer box = StringContainer { value = "hi" }
 
-    string val = extract(box)
+    string extracted = extract(box)
 
-    assert(val == "hi")
+    assert(extracted == "hi")
 }
 
 # ─── Turbofish — Explicit Type Arguments ─────────────────
 
 @test
 function void test_turbofish_identity_integer() {
-    integer n = identity::<integer>(42)
+    integer number_value = identity::<integer>(42)
 
-    assert(n == 42)
+    assert(number_value == 42)
 }
 
 @test
 function void test_turbofish_identity_string() {
-    string s = identity::<string>("hello")
+    string text = identity::<string>("hello")
 
-    assert(s == "hello")
+    assert(text == "hello")
 }
 
 @test
@@ -195,10 +223,10 @@ function void test_turbofish_swap() {
 
 @test
 function void test_turbofish_wrap_in_array() {
-    array<integer> arr = wrap_in_array::<integer>(99)
+    array<integer> wrapped = wrap_in_array::<integer>(99)
 
-    assert(Array.length(arr) == 1)
-    assert(arr[0] == 99)
+    assert(Array.length(wrapped) == 1)
+    assert(wrapped[0] == 99)
 }
 
 # ─── Bounded Generic Parameters ──────────────────────────
@@ -219,9 +247,9 @@ function<T: HasValue> integer extract_value(T item) {
 function void test_bounded_generic_call() {
     NumberBox box = NumberBox { value = 7 }
 
-    integer val = extract_value(box)
+    integer extracted = extract_value(box)
 
-    assert(val == 7)
+    assert(extracted == 7)
 }
 
 interface HasName {
@@ -241,47 +269,16 @@ function<T: HasValue + HasName> string describe(T item) {
 function void test_bounded_generic_multi_bound() {
     NamedBox box = NamedBox { name = "count", value = 42 }
 
-    string desc = describe(box)
+    string description = describe(box)
 
-    assert(desc == "count: 42")
+    assert(description == "count: 42")
 }
 
-# ─── Generic type alias ──────────────────────────
+# ─── Runtime Edge Cases ──────────────────────────────────
 
-type HomoPair<T> = (T, T)
-type Wrapper<T> = array<T>
-
-@test
-function void test_generic_type_alias_integer_pair() {
-    HomoPair<integer> p = (10, 20)
-
-    assert(p.0 == 10)
-    assert(p.1 == 20)
-}
-
-@test
-function void test_generic_type_alias_string_pair() {
-    HomoPair<string> p = ("hello", "world")
-
-    assert(p.0 == "hello")
-    assert(p.1 == "world")
-}
-
-@test
-function void test_generic_type_alias_array_wrapper() {
-    Wrapper<integer> w = [1, 2, 3]
-
-    assert(Array.length(w) == 3)
-    assert(w[0] == 1)
-}
-
-# ═══════════════════════════════════════════════════════════
-# Edge-case tests — generics
-# ═══════════════════════════════════════════════════════════
-
-# Note: Type bound violations and type parameter mismatches are caught
-# at compile time by the type checker (tested in type_checker_test.cpp).
-# Below we test runtime generic behavior edge cases.
+# Type bound violations and type parameter mismatches are caught at compile
+# time by the type checker (tested in type_checker_test_generics.cpp); the
+# tests below cover runtime generic behaviour.
 
 function<T> array<T> make_singleton(T value) {
     return [value]
@@ -289,37 +286,37 @@ function<T> array<T> make_singleton(T value) {
 
 @test
 function void test_generic_function_with_different_types() {
-    array<integer> ints = make_singleton(42)
-    array<string> strs = make_singleton("hello")
-    array<boolean> bools = make_singleton(true)
+    array<integer> integers = make_singleton(42)
+    array<string> strings = make_singleton("hello")
+    array<boolean> booleans = make_singleton(true)
 
-    assert(ints[0] == 42)
-    assert(strs[0] == "hello")
-    assert(bools[0])
+    assert(integers[0] == 42)
+    assert(strings[0] == "hello")
+    assert(booleans[0])
 }
 
-function<T> T first_or_default(array<T> arr, T default_value) {
-    if Array.length(arr) == 0 {
+function<T> T first_or_default(array<T> items, T default_value) {
+    if Array.length(items) == 0 {
         return default_value
     }
 
-    return arr[0]
+    return items[0]
 }
 
 @test
 function void test_generic_function_empty_array_default() {
     array<integer> empty = []
-    integer val = first_or_default(empty, -1)
+    integer first = first_or_default(empty, -1)
 
-    assert(val == -1, "should return default for empty array")
+    assert(first == -1, "should return default for empty array")
 }
 
 @test
 function void test_generic_function_non_empty_array() {
     array<string> words = ["hello"]
-    string val = first_or_default(words, "default")
+    string first = first_or_default(words, "default")
 
-    assert(val == "hello")
+    assert(first == "hello")
 }
 
 @test
@@ -331,11 +328,11 @@ function void test_generic_record_inferred_nested() {
 
 @test
 function void test_generic_record_with_override() {
-    Box<string> b1 = Box { value = "hello" }
-    Box<string> b2 = b1 with { value = "world" }
+    Box<string> original = Box { value = "hello" }
+    Box<string> updated = original with { value = "world" }
 
-    assert(b1.value == "hello")
-    assert(b2.value == "world")
+    assert(original.value == "hello")
+    assert(updated.value == "world")
 }
 
 # ─── Generic functions producing / consuming generic types ───
@@ -344,61 +341,61 @@ function<T> Box<T> wrap_in_box(T value) {
     return Box<T> { value = value }
 }
 
-function<T> T unwrap_box(Box<T> b) {
-    return b.value
+function<T> T unwrap_box(Box<T> box) {
+    return box.value
 }
 
-function<T, U> Pair<T, U> build_pair(T a, U b) {
-    return Pair<T, U> { first = a, second = b }
+function<T, U> Pair<T, U> build_pair(T first, U second) {
+    return Pair<T, U> { first = first, second = second }
 }
 
-function<T> T or_default(optional<T> o, T fallback) {
-    return Optional.unwrap_or(o, fallback)
+function<T> T or_default(optional<T> maybe_value, T fallback) {
+    return Optional.unwrap_or(maybe_value, fallback)
 }
 
 @test
 function void test_generic_constructor_function() {
-    Box<integer> b = wrap_in_box(42)
+    Box<integer> box = wrap_in_box(42)
 
-    assert(b.value == 42)
+    assert(box.value == 42)
 }
 
 @test
 function void test_generic_function_takes_generic_record() {
-    integer v = unwrap_box(wrap_in_box(7))
+    integer unwrapped = unwrap_box(wrap_in_box(7))
 
-    assert(v == 7)
+    assert(unwrapped == 7)
 }
 
 @test
 function void test_generic_composition() {
     # A generic call feeding another generic call: identity inside wrap_in_array.
-    array<integer> arr = wrap_in_array(identity(99))
+    array<integer> wrapped = wrap_in_array(identity(99))
 
-    assert(Array.length(arr) == 1)
-    assert(arr[0] == 99)
+    assert(Array.length(wrapped) == 1)
+    assert(wrapped[0] == 99)
 }
 
 @test
 function void test_generic_returns_generic_record_two_params() {
-    Pair<string, integer> p = build_pair("age", 30)
+    Pair<string, integer> pair = build_pair("age", 30)
 
-    assert(p.first == "age")
-    assert(p.second == 30)
+    assert(pair.first == "age")
+    assert(pair.second == 30)
 }
 
 @test
 function void test_generic_with_optional_some() {
-    integer v = or_default(some(5), 0)
+    integer resolved = or_default(some(5), 0)
 
-    assert(v == 5)
+    assert(resolved == 5)
 }
 
 @test
 function void test_generic_with_optional_none() {
-    integer v = or_default(none, -1)
+    integer resolved = or_default(none, -1)
 
-    assert(v == -1)
+    assert(resolved == -1)
 }
 
 @test
@@ -412,14 +409,14 @@ function void test_generic_record_in_array() {
 
 @test
 function void test_turbofish_on_constructor_function() {
-    Box<string> b = wrap_in_box::<string>("hi")
+    Box<string> box = wrap_in_box::<string>("hi")
 
-    assert(b.value == "hi")
+    assert(box.value == "hi")
 }
 
 @test
 function void test_generic_constructor_then_unwrap_string() {
-    string s = unwrap_box(wrap_in_box("hello"))
+    string text = unwrap_box(wrap_in_box("hello"))
 
-    assert(s == "hello")
+    assert(text == "hello")
 }

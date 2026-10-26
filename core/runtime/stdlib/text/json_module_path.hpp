@@ -39,16 +39,16 @@ struct NavigateResult {
 // (Json.get) reports "invalid array index"; the bracket API (Json.get_path /
 // Json.set_path) reports "cannot use key ... on an array".
 enum class ArrayKeyError {
-    cannot_use_key,
-    invalid_array_index
+    CannotUseKey,
+    InvalidArrayIndex
 };
 
 // Whether navigate_path may descend into arrays when a key segment lands on one.
 // Json.set_path allows it (its bracket paths address arrays); Json.set rejects
 // it to keep its dictionary-only traversal.
 enum class NavigateArrays {
-    allow,
-    reject
+    Allow,
+    Reject
 };
 
 // Resolved array subscript, or the error string the caller should surface.
@@ -77,8 +77,8 @@ resolve_array_index(std::string_view key, const std::vector<Value>& elems, Array
 // controls whether a key segment may descend into an array.
 [[nodiscard]] NavigateResult navigate_path(Value& root, const std::vector<PathSegment>& segments,
                                            std::size_t count,
-                                           ArrayKeyError key_error = ArrayKeyError::cannot_use_key,
-                                           NavigateArrays arrays = NavigateArrays::allow);
+                                           ArrayKeyError key_error = ArrayKeyError::CannotUseKey,
+                                           NavigateArrays arrays = NavigateArrays::Allow);
 
 } // namespace json_path
 

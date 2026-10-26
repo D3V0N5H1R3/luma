@@ -1,6 +1,12 @@
 # ═══════════════════════════════════════════════════════════
 # Luma v1.0 — Feature Tests — Value-Block Assignment
 #
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+#
+# See Luma_User_Manual.md §5 (If as an Expression) and §15 (Match
+# as an Expression).
+#
 # Regression coverage for a compiler codegen bug where a
 # value-producing block (`match` / `if` used as an expression)
 # on the right-hand side of an index assignment (`dict[k] = …`)
@@ -10,9 +16,6 @@
 # temporaries already on the stack, so the trailing IndexSet
 # popped the key string as the container and failed with
 # "cannot index-assign into 'string'".
-#
-# Feature Tests are based on Luma_Initial_Concept.md and
-# Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
 record Holder {
@@ -23,101 +26,124 @@ record Holder {
 
 @test
 function void test_index_assign_match_failure() {
-    result<string> res = failure("cors")
-    mutable dictionary<string> m = {"response": ""}
-    m["response"] = match res {
+    result<string> response = failure("cors")
+    mutable dictionary<string> model = {"response": ""}
+
+    model["response"] = match response {
         success(body) { body }
         failure(err) { "Request failed: ${err}" }
     }
 
-    assert(m["response"] == "Request failed: cors")
+    assert(model["response"] == "Request failed: cors")
 }
 
 @test
 function void test_index_assign_match_success() {
-    result<string> res = success("hello body")
-    mutable dictionary<string> m = {"response": ""}
-    m["response"] = match res {
+    result<string> response = success("hello body")
+    mutable dictionary<string> model = {"response": ""}
+
+    model["response"] = match response {
         success(body) { body }
         failure(err) { "Request failed: ${err}" }
     }
 
-    assert(m["response"] == "hello body")
+    assert(model["response"] == "hello body")
 }
 
 # ─── Index assignment preceded by another index assignment ───
+
 # Exercises the case where live temporaries (container + key) sit
 # beneath the value block while it declares binding locals.
 
 @test
 function void test_index_assign_match_after_simple_assign() {
-    result<string> res = failure("boom")
-    mutable dictionary<string> m = {"status": "", "response": ""}
-    m["status"] = "done"
-    m["response"] = match res {
+    result<string> response = failure("boom")
+    mutable dictionary<string> model = {"status": "", "response": ""}
+
+    model["status"] = "done"
+    model["response"] = match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }
 
-    assert(m["status"] == "done")
-    assert(m["response"] == "fail:boom")
+    assert(model["status"] == "done")
+    assert(model["response"] == "fail:boom")
 }
 
 # ─── Index assignment with an `if` value block that has an inner let ───
 
 @test
 function void test_index_assign_if_inner_let() {
-    boolean flag = true
-    mutable dictionary<string> m = {"k": ""}
-    m["k"] = if flag {
+    boolean is_computed = String.length("abc") == 3
+    mutable dictionary<string> model = {"key": ""}
+
+    model["key"] = if is_computed {
         string computed = "computed-value"
         computed
     } else {
         "other"
     }
 
-    assert(m["k"] == "computed-value")
+    assert(model["key"] == "computed-value")
 }
 
 # ─── Field assignment with a `match` RHS ───
 
 @test
 function void test_field_assign_match_failure() {
-    result<string> res = failure("nope")
-    mutable Holder h = Holder { value = "" }
-    h.value = match res {
+    result<string> response = failure("nope")
+    mutable Holder holder = Holder { value = "" }
+
+    holder.value = match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }
 
-    assert(h.value == "fail:nope")
+    assert(holder.value == "fail:nope")
+}
+
+@test
+function void test_field_assign_if_inner_let() {
+    boolean is_computed = String.length("abc") == 3
+    mutable Holder holder = Holder { value = "" }
+
+    holder.value = if is_computed {
+        string computed = "computed-value"
+        computed
+    } else {
+        "other"
+    }
+
+    assert(holder.value == "computed-value")
 }
 
 # ─── Index assignment with a `match` RHS inside a closure ───
-# Mirrors the Http.get callback shape that first
-# surfaced the bug: a lambda capturing a dictionary upvalue and
-# index-assigning a match over its result<string> parameter.
+
+# Mirrors the Http.get callback shape that first surfaced the bug: a
+# lambda capturing a dictionary upvalue and index-assigning a match over
+# its result<string> parameter.
 
 @test
 function void test_index_assign_match_in_closure() {
     dictionary<string> model = {"response": ""}
-    function(result<string>) -> dictionary<string> cb = (result<string> res) -> {
-        mutable dictionary<string> m = model
-        m["response"] = match res {
+    function(result<string>) -> dictionary<string> on_response = (result<string> response) -> {
+        mutable dictionary<string> updated = model
+        updated["response"] = match response {
             success(body) { body }
             failure(err) { "Request failed: ${err}" }
         }
-        return m
+        return updated
     }
 
-    dictionary<string> failed = cb(failure("cors"))
-    dictionary<string> ok = cb(success("payload"))
+    dictionary<string> failed = on_response(failure("cors"))
+    dictionary<string> succeeded = on_response(success("payload"))
 
     assert(failed["response"] == "Request failed: cors")
-    assert(ok["response"] == "payload")
+    assert(succeeded["response"] == "payload")
 }
 
 # ─── Index assignment with a `match` whose arm is itself an `if` value block ───
+
 # Mirrors the gui_http.luma callback after its CORS-hint refinement: the failure
 # arm of the match is an `if`/`else` value block. Two nested value blocks share
 # the same index-assign target, so both must account for the container+key
@@ -125,9 +151,10 @@ function void test_index_assign_match_in_closure() {
 
 @test
 function void test_index_assign_match_arm_with_if_block() {
-    result<string> res = failure("boom")
-    mutable dictionary<string> m = {"k": ""}
-    m["k"] = match res {
+    result<string> response = failure("boom")
+    mutable dictionary<string> model = {"key": ""}
+
+    model["key"] = match response {
         success(body) { body }
         failure(err) {
             if String.contains(err, "oo") {
@@ -138,18 +165,19 @@ function void test_index_assign_match_arm_with_if_block() {
         }
     }
 
-    assert(m["k"] == "matched:boom")
+    assert(model["key"] == "matched:boom")
 }
 
 # ─── Control: empty-prefix forms that always worked ───
 
 @test
 function void test_plain_var_match_still_works() {
-    result<string> res = success("direct")
-    string s = match res {
+    result<string> response = success("direct")
+
+    string text = match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }
 
-    assert(s == "direct")
+    assert(text == "direct")
 }

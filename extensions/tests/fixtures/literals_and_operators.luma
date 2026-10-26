@@ -16,6 +16,7 @@ function void main() {
     # Number literals
     integer dec = 42
     integer hex = 0xFF
+    integer oct = 0o755
     integer bin = 0b1010
     number pi = 3.14159
     number sci = 1.5e10

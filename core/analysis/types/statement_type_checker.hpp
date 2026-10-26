@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_TYPES_STATEMENT_TYPE_CHECKER_HPP
+#define LUMA_TYPES_STATEMENT_TYPE_CHECKER_HPP
 
 #include <span>
 #include <vector>
@@ -51,6 +52,12 @@ public:
     void check_statement_list(const std::vector<StatementPtr>& stmts);
     [[nodiscard]] bool definitely_returns(std::span<const StatementPtr> stmts) const;
 
+    // True when no path through `stmts` reaches its end: every path ends in a
+    // return, break, or continue (or an endless `while true` loop).  A branch
+    // like this does not feed the ownership merge after its if/match, because
+    // control never continues there from it.
+    [[nodiscard]] bool never_falls_through(std::span<const StatementPtr> stmts) const;
+
     // ─── Statement dispatch handlers (called by StatementDispatcher) ───
 
     void visit_variable_declaration(const VariableDeclStatement& stmt);
@@ -74,9 +81,23 @@ public:
 private:
     // Report an error when an outer-scope unique variable is consumed inside a
     // loop body, where the next iteration would reuse the already-consumed
-    // value.  Shared by visit_for and visit_while.
-    void check_unique_consumption_in_loop(const TypeScope::OwnershipSnapshot& before,
-                                          const SourceLocation& loc);
+    // value.  `next_iteration` holds every ownership state that reaches the
+    // next iteration: the end of the body (when it falls through) and each
+    // `continue`.
+    void check_unique_consumption_in_loop(
+        const TypeScope::OwnershipSnapshot& before,
+        const std::vector<TypeScope::OwnershipSnapshot>& next_iteration, const SourceLocation& loc);
+
+    // Opens the ownership flow record that `break`/`continue` report into, for
+    // a loop about to be checked in the current scope.
+    void begin_loop_ownership_flow();
+
+    // Closes the innermost loop's flow record once the loop's own scope is
+    // popped: reports consumption reaching the next iteration, restores
+    // `before` (the loop may run zero times), and then marks consumed
+    // whatever a `break` path consumed, since that state leaves the loop.
+    void end_loop_ownership_flow(const TypeScope::OwnershipSnapshot& before,
+                                 bool body_falls_through, const SourceLocation& loc);
 
     // True when a match statement is exhaustive and every arm definitely
     // returns, so the match itself cannot fall through.  Used by
@@ -115,10 +136,9 @@ private:
     void check_target_mutability(const Expression& target, const SourceLocation& loc,
                                  AssignmentKind kind);
 
-    // visit_match_statement per-arm phases.
-    void check_match_arm_comparison(const MatchArm& arm, const TypeInfo& subject_type);
-
     TypeCheckingServices& tc_;
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_STATEMENT_TYPE_CHECKER_HPP

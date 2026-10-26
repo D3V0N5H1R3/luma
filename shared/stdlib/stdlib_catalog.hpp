@@ -31,15 +31,27 @@
 namespace luma::stdlib {
 
 // ─── Capabilities ───
-// Each stdlib function requires a single OS capability, or Capability::None
-// when it is always safe.  In sandbox mode only Capability::None functions
-// are available; is_safe() performs that check.
-enum class Capability : uint16_t {
-    None = 0,
-    FileSystem = 1 << 0,
-    Network = 1 << 1,
-    Process = 1 << 2,
-    Console = 1 << 3,
+// The single OS capability a stdlib function's module needs, or
+// Capability::None.  The tag is metadata, not the sandbox gate: its one
+// consumer is sandbox_blocked_modules(), which collects every module holding
+// a tagged function so a lookup in sandbox mode can report "not available in
+// sandbox mode" instead of "undefined variable".  Enforcement happens at
+// registration — the stdlib registry's kModules table withholds OS-only
+// modules wholesale, and sandbox-aware modules withhold individual members.
+// Capability::None therefore does NOT mean "available in sandbox mode":
+//   • the in-memory members of the OS-only Csv and Xml modules are None, yet
+//     the whole module is withheld (their file members carry FileSystem);
+//   • the file / console-input members of the sandbox-aware Hash,
+//     Compression, Log, and Terminal modules are None, yet are withheld by
+//     name (tagging them would block the module's safe members too).
+// stdlib_catalog_conformance_test checks that the blocked set derived here
+// names exactly the registry's OS-only modules.
+enum class Capability : uint8_t {
+    None,
+    FileSystem,
+    Network,
+    Process,
+    Console,
 };
 
 // Metadata for a single stdlib function.
@@ -48,18 +60,19 @@ enum class Capability : uint16_t {
 struct FunctionSpec {
     std::string qualified_name; // "Module.function"
     int arity{0};               // Exact arity, or minimum arity when is_variadic_fn is true.
-    std::string params;         // Human-readable param list: "(arr: array<T>, f: func(T) -> U)"
+    std::string params;         // Human-readable param list: "(arr: array<T>, f: function(T) -> U)"
     bool is_constant{false};    // True for named constants (Math.pi, etc.).
     ReturnTypeDesc return_type; // Return type descriptor.  When Unspecified, the type
                                 // checker falls back to its manual signature table.
-    Capability capabilities{Capability::None}; // Required OS capabilities.
+    Capability capabilities{Capability::None}; // OS capability tag (see Capability).
     std::vector<ReturnTypeDesc>
         param_types; // Structured parameter types for the type checker (empty = unchecked).
     bool is_variadic_fn{false}; // True if this function accepts a variable number of arguments.
 
-    // Returns true if this function requires no OS capabilities.
-    [[nodiscard]] bool is_safe() const noexcept {
-        return capabilities == Capability::None;
+    // Returns true if this function carries an OS capability tag.  This is not
+    // the same as "unavailable in sandbox mode" — see Capability.
+    [[nodiscard]] bool requires_capability() const noexcept {
+        return capabilities != Capability::None;
     }
 
     // Returns true if this function is variadic (accepts a variable number of arguments).
@@ -84,7 +97,8 @@ using CatalogMap = luma::StringMap<FunctionSpec>;
 // Returns the set of constant names (functions that are values, not callable).
 [[nodiscard]] const luma::StringSet& constants();
 
-// Returns the set of module prefixes that require the given capability.
+// Returns the module prefixes that hold at least one capability-tagged
+// function — exactly the modules sandbox mode withholds wholesale.
 [[nodiscard]] const luma::StringSet& sandbox_blocked_modules();
 
 // Returns the set of stdlib function names that return result<T>.

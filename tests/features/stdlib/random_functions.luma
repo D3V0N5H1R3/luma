@@ -3,13 +3,40 @@
 #
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
+#
+# Draws are random, so assertions check ranges and invariants; tests that need
+# a definite outcome seed the non-secure PRNG with Random.set_seed first.
 # ═══════════════════════════════════════════════════════════
+
+# The int64 minimum cannot be written as a literal, so build it from
+# INT64_MIN + 1.
+function integer int64_minimum() {
+    mutable integer lowest = -9223372036854775807
+    lowest = lowest - 1
+
+    return lowest
+}
+
+# ─── Non-secure draws ────────────────────────────────────
 
 @test
 function void test_random_generate_boolean() {
-    boolean is_generated = Random.generate_boolean()
+    # With a fixed seed, 64 draws are deterministic and must include both
+    # values.
+    Random.set_seed(7)
+    mutable boolean has_true = false
+    mutable boolean has_false = false
 
-    assert(is_generated || !is_generated)
+    for _i in 0..64 {
+        if Random.generate_boolean() {
+            has_true = true
+        } else {
+            has_false = true
+        }
+    }
+
+    assert(has_true, "some draw is true")
+    assert(has_false, "some draw is false")
 }
 
 @test
@@ -30,28 +57,24 @@ function void test_random_integer_singleton() {
 function void test_random_integer_invalid_range() {
     result<integer> bad = Random.generate_integer(100, 0)
 
-    # lo > hi should produce a failure, not a value.
-    assert(Result.is_failure(bad))
+    assert(Result.is_failure(bad), "low > high is a failure")
 }
 
 @test
 function void test_random_integer_wide_range() {
     # The full int64 span previously overflowed and divided by zero. It must now
-    # return a value inside the range. (INT64_MIN cannot be written as a literal,
-    # so build it from INT64_MIN + 1.)
-    mutable integer lo = -9223372036854775807
-    lo = lo - 1
+    # return a value inside the range.
+    integer lowest = int64_minimum()
+    integer drawn = Result.unwrap(Random.generate_integer(lowest, 9223372036854775807))
 
-    integer v = Result.unwrap(Random.generate_integer(lo, 9223372036854775807))
-
-    assert(v >= lo && v <= 9223372036854775807)
+    assert(drawn >= lowest && drawn <= 9223372036854775807)
 }
 
 @test
 function void test_random_number() {
     number random_number = Random.generate_number()
 
-    assert(random_number >= 0.0 && random_number <= 1.0)
+    assert(random_number >= 0.0 && random_number < 1.0, "draw is in [0, 1)")
 }
 
 @test
@@ -60,6 +83,15 @@ function void test_random_string() {
 
     assert(String.length(random_string) == 16)
 }
+
+@test
+function void test_random_generate_string_invalid() {
+    result<string> bad = Random.generate_string(-1)
+
+    assert(Result.is_failure(bad))
+}
+
+# ─── choice / shuffle / sample ───────────────────────────
 
 @test
 function void test_random_choice() {
@@ -74,7 +106,7 @@ function void test_random_choice() {
 
     result<integer> empty_result = Random.choice([])
 
-    assert(!Result.is_success(empty_result))
+    assert(Result.is_failure(empty_result))
 }
 
 @test
@@ -84,6 +116,7 @@ function void test_random_shuffle() {
 
     assert(Array.length(shuffled) == 5)
     assert(Result.unwrap(Array.sum(shuffled)) == 15)
+    assert(numbers == [1, 2, 3, 4, 5], "shuffle returns a copy")
 }
 
 @test
@@ -92,8 +125,9 @@ function void test_random_shuffle_preserves_elements() {
     array<integer> shuffled = Random.shuffle(numbers)
 
     # A shuffle is a permutation: every original element survives exactly once.
-    assert(Array.length(shuffled) == 5)
-    assert(1 in shuffled && 2 in shuffled && 3 in shuffled && 4 in shuffled && 5 in shuffled)
+    array<integer> sorted = Result.unwrap(Array.sort(shuffled, (integer a, integer b) -> a - b))
+
+    assert(sorted == numbers)
 }
 
 @test
@@ -102,16 +136,17 @@ function void test_random_sample() {
     array<integer> sampled = Random.sample(numbers, 3) |> Result.unwrap()
 
     assert(Array.length(sampled) == 3)
+    assert(Array.length(Array.unique(sampled)) == 3, "sampled elements are unique")
+    assert(Result.unwrap(Array.all(sampled, (integer x) -> x in numbers)),
+           "sampled elements come from the source")
 }
 
 @test
 function void test_random_sample_too_large() {
     array<integer> numbers = [10, 20, 30]
-
-    # A count beyond the array size fails (per the documented contract).
     result<array<integer>> bad = Random.sample(numbers, 10)
 
-    assert(Result.is_failure(bad))
+    assert(Result.is_failure(bad), "a count beyond the array size fails")
 }
 
 @test
@@ -188,10 +223,9 @@ function void test_random_sample_from_exponential_invalid_rate() {
 function void test_random_sample_from_bernoulli() {
     # A Bernoulli draw is an integer-valued number: exactly 0.0 or 1.0.
     number sample = Random.sample_from(Random.Distribution.Bernoulli(0.5)) |> Result.unwrap()
+    integer whole = Converter.to_integer(sample) |> Result.unwrap()
 
     assert(sample >= 0.0 && sample <= 1.0, "Bernoulli yields 0 or 1")
-
-    integer whole = Converter.to_integer(sample) |> Result.unwrap()
     assert(whole == 0 || whole == 1, "Bernoulli draw is integer-valued 0 or 1")
 }
 
@@ -271,61 +305,77 @@ function void test_random_sample_from_lognormal_invalid_standard_deviation() {
     assert(Result.is_failure(negative_sd))
 }
 
-@test
-function void test_random_generate_string_invalid() {
-    result<string> bad = Random.generate_string(-1)
-
-    assert(Result.is_failure(bad))
-}
+# ─── UUIDs ───────────────────────────────────────────────
 
 @test
 function void test_random_uuid() {
     string id = Random.generate_uuid()
+    array<integer> group_lengths = String.split(id, "-")
+    |> Array.map((string group) -> String.length(group))
+    |> Result.unwrap()
 
-    # UUID v4 format: 8-4-4-4-12 = 36 characters
+    # UUID v4 format: 8-4-4-4-12 hex groups, version nibble "4".
     assert(String.length(id) == 36)
-    assert(String.contains(id, "-"))
+    assert(group_lengths == [8, 4, 4, 4, 12])
+    assert(String.substring(id, 14, 15) == "4", "version 4 UUID")
+    assert(Result.is_success(Random.parse_uuid(id)), "generated UUID is canonical")
 }
 
 @test
 function void test_random_uuid_uniqueness() {
-    string id1 = Random.generate_uuid()
-    string id2 = Random.generate_uuid()
+    string first_id = Random.generate_uuid()
+    string second_id = Random.generate_uuid()
 
-    assert(id1 != id2)
+    assert(first_id != second_id)
 }
 
 # ─── Secure Random Functions ─────────────────────────────
+# The secure_* functions need the CSPRNG (TLS); a build with
+# LUMA_FEATURE_TLS=OFF returns failures, so value checks are guarded.
 
 @test
 function void test_random_secure_boolean() {
-    result<boolean> r = Random.secure_boolean()
+    # 64 unseeded draws all landing on one value has probability 2^-63.
+    mutable boolean has_true = false
+    mutable boolean has_false = false
+    mutable boolean is_available = true
 
-    # May fail if TLS not available, but should not throw
-    if Result.is_success(r) {
-        boolean val = Result.unwrap(r)
+    for _i in 0..64 {
+        match Random.secure_boolean() {
+            success(drawn) {
+                if drawn {
+                    has_true = true
+                } else {
+                    has_false = true
+                }
+            }
+            failure(_err) { is_available = false }
+        }
+    }
 
-        assert(val || !val)
+    if is_available {
+        assert(has_true, "some secure draw is true")
+        assert(has_false, "some secure draw is false")
     }
 }
 
 @test
 function void test_random_secure_integer() {
-    result<integer> r = Random.secure_integer(0, 100)
+    result<integer> secure_result = Random.secure_integer(0, 100)
 
-    if Result.is_success(r) {
-        integer val = Result.unwrap(r)
+    if Result.is_success(secure_result) {
+        integer drawn = Result.unwrap(secure_result)
 
-        assert(val >= 0 && val <= 100)
+        assert(drawn >= 0 && drawn <= 100)
     }
 }
 
 @test
 function void test_random_secure_integer_singleton() {
-    result<integer> r = Random.secure_integer(42, 42)
+    result<integer> secure_result = Random.secure_integer(42, 42)
 
-    if Result.is_success(r) {
-        assert(Result.unwrap(r) == 42)
+    if Result.is_success(secure_result) {
+        assert(Result.unwrap(secure_result) == 42)
     }
 }
 
@@ -334,84 +384,79 @@ function void test_random_secure_integer_wide_range() {
     # Regression: the full int64 span previously triggered a division-by-zero
     # crash in the secure path. It must now return cleanly — a value when the
     # secure backend is available, a failure when it is not — but never crash.
-    mutable integer lo = -9223372036854775807
-    lo = lo - 1
+    integer lowest = int64_minimum()
+    result<integer> secure_result = Random.secure_integer(lowest, 9223372036854775807)
 
-    result<integer> r = Random.secure_integer(lo, 9223372036854775807)
+    if Result.is_success(secure_result) {
+        integer drawn = Result.unwrap(secure_result)
 
-    if Result.is_success(r) {
-        integer val = Result.unwrap(r)
-
-        assert(val >= lo && val <= 9223372036854775807)
+        assert(drawn >= lowest && drawn <= 9223372036854775807)
     }
 }
 
 @test
 function void test_random_secure_integer_invalid_range() {
-    result<integer> r = Random.secure_integer(100, 0)
+    result<integer> secure_result = Random.secure_integer(100, 0)
 
-    # lo > hi should produce a failure
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(secure_result), "low > high is a failure")
 }
 
 @test
 function void test_random_secure_number() {
-    result<number> r = Random.secure_number()
+    result<number> secure_result = Random.secure_number()
 
-    if Result.is_success(r) {
-        number val = Result.unwrap(r)
+    if Result.is_success(secure_result) {
+        number drawn = Result.unwrap(secure_result)
 
-        assert(val >= 0.0 && val <= 1.0)
+        assert(drawn >= 0.0 && drawn < 1.0, "secure draw is in [0, 1)")
     }
 }
 
 @test
 function void test_random_secure_string() {
-    result<string> r = Random.secure_string(16)
+    result<string> secure_result = Random.secure_string(16)
 
-    if Result.is_success(r) {
-        string val = Result.unwrap(r)
+    if Result.is_success(secure_result) {
+        string drawn = Result.unwrap(secure_result)
 
-        assert(String.length(val) == 16)
+        assert(String.length(drawn) == 16)
     }
 }
 
 @test
 function void test_random_secure_string_invalid_length() {
-    result<string> r = Random.secure_string(-1)
+    result<string> secure_result = Random.secure_string(-1)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(secure_result))
 }
 
 @test
 function void test_random_secure_uuid() {
-    result<string> r = Random.secure_uuid()
+    result<string> secure_result = Random.secure_uuid()
 
-    if Result.is_success(r) {
-        string val = Result.unwrap(r)
+    if Result.is_success(secure_result) {
+        string id = Result.unwrap(secure_result)
 
-        assert(String.length(val) == 36)
-        assert(String.contains(val, "-"))
+        assert(String.length(id) == 36)
+        assert(Result.is_success(Random.parse_uuid(id)), "secure UUID is canonical")
     }
 }
 
-# ═══════════════════════════════════════════════════════════
-# Random.Uuid (typed, validated UUID value)
-# ═══════════════════════════════════════════════════════════
+# ─── Random.Uuid (typed, validated UUID value) ───────────
 
 @test
 function void test_random_uuid_typed_is_36_chars() {
-    Random.Uuid u = Random.uuid_typed()
+    Random.Uuid id = Random.uuid_typed()
 
-    assert(String.length(Random.uuid_to_string(u)) == 36, "a canonical UUID is 36 characters")
+    assert(String.length(Random.uuid_to_string(id)) == 36, "a canonical UUID is 36 characters")
 }
 
 @test
 function void test_random_parse_uuid_accepts_and_lowercases() {
-    result<Random.Uuid> r = Random.parse_uuid("550E8400-E29B-41D4-A716-446655440000")
+    result<Random.Uuid> parsed = Random.parse_uuid("550E8400-E29B-41D4-A716-446655440000")
 
-    assert(Result.is_success(r), "a canonical UUID parses")
-    assert(Random.uuid_to_string(Result.unwrap(r)) == "550e8400-e29b-41d4-a716-446655440000",
+    assert(Result.is_success(parsed), "a canonical UUID parses")
+    assert(Random.uuid_to_string(Result.unwrap(parsed)) == "550e8400-e29b-41d4-a716-446655440000",
            "the stored value is lower-cased")
 }
 
@@ -422,33 +467,35 @@ function void test_random_parse_uuid_rejects_malformed() {
            "a non-hex character fails")
 }
 
-# ─── seeding / bytes additions ───────────────────────────
+# ─── Seeding / bytes ─────────────────────────────────────
 
 @test
 function void test_random_set_seed_reproducible() {
     Random.set_seed(42)
-    integer a = Result.unwrap(Random.generate_integer(1, 1000000))
+    integer first_draw = Result.unwrap(Random.generate_integer(1, 1000000))
     Random.set_seed(42)
-    integer b = Result.unwrap(Random.generate_integer(1, 1000000))
-    assert(a == b)
+    integer second_draw = Result.unwrap(Random.generate_integer(1, 1000000))
+
+    assert(first_draw == second_draw)
 }
 
 @test
 function void test_random_bytes() {
-    array<integer> fast = Result.unwrap(Random.generate_bytes(8))
-    assert(Array.length(fast) == 8)
-    assert(Array.all(fast, (integer x) -> x >= 0 && x <= 255))
+    array<integer> fast_bytes = Result.unwrap(Random.generate_bytes(8))
+
+    assert(Array.length(fast_bytes) == 8)
+    assert(Result.unwrap(Array.all(fast_bytes, (integer x) -> x >= 0 && x <= 255)))
     assert(Result.is_failure(Random.generate_bytes(-1)))
     assert(Array.length(Result.unwrap(Random.generate_bytes(0))) == 0)
 
     # secure_bytes needs the CSPRNG (TLS); tolerate its absence so this test
     # also passes in the feature-flag build with LUMA_FEATURE_TLS=OFF.
-    result<array<integer>> sec = Random.secure_bytes(16)
+    result<array<integer>> secure_result = Random.secure_bytes(16)
 
-    if Result.is_success(sec) {
-        array<integer> bytes = Result.unwrap(sec)
+    if Result.is_success(secure_result) {
+        array<integer> secure_bytes = Result.unwrap(secure_result)
 
-        assert(Array.length(bytes) == 16)
-        assert(Array.all(bytes, (integer x) -> x >= 0 && x <= 255))
+        assert(Array.length(secure_bytes) == 16)
+        assert(Result.unwrap(Array.all(secure_bytes, (integer x) -> x >= 0 && x <= 255)))
     }
 }

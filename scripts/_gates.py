@@ -16,6 +16,7 @@ command is ``None`` is reported as skipped, with a reason, rather than failing.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -23,9 +24,14 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from _common import REPO_ROOT, reconfigure_utf8_streams
+from _common import REPO_ROOT, find_visual_studio_llvm_tool, reconfigure_utf8_streams
 
 _RULE_WIDTH = 72
+
+# .clang-format uses option spellings introduced in clang-format 20; older
+# versions reject the whole file, so they would fail on every C++ file with a
+# config-parse error. Matches the pre-commit hook and the CI Formatting job.
+MIN_CLANG_FORMAT_MAJOR = 20
 
 
 class Status(Enum):
@@ -98,6 +104,36 @@ def which(tool: str) -> str | None:
     bare command name.
     """
     return shutil.which(tool)
+
+
+def find_clang_format() -> tuple[str | None, str]:
+    """Locate a ``clang-format`` new enough to parse the repository's config.
+
+    Returns ``(path, "")`` for a usable binary — the one on ``PATH``, else
+    Visual Studio's bundled copy — otherwise ``(None, reason)`` for a skipped
+    gate. Like the pre-commit hook, a binary whose version cannot be determined
+    is still used — only a version known to be too old is rejected.
+    """
+    exe = which("clang-format") or find_visual_studio_llvm_tool("clang-format")
+    if exe is None:
+        return None, (
+            "clang-format not found (install LLVM/clang tools, or Visual Studio's "
+            '"C++ Clang tools for Windows" component)'
+        )
+    try:
+        banner = subprocess.run(
+            [exe, "--version"], capture_output=True, text=True, timeout=10, check=False
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return exe, ""
+    # Take the number after "version" so a vendor prefix cannot be mistaken for it.
+    match = re.search(r"version (\d+)", banner)
+    if match is not None and int(match.group(1)) < MIN_CLANG_FORMAT_MAJOR:
+        return None, (
+            f"clang-format {match.group(1)} found, {MIN_CLANG_FORMAT_MAJOR}+ required "
+            "to parse .clang-format"
+        )
+    return exe, ""
 
 
 def git_ls(*patterns: str) -> list[str]:

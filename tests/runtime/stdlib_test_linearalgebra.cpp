@@ -44,6 +44,27 @@ LUMA_TEST(linear_algebra_multiply_overflow_guarded) {
     ASSERT_TRUE(threw);
 }
 
+LUMA_TEST(linear_algebra_outer_overflow_guarded) {
+    // Regression: outer skipped the shared matrix-size guard, so two vectors at
+    // the array limit allocated limit² doubles.
+    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(8)};
+
+    bool threw{false};
+
+    try {
+        (void)eval("LinearAlgebra.outer([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])");
+    } catch (const std::exception& e) {
+        threw = true;
+        ASSERT_TRUE(std::string{e.what()}.find("maximum matrix element count") !=
+                    std::string::npos);
+    }
+
+    ASSERT_TRUE(threw);
+
+    // Within the limit (2 × 2 = 4 elements) outer still succeeds.
+    ASSERT_RESULT_SUCCESS(eval("LinearAlgebra.outer([1.0, 2.0], [3.0, 4.0])"));
+}
+
 LUMA_TEST(linearalgebra_add) {
     const auto v = eval("LinearAlgebra.add([1.0, 2.0], [3.0, 4.0])");
 

@@ -152,9 +152,9 @@ The protocol thread remains responsive to DAP requests while the program runs.
 
 ### Modification
 
-| Request       | Direction       | Purpose                                       |
-| ------------- | --------------- | --------------------------------------------- |
-| `setVariable` | Client → Server | Modify a variable's value while paused        |
+| Request       | Direction       | Purpose                                |
+| ------------- | --------------- | -------------------------------------- |
+| `setVariable` | Client → Server | Modify a variable's value while paused |
 
 ### Events (Server → Client)
 
@@ -444,7 +444,7 @@ On Windows, sets `stdin`, `stdout`, and `stderr` to binary mode to prevent `\r\n
 
 ### `dap_transport.hpp` — Message Framing (Shared Transport)
 
-`dap_transport.hpp` re-exports the shared stdio transport under the debugger's namespace: `using luma::dap::Transport = luma::protocol::StdioTransport;`. The Content-Length framing, thread-safe writes, optional read timeout, and shared JSON value type (`luma::json::JsonValue` from `shared/json/`) are exactly those the language server uses.
+`dap_transport.hpp` re-exports the shared stdio transport under the debugger's namespace: `using luma::dap::Transport = luma::protocol::StdioTransport;`. The Content-Length framing, thread-safe writes, and shared JSON value type (`luma::json::JsonValue` from `shared/json/`) are exactly those the language server uses.
 
 That shared transport and JSON type are documented authoritatively in the [Language Server](Luma_Language_Server.md) design document — see §15 (Module Responsibilities) and §23 (Platform-Specific Handling).
 
@@ -949,15 +949,18 @@ examples/debug/
 ├── breakpoint_basic.luma      # Simple breakpoint on a print statement
 ├── closure_variables.luma     # Captured upvalues for closure-scope inspection
 ├── concurrent_tasks.luma      # task_scope with multiple tasks
-├── conditional_loop.luma      # Loop with conditional logic for stepping
+├── conditional_loop.luma      # Loop with a running total for conditional breakpoints
 ├── exception_caught.luma      # try/catch for the 'caught' exception filter
 ├── exception_unhandled.luma   # Triggers an unhandled exception
+├── global_scope.luma          # Nested frame that evaluates calls to top-level functions
+├── infinite_eval.luma         # Non-terminating function for the evaluation timeout
 ├── long_loop.luma             # Long-running loop for pause testing
 ├── recursive_stack.luma       # Deep recursion for call-stack and step-out testing
-├── set_variable.luma          # Various variable types for setVariable testing
+├── set_variable.luma          # Mutable integer and string for setVariable testing
 ├── step_into_function.luma    # Function call for step-in testing
 ├── step_over_loop.luma        # Loop for step-over testing
 ├── structured_values.luma     # Records and choice types for expandable variables
+├── task_stress.luma           # Rapid task spawn/exit churn for task-thread inspection
 └── variables_basic.luma       # Various variable types for inspection
 ```
 
@@ -979,3 +982,4 @@ Once the current implementation is stable, the following features could be added
 - [Contributing](../CONTRIBUTING.md) — configuring editors to launch the debugger
 - [Language Server](Luma_Language_Server.md) — the companion LSP language server
 - [Software Architecture](Luma_Software_Architecture.md) — how the debug adapter fits into the interpreter
+- [Manual Tests](Luma_Manual_Tests.md) — manual test plan covering the debugger in VS Code and Zed

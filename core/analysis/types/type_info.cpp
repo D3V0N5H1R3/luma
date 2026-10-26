@@ -163,7 +163,10 @@ std::string TypeInfo::to_string() const {
                 return "result<?>";
             }
 
-            if (inner_types.size() >= 2 && result_error_type().kind != Kind::StdlibAny) {
+            // `string` is the default error type, so result<T, string> is
+            // spelled result<T>, as users write it.
+            if (inner_types.size() >= 2 && result_error_type().kind != Kind::StdlibAny &&
+                result_error_type().kind != Kind::String) {
                 return std::format("result<{}, {}>", result_value_type().to_string(),
                                    result_error_type().to_string());
             }
@@ -235,7 +238,9 @@ TypeInfo TypeInfo::make_result(TypeInfo value) {
     TypeInfo info{.kind = Kind::Result, .name = {}, .inner_types = {}, .return_type = {}};
     info.inner_types.reserve(2);
     info.inner_types.push_back(std::move(value));
-    info.inner_types.push_back(TypeInfo::make(Kind::StdlibAny)); // default error type (permissive)
+    // Inferred results (success(...), stdlib signatures) leave the error type
+    // open; the `result<T>` annotation itself resolves to result<T, string>.
+    info.inner_types.push_back(TypeInfo::make(Kind::StdlibAny));
 
     return info;
 }

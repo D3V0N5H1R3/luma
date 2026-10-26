@@ -65,7 +65,7 @@ using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
 [[nodiscard]] AddrInfoPtr resolve_host(const std::string& host, int port) {
     ensure_winsock();
 
-    struct addrinfo hints {};
+    struct addrinfo hints{};
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -261,30 +261,25 @@ build_http_request_string(const std::string& method, const ParsedUrl& parsed,
         }
     }
 
-    // Create socket and connect using the resolved address (no second DNS
-    // lookup) to eliminate the TOCTOU window a second resolution would open.
-    const auto sock = ::socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+    // Connect using the resolved addresses (no second DNS lookup) to eliminate
+    // the TOCTOU window a second resolution would open.  Every candidate address
+    // is tried in order; the SSRF check above already vetted all of them.
+    TcpConnectFailure failure{};
+    const auto sock = tcp_connect_any(info.get(), timeout_ms, &failure);
 
     if (sock == invalid_socket_handle) {
-        error_out = "Http: cannot create socket";
-        return invalid_socket_handle;
-    }
+        if (failure.socket_failed) {
+            error_out = "Http: cannot create socket";
+        } else {
+            error_out = std::format("Http: connection to {}:{} {}", host, port,
+                                    failure.timed_out ? "timed out" : "failed");
+            kind_out = failure.timed_out ? HttpErrorKind::Timeout : HttpErrorKind::ConnectionFailed;
+        }
 
-    SocketGuard guard{sock};
-
-    bool timed_out = false;
-
-    if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
-                                  timeout_ms, &timed_out)) {
-        error_out = std::format("Http: connection to {}:{} {}", host, port,
-                                timed_out ? "timed out" : "failed");
-        kind_out = timed_out ? HttpErrorKind::Timeout : HttpErrorKind::ConnectionFailed;
         return invalid_socket_handle;
     }
 
     (void)platform_socket::set_timeout(sock, timeout_ms);
-
-    guard.release();
 
     return sock;
 }
@@ -565,14 +560,20 @@ perform_http(const std::string& method, const std::string& url, const std::strin
                                     "Http: failed to send request");
     }
 
-    // Read response.
-    const auto raw_response = read_http_response(*conn);
+    // Read response.  A truncated, oversized or malformed response is a failure,
+    // never a success carrying a silently shortened body.
+    const auto response = read_http_response(*conn, method);
 
-    if (raw_response.empty()) {
+    if (!response.ok()) {
+        return RawHttpOutcome::fail(HttpErrorKind::Malformed,
+                                    std::format("Http: {}", response.error));
+    }
+
+    if (response.raw.empty()) {
         return RawHttpOutcome::fail(HttpErrorKind::Malformed, "Http: empty response");
     }
 
-    return RawHttpOutcome::success(parse_response(raw_response));
+    return RawHttpOutcome::success(parse_response(response.raw));
 }
 
 } // anonymous namespace

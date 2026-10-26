@@ -153,7 +153,7 @@ struct TokenExtents {
 [[nodiscard]] inline Range find_declaration_name_range(const std::vector<Token>& tokens,
                                                        const SourceLocation& decl_loc,
                                                        std::string_view name) {
-    return find_identifier_range(tokens, decl_loc, luma::qualified_member(name));
+    return find_identifier_range(tokens, decl_loc, luma::symbols::qualified_member(name));
 }
 
 // Find the first Identifier token matching 'name' within a bounding range
@@ -184,7 +184,7 @@ struct TokenExtents {
 [[nodiscard]] inline Range find_declaration_name_range(const TokenIndex& line_index,
                                                        const SourceLocation& decl_loc,
                                                        std::string_view name) {
-    const std::string_view member = luma::qualified_member(name);
+    const std::string_view member = luma::symbols::qualified_member(name);
     const int line0 = decl_loc.line - 1;
     const int col0 = std::max(0, decl_loc.column - 1);
     const Range fallback{Position{line0, col0},

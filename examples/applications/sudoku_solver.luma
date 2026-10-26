@@ -16,30 +16,31 @@
 
 # ─── Parsing & Rendering ─────────────────────────────────
 
+# Any character that is not a digit (such as "_" or ".") becomes a blank cell.
 function array<integer> parse_grid(string text) {
-    mutable array<integer> board = []
-    for ch in String.characters(text) {
-        integer digit = Result.unwrap_or(Converter.to_integer(ch), 0)
-        board = Array.push(board, digit)
-    }
-    return board
+    return String.characters(text)
+        |> Array.map((string character) -> Result.unwrap_or(Converter.to_integer(character), 0))
+        |> Result.unwrap_or([])
 }
 
-function string three(array<integer> board, integer row, integer start) {
-    mutable array<string> parts = []
-    for col in start..start + 3 {
-        integer value = board[row * 9 + col]
-        string shown = if value == 0 { "." } else { Converter.to_string(value) }
-        parts = Array.push(parts, shown)
-    }
-    return String.join(parts, " ")
+function string cell_text(integer value) {
+    return if value == 0 { "." } else { "${value}" }
+}
+
+# The three cells of one row that fall inside a single 3×3 box.
+function string format_box_row(array<integer> board, integer row, integer start_col) {
+    return Array.range(start_col, start_col + 3)
+        |> Result.unwrap_or([])
+        |> Array.map((integer col) -> cell_text(board[row * 9 + col]))
+        |> Result.unwrap_or([])
+        |> String.join(" ")
 }
 
 function void print_grid(array<integer> board) {
     for row in 0..9 {
-        string left = three(board, row, 0)
-        string middle = three(board, row, 3)
-        string right = three(board, row, 6)
+        string left = format_box_row(board, row, 0)
+        string middle = format_box_row(board, row, 3)
+        string right = format_box_row(board, row, 6)
         print("   ${left} | ${middle} | ${right}")
         if row == 2 || row == 5 {
             print("  -------+-------+-------")
@@ -51,16 +52,16 @@ function void print_grid(array<integer> board) {
 
 function array<integer> row_values(array<integer> board, integer row) {
     return Array.range(0, 9)
-    |> Result.unwrap_or([])
-    |> Array.map((integer col) -> board[row * 9 + col])
-    |> Result.unwrap_or([])
+        |> Result.unwrap_or([])
+        |> Array.map((integer col) -> board[row * 9 + col])
+        |> Result.unwrap_or([])
 }
 
 function array<integer> column_values(array<integer> board, integer col) {
     return Array.range(0, 9)
-    |> Result.unwrap_or([])
-    |> Array.map((integer row) -> board[row * 9 + col])
-    |> Result.unwrap_or([])
+        |> Result.unwrap_or([])
+        |> Array.map((integer row) -> board[row * 9 + col])
+        |> Result.unwrap_or([])
 }
 
 function array<integer> box_values(array<integer> board, integer box) {
@@ -70,27 +71,27 @@ function array<integer> box_values(array<integer> board, integer box) {
     # The nine cells of a box map to indices 0..8; cell / 3 and cell % 3 give
     # the local row and column. One native map replaces a nested push loop.
     return Array.range(0, 9)
-    |> Result.unwrap_or([])
-    |> Array.map((integer cell) -> board[(box_row + cell // 3) * 9 + box_col + cell % 3])
-    |> Result.unwrap_or([])
+        |> Result.unwrap_or([])
+        |> Array.map((integer cell) -> board[(box_row + cell // 3) * 9 + box_col + cell % 3])
+        |> Result.unwrap_or([])
 }
 
 function boolean is_safe(array<integer> board, integer row, integer col, integer value) {
-    for c in 0..9 {
-        if board[row * 9 + c] == value {
+    for other_col in 0..9 {
+        if board[row * 9 + other_col] == value {
             return false
         }
     }
-    for r in 0..9 {
-        if board[r * 9 + col] == value {
+    for other_row in 0..9 {
+        if board[other_row * 9 + col] == value {
             return false
         }
     }
     integer box_row = (row // 3) * 3
     integer box_col = (col // 3) * 3
-    for r in box_row..box_row + 3 {
-        for c in box_col..box_col + 3 {
-            if board[r * 9 + c] == value {
+    for other_row in box_row..box_row + 3 {
+        for other_col in box_col..box_col + 3 {
+            if board[other_row * 9 + other_col] == value {
                 return false
             }
         }
@@ -98,23 +99,24 @@ function boolean is_safe(array<integer> board, integer row, integer col, integer
     return true
 }
 
-function boolean unit_is_complete(array<integer> values) {
+# A row, column or box is complete when it holds nine distinct non-blank digits.
+function boolean is_unit_complete(array<integer> values) {
     if Array.contains(values, 0) {
         return false
     }
-    set seen = Set.from_array(values)
-    return Set.length(seen) == 9
+    set<integer> distinct_digits = Set.from_array(values)
+    return Set.length(distinct_digits) == 9
 }
 
 function boolean is_solved(array<integer> board) {
     for index in 0..9 {
-        if !unit_is_complete(row_values(board, index)) {
+        if !is_unit_complete(row_values(board, index)) {
             return false
         }
-        if !unit_is_complete(column_values(board, index)) {
+        if !is_unit_complete(column_values(board, index)) {
             return false
         }
-        if !unit_is_complete(box_values(board, index)) {
+        if !is_unit_complete(box_values(board, index)) {
             return false
         }
     }
@@ -158,23 +160,13 @@ function optional<array<integer>> solve(array<integer> board) {
 }
 
 function integer count_clues(array<integer> board) {
-    mutable integer clues = 0
-    for index in 0..81 {
-        if board[index] != 0 {
-            clues = clues + 1
-        }
-    }
-    return clues
+    return Array.count(board, (integer value) -> value != 0) ?? 0
 }
 
 # ─── Demo ────────────────────────────────────────────────
 
-@main
-function void main() {
-    print("═══════════════════════════════════════════════════")
-    print("   Sudoku Solver — Recursive Backtracking")
-    print("═══════════════════════════════════════════════════")
-
+# A classic 30-clue puzzle; "_" marks a blank cell.
+function array<integer> sample_board() {
     string puzzle = "53__7____" +
                     "6__195___" +
                     "_98____6_" +
@@ -184,8 +176,16 @@ function void main() {
                     "_6____28_" +
                     "___419__5" +
                     "____8__79"
-    string normalised = String.replace(puzzle, "_", "0")
-    array<integer> board = parse_grid(normalised)
+    return parse_grid(puzzle)
+}
+
+@main
+function void main() {
+    print("═══════════════════════════════════════════════════")
+    print("   Sudoku Solver — Recursive Backtracking")
+    print("═══════════════════════════════════════════════════")
+
+    array<integer> board = sample_board()
 
     print("")
     print("Puzzle (${count_clues(board)} clues):")
@@ -201,8 +201,8 @@ function void main() {
         print("Solved:")
         print_grid(solution)
         print("")
-        string ok = if is_solved(solution) { "yes" } else { "no" }
-        print("Every row, column and box valid: ${ok}")
+        string verdict = if is_solved(solution) { "yes" } else { "no" }
+        print("Every row, column and box valid: ${verdict}")
     }
     case none {
         print("")
@@ -212,19 +212,6 @@ function void main() {
 }
 
 # ─── Tests ───────────────────────────────────────────────
-
-function array<integer> sample_board() {
-    string puzzle = "53__7____" +
-                    "6__195___" +
-                    "_98____6_" +
-                    "8___6___3" +
-                    "4__8_3__1" +
-                    "7___2___6" +
-                    "_6____28_" +
-                    "___419__5" +
-                    "____8__79"
-    return parse_grid(String.replace(puzzle, "_", "0"))
-}
 
 @test
 function void test_parse_grid_has_81_cells() {

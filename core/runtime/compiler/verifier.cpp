@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <iterator>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -68,8 +70,15 @@ namespace {
                                                   std::size_t code_size) {
     return {.offset = offset,
             .message = std::format("jump at offset {} targets offset {} "
-                                   "which is beyond code size {}",
+                                   "which is at or beyond code size {}",
                                    offset, target, code_size)};
+}
+
+[[nodiscard]] VerifyError falls_off_end_error(std::size_t offset, std::size_t code_size) {
+    return {.offset = offset,
+            .message = std::format("control flow from offset {} falls off the end of the code "
+                                   "(size {}) without a Return",
+                                   offset, code_size)};
 }
 
 [[nodiscard]] VerifyError loop_underflow(std::size_t offset, std::size_t loop_offset) {
@@ -229,7 +238,10 @@ static void collect_jumps(Op op, std::size_t offset, const std::vector<std::uint
         const auto jump_offset = static_cast<std::size_t>(read_u32_be(&code[offset + 1]));
         const auto target = Chunk::resolve_forward_jump_target(offset, jump_offset);
 
-        if (target > code.size()) {
+        // A target equal to code.size() is not an instruction: the VM would
+        // fall past the last instruction, so it is as invalid as a target
+        // beyond the end.
+        if (target >= code.size()) {
             errors.push_back(jump_target_beyond_code(offset, target, code.size()));
         } else {
             jumps.push_back({.offset = offset, .target = target, .is_loop = false});
@@ -253,77 +265,355 @@ static void collect_jumps(Op op, std::size_t offset, const std::vector<std::uint
     }
 }
 
-static bool track_stack_depth(Op op, std::size_t offset, const std::vector<std::uint8_t>& code,
-                              int& depth, int& max_depth, std::vector<VerifyError>& errors) {
-    // Try the fixed-effect lookup first.
-    if (const auto effect = fixed_stack_effect(op)) {
-        depth += *effect;
-    } else {
-        // Operand-dependent stack effects.
+StackEffect instruction_stack_effect(const std::vector<std::uint8_t>& code, std::size_t offset) {
+    const auto u8_operand = [&](std::size_t at) { return static_cast<int>(code[offset + at]); };
+    const auto u16_operand = [&](std::size_t at) {
+        return static_cast<int>(read_u16_be(&code[offset + at]));
+    };
+
+    switch (static_cast<Op>(code[offset])) {
+        case Op::Constant:
+        case Op::ConstantLong:
+        case Op::GetLocal:
+        case Op::GetUpvalue:
+        case Op::GetGlobal:
+        case Op::None:
+        case Op::True:
+        case Op::False:
+        case Op::Zero:
+        case Op::One:
+        case Op::MakeClosure:
+        case Op::TaskScopeEnd: // Pushes the array of task results.
+            return {.pops = 0, .pushes = 1};
+
+        case Op::Pop:
+        case Op::SetLocalPop:
+        case Op::Return:
+        case Op::Rethrow:
+            return {.pops = 1, .pushes = 0};
+
+        case Op::Dup:
+            return {.pops = 1, .pushes = 2};
+
+        case Op::Dup2:
+            return {.pops = 2, .pushes = 4};
+
+        case Op::Swap:
+            return {.pops = 2, .pushes = 2};
+
+        // Replace the top value (or only inspect it).
+        case Op::SetLocal:
+        case Op::SetUpvalue:
+        case Op::SetGlobal:
+        case Op::Negate:
+        case Op::Increment:
+        case Op::Decrement:
+        case Op::Not:
+        case Op::MakeSuccess:
+        case Op::MakeFailure:
+        case Op::MakeSome:
+        case Op::Unwrap:
+        case Op::ResultInner:
+        case Op::IsSuccess:
+        case Op::IsSome:
+        case Op::EnsureSuccess:
+        case Op::Downcast:
+        case Op::TrustedDowncast:
+        case Op::IsType:
+        case Op::JumpIfFalse:
+        case Op::JumpIfTrue:
+        case Op::NullCoalesce:
+        case Op::GetField:
+        case Op::GetFieldOpt:
+        case Op::GetFieldUnique:
+        case Op::Await:
+        case Op::ForIterInit:
+        case Op::TypeOf:
+        case Op::IntToNumber:
+        case Op::WidenNumber:
+        case Op::Clone:
+            return {.pops = 1, .pushes = 1};
+
+        // Combine two values into one.
+        case Op::Add:
+        case Op::Subtract:
+        case Op::Multiply:
+        case Op::Divide:
+        case Op::IntDivide:
+        case Op::Modulo:
+        case Op::Equal:
+        case Op::NotEqual:
+        case Op::Less:
+        case Op::LessEqual:
+        case Op::Greater:
+        case Op::GreaterEqual:
+        case Op::And:
+        case Op::Or:
+        case Op::Concatenate:
+        case Op::MakeRange:
+        case Op::MakeRangeInc:
+        case Op::IndexGet:
+        case Op::IndexGetOpt:
+        case Op::IndexGetUnique:
+        case Op::SetField: // Pops the record and value, pushes the updated record.
+        case Op::MakeChoice:
+        case Op::MakeChoiceConstructor:
+        case Op::Pipe:
+        case Op::ErrorPipe:
+        case Op::Contains:
+            return {.pops = 2, .pushes = 1};
+
+        case Op::IndexSet:
+            return {.pops = 3, .pushes = 1};
+
+        case Op::Interpolate:
+        case Op::Print:
+        case Op::Assert:
+            return {.pops = u8_operand(1), .pushes = 1};
+
+        case Op::MakeArray:
+        case Op::MakeTuple:
+            return {.pops = u16_operand(1), .pushes = 1};
+
+        case Op::MakeDict:
+            return {.pops = 2 * u16_operand(1), .pushes = 1};
+
+        case Op::MakeRecord: // u16 type name, u8 field count, field names.
+            return {.pops = u8_operand(3), .pushes = 1};
+
+        case Op::RecordWith: // u8 override count, override names; also pops the base record.
+            return {.pops = u8_operand(1) + 1, .pushes = 1};
+
+        // The callee (below its arguments) is replaced by the result / task.
+        case Op::Call:
+        case Op::TailCall:
+        case Op::Spawn:
+            return {.pops = u8_operand(1) + 1, .pushes = 1};
+
+        case Op::CallNamed: // Each named argument is a (name, value) pair.
+            return {.pops = u8_operand(1) + (2 * u8_operand(2)) + 1, .pushes = 1};
+
+        // Pops the iterator state; pushes (element, true) or (value, key, true).
+        case Op::ForIterStep:
+            return {.pops = 1, .pushes = 2};
+
+        case Op::ForIterStepKV:
+            return {.pops = 1, .pushes = 3};
+
+        case Op::Jump:
+        case Op::Loop:
+        case Op::TryCatch:
+        case Op::TryEnd:
+        case Op::MatchStart:
+        case Op::MatchArm:
+        case Op::MatchEnd:
+        case Op::TaskScopeBegin:
+        case Op::IncrementLocal:
+        case Op::DecrementLocal:
+        case Op::GetLocalReturn:
+        case Op::UniqueLocal:
+        case Op::UniqueUpvalue:
+        case Op::UniqueGlobal:
+        case Op::EndModule:
+            return {.pops = 0, .pushes = 0};
+    }
+
+    return {.pops = 0, .pushes = 0};
+}
+
+namespace {
+
+// Stack-depth state reaching an instruction along some control-flow edge.
+struct PendingInstruction {
+    std::size_t offset;
+    int depth;
+};
+
+// Step budget of the stack-depth walk, per instruction (see check_stack_depths).
+constexpr std::size_t k_max_visits_per_instruction = 64;
+
+[[nodiscard]] VerifyError loop_stack_growth_error(std::size_t offset, int growth) {
+    return {.offset = offset,
+            .message = std::format("stack grows by {} on every iteration of the loop at offset {}",
+                                   growth, offset)};
+}
+
+[[nodiscard]] VerifyError stack_analysis_budget_error(std::size_t offset) {
+    return {.offset = offset,
+            .message =
+                std::format("stack depth analysis exceeded its step budget at offset {}", offset)};
+}
+
+// Values a ForIterStep / ForIterStepKV does not push when the iterator is
+// exhausted: it then pushes only `false`, which the JumpIfFalse right after it
+// takes to the loop exit.
+[[nodiscard]] int values_missing_when_exhausted(Op op) {
+    if (op == Op::ForIterStep) {
+        return 1;
+    }
+
+    if (op == Op::ForIterStepKV) {
+        return 2;
+    }
+
+    return 0;
+}
+
+// Walk the control flow graph from the entry point, simulating each reachable
+// instruction with the deepest stack that reaches it.  Simulating the deepest
+// stack avoids false underflow reports at merge points while still catching
+// any instruction that pops more than every path into it provides.
+//
+// The walk revisits an instruction only when a deeper stack reaches it.  A
+// loop whose body leaves extra values behind would otherwise be re-walked once
+// per extra stack slot, so stack growth across a back edge is reported
+// directly, and a step budget bounds the work on crafted bytecode (this runs
+// on every deserialized .lumc file).
+void check_stack_depths(const CompiledFunction& func, const std::vector<std::size_t>& boundaries,
+                        std::vector<VerifyError>& errors) {
+    const auto& code = func.chunk().code;
+    std::vector<int> deepest(code.size(), -1);
+    // Every frame starts with the callee in slot 0 followed by its arguments.
+    std::vector<PendingInstruction> pending{
+        {.offset = 0, .depth = func.arity + CompilerLimits::k_first_parameter_slot}};
+
+    // Compiled code reaches each instruction with at most a few distinct
+    // depths; this budget leaves ample headroom for that.
+    const std::size_t step_budget = (boundaries.size() * k_max_visits_per_instruction) + 1;
+    std::size_t steps = 0;
+
+    const auto is_boundary = [&](std::size_t offset) {
+        return std::ranges::binary_search(boundaries, offset);
+    };
+
+    const auto previous_op = [&](std::size_t offset) -> std::optional<Op> {
+        const auto it = std::ranges::lower_bound(boundaries, offset);
+
+        if (it == boundaries.begin()) {
+            return std::nullopt;
+        }
+
+        return static_cast<Op>(code[*std::prev(it)]);
+    };
+
+    while (!pending.empty()) {
+        const auto [offset, depth] = pending.back();
+        pending.pop_back();
+
+        if (offset >= code.size() || !is_boundary(offset) || depth <= deepest[offset]) {
+            continue;
+        }
+
+        // Invalid or truncated instructions are reported by the linear pass.
+        if (code[offset] > static_cast<std::uint8_t>(Op::EndModule) ||
+            offset + instruction_size(code, offset) > code.size()) {
+            continue;
+        }
+
+        if (++steps > step_budget) {
+            errors.push_back(stack_analysis_budget_error(offset));
+            return;
+        }
+
+        deepest[offset] = depth;
+
+        const auto op = static_cast<Op>(code[offset]);
+        const auto effect = instruction_stack_effect(code, offset);
+
+        if (depth < effect.pops) {
+            errors.push_back(stack_underflow_error(offset, op));
+            return;
+        }
+
+        const int after = depth - effect.pops + effect.pushes;
+
+        if (after > CompilerLimits::k_max_stack_depth) {
+            errors.push_back(stack_overflow_error(offset, after));
+            return;
+        }
+
+        const auto next = offset + instruction_size(code, offset);
+
+        // Every opcode other than an unconditional transfer continues at
+        // `next` on at least one path.  Past the last instruction there is no
+        // code to run, so the VM would read beyond the chunk.
+        const bool always_transfers = op == Op::Return || op == Op::GetLocalReturn ||
+                                      op == Op::Rethrow || op == Op::EndModule || op == Op::Jump ||
+                                      op == Op::Loop;
+
+        if (!always_transfers && next >= code.size()) {
+            errors.push_back(falls_off_end_error(offset, code.size()));
+            return;
+        }
+
         switch (op) {
-            case Op::Interpolate:
-                if (offset + 1 < code.size()) {
-                    depth += 1 - static_cast<int>(code[offset + 1]);
-                }
+            case Op::Return:
+            case Op::GetLocalReturn:
+            case Op::Rethrow:
+            case Op::EndModule:
                 break;
 
-            case Op::MakeArray:
-            case Op::MakeTuple:
-                if (in_bounds(code, offset, 3)) {
-                    const int count = static_cast<int>(read_u16_be(&code[offset + 1]));
-                    depth += 1 - count;
-                }
+            case Op::Jump:
+                pending.push_back({.offset = Chunk::resolve_forward_jump_target(
+                                       offset, read_u32_be(&code[offset + 1])),
+                                   .depth = after});
                 break;
 
-            case Op::MakeDict:
-                if (in_bounds(code, offset, 3)) {
-                    const int count = static_cast<int>(read_u16_be(&code[offset + 1]));
-                    depth += 1 - (count * 2);
-                }
-                break;
+            case Op::Loop: {
+                const auto back = static_cast<std::size_t>(read_u32_be(&code[offset + 1]));
 
-            case Op::Call:
-            case Op::TailCall:
-            case Op::Spawn:
-                if (offset + 1 < code.size()) {
-                    depth -= static_cast<int>(code[offset + 1]);
-                }
-                break;
+                if (back <= next) {
+                    const auto target = Chunk::resolve_loop_jump_target(offset, back);
 
-            case Op::Print:
-            case Op::Assert:
-                if (offset + 1 < code.size()) {
-                    depth += 1 - static_cast<int>(code[offset + 1]);
-                }
-                break;
+                    // A loop header already simulated with a shallower stack
+                    // means each iteration leaves values behind.
+                    if (deepest[target] >= 0 && after > deepest[target]) {
+                        errors.push_back(loop_stack_growth_error(offset, after - deepest[target]));
+                        return;
+                    }
 
-            case Op::CallNamed:
-                if (offset + 2 < code.size()) {
-                    const int positional = static_cast<int>(code[offset + 1]);
-                    const int named = static_cast<int>(code[offset + 2]);
-                    depth -= positional + (named * 2);
+                    pending.push_back({.offset = target, .depth = after});
                 }
+
+                break;
+            }
+
+            case Op::JumpIfFalse:
+            case Op::JumpIfTrue:
+            case Op::NullCoalesce: {
+                const auto previous = previous_op(offset);
+                const int missing = op == Op::JumpIfFalse && previous
+                                        ? values_missing_when_exhausted(*previous)
+                                        : 0;
+
+                if (after < missing) {
+                    errors.push_back(stack_underflow_error(offset, op));
+                    return;
+                }
+
+                pending.push_back({.offset = next, .depth = after});
+                pending.push_back({.offset = Chunk::resolve_forward_jump_target(
+                                       offset, read_u32_be(&code[offset + 1])),
+                                   .depth = after - missing});
+                break;
+            }
+
+            case Op::TryCatch:
+                // The handler restores this depth and pushes the error value.
+                pending.push_back({.offset = next, .depth = after});
+                pending.push_back({.offset = Chunk::resolve_forward_jump_target(
+                                       offset, read_u32_be(&code[offset + 1])),
+                                   .depth = after + 1});
                 break;
 
             default:
+                pending.push_back({.offset = next, .depth = after});
                 break;
         }
     }
-
-    if (depth < 0) {
-        errors.push_back(stack_underflow_error(offset, op));
-        return false;
-    }
-
-    max_depth = std::max(depth, max_depth);
-
-    if (max_depth > CompilerLimits::k_max_stack_depth) {
-        errors.push_back(stack_overflow_error(offset, max_depth));
-        return false;
-    }
-
-    return true;
 }
+
+} // namespace
 
 // ─── Single-pass verification ───
 
@@ -340,9 +630,6 @@ std::vector<BytecodeVerifier::VerifyError> BytecodeVerifier::verify(const Compil
     // State accumulated during the single iteration.
     std::vector<std::size_t> boundaries;
     std::vector<JumpRecord> jumps;
-    int stack_depth = func.arity;
-    int max_stack_depth = stack_depth;
-    bool track_stack = true;
     std::size_t offset = 0;
 
     while (offset < code.size()) {
@@ -370,11 +657,6 @@ std::vector<BytecodeVerifier::VerifyError> BytecodeVerifier::verify(const Compil
         // ── Collect jumps for deferred boundary validation ──
         collect_jumps(op, offset, code, jumps, errors);
 
-        // ── Stack depth tracking ──
-        if (track_stack) {
-            track_stack = track_stack_depth(op, offset, code, stack_depth, max_stack_depth, errors);
-        }
-
         offset += size;
     }
 
@@ -386,6 +668,9 @@ std::vector<BytecodeVerifier::VerifyError> BytecodeVerifier::verify(const Compil
             errors.push_back(jump_not_on_boundary(jump.offset, jump.target, jump.is_loop));
         }
     }
+
+    // ── Stack depth along every control-flow path ──
+    check_stack_depths(func, boundaries, errors);
 
     return errors;
 }

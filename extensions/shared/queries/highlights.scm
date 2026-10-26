@@ -44,6 +44,7 @@
 (integer_literal) @number
 (float_literal) @number.float
 (hex_literal) @number
+(octal_literal) @number
 (binary_literal) @number
 
 ; ─── Booleans ──────────────────────────────────────────────────────

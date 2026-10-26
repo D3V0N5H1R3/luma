@@ -15,6 +15,7 @@
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/control_flow.hpp"
@@ -100,6 +101,86 @@ signal_kind_from_variant(std::string_view variant) {
         return platform_process::SignalKind::Hangup;
     }
     return std::nullopt;
+}
+
+// Why a Process.Command record could not be turned into an argv vector.  The
+// string-error and typed-error entry points report the same two conditions in
+// their own way (a message vs. Process.Error.InvalidCommand).
+enum class CommandArgvError {
+    None,
+    EmptyProgram,
+    NonStringArgument,
+};
+
+// Validates a Process.Command record and builds its argv verbatim (argv[0] is
+// the program): no shell, no tokenization, so metacharacters in any argument are
+// inert.  A value that is not a Command record at all is a programming error
+// and throws (naming `qualified`); an empty program or a non-string argument is
+// reported through `error` so each caller can map it to its own result shape.
+// Shared by run_command, run_command_typed and run_command_timeout.
+[[nodiscard]] std::vector<std::string> command_record_argv(const Value& value,
+                                                           std::string_view qualified,
+                                                           const SourceLocation& loc,
+                                                           CommandArgvError& error) {
+    error = CommandArgvError::None;
+
+    const Value* program = nullptr;
+    const Value* arguments = nullptr;
+
+    if (value.is_record()) {
+        const auto& rec = value.as_record();
+        program = rec->find_field("program");
+        arguments = rec->find_field("arguments");
+    }
+
+    if (program == nullptr || !program->is_string() || arguments == nullptr ||
+        !arguments->is_array()) {
+        throw RuntimeError{std::format("{}: expected a Process.Command record", qualified), loc,
+                           "build one with Process.command(program, arguments)"};
+    }
+
+    if (program->as_string().empty()) {
+        error = CommandArgvError::EmptyProgram;
+
+        return {};
+    }
+
+    std::vector<std::string> argv;
+    argv.reserve(arguments->as_array()->elements->size() + 1);
+    argv.push_back(program->as_string());
+
+    for (const auto& element : *arguments->as_array()->elements) {
+        if (!element.is_string()) {
+            error = CommandArgvError::NonStringArgument;
+
+            return {};
+        }
+
+        argv.push_back(element.as_string());
+    }
+
+    return argv;
+}
+
+// The string-error failure result for a CommandArgvError.
+[[nodiscard]] Value command_argv_failure(CommandArgvError error) {
+    return make_failure_value(error == CommandArgvError::EmptyProgram
+                                  ? "program must not be empty"
+                                  : "every argument must be a string");
+}
+
+// Wraps a successfully captured run in success(Process.CommandOutput).  Shared
+// by execute, run_command, run_command_typed and run_command_timeout so the
+// record shape lives in one place.
+[[nodiscard]] Value make_command_output(platform_process::CapturedOutput&& captured) {
+    auto output = std::make_shared<RecordValue>();
+    output->type_name = "CommandOutput";
+    output->fields.emplace_back("exit_code", Value{static_cast<std::int64_t>(captured.exit_code)});
+    output->fields.emplace_back("standard_output", Value{std::move(captured.standard_output)});
+    output->fields.emplace_back("standard_error", Value{std::move(captured.standard_error)});
+    output->fields.emplace_back("success", Value{captured.exit_code == 0});
+
+    return make_success_value(Value{std::move(output)});
 }
 
 } // namespace
@@ -197,6 +278,14 @@ void register_process_ns(const EnvPtr& env) {
             if (pid <= 0) {
                 return make_failure_value(
                     error_msg("Process", "signal", "pid must be a positive process id"));
+            }
+
+            // Real process ids fit in 32 bits on every supported platform.  A
+            // larger value must not reach the platform layer, where POSIX kill(2)
+            // would truncate it to a pid_t (4294967295 → -1 = "every process").
+            if (pid > std::numeric_limits<std::int32_t>::max()) {
+                return make_failure_value(
+                    error_msg("Process", "signal", std::format("pid {} is out of range", pid)));
             }
 
             if (!platform_process::send_signal(pid, *kind)) {
@@ -310,7 +399,10 @@ void register_process_ns(const EnvPtr& env) {
             // binary that appears later on PATH (matching `which` / execvp).
             const auto probe = [&](const fs::path& dir) -> std::optional<std::string> {
                 for (const auto& ext : extensions) {
-                    fs::path candidate = dir / (name + ext);
+                    // Luma strings and safe_getenv values are UTF-8; convert
+                    // explicitly so a non-ASCII name or PATH entry is not
+                    // reinterpreted in the Windows ANSI code page.
+                    fs::path candidate = dir / path_from_utf8(name + ext);
                     std::error_code ec;
 
                     if (!fs::is_regular_file(candidate, ec)) {
@@ -325,7 +417,7 @@ void register_process_ns(const EnvPtr& env) {
 
                     auto resolved = fs::weakly_canonical(candidate, ec);
 
-                    return (ec ? fs::absolute(candidate, ec) : resolved).string();
+                    return path_to_utf8(ec ? fs::absolute(candidate, ec) : resolved);
                 }
 
                 return std::nullopt;
@@ -360,7 +452,7 @@ void register_process_ns(const EnvPtr& env) {
                     start, end == std::string::npos ? std::string::npos : end - start);
 
                 if (!dir.empty()) {
-                    if (auto found = probe(fs::path{dir})) {
+                    if (auto found = probe(path_from_utf8(dir))) {
                         return Value{std::move(*found)};
                     }
                 }
@@ -377,7 +469,7 @@ void register_process_ns(const EnvPtr& env) {
         .func("current_directory", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
             return wrap_result_operation("Process", "current_directory", [&]() -> Value {
-                return make_success_value(Value{std::filesystem::current_path().string()});
+                return make_success_value(Value{path_to_utf8(std::filesystem::current_path())});
             });
         })
         .func("has_environment_variable", 1)
@@ -455,17 +547,7 @@ void register_process_ns(const EnvPtr& env) {
                     return make_failure_value("failed to execute command");
                 }
 
-                auto rec = std::make_shared<RecordValue>();
-                rec->type_name = "CommandOutput";
-                rec->fields.emplace_back("exit_code",
-                                         Value{static_cast<std::int64_t>(captured.exit_code)});
-                rec->fields.emplace_back("standard_output",
-                                         Value{std::move(captured.standard_output)});
-                rec->fields.emplace_back("standard_error",
-                                         Value{std::move(captured.standard_error)});
-                rec->fields.emplace_back("success", Value{captured.exit_code == 0});
-
-                return make_success_value(Value{std::move(rec)});
+                return make_command_output(std::move(captured));
             } catch (const RuntimeError& e) {
                 return failure_from_exception(e);
             }
@@ -501,37 +583,11 @@ void register_process_ns(const EnvPtr& env) {
         })
         .func("run_command", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (!args[0].is_record()) {
-                throw RuntimeError{"Process.run_command: expected a Process.Command record", loc,
-                                   "build one with Process.command(program, arguments)"};
-            }
+            CommandArgvError argv_error{};
+            auto argv = command_record_argv(args[0], "Process.run_command", loc, argv_error);
 
-            const auto& rec = args[0].as_record();
-            const Value* program = rec->find_field("program");
-            const Value* arguments = rec->find_field("arguments");
-
-            if (program == nullptr || !program->is_string() || arguments == nullptr ||
-                !arguments->is_array()) {
-                throw RuntimeError{"Process.run_command: expected a Process.Command record", loc,
-                                   "build one with Process.command(program, arguments)"};
-            }
-
-            if (program->as_string().empty()) {
-                return make_failure_value("program must not be empty");
-            }
-
-            // Build the argv vector verbatim (argv[0] is the program): no shell,
-            // no tokenization, so metacharacters in any argument are inert.
-            std::vector<std::string> argv;
-            argv.reserve(arguments->as_array()->elements->size() + 1);
-            argv.push_back(program->as_string());
-
-            for (const auto& element : *arguments->as_array()->elements) {
-                if (!element.is_string()) {
-                    return make_failure_value("every argument must be a string");
-                }
-
-                argv.push_back(element.as_string());
+            if (argv_error != CommandArgvError::None) {
+                return command_argv_failure(argv_error);
             }
 
             try {
@@ -541,17 +597,7 @@ void register_process_ns(const EnvPtr& env) {
                     return make_failure_value("failed to execute command");
                 }
 
-                auto output = std::make_shared<RecordValue>();
-                output->type_name = "CommandOutput";
-                output->fields.emplace_back("exit_code",
-                                            Value{static_cast<std::int64_t>(captured.exit_code)});
-                output->fields.emplace_back("standard_output",
-                                            Value{std::move(captured.standard_output)});
-                output->fields.emplace_back("standard_error",
-                                            Value{std::move(captured.standard_error)});
-                output->fields.emplace_back("success", Value{captured.exit_code == 0});
-
-                return make_success_value(Value{std::move(output)});
+                return make_command_output(std::move(captured));
             } catch (const RuntimeError& e) {
                 return failure_from_exception(e);
             }
@@ -566,38 +612,24 @@ void register_process_ns(const EnvPtr& env) {
         // the string-error run_command is left untouched.
         .func("run_command_typed", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (!args[0].is_record()) {
-                throw RuntimeError{"Process.run_command_typed: expected a Process.Command record",
-                                   loc, "build one with Process.command(program, arguments)"};
-            }
-
-            const auto& rec = args[0].as_record();
-            const Value* program = rec->find_field("program");
-            const Value* arguments = rec->find_field("arguments");
-
-            if (program == nullptr || !program->is_string() || arguments == nullptr ||
-                !arguments->is_array()) {
-                throw RuntimeError{"Process.run_command_typed: expected a Process.Command record",
-                                   loc, "build one with Process.command(program, arguments)"};
-            }
+            CommandArgvError argv_error{};
+            auto argv = command_record_argv(args[0], "Process.run_command_typed", loc, argv_error);
 
             // An empty program name or a non-string argument is a malformed
             // command — a typed InvalidCommand rather than an attempted launch.
-            if (program->as_string().empty()) {
+            if (argv_error != CommandArgvError::None) {
                 return Value{ResultValue::failure(make_process_error_choice("InvalidCommand"))};
             }
 
-            std::vector<std::string> argv;
-            argv.reserve(arguments->as_array()->elements->size() + 1);
-            argv.push_back(program->as_string());
-
-            for (const auto& element : *arguments->as_array()->elements) {
-                if (!element.is_string()) {
-                    return Value{ResultValue::failure(make_process_error_choice("InvalidCommand"))};
-                }
-
-                argv.push_back(element.as_string());
+#ifdef _WIN32
+            // The Windows launch layer refuses batch scripts (cmd.exe would
+            // re-parse the arguments), including a name that only resolves to
+            // one; classify that refusal as InvalidCommand rather than the
+            // generic LaunchFailed the catch below would give.
+            if (platform_process::windows_launch_refusal(argv.front())) {
+                return Value{ResultValue::failure(make_process_error_choice("InvalidCommand"))};
             }
+#endif
 
             try {
                 auto captured = platform_process::execute_argv_captured(std::move(argv));
@@ -609,17 +641,7 @@ void register_process_ns(const EnvPtr& env) {
                         make_process_error_choice(process_error_variant(captured.launch_errno)))};
                 }
 
-                auto output = std::make_shared<RecordValue>();
-                output->type_name = "CommandOutput";
-                output->fields.emplace_back("exit_code",
-                                            Value{static_cast<std::int64_t>(captured.exit_code)});
-                output->fields.emplace_back("standard_output",
-                                            Value{std::move(captured.standard_output)});
-                output->fields.emplace_back("standard_error",
-                                            Value{std::move(captured.standard_error)});
-                output->fields.emplace_back("success", Value{captured.exit_code == 0});
-
-                return make_success_value(Value{std::move(output)});
+                return make_command_output(std::move(captured));
             } catch (const RuntimeError&) {
                 // A thrown RuntimeError here is a launch-level failure (e.g. a
                 // mismatched-quote tokenization error never happens on the argv
@@ -629,29 +651,20 @@ void register_process_ns(const EnvPtr& env) {
         })
         // Process.run_command_timeout(command, timeout_ms) -> result<Process.CommandOutput>
         // Timeout-bounded variant of run_command: runs the shell-free Command and,
-        // if it has not exited within timeout_ms milliseconds, forcibly kills it
-        // (SIGKILL on POSIX, TerminateProcess on Windows) and returns a failure.
-        // This is the safety affordance that prevents a hung or runaway child (a
-        // stuck network call, a program awaiting input, an infinite loop) from
-        // freezing the Luma program forever.  A command that exits within the
-        // deadline returns the same result<Process.CommandOutput> as run_command
-        // (a negative exit code — surfaced as failure — signals a launch failure).
+        // if it has not exited within timeout_ms milliseconds, forcibly kills it and
+        // its descendants (SIGKILL to its process group on POSIX, a Job Object on
+        // Windows) and returns a failure.  The deadline also bounds the wait for a
+        // child that closed its output streams but keeps running.  This is the
+        // safety affordance that prevents a hung or runaway child (a stuck network
+        // call, a program awaiting input, an infinite loop) from freezing the Luma
+        // program forever.  A command that exits within the deadline returns the
+        // same result<Process.CommandOutput> as run_command (a negative exit code —
+        // surfaced as failure — signals a launch failure).
         .func("run_command_timeout", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            if (!args[0].is_record()) {
-                throw RuntimeError{"Process.run_command_timeout: expected a Process.Command record",
-                                   loc, "build one with Process.command(program, arguments)"};
-            }
-
-            const auto& rec = args[0].as_record();
-            const Value* program = rec->find_field("program");
-            const Value* arguments = rec->find_field("arguments");
-
-            if (program == nullptr || !program->is_string() || arguments == nullptr ||
-                !arguments->is_array()) {
-                throw RuntimeError{"Process.run_command_timeout: expected a Process.Command record",
-                                   loc, "build one with Process.command(program, arguments)"};
-            }
+            CommandArgvError argv_error{};
+            auto argv =
+                command_record_argv(args[0], "Process.run_command_timeout", loc, argv_error);
 
             const auto timeout_ms = expect_integer(args[1], "Process.run_command_timeout", loc);
 
@@ -661,22 +674,8 @@ void register_process_ns(const EnvPtr& env) {
                                                     "milliseconds"));
             }
 
-            if (program->as_string().empty()) {
-                return make_failure_value("program must not be empty");
-            }
-
-            // Build the argv vector verbatim (argv[0] is the program): no shell,
-            // no tokenization, so metacharacters in any argument are inert.
-            std::vector<std::string> argv;
-            argv.reserve(arguments->as_array()->elements->size() + 1);
-            argv.push_back(program->as_string());
-
-            for (const auto& element : *arguments->as_array()->elements) {
-                if (!element.is_string()) {
-                    return make_failure_value("every argument must be a string");
-                }
-
-                argv.push_back(element.as_string());
+            if (argv_error != CommandArgvError::None) {
+                return command_argv_failure(argv_error);
             }
 
             try {
@@ -693,17 +692,7 @@ void register_process_ns(const EnvPtr& env) {
                     return make_failure_value("failed to execute command");
                 }
 
-                auto output = std::make_shared<RecordValue>();
-                output->type_name = "CommandOutput";
-                output->fields.emplace_back("exit_code",
-                                            Value{static_cast<std::int64_t>(captured.exit_code)});
-                output->fields.emplace_back("standard_output",
-                                            Value{std::move(captured.standard_output)});
-                output->fields.emplace_back("standard_error",
-                                            Value{std::move(captured.standard_error)});
-                output->fields.emplace_back("success", Value{captured.exit_code == 0});
-
-                return make_success_value(Value{std::move(output)});
+                return make_command_output(std::move(captured));
             } catch (const RuntimeError& e) {
                 return failure_from_exception(e);
             }

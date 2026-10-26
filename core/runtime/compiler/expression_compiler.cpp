@@ -53,11 +53,21 @@ void Compiler::compile_expression(const Expression& expr) {
         return;
     }
 
-    const ScopeGuard guard{[this] {
-        --expression_depth_;
-    }};
+    const ScopeGuard guard{[this] { --expression_depth_; }};
 
     dispatch_expr(expr);
+
+    // The type checker marks expressions whose integer values flow into a
+    // `number` context; convert them so the runtime value matches its type.
+    if (expr.numeric_widening) {
+        const auto& pattern = *expr.numeric_widening;
+
+        if (pattern == "number") {
+            emit(Op::IntToNumber, expr.location);
+        } else {
+            emit_u16(Op::WidenNumber, add_name(pattern), expr.location);
+        }
+    }
 }
 
 void Compiler::compile_literal(const LiteralExpression& expr) {
@@ -110,14 +120,13 @@ void Compiler::compile_unary(const UnaryExpression& expr) {
 
         if (expr.op == TokenType::Minus) {
             if (lit.literal_type() == LiteralExpression::LiteralType::Integer) {
-                // Guard against signed overflow: -INT64_MIN is UB.
-                if (lit.integer_value() == std::numeric_limits<std::int64_t>::min()) {
-                    (void)emit_constant(Value{-static_cast<double>(lit.integer_value())},
-                                        expr.location);
-                } else {
+                // -INT64_MIN does not fit in an int64 (and is UB in C++).  It is
+                // left unfolded so the VM raises "integer overflow in negation",
+                // matching the runtime instead of widening to a number.
+                if (lit.integer_value() != std::numeric_limits<std::int64_t>::min()) {
                     (void)emit_constant(Value{-lit.integer_value()}, expr.location);
+                    return;
                 }
-                return;
             }
 
             if (lit.literal_type() == LiteralExpression::LiteralType::Number) {
@@ -143,6 +152,17 @@ void Compiler::compile_unary(const UnaryExpression& expr) {
             emit(Op::Not, expr.location);
             break;
         case TokenType::QuestionMark: {
+            // Inside @main a propagated failure has no caller to return to,
+            // so it raises a RuntimeError instead: Unwrap yields the inner
+            // value of success/some (and passes any other value through) and
+            // raises with the failure message (or the "none" message)
+            // otherwise.  The error reaches an enclosing try/catch, or
+            // terminates the program when uncaught.
+            if (current_scope().function.is_main) {
+                emit(Op::Unwrap, expr.location); // [inner]
+                break;
+            }
+
             // The ? operator: unwrap success/some, or return early with failure/none.
             // Stack: [value]
             emit(Op::Dup, expr.location);       // [value, value]
@@ -154,8 +174,13 @@ void Compiler::compile_unary(const UnaryExpression& expr) {
             emit(Op::Pop, expr.location); // [value]
 
             // Emit pending finally blocks before returning, just like
-            // compile_return does, so that try/finally cleanup runs.
-            emit_try_unwind(current_scope().exception_context.depth(), expr.location);
+            // compile_return does, so that try/finally cleanup runs.  The
+            // failure value stays on the stack while they run, so reserve a
+            // scratch slot for it (see compile_return).
+            if (current_scope().exception_context.is_active()) {
+                const ScratchSlotGuard scratch{access_, 1, expr.location};
+                emit_try_unwind(current_scope().exception_context.depth(), expr.location);
+            }
 
             emit(Op::Return, expr.location);
 
@@ -303,8 +328,11 @@ void Compiler::compile_lambda(const LambdaExpression& expr) {
                 compile_statement(*stmt);
             }
 
-            emit(Op::None, expr.location);
-            emit(Op::Return, expr.location);
+            // Skipped when the body already ends in a reachable-only Return
+            // (patch_jump clears the flag when a jump lands here), so a body
+            // such as `{ return 1 }` compiles to `One; Return` rather than
+            // carrying an unreachable `None; Return` tail.
+            emit_implicit_return(expr.location);
         }
     }
 

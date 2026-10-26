@@ -15,7 +15,7 @@
 #include "symbols/qualified_name.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using namespace luma::symbols;
 
 // ═══════════════════════════════════════════════════════════
 // make_qualified
@@ -169,6 +169,30 @@ static void test_round_trip_first_dot() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// split_member — last-dot split, nullopt when unqualified
+// ═══════════════════════════════════════════════════════════
+
+static void test_split_member_basic() {
+    const auto split = split_member("Math.floor");
+    ASSERT_TRUE(split.has_value());
+    ASSERT_EQ(split->first, std::string_view{"Math"});
+    ASSERT_EQ(split->second, std::string_view{"floor"});
+}
+
+static void test_split_member_multi_dot() {
+    // Unlike split_module, the split point is the LAST dot.
+    const auto split = split_member("A.B.C");
+    ASSERT_TRUE(split.has_value());
+    ASSERT_EQ(split->first, std::string_view{"A.B"});
+    ASSERT_EQ(split->second, std::string_view{"C"});
+}
+
+static void test_split_member_no_dot() {
+    ASSERT_FALSE(split_member("floor").has_value());
+    ASSERT_FALSE(split_member("").has_value());
+}
+
+// ═══════════════════════════════════════════════════════════
 // QualifiedName::parse — last-dot split into owned halves
 // ═══════════════════════════════════════════════════════════
 
@@ -227,6 +251,9 @@ int main() {
     RUN(test_split_module_trailing_dot);
     RUN(test_split_module_leading_dot);
     RUN(test_split_module_views_alias_argument);
+    RUN(test_split_member_basic);
+    RUN(test_split_member_multi_dot);
+    RUN(test_split_member_no_dot);
 
     RUN(test_round_trip_first_dot);
 

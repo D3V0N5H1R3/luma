@@ -84,24 +84,20 @@ function string direction_key(Direction direction) {
     }
 }
 
-function string direction_name(Direction direction) {
-    return direction_key(direction)
-}
-
 # ─── Game Logic ──────────────────────────────────────────
 
+# Safe to unwrap: a player only ever moves to a room id taken from an exit
+# of the world map, so the lookup cannot fail.
 function Room current_room(dictionary<Room> world, Player player) {
     return Result.unwrap(Dictionary.get(world, player.location))
 }
 
 function Player go(dictionary<Room> world, Player player, Direction direction) {
     Room here = current_room(world, player)
-    string key = direction_key(direction)
-    if Dictionary.has(here.exits, key) {
-        string destination = Result.unwrap(Dictionary.get(here.exits, key))
-        return player with { location = destination }
+    return match Dictionary.get(here.exits, direction_key(direction)) {
+        success(destination) { player with { location = destination } }
+        failure(_) { player }
     }
-    return player
 }
 
 function Player take_item(dictionary<Room> world, Player player) {
@@ -150,7 +146,7 @@ function Player run_script(dictionary<Room> world, Player start, array<Command> 
 # ─── Narration ───────────────────────────────────────────
 
 function string inventory_text(Player player) {
-    if Array.length(player.inventory) == 0 {
+    if Array.is_empty(player.inventory) {
         return "(empty)"
     }
     return String.join(player.inventory, ", ")
@@ -177,10 +173,10 @@ function Player narrate(dictionary<Room> world, Player player, Command command) 
     case Command.Go(direction) {
         if next.location == player.location {
             Room here = current_room(world, player)
-            string valid = String.join(Dictionary.keys(here.exits), ", ")
-            print("> go ${direction_name(direction)} — the way is blocked. Try: ${valid}.")
+            string open_exits = String.join(Dictionary.keys(here.exits), ", ")
+            print("> go ${direction_key(direction)} — the way is blocked. Try: ${open_exits}.")
         } else {
-            print("> go ${direction_name(direction)}")
+            print("> go ${direction_key(direction)}")
             describe(world, next)
         }
     }
