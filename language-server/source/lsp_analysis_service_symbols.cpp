@@ -528,9 +528,8 @@ void process_while_locals(const WhileStatement& ws, AnalysisResult& result,
 void LspAnalysisService::collect_ast_symbols(const std::vector<std::unique_ptr<Declaration>>& decls,
                                              AnalysisResult& result, std::string_view prefix) {
     auto local_vars_fn = [this](const std::vector<std::unique_ptr<Statement>>& stmts,
-                                AnalysisResult& res, const std::string& fn, int start, int end) {
-        collect_local_vars(stmts, res, fn, start, end);
-    };
+                                AnalysisResult& res, const std::string& fn, int start,
+                                int end) { collect_local_vars(stmts, res, fn, start, end); };
 
     for (const auto& decl_ptr : decls) {
         if (!decl_ptr) {
@@ -585,9 +584,8 @@ void LspAnalysisService::collect_local_vars(const std::vector<std::unique_ptr<St
                                             const std::string& enclosing_function, int scope_start,
                                             int scope_end) {
     auto local_vars_fn = [this](const std::vector<std::unique_ptr<Statement>>& s,
-                                AnalysisResult& res, const std::string& fn, int start, int end) {
-        collect_local_vars(s, res, fn, start, end);
-    };
+                                AnalysisResult& res, const std::string& fn, int start,
+                                int end) { collect_local_vars(s, res, fn, start, end); };
 
     for (const auto& stmt_ptr : stmts) {
         if (!stmt_ptr) {

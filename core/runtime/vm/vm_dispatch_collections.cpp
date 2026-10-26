@@ -236,9 +236,7 @@ void VM::handle_index_get_opt() {
             push(val ? *val : Value{});
         },
         [&] { push(Value{}); }, // string — not indexable with ?[]; return none
-        [&] {
-            push(Value{});
-        } // other — not indexable with ?[]; return none
+        [&] { push(Value{}); }  // other — not indexable with ?[]; return none
     );
 }
 

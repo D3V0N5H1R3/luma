@@ -445,9 +445,7 @@ private:
                          "simplify the expression or split it into smaller parts");
         }
 
-        return ScopeGuard{[this] {
-            --depth_;
-        }};
+        return ScopeGuard{[this] { --depth_; }};
     }
 
     // ====================================================================

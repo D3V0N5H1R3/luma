@@ -256,9 +256,7 @@ static void collect_jumps(Op op, std::size_t offset, const std::vector<std::uint
 }
 
 StackEffect instruction_stack_effect(const std::vector<std::uint8_t>& code, std::size_t offset) {
-    const auto u8_operand = [&](std::size_t at) {
-        return static_cast<int>(code[offset + at]);
-    };
+    const auto u8_operand = [&](std::size_t at) { return static_cast<int>(code[offset + at]); };
     const auto u16_operand = [&](std::size_t at) {
         return static_cast<int>(read_u16_be(&code[offset + at]));
     };

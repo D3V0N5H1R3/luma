@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from _common import REPO_ROOT, reconfigure_utf8_streams
+from _common import REPO_ROOT, find_visual_studio_llvm_tool, reconfigure_utf8_streams
 
 _RULE_WIDTH = 72
 
@@ -109,14 +109,17 @@ def which(tool: str) -> str | None:
 def find_clang_format() -> tuple[str | None, str]:
     """Locate a ``clang-format`` new enough to parse the repository's config.
 
-    Returns ``(path, "")`` when a usable binary is on ``PATH``, otherwise
-    ``(None, reason)`` for a skipped gate. Like the pre-commit hook, a binary
-    whose version cannot be determined is still used — only a version known to
-    be too old is rejected.
+    Returns ``(path, "")`` for a usable binary — the one on ``PATH``, else
+    Visual Studio's bundled copy — otherwise ``(None, reason)`` for a skipped
+    gate. Like the pre-commit hook, a binary whose version cannot be determined
+    is still used — only a version known to be too old is rejected.
     """
-    exe = which("clang-format")
+    exe = which("clang-format") or find_visual_studio_llvm_tool("clang-format")
     if exe is None:
-        return None, "clang-format not found (install LLVM/clang tools)"
+        return None, (
+            "clang-format not found (install LLVM/clang tools, or Visual Studio's "
+            '"C++ Clang tools for Windows" component)'
+        )
     try:
         banner = subprocess.run(
             [exe, "--version"], capture_output=True, text=True, timeout=10, check=False

@@ -104,6 +104,50 @@ def resolve_jobs(explicit: int | None) -> int:
     return explicit
 
 
+def find_visual_studio_llvm_tool(tool: str) -> str | None:
+    """Return Visual Studio's bundled LLVM *tool* (e.g. ``clang-format``), or ``None``.
+
+    Visual Studio's "C++ Clang tools for Windows" component installs the LLVM
+    tools under ``VC\\Tools\\Llvm\\<arch>\\bin`` but puts them on ``PATH`` only
+    inside a Developer prompt. ``vswhere`` locates the newest installation, and
+    the host architecture selects the binary that can run here (an ARM64 build
+    does not start on x64). Returns ``None`` off Windows or when not installed.
+    """
+    if sys.platform != "win32":
+        return None
+    program_files = os.environ.get("PROGRAMFILES(X86)")
+    if not program_files:
+        return None
+    vswhere = Path(program_files) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+    if not vswhere.is_file():
+        return None
+    arch = "ARM64" if os.environ.get("PROCESSOR_ARCHITECTURE", "").upper() == "ARM64" else "x64"
+    try:
+        result = subprocess.run(
+            [
+                str(vswhere),
+                "-latest",
+                "-prerelease",
+                "-products",
+                "*",
+                "-utf8",
+                "-find",
+                rf"VC\Tools\Llvm\{arch}\bin\{tool}.exe",
+            ],
+            capture_output=True,
+            encoding="utf-8",
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in result.stdout.splitlines():
+        candidate = line.strip()
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return None
+
+
 def reconfigure_utf8_streams() -> None:
     """Reconfigure stdout/stderr to UTF-8 so reports render on any code page.
 

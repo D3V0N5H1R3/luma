@@ -314,11 +314,35 @@ class FormatCppOnEditTest(unittest.TestCase):
         payload = json.dumps(self.payload({"path": "a.cpp"}))
         with (
             mock.patch.object(format_cpp_on_edit.shutil, "which", return_value=None),
+            mock.patch.object(
+                format_cpp_on_edit, "find_visual_studio_clang_format", return_value=None
+            ),
             mock.patch.object(sys, "stdin", io.StringIO(payload)),
             contextlib.redirect_stdout(stdout),
         ):
             self.assertEqual(format_cpp_on_edit.main([]), 0)
         self.assertEqual(stdout.getvalue(), "")
+
+    def test_falls_back_to_visual_studio_clang_format(self) -> None:
+        # Visual Studio's copy is off PATH outside a Developer prompt.
+        bundled = r"C:\VS\VC\Tools\Llvm\x64\bin\clang-format.exe"
+        with (
+            mock.patch.object(format_cpp_on_edit.shutil, "which", return_value=None),
+            mock.patch.object(
+                format_cpp_on_edit, "find_visual_studio_clang_format", return_value=bundled
+            ),
+        ):
+            self.assertEqual(format_cpp_on_edit.find_clang_format(), bundled)
+
+    def test_prefers_clang_format_on_path(self) -> None:
+        with (
+            mock.patch.object(format_cpp_on_edit.shutil, "which", return_value="clang-format"),
+            mock.patch.object(
+                format_cpp_on_edit, "find_visual_studio_clang_format"
+            ) as visual_studio_mock,
+        ):
+            self.assertEqual(format_cpp_on_edit.find_clang_format(), "clang-format")
+        visual_studio_mock.assert_not_called()
 
 
 class RegistrationTest(unittest.TestCase):

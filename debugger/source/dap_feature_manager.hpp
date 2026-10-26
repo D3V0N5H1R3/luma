@@ -112,9 +112,7 @@ public:
     [[nodiscard]] JsonValue build_capabilities_json() const {
         JsonValue::ObjectType obj;
 
-        const auto set = [&](const char* key, Feature f) {
-            obj[key] = JsonValue(is_enabled(f));
-        };
+        const auto set = [&](const char* key, Feature f) { obj[key] = JsonValue(is_enabled(f)); };
 
         // ─── Breakpoints ───
         set("supportsConditionalBreakpoints", Feature::ConditionalBreakpoints);
@@ -225,9 +223,7 @@ private:
         // Start with all features disabled.
         features_.fill(false);
 
-        const auto enable = [this](Feature f) {
-            features_[static_cast<int>(f)] = true;
-        };
+        const auto enable = [this](Feature f) { features_[static_cast<int>(f)] = true; };
 
         // Features the server always provides.
         enable(Feature::ConfigurationDone);

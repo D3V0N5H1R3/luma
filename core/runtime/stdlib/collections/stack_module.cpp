@@ -15,11 +15,9 @@ namespace luma {
 void register_stack_ns(const EnvPtr& env) {
     // Register new(), from_array(), and common ops (length, is_empty,
     // to_array, map, filter, reduce, each (reverse), partition, concat).
-    const ContainerModuleBuilder<StackValue, true> cmb{"Stack", env, expect_stack,
-                                                       ResourceLimits::max_stack_size,
-                                                       [](StackValue& c, const Value& v) {
-                                                           c.elements.push_back(v);
-                                                       }};
+    const ContainerModuleBuilder<StackValue, true> cmb{
+        "Stack", env, expect_stack, ResourceLimits::max_stack_size,
+        [](StackValue& c, const Value& v) { c.elements.push_back(v); }};
     cmb.register_all_common();
 
     // Stack-specific operations (LIFO — push/pop/peek act on the back).

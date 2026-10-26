@@ -30,30 +30,12 @@ struct HitConditionOp {
 };
 
 constexpr std::array<HitConditionOp, 6> k_hit_condition_ops = {{
-    {.prefix = ">=",
-     .evaluate = +[](int h, int t) -> bool {
-         return h >= t;
-     }},
-    {.prefix = "<=",
-     .evaluate = +[](int h, int t) -> bool {
-         return h <= t;
-     }},
-    {.prefix = "==",
-     .evaluate = +[](int h, int t) -> bool {
-         return h == t;
-     }},
-    {.prefix = ">",
-     .evaluate = +[](int h, int t) -> bool {
-         return h > t;
-     }},
-    {.prefix = "<",
-     .evaluate = +[](int h, int t) -> bool {
-         return h < t;
-     }},
-    {.prefix = "%",
-     .evaluate = +[](int h, int t) -> bool {
-         return t > 0 && (h % t) == 0;
-     }},
+    {.prefix = ">=", .evaluate = +[](int h, int t) -> bool { return h >= t; }},
+    {.prefix = "<=", .evaluate = +[](int h, int t) -> bool { return h <= t; }},
+    {.prefix = "==", .evaluate = +[](int h, int t) -> bool { return h == t; }},
+    {.prefix = ">", .evaluate = +[](int h, int t) -> bool { return h > t; }},
+    {.prefix = "<", .evaluate = +[](int h, int t) -> bool { return h < t; }},
+    {.prefix = "%", .evaluate = +[](int h, int t) -> bool { return t > 0 && (h % t) == 0; }},
 }};
 
 struct ParsedHitCondition {

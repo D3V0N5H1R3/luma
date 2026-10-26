@@ -123,9 +123,7 @@ void LspAnalysisService::include_phase(Program& program, const std::string& uri,
             return;
         }
         const auto base_dir = std::filesystem::path(file_path).parent_path();
-        const auto log = [this](const std::string& msg) {
-            callbacks_.log(msg);
-        };
+        const auto log = [this](const std::string& msg) { callbacks_.log(msg); };
 
         include_processor::merge_include_declarations(program, base_dir, cache_snapshot,
                                                       cache_updates, result, log);

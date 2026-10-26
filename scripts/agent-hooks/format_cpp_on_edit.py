@@ -27,6 +27,7 @@ and how to test it.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -55,6 +56,55 @@ CPP_SUFFIXES = frozenset({".cpp", ".hpp"})
 # clang-format is abandoned by the script rather than killed by the runtime.
 VERSION_TIMEOUT = 5
 FORMAT_TIMEOUT = 20
+
+
+def find_visual_studio_clang_format() -> str | None:
+    """Return Visual Studio's bundled ``clang-format``, or ``None``.
+
+    Visual Studio's "C++ Clang tools for Windows" component installs it under
+    ``VC\\Tools\\Llvm\\<arch>\\bin`` but puts it on ``PATH`` only inside a
+    Developer prompt. Mirrors ``find_visual_studio_llvm_tool`` in
+    ``scripts/_common.py``; the hooks import only the standard library.
+    """
+    if sys.platform != "win32":
+        return None
+    program_files = os.environ.get("PROGRAMFILES(X86)")
+    if not program_files:
+        return None
+    vswhere = Path(program_files) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+    if not vswhere.is_file():
+        return None
+    # An ARM64 binary does not start on an x64 host, so pick by architecture.
+    arch = "ARM64" if os.environ.get("PROCESSOR_ARCHITECTURE", "").upper() == "ARM64" else "x64"
+    try:
+        result = subprocess.run(
+            [
+                str(vswhere),
+                "-latest",
+                "-prerelease",
+                "-products",
+                "*",
+                "-utf8",
+                "-find",
+                rf"VC\Tools\Llvm\{arch}\bin\clang-format.exe",
+            ],
+            capture_output=True,
+            encoding="utf-8",
+            timeout=VERSION_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in result.stdout.splitlines():
+        candidate = line.strip()
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def find_clang_format() -> str | None:
+    """Return the ``clang-format`` on ``PATH``, else Visual Studio's bundled copy."""
+    return shutil.which("clang-format") or find_visual_studio_clang_format()
 
 
 def clang_format_is_usable(executable: str) -> bool:
@@ -173,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     if not targets:
         return 0
 
-    executable = shutil.which("clang-format")
+    executable = find_clang_format()
     if executable is None or not clang_format_is_usable(executable):
         return 0  # No usable formatter — nothing to do.
 

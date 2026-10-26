@@ -260,6 +260,31 @@ class PreCommitTest(GitHookTestCase):
         self.git("add", "core/a.cpp")
         self.assertEqual(self.run_hook(PRE_COMMIT).returncode, 1)
 
+    @unittest.skipUnless(os.name == "nt", "the Visual Studio fallback is Windows-only")
+    def test_falls_back_to_visual_studio_clang_format(self) -> None:
+        # With no clang-format on PATH, the hook asks vswhere for the copy that
+        # Visual Studio's "C++ Clang tools" component installs.
+        root = Path(self._tmp.name)
+        (root / "bin" / "clang-format").unlink()
+        program_files = root / "Program Files (x86)"
+        llvm_bin = program_files / "VS" / "VC" / "Tools" / "Llvm" / "x64" / "bin"
+        llvm_bin.mkdir(parents=True)
+        bundled = llvm_bin / "clang-format.exe"
+        bundled.write_bytes(CLANG_FORMAT_STUB.encode())
+        installer = program_files / "Microsoft Visual Studio" / "Installer"
+        installer.mkdir(parents=True)
+        # vswhere prints Windows paths with CRLF line endings.
+        (installer / "vswhere.exe").write_bytes(
+            f"#!/bin/sh\nprintf '%s\\r\\n' '{bundled}'\n".encode()
+        )
+        self.env["PROGRAMFILES(X86)"] = str(program_files)
+        self.env["PROCESSOR_ARCHITECTURE"] = "AMD64"
+        self.write("core/a.cpp", self.LINES + "BAD\n")
+        self.git("add", "core/a.cpp")
+        result = self.run_hook(PRE_COMMIT)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("--assume-filename=core/a.cpp", self.log("clang-format"))
+
     def test_clang_tidy_uses_preset_compile_database_and_ci_scope(self) -> None:
         self.write_compile_db("build-debug", ["core/a.cpp", "core/a_posix.cpp", "tests/t.cpp"])
         self.write("core/a.cpp", self.LINES + "int ok;\n")

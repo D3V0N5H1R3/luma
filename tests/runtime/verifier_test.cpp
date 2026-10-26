@@ -146,12 +146,15 @@ static void test_jump_target_out_of_bounds() {
 // ─── Valid jump target ───
 
 static void test_valid_jump_target() {
+    // Hand-laid bytecode: opcode, then its operand bytes.
+    // clang-format off
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::Jump), 0x00, 0x00, 0x00,
-        0x01,                                  // jump +1 → offset 6
+        static_cast<std::uint8_t>(Op::Jump),
+        0x00, 0x00, 0x00, 0x01,                // jump +1 → offset 6
         static_cast<std::uint8_t>(Op::True),   // offset 5 (skipped)
         static_cast<std::uint8_t>(Op::Return), // offset 6 (target)
     });
+    // clang-format on
 
     BytecodeVerifier verifier;
     auto errors = verifier.verify(func);
@@ -280,13 +283,16 @@ static void test_valid_multi_instruction_sequence() {
 // ─── Valid conditional jump ───
 
 static void test_conditional_jump_valid() {
+    // Hand-laid bytecode: opcode, then its operand bytes.
+    // clang-format off
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::True), static_cast<std::uint8_t>(Op::JumpIfFalse), 0x00, 0x00,
-        0x00,
-        0x01,                                  // jump +1 → offset 7
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::JumpIfFalse),
+        0x00, 0x00, 0x00, 0x01,                // jump +1 → offset 7
         static_cast<std::uint8_t>(Op::True),   // offset 6
         static_cast<std::uint8_t>(Op::Return), // offset 7 (target)
     });
+    // clang-format on
 
     BytecodeVerifier verifier;
     auto errors = verifier.verify(func);
@@ -298,13 +304,16 @@ static void test_conditional_jump_valid() {
 // ─── Valid TryCatch ───
 
 static void test_try_catch_valid() {
+    // Hand-laid bytecode: opcode, then its operand bytes.
+    // clang-format off
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::TryCatch), 0x00, 0x00, 0x00,
-        0x02,                                  // catch at offset 5+2=7
+        static_cast<std::uint8_t>(Op::TryCatch),
+        0x00, 0x00, 0x00, 0x02,                // catch at offset 5+2=7
         static_cast<std::uint8_t>(Op::True),   // try body (offset 5)
         static_cast<std::uint8_t>(Op::TryEnd), // end try (offset 6)
         static_cast<std::uint8_t>(Op::Return), // catch/after (offset 7)
     });
+    // clang-format on
 
     BytecodeVerifier verifier;
     auto errors = verifier.verify(func);

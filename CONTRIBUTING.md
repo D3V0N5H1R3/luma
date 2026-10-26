@@ -267,7 +267,7 @@ npx markdownlint-cli2
 
 The repository ships two hooks (in `scripts/git-hooks/`):
 
-- `pre-commit` runs `clang-format` — and `clang-tidy` when a `compile_commands.json` exists in `build/` or a `build-*` preset tree — on staged C++ files, blocking the commit if they are not clean. It checks the staged content (so partially staged files are judged on what is being committed) and covers the same directories as the CI *Formatting* and *Static Analysis* jobs.
+- `pre-commit` runs `clang-format` — and `clang-tidy` when a `compile_commands.json` exists in `build/` or a `build-*` preset tree — on staged C++ files, blocking the commit if they are not clean. It checks the staged content (so partially staged files are judged on what is being committed) and covers the same directories as the CI *Formatting* and *Static Analysis* jobs. On Windows, when no `clang-format` is on `PATH`, it uses the one Visual Studio installs with its **C++ Clang tools for Windows** component (found with `vswhere`), as do `scripts/lint.py`, `scripts/format.py`, the agent format hook, and the CMake `format` target. That copy is newer than CI's clang-format 20, but the tree formats identically with clang-format 20 through 22.
 - `commit-msg` checks that the commit subject follows the [Conventional Commits](#commit-messages) format (one of `chore`, `ci`, `docs`, `feat`, `fix`, `refactor`, `style`, `test`, with an optional scope and `!`), blocking the commit if it does not. It also warns — without blocking — when the subject exceeds 72 characters. Git-generated merge, revert, and autosquash (`fixup!`/`squash!`/`amend!`) messages are exempt.
 
 Enable them once per clone by pointing Git at the tracked hooks directory:
@@ -425,6 +425,7 @@ The Luma extension resolves `luma_lsp`, `luma`, and `luma_dap` binaries automati
 **Formatting:** The C/C++ extension formats C++ on save using the repository's `.clang-format`, pre-configured in `.vscode/settings.json`. It runs `clang-format` from your `PATH`, falling back to the copy bundled with the extension — whose version usually differs from the **clang-format 20** that CI enforces, so it can reformat code you did not touch. Install clang-format 20 on your `PATH`, or point `C_Cpp.clang_format_path` at it in your **user** settings (it is machine-specific, so the workspace leaves it unset). Check the version with `clang-format --version`. Typical clang-format 20 paths:
 
 - **Windows** (LLVM 20 installer): `C:\Program Files\LLVM\bin\clang-format.exe`
+- **Windows** (Visual Studio's **C++ Clang tools for Windows**, a newer version that formats this tree identically): `C:\Program Files\Microsoft Visual Studio\<version>\<edition>\VC\Tools\Llvm\x64\bin\clang-format.exe`
 - **macOS** (Homebrew `llvm@20`): the output of `echo "$(brew --prefix llvm@20)/bin/clang-format"`
 - **Linux** (Debian/Ubuntu `clang-format-20` package): `/usr/bin/clang-format-20`
 
@@ -448,7 +449,7 @@ cp -r extensions/zed ~/.local/share/zed/extensions/luma
 
 **Formatting:** `.zed/settings.json` formats C++ on save with `clang-format` from your `PATH` (as an external formatter), not clangd's built-in formatter. Zed auto-downloads the latest clangd, whose formatter may differ from the **clang-format 20** that CI enforces. Workspace settings take precedence over user settings, so the command must resolve as plain `clang-format` (version 20), or saving a C++ file reports a formatter error. Check with `clang-format --version`:
 
-- **Windows** (LLVM 20 installer): add `C:\Program Files\LLVM\bin` to `PATH`.
+- **Windows** (LLVM 20 installer): add `C:\Program Files\LLVM\bin` to `PATH`, or Visual Studio's `VC\Tools\Llvm\x64\bin` (its **C++ Clang tools for Windows** component, which formats this tree identically).
 - **macOS** (Homebrew `llvm@20`, which is keg-only): add `$(brew --prefix llvm@20)/bin` to `PATH`.
 - **Linux** (Debian/Ubuntu `clang-format-20` package, installed as `clang-format-20`): `sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 100`. The Dev Container already does this.
 

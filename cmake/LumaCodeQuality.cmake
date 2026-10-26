@@ -10,7 +10,21 @@
 
 include_guard(GLOBAL)
 
-find_program(LUMA_CLANG_FORMAT_EXE clang-format)
+# Visual Studio's "C++ Clang tools for Windows" component ships clang-format but
+# puts it on PATH only inside a Developer prompt. With a Visual Studio generator,
+# CMAKE_GENERATOR_INSTANCE is that installation, so search its LLVM directory
+# after PATH (PATHS, not HINTS, keeps a clang-format on PATH preferred). The host
+# architecture selects the binary: an ARM64 build does not start on x64.
+set(_luma_vs_llvm_bin "")
+if(CMAKE_GENERATOR_INSTANCE)
+    if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
+        set(_luma_vs_llvm_bin "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/Llvm/ARM64/bin")
+    else()
+        set(_luma_vs_llvm_bin "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/Llvm/x64/bin")
+    endif()
+endif()
+
+find_program(LUMA_CLANG_FORMAT_EXE clang-format PATHS ${_luma_vs_llvm_bin})
 if(LUMA_CLANG_FORMAT_EXE)
     # Sources are discovered at build time by cmake/LumaRunClangTool.cmake so that
     # newly added files are covered without reconfiguring (file(GLOB_RECURSE) only

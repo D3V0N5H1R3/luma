@@ -86,9 +86,7 @@ auto movement_body(char code) {
 
 // True when every RGB component is within the representable 0-255 range.
 [[nodiscard]] bool rgb_components_valid(std::int64_t r, std::int64_t g, std::int64_t b) {
-    const auto in_range = [](std::int64_t v) {
-        return v >= 0 && v <= 255;
-    };
+    const auto in_range = [](std::int64_t v) { return v >= 0 && v <= 255; };
 
     return in_range(r) && in_range(g) && in_range(b);
 }
