@@ -16,6 +16,7 @@
 #include "analysis/source/source_location.hpp"
 #include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/task_completion.hpp"
+#include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
@@ -140,6 +141,9 @@ void register_task_ns(const EnvPtr& env) {
         // Await all tasks and return their results in order.
         .func("all", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& arr = expect_array(args[0], "Task.all", loc);
 
             auto results = std::make_shared<ArrayValue>();
@@ -171,6 +175,9 @@ void register_task_ns(const EnvPtr& env) {
         // Return the result of the first task to complete.
         .func("race", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& arr = expect_array(args[0], "Task.race", loc);
 
             if (auto failure =
@@ -208,6 +215,9 @@ void register_task_ns(const EnvPtr& env) {
         // failure("timeout") if the task does not complete in time.
         .func("timeout", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& task = expect_task(args[0], "Task.timeout", loc);
 
             const auto ms = expect_integer(args[1], "Task.timeout", loc);
@@ -252,6 +262,9 @@ void register_task_ns(const EnvPtr& env) {
         // Await t, apply f to its value, and return the transformed result.
         .func("map", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& task = expect_task(args[0], "Task.map", loc);
 
             expect_callable(args[1], "Task.map", loc);
@@ -268,6 +281,9 @@ void register_task_ns(const EnvPtr& env) {
         // Apply f to the result of t (f must return a task), then await it.
         .func("flat_map", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& task = expect_task(args[0], "Task.flat_map", loc);
 
             expect_callable(args[1], "Task.flat_map", loc);
@@ -292,6 +308,9 @@ void register_task_ns(const EnvPtr& env) {
         // Await all tasks and apply f to each result.
         .func("map_n", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& arr = expect_array(args[0], "Task.map_n", loc);
 
             expect_callable(args[1], "Task.map_n", loc);
@@ -360,10 +379,10 @@ void register_task_ns(const EnvPtr& env) {
             return last_result;
         })
         // Task.cancel(task t) -> boolean
-        // Request cooperative cancellation of a task.  Returns true if the
-        // task had a cancellation token (i.e. was spawned inside a
-        // task_scope), false otherwise (fire-and-forget tasks cannot be
-        // cancelled).
+        // Request cooperative cancellation of this one task (its own token —
+        // siblings and the enclosing task_scope are unaffected).  Returns true
+        // if the task has a cancellation token (every spawned task does),
+        // false for a task created already resolved (Task.completed/failed).
         .func("cancel", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& task = expect_task(args[0], "Task.cancel", loc);
@@ -393,6 +412,9 @@ void register_task_ns(const EnvPtr& env) {
         // If all tasks fail, returns the last failure message.
         .func("any", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& arr = expect_array(args[0], "Task.any", loc);
 
             if (auto failure =
@@ -450,6 +472,9 @@ void register_task_ns(const EnvPtr& env) {
         // Awaits each task in order, collecting results. Cancels remaining on failure.
         .func("sequence", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& arr = expect_array(args[0], "Task.sequence", loc);
             auto results = std::make_shared<ArrayValue>();
 
@@ -479,6 +504,9 @@ void register_task_ns(const EnvPtr& env) {
         // element carries that task's own success or failure.
         .func("all_settled", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& arr = expect_array(args[0], "Task.all_settled", loc);
 
             auto results = std::make_shared<ArrayValue>();
@@ -578,6 +606,9 @@ void register_task_ns(const EnvPtr& env) {
         // a timeout OR a task failure both fall back to `default`.
         .func("timeout_or", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Waits on other tasks: let the pool compensate if this is a worker.
+            const ThreadPool::BlockingRegion blocking;
+
             const auto& task = expect_task(args[0], "Task.timeout_or", loc);
 
             const auto ms = expect_integer(args[1], "Task.timeout_or", loc);

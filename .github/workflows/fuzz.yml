@@ -90,8 +90,6 @@ jobs:
             time: 120
           - target: fuzz_compiler
             time: 120
-          - target: fuzz_resolver
-            time: 120
           - target: fuzz_vm
             time: 120
           - target: fuzz_include_resolver

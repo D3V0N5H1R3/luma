@@ -61,6 +61,9 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
             return TypeInfo::make(TypeInfo::Kind::StdlibAny);
         }
 
+        // A propagated failure/none is a value the enclosing body returns.
+        tc_.context().has_value_return = true;
+
         // The operand's wrapper kind must also match the enclosing function's
         // return wrapper: propagating a 'none' out of a result-returning
         // function (or a failure out of an optional-returning function) would
@@ -84,6 +87,25 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
         }
 
         if (operand_type.kind == TypeInfo::Kind::Result) {
+            // A propagated failure leaves through the enclosing function, so
+            // its error type must fit the declared one (Manual §14, typed
+            // errors): a 'string' error must not escape as a 'MathError'.
+            if (!ctx.is_in_main && ctx.current_return_type &&
+                ctx.current_return_type->kind == TypeInfo::Kind::Result &&
+                ctx.current_return_type->inner_types.size() >= 2 &&
+                operand_type.inner_types.size() >= 2 &&
+                !tc_.is_assignable(ctx.current_return_type->result_error_type(),
+                                   operand_type.result_error_type())) {
+                tc_.error(std::format("error propagation '?' cannot propagate an error of type "
+                                      "'{}' out of a function whose error type is '{}'",
+                                      operand_type.result_error_type().to_string(),
+                                      ctx.current_return_type->result_error_type().to_string()),
+                          expr.location,
+                          "convert the error first (e.g. with match), or change the function's "
+                          "error type",
+                          DiagnosticCode::TypeMismatch);
+            }
+
             if (!operand_type.inner_types.empty()) {
                 return operand_type.result_value_type();
             }

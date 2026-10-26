@@ -58,6 +58,37 @@ enum class Strategy {
            type == TokenType::RightBracket;
 }
 
+/// Check if a token can occur inside a type annotation such as
+/// `Ns.Box<array<(integer, function(string) -> none)>>`.  Lookahead scans that
+/// try to skip a generic argument list stop at the first token for which this
+/// is false (e.g. `{`, `=`, an operator or a literal), which bounds the scan to
+/// the type itself instead of the rest of the file — `a < b` in an expression
+/// would otherwise scan to end-of-file looking for a closing `>`.
+[[nodiscard]] constexpr bool can_appear_in_type(TokenType type) noexcept {
+    if (is_type_keyword(type)) {
+        return true;
+    }
+
+    switch (type) {
+        case TokenType::Identifier:
+        case TokenType::Less:
+        case TokenType::Greater:
+        case TokenType::GreaterGreater:
+        case TokenType::Comma:
+        case TokenType::Dot:
+        case TokenType::LeftParen:
+        case TokenType::RightParen:
+        case TokenType::Function:
+        case TokenType::Arrow:
+        case TokenType::Unique:
+        case TokenType::Borrow:
+        case TokenType::NoneLiteral:
+            return true;
+        default:
+            return false;
+    }
+}
+
 /// Check if a token looks like the start of a new statement or
 /// declaration.  Used by both recover_expect and synchronize as
 /// the "safe landing" test.

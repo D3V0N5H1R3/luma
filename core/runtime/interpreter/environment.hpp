@@ -1,7 +1,9 @@
 #ifndef LUMA_INTERPRETER_ENVIRONMENT_HPP
 #define LUMA_INTERPRETER_ENVIRONMENT_HPP
 
+#include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <memory>
@@ -12,7 +14,6 @@
 
 #include "analysis/source/source_location.hpp"
 #include "common/string_hash.hpp"
-#include "runtime/interpreter/lazy_loader.hpp"
 #include "runtime/interpreter/sandbox_policy.hpp"
 #include "runtime/interpreter/value.hpp"
 
@@ -22,6 +23,30 @@ struct Binding {
     Value value{};
     bool is_mutable{false};
     bool is_from_namespace{false}; // true when registered as a namespace bare name
+    // Bumped by the VM on every write to the binding (SetGlobal, the in-place
+    // write UniqueGlobal announces); `k_unversioned` after a write that
+    // bypassed the VM.  Lets a task global snapshot reuse the copy of a
+    // binding unchanged since the previous snapshot (see BindingCopyCache).
+    std::uint64_t write_version{0};
+
+    static constexpr std::uint64_t k_unversioned{~std::uint64_t{0}};
+};
+
+// Deep copies of global bindings kept across successive task snapshots
+// (Environment::copy_bindings).  A binding whose write_version still matches
+// its cached copy is shared by the new snapshot instead of being deep-copied
+// again, so re-snapshotting after a global write costs one deep copy per
+// binding actually written, not one per global.  Sharing a copy between
+// snapshots is safe for the same reason sharing one snapshot between sibling
+// tasks is: tasks never write their globals, and copy-on-write clones a value
+// before any in-place mutation while another holder still references it.
+struct BindingCopyCache {
+    struct Entry {
+        std::uint64_t write_version{0};
+        Value copy;
+    };
+
+    StringMap<Entry> entries;
 };
 
 // Represents a lexical scope in the interpreter's runtime.  Each
@@ -50,7 +75,7 @@ struct Binding {
 //     unique global name; subsequent accesses are O(1) cache hits.
 //
 // The chain-walking methods are therefore exercised primarily during
-// REPL evaluation, lazy module loading, and sandbox checks — none of
+// REPL evaluation, stdlib registration, and sandbox checks — none of
 // which are tight-loop hot paths.  Adding a lookup cache here would
 // duplicate the VM's global_cache_ without measurable benefit.
 //
@@ -69,7 +94,7 @@ struct Binding {
         "check the spelling or ensure the variable is declared in an accessible scope"};
 }
 
-class Environment : public std::enable_shared_from_this<Environment> {
+class Environment {
 public:
     // ── Responsibilities ────────────────────────────────────────────────
     // Environment combines several related concerns that are small enough
@@ -87,35 +112,20 @@ public:
     //      module prefixes that raise RuntimeError on access (--box mode).
     //      verify_sandbox_access() walks up to the root environment to check.
     //
-    //   4. Lazy module loading — set_lazy_loader() installs a callback
-    //      invoked when a qualified "Module.name" lookup fails, triggering
-    //      on-demand module registration without pre-loading every module.
-    //
-    //   5. Deep copy for task isolation — deep_copy() clones the entire
+    //   4. Deep copy for task isolation — deep_copy() clones the entire
     //      ancestor chain so that spawned tasks and channel sends receive
     //      fully independent value snapshots.
     //
     // Environment owns only scope chaining and value bindings; it delegates
-    // sandbox enforcement to SandboxPolicy (sandbox_policy.hpp) and on-demand
-    // module registration to LazyLoader (lazy_loader.hpp).  Each Environment
-    // holds a value-typed instance of each, but only the root's instances are
-    // populated; the scope-chain walk locates them from any child scope.
+    // sandbox enforcement to SandboxPolicy (sandbox_policy.hpp).  Each
+    // Environment holds a value-typed policy, but only the root's is
+    // populated; the scope-chain walk locates it from any child scope.
     // ────────────────────────────────────────────────────────────────────
-    // Callback type for lazy module loading.  When a lookup fails and
-    // the name starts with "Module.", the callback is invoked with the
-    // module prefix (e.g. "Queue") to register that module's functions
-    // on demand.  Returns true if the module was loaded.
-    using ModuleFactory = LazyLoader::ModuleFactory;
-
     explicit Environment(EnvPtr parent = nullptr) : parent_{std::move(parent)} {}
 
     [[nodiscard]] static EnvPtr create(EnvPtr parent = nullptr) {
         return std::make_shared<Environment>(std::move(parent));
     }
-
-    // Sandbox blocking and lazy loading are delegated to SandboxPolicy and
-    // LazyLoader (sandbox_policy.hpp / lazy_loader.hpp); Environment owns only
-    // the scope-chain walk that locates the root policy/loader.
 
     // Mark a set of module prefixes as blocked by sandbox mode.
     // Only call this on the global (root) environment.
@@ -133,12 +143,6 @@ public:
         }
 
         return parent_ ? parent_->sandbox_denial_hint(name) : std::nullopt;
-    }
-
-    // Install a lazy-loading callback for on-demand module registration.
-    // Only call this on the global (root) environment.
-    void set_lazy_loader(ModuleFactory loader) {
-        lazy_loader_.set_loader(std::move(loader));
     }
 
     // Deep-copy this environment and the entire ancestor chain.
@@ -177,6 +181,38 @@ public:
         return deep_copy_impl(visited);
     }
 
+    // Copy only this scope's bindings whose mutability equals
+    // `mutable_bindings` into a new environment chained to `parent`.  The
+    // sandbox policy is carried over.  Used to build a spawned task's global
+    // snapshot in two layers: the immutable bindings (the stdlib — large but
+    // never reassigned) form a shared base layer, and the mutable user globals
+    // a top layer rebuilt after a global write.  Each value is deep-copied
+    // only when `cache` holds no copy of it at its current write_version.
+    [[nodiscard]] EnvPtr copy_bindings(EnvPtr parent, bool mutable_bindings,
+                                       BindingCopyCache& cache) const {
+        auto copy = std::make_shared<Environment>(std::move(parent));
+        copy->sandbox_policy_ = sandbox_policy_;
+
+        for (const auto& [name, binding] : bindings_) {
+            if (binding.is_mutable != mutable_bindings) {
+                continue;
+            }
+
+            auto [it, inserted] = cache.entries.try_emplace(name);
+            auto& entry = it->second;
+
+            if (inserted || entry.write_version != binding.write_version ||
+                binding.write_version == Binding::k_unversioned) {
+                entry = {.write_version = binding.write_version, .copy = binding.value.deep_copy()};
+            }
+
+            copy->bindings_[name] = Binding{entry.copy, binding.is_mutable,
+                                            binding.is_from_namespace, binding.write_version};
+        }
+
+        return copy;
+    }
+
     void define(std::string_view name, Value value, bool is_mutable, const SourceLocation& loc = {},
                 bool is_from_namespace = false) {
         if (bindings_.contains(name)) {
@@ -184,7 +220,8 @@ public:
                                loc};
         }
 
-        bindings_[std::string{name}] = Binding{std::move(value), is_mutable, is_from_namespace};
+        bindings_[std::string{name}] =
+            Binding{std::move(value), is_mutable, is_from_namespace, /*write_version=*/0};
     }
 
     [[nodiscard]] Value get(std::string_view name, const SourceLocation& loc) {
@@ -196,16 +233,6 @@ public:
 
         if (parent_) {
             return parent_->get(name, loc);
-        }
-
-        // Try lazy-loading: if the name looks like "Module.function",
-        // extract the module prefix and trigger on-demand registration.
-        if (try_lazy_load(name)) {
-            // Retry after loading — the binding should now exist.
-            const auto retry = bindings_.find(name);
-            if (retry != bindings_.end()) {
-                return retry->second.value;
-            }
         }
 
         // Check if the name belongs to a module blocked by sandbox mode.
@@ -225,6 +252,7 @@ public:
             }
 
             it->second.value = std::move(value);
+            it->second.write_version = Binding::k_unversioned; // Written outside the VM.
 
             return;
         }
@@ -253,11 +281,13 @@ public:
             }
 
             it->second.value = std::move(value);
+            it->second.write_version = Binding::k_unversioned; // Caller may re-stamp it.
 
             return;
         }
 
-        bindings_[std::string{name}] = Binding{std::move(value), is_mutable, false};
+        bindings_[std::string{name}] =
+            Binding{std::move(value), is_mutable, false, /*write_version=*/0};
     }
 
     [[nodiscard]] bool has(std::string_view name) const {
@@ -275,6 +305,17 @@ public:
     // Check only this scope's bindings, without walking the parent chain.
     [[nodiscard]] bool has_local(std::string_view name) const {
         return bindings_.contains(name);
+    }
+
+    // Number of bindings in this scope only (does not walk the parent chain).
+    [[nodiscard]] std::size_t local_binding_count() const noexcept {
+        return bindings_.size();
+    }
+
+    // Whether this scope (not its parents) holds any mutable binding.
+    [[nodiscard]] bool has_mutable_bindings() const noexcept {
+        return std::ranges::any_of(bindings_,
+                                   [](const auto& entry) { return entry.second.is_mutable; });
     }
 
     [[nodiscard]] Binding* find_binding(std::string_view name) {
@@ -355,9 +396,13 @@ private:
         EnvPtr parent_copy = parent_ ? parent_->deep_copy_impl(visited) : nullptr;
         auto copy = std::make_shared<Environment>(std::move(parent_copy));
 
+        // Carry the sandbox policy over so a copy (e.g. a spawned task's global
+        // snapshot) still reports blocked modules with the sandbox diagnostic.
+        copy->sandbox_policy_ = sandbox_policy_;
+
         for (const auto& [name, binding] : bindings_) {
-            copy->bindings_[name] =
-                Binding{binding.value.deep_copy(), binding.is_mutable, binding.is_from_namespace};
+            copy->bindings_[name] = Binding{binding.value.deep_copy(), binding.is_mutable,
+                                            binding.is_from_namespace, binding.write_version};
         }
 
         return copy;
@@ -382,13 +427,6 @@ private:
     EnvPtr parent_;
     StringMap<Binding> bindings_;
     SandboxPolicy sandbox_policy_;
-    LazyLoader lazy_loader_;
-
-    // Attempt to lazy-load a module for the given qualified name.
-    // Returns true if a module was loaded (caller should retry lookup).
-    bool try_lazy_load(std::string_view name) {
-        return lazy_loader_.try_load(name, shared_from_this());
-    }
 
     void verify_sandbox_access(std::string_view name, const SourceLocation& loc) const {
         // Each scope's policy throws if it blocks the name; walk up to the root

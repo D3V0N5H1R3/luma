@@ -82,6 +82,13 @@ struct TerminalDimensions {
 
 [[nodiscard]] TerminalDimensions query_terminal_size();
 
+/// Put the console back into its original state: leave raw mode (restoring the
+/// saved termios / console modes) and switch mouse reporting off.  A no-op when
+/// raw mode is not active.  Registered with std::atexit the first time raw mode
+/// is entered, so an abnormal end of the program (an uncaught error,
+/// Process.exit) cannot leave the host terminal in raw mode.
+void restore_terminal_state();
+
 } // namespace luma::terminal_internal
 
 #endif // LUMA_STDLIB_TERMINAL_MODULE_INTERNAL_HPP

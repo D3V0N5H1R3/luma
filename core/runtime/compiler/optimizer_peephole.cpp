@@ -47,17 +47,17 @@ constexpr CancelPairPattern k_cancel_pair_patterns[] = {
     // Only the pure stack manipulations above qualify as cancel pairs.  A cancel
     // pair must reproduce its input for EVERY runtime value that can reach it, so
     // every arithmetic/logical "identity" is intentionally absent: its opcode
-    // inspects, coerces, or rejects operand TYPES at runtime, and cancelling the
-    // pair would skip a RuntimeError or change a value the unoptimised program
-    // produces.  Two runtime facts make this reachable even when the source looks
-    // integer- or number-typed: integer overflow promotes an `integer` slot to a
-    // `number`, and the permissive `any` type lets a slot hold a string/boolean/etc.
-    // the operator does not accept.  The absent pairs and why each is unsound:
-    //   Negate;Negate `-(-x)`     — safe_negate promotes INT64_MIN to a number, so
-    //                               cancelling keeps the raw INT64_MIN integer and
-    //                               changes the result's type.
-    //   One;IntDivide `x // 1`    — `//` requires integer operands; an
-    //                               overflow-promoted number raises at runtime, but
+    // inspects, coerces, or rejects operand TYPES or VALUES at runtime, and
+    // cancelling the pair would skip a RuntimeError or change a value the
+    // unoptimised program produces.  The permissive `any` type lets a slot hold
+    // a value (number, string, boolean, …) the operator does not accept even
+    // when the source looks integer-typed.  The absent pairs and why each is
+    // unsound:
+    //   Negate;Negate `-(-x)`     — checked_negate raises "integer overflow in
+    //                               negation" for INT64_MIN, so cancelling would
+    //                               skip that RuntimeError.
+    //   One;IntDivide `x // 1`    — `//` requires integer operands; a `number`
+    //                               held by an `any` slot raises at runtime, but
     //                               the cancel would return it unchanged.
     //   Not;Not `!!x`             — `!` coerces via truthiness, so `!!v` is a
     //                               boolean; for a non-boolean `any` operand that
@@ -71,17 +71,11 @@ constexpr CancelPairPattern k_cancel_pair_patterns[] = {
     //                               normalises -0.0 to +0.0.
 };
 
-// Pattern: NOP out first_op, replace second_op with replacement.
-struct ReplaceSecondPattern {
-    Op first;
-    Op second;
-    Op replacement;
-};
-
-constexpr ReplaceSecondPattern k_replace_second_patterns[] = {
-    {.first = Op::One, .second = Op::Add, .replacement = Op::Increment},
-    {.first = Op::One, .second = Op::Subtract, .replacement = Op::Decrement},
-};
+// `One; Add` → `Increment` and `One; Subtract` → `Decrement` are deliberately
+// NOT fused.  Increment/Decrement report overflow as "integer overflow in
+// increment/decrement" (they implement `++`/`--`), so fusing `x + 1` would make
+// its runtime error name the wrong operation; they also word type errors for a
+// non-numeric `any` operand differently from Add/Subtract.
 
 } // anonymous namespace
 
@@ -149,21 +143,6 @@ std::size_t Optimizer::peephole_pass(Chunk& chunk) const {
             continue;
         }
 
-        // ── Table-driven: NOP first, replace second ──
-        for (const auto& pat : k_replace_second_patterns) {
-            if (op == pat.first && next_op == pat.second) {
-                nop_out(code, i, 1);
-                code[next_offset] = static_cast<std::uint8_t>(pat.replacement);
-                eliminated += 1;
-                i = next_offset + 1;
-                matched = true;
-                break;
-            }
-        }
-        if (matched) {
-            continue;
-        }
-
         // ── Structural patterns (operand-dependent) ──
 
         // Pattern: IntToNumber + IntToNumber → single IntToNumber (idempotent).
@@ -175,7 +154,11 @@ std::size_t Optimizer::peephole_pass(Chunk& chunk) const {
         }
 
         // Pattern: Constant(integer) + IntToNumber → Constant(float).
-        if (op == Op::Constant && next_op == Op::IntToNumber && i + 2 < code.size()) {
+        // Skipped once the constant pool is full: add_constant() throws
+        // std::overflow_error then, and the optimizer must never make
+        // compilation worse (mirrors the constant-fold passes).
+        if (op == Op::Constant && next_op == Op::IntToNumber && i + 2 < code.size() &&
+            chunk.constants.size() < CompilerLimits::k_max_constants) {
             const auto idx = optimizer_util::read_u16(code, i + 1);
             if (idx < chunk.constants.size() && chunk.constants[idx].is_integer()) {
                 const auto promoted = static_cast<double>(chunk.constants[idx].as_integer());

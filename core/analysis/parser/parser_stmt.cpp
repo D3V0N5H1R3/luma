@@ -229,23 +229,31 @@ int Parser::skip_type_at(int offset, int depth) const {
             offset += 2;
         }
 
-        // Generic params: Type<T, U>
+        // Generic params: Type<T, U>.  The scan stops at the first token that
+        // cannot be part of a type, so `MAX < x` in an expression does not
+        // scan to end-of-file looking for a closing '>'.
         if (token_type_at(offset) == TokenType::Less) {
             ++offset;
 
             int angle_depth = 1;
 
             while (angle_depth > 0 && token_pos_ + offset < token_count_) {
-                if (token_type_at(offset) == TokenType::Less) {
+                const TokenType type = token_type_at(offset);
+
+                if (!error_recovery::can_appear_in_type(type)) {
+                    return offset;
+                }
+
+                if (type == TokenType::Less) {
                     ++angle_depth;
                 }
 
-                if (token_type_at(offset) == TokenType::Greater) {
+                if (type == TokenType::Greater) {
                     --angle_depth;
                 }
 
                 // '>>' is tokenised as a single token for nested generics.
-                if (token_type_at(offset) == TokenType::GreaterGreater) {
+                if (type == TokenType::GreaterGreater) {
                     angle_depth -= 2;
                 }
 
@@ -391,21 +399,21 @@ bool Parser::looks_like_record_destructuring() const {
         return false;
     }
 
-    // Find the matching '}'.
+    // Find the matching '}'.  A destructuring pattern holds only field names
+    // and commas, so any other token (e.g. the '=' of `Type { f = v }` record
+    // creation) settles the question without scanning further.
     int offset = after_type + 1;
-    int depth = 1;
 
-    while (depth > 0 && token_pos_ + offset < token_count_) {
-        const auto type = token_type_at(offset);
-
-        if (type == TokenType::LeftBrace) {
-            ++depth;
-        } else if (type == TokenType::RightBrace) {
-            --depth;
-        }
-
+    while (token_type_at(offset) == TokenType::Identifier ||
+           token_type_at(offset) == TokenType::Comma) {
         ++offset;
     }
+
+    if (token_type_at(offset) != TokenType::RightBrace) {
+        return false;
+    }
+
+    ++offset;
 
     // A destructuring binding is followed by '=' (not '==', which the lexer
     // tokenises separately).  Record *creation* (`Type { field = value }`) as a
@@ -560,7 +568,7 @@ StatementPtr Parser::parse_try_statement() {
     // At least one of catch or finally must be present.
     if (!has_catch && !has_finally) {
         syntax_error("try must have at least a 'catch' or 'finally' block", location,
-                     "add 'catch error { ... }' or 'finally { ... }' after the try block");
+                     "add 'catch(err) { ... }' or 'finally { ... }' after the try block");
     }
 
     return statement;
@@ -620,9 +628,7 @@ StatementPtr Parser::parse_match_statement() {
 std::vector<MatchArm> Parser::parse_match_arms() {
     std::vector<MatchArm> arms{};
 
-    while (!check(TokenType::RightBrace) && !is_at_end()) {
-        arms.push_back(parse_match_arm());
-    }
+    parse_block_items(BlockItem::MatchArm, [&] { arms.push_back(parse_match_arm()); });
 
     return arms;
 }
@@ -795,21 +801,20 @@ bool Parser::looks_like_record_pattern() const {
         return false;
     }
 
-    // Match the pattern's braces.
+    // The pattern's braces hold only field names and commas, so stop at the
+    // first other token (e.g. inside a variant arm's body block).
     int close = offset + 1;
-    int depth = 1;
 
-    while (depth > 0 && token_pos_ + close < token_count_) {
-        const auto type = token_type_at(close);
-
-        if (type == TokenType::LeftBrace) {
-            ++depth;
-        } else if (type == TokenType::RightBrace) {
-            --depth;
-        }
-
+    while (token_type_at(close) == TokenType::Identifier ||
+           token_type_at(close) == TokenType::Comma) {
         ++close;
     }
+
+    if (token_type_at(close) != TokenType::RightBrace) {
+        return false;
+    }
+
+    ++close;
 
     // The pattern braces are followed by the arm's body block (`{`) or an
     // optional contextual `when` guard.  A unit/variant arm (`case X { body }`)
@@ -915,8 +920,9 @@ void Parser::parse_case_pattern(MatchArm& arm) {
         }
     } else {
         syntax_error("invalid match arm", current().location,
-                     "expected a literal, variable binding, "
-                     "choice variant, or '_' wildcard");
+                     "expected a literal, a comparison (e.g. 'case > 0'), 'some(x)', a choice "
+                     "variant (e.g. 'case Shape.Circle(r)') or a record pattern; use 'else' "
+                     "for the catch-all arm");
     }
 
     // Parse alternative patterns: case A | B | C { ... }
@@ -986,9 +992,7 @@ StatementPtr Parser::parse_expression_statement() {
 std::vector<StatementPtr> Parser::parse_block_body() {
     std::vector<StatementPtr> body{};
 
-    while (!check(TokenType::RightBrace) && !is_at_end()) {
-        body.push_back(parse_statement());
-    }
+    parse_block_items(BlockItem::Statement, [&] { body.push_back(parse_statement()); });
 
     return body;
 }

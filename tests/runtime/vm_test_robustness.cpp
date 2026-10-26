@@ -435,6 +435,102 @@ LUMA_TEST(vm_numeric_widener_shares_unchanged_values) {
     ASSERT_TRUE(NumericWidener::widen(Value{std::string{"7"}}, "number").is_string());
 }
 
+// Regression (review #16): Op::TailCall padded missing parameters with `none`
+// without checking required_arity, unlike the Op::Call path above.
+LUMA_TEST(vm_tail_call_with_too_few_required_args_is_rejected) {
+    CompiledFunction callee;
+    callee.name = "<callee>";
+    callee.arity = 2;
+    callee.required_arity = 2;
+    callee.param_names = {"a", "b"};
+    callee.build_param_name_index();
+    callee.mutable_chunk().code = {static_cast<std::uint8_t>(Op::None),
+                                   static_cast<std::uint8_t>(Op::Return)};
+
+    std::vector<CompiledFunction> functions;
+    functions.push_back(std::move(callee));
+
+    // Top-level: close over function 0, push one argument, tail-call it.
+    auto top = make_raw_function({
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0x00U,
+        0x00U, // function index 0 (big-endian u16)
+        0x00U, // upvalue_count
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::TailCall),
+        0x01U, // arg_count — one short of required_arity
+        static_cast<std::uint8_t>(Op::Return),
+    });
+
+    const auto env = luma::test::make_std_env();
+    VM vm{env};
+    bool raised_runtime_error = false;
+    try {
+        vm.execute(functions, top);
+    } catch (const RuntimeError& error) {
+        raised_runtime_error =
+            std::string{error.what()}.find("too few arguments") != std::string::npos;
+    } catch (const std::exception&) {
+        // Pre-fix, no error was raised at all — the callee ran with b = none.
+    }
+    ASSERT_TRUE(raised_runtime_error);
+}
+
+// Regression (review #11): a function that executes Op::TryCatch and returns
+// without Op::TryEnd left a stale handler behind.  A later error in the caller
+// then "caught" it by installing the dead function's catch_ip into the
+// caller's frame — executing the callee's bytecode in the wrong frame (and,
+// with a hostile offset, reading outside the caller's chunk).  The handler
+// must die with its frame, so the caller's error propagates.
+LUMA_TEST(vm_stale_exception_handler_does_not_survive_return) {
+    CompiledFunction callee;
+    callee.name = "<leaky-try>";
+    // TryCatch with offset 0 (catch_ip = the None below), then return without
+    // the matching TryEnd.
+    callee.mutable_chunk().code = {
+        static_cast<std::uint8_t>(Op::TryCatch),
+        0x00U,
+        0x00U,
+        0x00U,
+        0x00U,
+        static_cast<std::uint8_t>(Op::None),
+        static_cast<std::uint8_t>(Op::Return),
+    };
+
+    std::vector<CompiledFunction> functions;
+    functions.push_back(std::move(callee));
+
+    // Top-level: call the leaky function, discard its result, then hit an
+    // invalid opcode (a runtime error with no live handler).
+    auto top = make_raw_function({
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0x00U,
+        0x00U,
+        0x00U,
+        static_cast<std::uint8_t>(Op::Call),
+        0x00U,
+        static_cast<std::uint8_t>(Op::Pop),
+        0xFFU,
+        static_cast<std::uint8_t>(Op::None),
+        static_cast<std::uint8_t>(Op::Return),
+    });
+
+    const auto env = luma::test::make_std_env();
+    VM vm{env};
+    bool raised_original_error = false;
+    try {
+        vm.execute(functions, top);
+    } catch (const RuntimeError& error) {
+        // The invalid-opcode error itself must surface — not a secondary
+        // fault from running the dead frame's bytecode.
+        raised_original_error =
+            std::string{error.what()}.find("unknown or reserved opcode") != std::string::npos;
+    }
+    // Pre-fix: the stale handler swallowed the error and the top-level frame
+    // resumed inside <leaky-try>'s bytecode.
+    ASSERT_TRUE(raised_original_error);
+}
+
 // ─── Main ───
 
 int main() {

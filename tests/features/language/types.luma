@@ -381,6 +381,53 @@ function void test_multiline_string_preserves_lines() {
     assert(lines == ["Line1", "Line2", "Line3"])
 }
 
+@test
+function void test_multiline_string_dedents_across_interpolations() {
+    # The common indent is computed once for the whole literal, so the text
+    # after an interpolation loses its indentation too.
+    string name = "Alice"
+    string letter = """
+        Dear ${name},
+        Thank you.
+        """
+
+    assert(letter == "Dear Alice,\nThank you.")
+}
+
+@test
+function void test_multiline_string_keeps_space_between_interpolations() {
+    string first = "x"
+    string second = "y"
+
+    assert("""${first} ${second}""" == "x y")
+
+    string stacked = """
+        ${first}
+          ${second}
+        """
+
+    assert(stacked == "x\n  y")
+}
+
+@test
+function void test_multiline_string_processes_escapes() {
+    integer price = 3
+    string text = """
+        cost: \${price} = ${price}\tok
+        quote: \"\"\"
+        """
+
+    assert(text == "cost: \${price} = 3\tok\nquote: \"\"\"")
+}
+
+# ─── Number literal forms ────────────────────────────────
+
+@test
+function void test_octal_literal() {
+    assert(0o17 == 15)
+    assert(0o755 == 493)
+}
+
 # ─── Collection type keywords ────────────────────────────
 
 @test
@@ -498,19 +545,55 @@ function void test_type_of_choice_reports_name() {
     assert(type_of(shape) == "TypeShape")
 }
 
-# ─── Integer overflow promotes to number ─────────────────
+# ─── Integer overflow is a runtime error ─────────────────
 
 @test
-function void test_integer_overflow_promotes_to_number() {
-    integer maximum_integer = 9223372036854775807
+function void test_integer_overflow_raises_error() {
+    mutable integer maximum_integer = 9223372036854775807
+    mutable string caught_message = ""
 
-    # Overflowing integer arithmetic widens the result to number rather
-    # than wrapping around.
-    assert(type_of(maximum_integer + 1) == "number")
+    # Overflowing integer arithmetic raises instead of wrapping around or
+    # silently widening to number, so an integer variable always holds an
+    # integer.
+    try {
+        integer _ = maximum_integer * 2
+    } catch(err) {
+        caught_message = err
+    }
 
-    number promoted = maximum_integer + 1
+    assert(caught_message == "integer overflow in multiplication")
 
-    assert(promoted > 9000000000000000000.0)
+    caught_message = ""
+
+    try {
+        maximum_integer++
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(caught_message == "integer overflow in increment")
+    assert(maximum_integer == 9223372036854775807, "the failed increment left the value intact")
+
+    integer minimum_integer = -9223372036854775807 - 1
+    caught_message = ""
+
+    try {
+        integer _ = minimum_integer - 1
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(String.contains(caught_message, "integer overflow in"))
+
+    caught_message = ""
+
+    try {
+        integer _ = -minimum_integer
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(caught_message == "integer overflow in negation")
 }
 
 # ─── Integer modulo sign ─────────────────────────────────

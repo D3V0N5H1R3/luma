@@ -115,12 +115,12 @@ static void test_peephole_double_not_preserved() {
     ASSERT_EQ(count_opcode(chunk, Op::Not), 2U);
 }
 
-// ─── Peephole: Negate + Negate is preserved (INT64_MIN type safety) ───
+// ─── Peephole: Negate + Negate is preserved (INT64_MIN overflow) ───
 
 static void test_peephole_double_negate_preserved() {
-    // safe_negate promotes INT64_MIN to a double, so `-(-INT64_MIN)` legitimately
-    // yields a number.  Cancelling the pair would leave the raw integer INT64_MIN
-    // and silently change the value's type, so both Negates must survive.
+    // checked_negate raises "integer overflow in negation" for INT64_MIN, so
+    // `-(-x)` must still raise when x is INT64_MIN.  Cancelling the pair would
+    // skip that RuntimeError, so both Negates must survive.
     auto chunk = make_chunk({
         static_cast<std::uint8_t>(Op::One),
         static_cast<std::uint8_t>(Op::Negate),
@@ -196,9 +196,12 @@ static void test_peephole_zero_subtract_preserved() {
     ASSERT_TRUE(has_opcode(chunk, Op::Subtract));
 }
 
-// ─── Peephole: One + Add → Increment ───
+// ─── Peephole: One + Add is preserved (not fused into Increment) ───
+//
+// Increment reports overflow as "integer overflow in increment", so fusing
+// `x + 1` would make its runtime error name the wrong operation.
 
-static void test_peephole_one_add_to_increment() {
+static void test_peephole_one_add_is_preserved() {
     auto chunk = make_chunk({
         static_cast<std::uint8_t>(Op::True), // placeholder stack value
         static_cast<std::uint8_t>(Op::One),
@@ -209,13 +212,14 @@ static void test_peephole_one_add_to_increment() {
     Optimizer opt{1};
     [[maybe_unused]] auto elim = opt.optimize(chunk);
 
-    ASSERT_TRUE(has_opcode(chunk, Op::Increment));
-    ASSERT_FALSE(has_opcode(chunk, Op::One));
+    ASSERT_FALSE(has_opcode(chunk, Op::Increment));
+    ASSERT_TRUE(has_opcode(chunk, Op::One));
+    ASSERT_TRUE(has_opcode(chunk, Op::Add));
 }
 
-// ─── Peephole: One + Subtract → Decrement ───
+// ─── Peephole: One + Subtract is preserved (not fused into Decrement) ───
 
-static void test_peephole_one_subtract_to_decrement() {
+static void test_peephole_one_subtract_is_preserved() {
     auto chunk = make_chunk({
         static_cast<std::uint8_t>(Op::True), // placeholder stack value
         static_cast<std::uint8_t>(Op::One),
@@ -226,8 +230,9 @@ static void test_peephole_one_subtract_to_decrement() {
     Optimizer opt{1};
     [[maybe_unused]] auto elim = opt.optimize(chunk);
 
-    ASSERT_TRUE(has_opcode(chunk, Op::Decrement));
-    ASSERT_FALSE(has_opcode(chunk, Op::One));
+    ASSERT_FALSE(has_opcode(chunk, Op::Decrement));
+    ASSERT_TRUE(has_opcode(chunk, Op::One));
+    ASSERT_TRUE(has_opcode(chunk, Op::Subtract));
 }
 
 // ─── Peephole: One + Multiply is preserved (`any` operand type contract) ───
@@ -514,6 +519,33 @@ static void test_constant_fold_skip_modulo_int_min_neg1() {
     ASSERT_TRUE(has_opcode(chunk, Op::Modulo));
 }
 
+// ─── Constant folding: overflowing integer arithmetic is left for the VM ───
+//
+// The VM raises "integer overflow in <operation>" rather than widening an
+// integer to a number, so INT64_MAX + 1 (and friends) must not be folded into
+// any constant — neither a wrapped integer nor a promoted number.
+static void test_constant_fold_skips_integer_overflow() {
+    for (const Op op : {Op::Add, Op::Subtract, Op::Multiply}) {
+        Chunk chunk;
+        auto loc = SourceLocation{};
+        const std::int64_t lhs = op == Op::Subtract ? INT64_MIN : INT64_MAX;
+        const std::int64_t rhs = op == Op::Multiply ? 2 : 1;
+        auto idx_a = chunk.add_constant(Value{lhs});
+        auto idx_b = chunk.add_constant(Value{rhs});
+
+        chunk.emit_u16(Op::Constant, idx_a, loc);
+        chunk.emit_u16(Op::Constant, idx_b, loc);
+        chunk.emit(op, loc);
+        chunk.emit(Op::EndModule, loc);
+
+        Optimizer opt{2};
+        [[maybe_unused]] auto elim = opt.optimize(chunk);
+
+        ASSERT_TRUE(has_opcode(chunk, op));
+        ASSERT_EQ(chunk.constants.size(), 2U);
+    }
+}
+
 // ─── Dead code elimination: after Jump ───
 
 static void test_dead_code_after_jump() {
@@ -692,9 +724,9 @@ static void test_set_local_get_local_fusion() {
 // ─── Peephole: One + IntDivide is NOT folded (x // 1 is unsound for number) ───
 
 // `//` requires integer operands and handle_int_divide raises a RuntimeError on a
-// non-integer, but bytecode carries no static type and an integer-typed slot can
-// hold an overflow-promoted `number`.  The `One; IntDivide` cancel-pair was removed
-// (same class as `x % 1`), so IntDivide must survive the optimizer intact.
+// non-integer, but bytecode carries no static type and a slot can hold a `number`
+// (e.g. through the permissive `any` type).  The `One; IntDivide` cancel-pair was
+// removed (same class as `x % 1`), so IntDivide must survive the optimizer intact.
 static void test_peephole_one_int_divide_preserved() {
     auto chunk = make_chunk({
         static_cast<std::uint8_t>(Op::True), // placeholder stack value
@@ -819,6 +851,125 @@ static void test_constant_fold_skips_when_pool_full() {
 
     ASSERT_TRUE(has_opcode(chunk, Op::Add));
     ASSERT_EQ(chunk.constants.size(), static_cast<std::size_t>(CompilerLimits::k_max_constants));
+}
+
+// ─── Peephole: Constant(int) + IntToNumber skips when the pool is full ───
+//
+// Promoting the integer constant needs a new number entry; once the pool is
+// full add_constant() would throw std::overflow_error out of the optimizer.
+static void test_peephole_int_to_number_skips_when_pool_full() {
+    Chunk chunk;
+    auto loc = SourceLocation{};
+
+    for (std::int64_t i = 0; i < static_cast<std::int64_t>(CompilerLimits::k_max_constants); ++i) {
+        (void)chunk.add_constant(Value{i});
+    }
+
+    chunk.emit_u16(Op::Constant, 7, loc);
+    chunk.emit(Op::IntToNumber, loc);
+    chunk.emit(Op::EndModule, loc);
+
+    Optimizer opt{1};
+
+    [[maybe_unused]] auto eliminated = opt.optimize(chunk);
+
+    ASSERT_TRUE(has_opcode(chunk, Op::IntToNumber));
+    ASSERT_EQ(chunk.constants.size(), static_cast<std::size_t>(CompilerLimits::k_max_constants));
+}
+
+// ─── Cross-function inlining ───
+
+static CompiledFunction make_callee(std::initializer_list<std::uint8_t> bytes) {
+    CompiledFunction callee;
+    callee.name = "<lambda>";
+    callee.mutable_chunk().code = std::vector<std::uint8_t>(bytes);
+    return callee;
+}
+
+// A straight-line `One; Return` callee is inlined in place of MakeClosure+Call.
+static void test_inline_straight_line_callee() {
+    const std::vector<CompiledFunction> functions{make_callee({
+        static_cast<std::uint8_t>(Op::One),
+        static_cast<std::uint8_t>(Op::Return),
+    })};
+
+    auto chunk = make_chunk({
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0,
+        0,
+        0, // func 0, no upvalues
+        static_cast<std::uint8_t>(Op::Call),
+        0, // call with 0 args
+        static_cast<std::uint8_t>(Op::Return),
+    });
+
+    Optimizer opt{2};
+    (void)opt.inline_small_functions(chunk, functions);
+
+    ASSERT_FALSE(has_opcode(chunk, Op::Call));
+    ASSERT_EQ(static_cast<Op>(chunk.code[0]), Op::One);
+    ASSERT_EQ(static_cast<Op>(chunk.code[1]), Op::Return);
+}
+
+// Regression: the inliner copied a callee body that contained a Return before
+// the final one (`One Return None Return`, as a block lambda `{ return 1 }` used
+// to compile), so the *caller* returned early.
+static void test_inline_rejects_body_with_mid_body_return() {
+    const std::vector<CompiledFunction> functions{make_callee({
+        static_cast<std::uint8_t>(Op::One),
+        static_cast<std::uint8_t>(Op::Return),
+        static_cast<std::uint8_t>(Op::None),
+        static_cast<std::uint8_t>(Op::Return),
+    })};
+
+    auto chunk = make_chunk({
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0,
+        0,
+        0,
+        static_cast<std::uint8_t>(Op::Call),
+        0,
+        static_cast<std::uint8_t>(Op::Pop),
+        static_cast<std::uint8_t>(Op::None),
+        static_cast<std::uint8_t>(Op::Return),
+    });
+    const auto before = chunk.code;
+
+    Optimizer opt{2};
+    (void)opt.inline_small_functions(chunk, functions);
+
+    ASSERT_TRUE(chunk.code == before);
+}
+
+// Regression: a jump landing on the Call skipped the MakeClosure on that path;
+// after inlining it landed inside the copied body.  Such calls are not inlined.
+static void test_inline_skips_call_that_is_jump_target() {
+    const std::vector<CompiledFunction> functions{make_callee({
+        static_cast<std::uint8_t>(Op::One),
+        static_cast<std::uint8_t>(Op::Return),
+    })};
+
+    auto chunk = make_chunk({
+        static_cast<std::uint8_t>(Op::True), // 0
+        static_cast<std::uint8_t>(Op::JumpIfFalse),
+        0,
+        0,
+        0,
+        4, // 1: → 10 (the Call)
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0,
+        0,
+        0, // 6
+        static_cast<std::uint8_t>(Op::Call),
+        0,                                     // 10
+        static_cast<std::uint8_t>(Op::Return), // 12
+    });
+    const auto before = chunk.code;
+
+    Optimizer opt{2};
+    (void)opt.inline_small_functions(chunk, functions);
+
+    ASSERT_TRUE(chunk.code == before);
 }
 
 // ─── Unary constant folding: Negate integer ───
@@ -1094,7 +1245,7 @@ static void test_tail_call_not_tail_position() {
 
 static void test_multiply_power_of_two_not_strength_reduced() {
     // x * 2^n must keep the Multiply opcode.  Multiply is overloaded (string
-    // repeat, number*int, int promotion-on-overflow), so a blind rewrite to
+    // repeat, number*int, int overflow raising), so a blind rewrite to
     // ShiftLeft (which demands two integers and wraps on overflow) would
     // miscompile "ab" * 4, 3.5 * 2, and large-integer products.  The optimizer
     // has no operand type or range information at the bytecode level, so the
@@ -1253,8 +1404,8 @@ int main() {
     RUN(test_peephole_dup_pop_eliminated);
     RUN(test_peephole_zero_add_preserved);
     RUN(test_peephole_zero_subtract_preserved);
-    RUN(test_peephole_one_add_to_increment);
-    RUN(test_peephole_one_subtract_to_decrement);
+    RUN(test_peephole_one_add_is_preserved);
+    RUN(test_peephole_one_subtract_is_preserved);
     RUN(test_peephole_one_multiply_preserved);
     RUN(test_peephole_one_divide_preserved);
     RUN(test_peephole_one_int_divide_preserved);
@@ -1269,6 +1420,11 @@ int main() {
     RUN(test_constant_fold_float_add);
     RUN(test_constant_fold_string_concat);
     RUN(test_constant_fold_skips_when_pool_full);
+    RUN(test_constant_fold_skips_integer_overflow);
+    RUN(test_peephole_int_to_number_skips_when_pool_full);
+    RUN(test_inline_straight_line_callee);
+    RUN(test_inline_rejects_body_with_mid_body_return);
+    RUN(test_inline_skips_call_that_is_jump_target);
 
     // Unary constant folding.
     RUN(test_unary_fold_negate_integer);

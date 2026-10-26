@@ -1,9 +1,14 @@
 // Unit tests for SourceLocation and SourceManager.
 
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <string_view>
+#include <system_error>
 
 #include "analysis/source/source_location.hpp"
 #include "analysis/source/source_manager.hpp"
+#include "common/path_utils.hpp"
 #include "common/string_utils.hpp"
 #include "test_framework.hpp"
 
@@ -239,6 +244,34 @@ static void test_source_manager_any_source_contains_word_rejects_embedded() {
     ASSERT_TRUE(sm.any_source_contains("Marker"));
 }
 
+static void test_source_manager_load_file_with_non_ascii_name() {
+    // Regression: on MSVC a narrow std::string path was decoded with the ANSI
+    // code page, so a UTF-8 file name outside it (CJK + Cyrillic here) could
+    // not be opened.  SourceManager paths are UTF-8 and must round-trip.
+    const std::string utf8_name = "source_test_\xE6\x97\xA5\xD0\xB6.luma";
+    const auto fs_path = std::filesystem::temp_directory_path() / path_from_utf8(utf8_name);
+
+    {
+        std::ofstream out{fs_path, std::ios::binary};
+        out << "integer x = 1\n";
+    }
+
+    const std::string utf8_path = path_to_utf8(fs_path);
+
+    {
+        SourceManager sm;
+        const auto result = sm.try_load(utf8_path);
+
+        ASSERT_TRUE(result.file != nullptr);
+        ASSERT_EQ(sm.get_line(result.file->file_id, 1), std::string_view{"integer x = 1"});
+        ASSERT_TRUE(result.file->path.find("\xE6\x97\xA5\xD0\xB6") != std::string::npos);
+        ASSERT_TRUE(sm.find_file_id(utf8_path).has_value());
+    }
+
+    std::error_code ec;
+    std::filesystem::remove(fs_path, ec);
+}
+
 int main() {
     RUN(test_source_location_defaults);
     RUN(test_source_location_values);
@@ -263,6 +296,7 @@ int main() {
     RUN(test_source_manager_any_source_contains);
     RUN(test_source_manager_any_source_contains_word);
     RUN(test_source_manager_any_source_contains_word_rejects_embedded);
+    RUN(test_source_manager_load_file_with_non_ascii_name);
 
     return SUMMARY();
 }

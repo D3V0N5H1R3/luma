@@ -15,6 +15,7 @@
 #include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "analysis/types/type_checking_context.hpp"
+#include "common/scope_guard.hpp"
 
 namespace luma {
 
@@ -28,7 +29,8 @@ namespace {
 reject_external_internal_access(TypeCheckingServices& tc, std::string_view qualified_name,
                                 std::string_view namespace_name, std::string_view member_name,
                                 const SourceLocation& loc) {
-    if (tc.is_internal_member(qualified_name) && tc.context().current_namespace != namespace_name) {
+    if (tc.is_internal_member(qualified_name) &&
+        !type_check_helpers::is_within_namespace(tc.context().current_namespace, namespace_name)) {
         tc.error(std::format("'{}' is internal to namespace '{}' and cannot "
                              "be accessed from outside",
                              member_name, namespace_name),
@@ -66,6 +68,17 @@ TypeInfo ExpressionTypeChecker::infer_field_access_inner(const FieldAccessExpres
             }
             break;
         case TypeInfo::Kind::Optional:
+            // A plain `.field` on an optional fails at runtime when the value
+            // is none; only `?.` handles the missing case.
+            if (!expr.is_optional) {
+                tc_.error(std::format("cannot access field '{}' on '{}' — the value may be none",
+                                      expr.field_name, object_type.to_string()),
+                          expr.location,
+                          "use '?.' for optional chaining, or unwrap the value first with '?\?' "
+                          "or match",
+                          DiagnosticCode::TypeMismatch);
+            }
+
             if (const auto member = infer_optional_member(expr, object_type)) {
                 return *member;
             }
@@ -197,6 +210,13 @@ ExpressionTypeChecker::infer_namespace_member(const FieldAccessExpression& expr)
             }
 
             const auto& func = *fn_it->second;
+
+            // The signature names its namespace's own types by their bare
+            // names, so resolve it from inside that namespace.
+            const auto saved_namespace = tc_.context().current_namespace;
+            tc_.context().current_namespace = var.name;
+            const ScopeGuard namespace_guard{
+                [&] { tc_.context().current_namespace = saved_namespace; }};
 
             std::vector<TypeInfo> param_types;
 

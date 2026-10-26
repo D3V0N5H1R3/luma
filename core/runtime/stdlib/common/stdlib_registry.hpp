@@ -14,7 +14,6 @@
 #include "runtime/stdlib/collections/set_module.hpp"
 #include "runtime/stdlib/collections/stack_module.hpp"
 #include "runtime/stdlib/common/core_builtins_module.hpp"
-#include "runtime/stdlib/common/lazy_registry.hpp"
 #include "runtime/stdlib/concurrency/channel_module.hpp"
 #include "runtime/stdlib/concurrency/task_module.hpp"
 #include "runtime/stdlib/io/console_module.hpp"
@@ -56,30 +55,23 @@ namespace luma {
 // Each entry maps a module name to its registration function.  Modules
 // that require OS access (disabled in sandbox mode) are tagged os_only.
 // Modules whose behaviour adapts to the sandbox flag (Compression, Hash,
-// Log) are tagged sandbox_aware and carry a sandbox_register_fn instead
-// of the regular register_fn.
+// Log, Terminal) are tagged sandbox_aware and carry a sandbox_register_fn
+// instead of the regular register_fn.
 //
 // ─── Method naming convention ────────────────────────────────────────────────
 //   register_<module>_ns()  — Top-level registration function for a stdlib
 //                              module.  Each module exposes exactly one of
 //                              these, called by the module table below.
 //
-// Loading strategy (RT-22):
-//   Two registration paths are provided — eager and lazy.
-//
-//   Eager (register_all):
-//     Every module is registered into the Environment immediately at
-//     startup.  Simple and predictable, but incurs a fixed cost
-//     proportional to the number of modules, even if the program only
-//     uses a few.  Used by the CLI interpreter and REPL.
-//
-//   Lazy (register_all_lazy):
-//     Module factories are stored in a LazyRegistry and loaded on first
-//     access via the Environment's lazy-loading callback.  Core builtins
-//     (print, assert, type_of) and choice variants are always loaded
-//     eagerly because they are needed before any user code runs.  Used
-//     by the language server and other contexts where startup latency
-//     matters more than steady-state performance.
+// Loading strategy:
+//   register_all() registers every active module into the Environment
+//   eagerly: core builtins first, then each module in kModules (os_only
+//   modules are skipped in sandbox mode; sandbox_aware modules receive the
+//   sandbox flag), then the stdlib choice variants and the sandbox-blocked
+//   name sets.  Registration is a fixed startup cost proportional to the
+//   number of modules, independent of which modules the program uses.  Every
+//   runtime entry point (CLI runner, test runner, REPL, debugger) uses this
+//   single path.
 
 namespace detail {
 
@@ -125,11 +117,12 @@ inline constexpr ModuleEntry kModules[] = {
     {"Statistics", register_statistics_ns, nullptr, false, false},
     {"String", register_string_ns, nullptr, false, false},
     {"Task", register_task_ns, nullptr, false, false},
-    {"Terminal", register_terminal_ns, nullptr, false, false},
     // ── Sandbox-aware modules (adapt behaviour based on sandbox flag) ──
     {"Compression", nullptr, register_compression_ns, false, true},
     {"Hash", nullptr, register_hash_ns, false, true},
     {"Log", nullptr, register_log_ns, false, true},
+    // Terminal withholds its console-input functions in sandbox mode.
+    {"Terminal", nullptr, register_terminal_ns, false, true},
     // ── OS-only modules (disabled in sandbox mode) ──
     {"Console", register_console_ns, nullptr, true, false},
     {"Csv", register_csv_ns, nullptr, true, false},
@@ -172,8 +165,9 @@ constexpr std::size_t kModuleCount = std::size(kModules);
     return find_module(name) != nullptr;
 }
 
-// The catalog functions that sandbox-aware modules (Hash, Compression, Log)
-// withhold in sandbox mode, e.g. `Hash.sha256_file`.  Found by registering
+// The catalog functions that sandbox-aware modules (Hash, Compression, Log,
+// Terminal) withhold in sandbox mode, e.g. `Hash.sha256_file` or
+// `Terminal.read_key`.  Found by registering
 // each such module in sandbox mode into a scratch environment and collecting
 // the catalog members it left out.  The set never changes, so it is computed
 // once: the debugger registers a sandboxed stdlib for every watch evaluation.
@@ -207,8 +201,8 @@ constexpr std::size_t kModuleCount = std::size(kModules);
     return withheld;
 }
 
-// Register choice variants and sandbox-blocked prefixes.
-// Shared by both eager and lazy registration paths.
+// Register choice variants and sandbox-blocked prefixes.  Runs after every
+// module is registered.
 inline void register_stdlib_postamble(const EnvPtr& env, bool sandbox) {
     // Register stdlib-provided choice variants so they are accessible
     // at runtime.  Unit variants (e.g. Log.Level.Information) become ready-made
@@ -257,8 +251,9 @@ inline void register_stdlib_postamble(const EnvPtr& env, bool sandbox) {
     // instead of the generic "undefined variable" error.  The blocked
     // set is derived from the catalog's capability tags — single source
     // of truth for sandbox restrictions.  Sandbox-aware modules (Hash,
-    // Compression, Log) stay available but withhold their file functions,
-    // which are blocked by name (see sandbox_withheld_functions).
+    // Compression, Log, Terminal) stay available but withhold their file /
+    // console-input functions, which are blocked by name (see
+    // sandbox_withheld_functions).
     if (sandbox) {
         StringSet blocked;
         for (const auto& mod : stdlib::sandbox_blocked_modules()) {
@@ -269,60 +264,20 @@ inline void register_stdlib_postamble(const EnvPtr& env, bool sandbox) {
     }
 }
 
-// Iterate over active modules, calling the appropriate visitor for each.
-// Encapsulates the sandbox_aware / os_only filtering logic shared by
-// both eager and lazy registration paths.
-template <typename SandboxAwareFn, typename NormalFn>
-void for_each_active_module(bool sandbox, SandboxAwareFn sa_fn, NormalFn normal_fn) {
-    for (const auto& mod : kModules) {
-        if (mod.sandbox_aware) {
-            sa_fn(mod);
-        } else if (!mod.os_only || !sandbox) {
-            normal_fn(mod);
-        }
-    }
-}
-
 } // namespace detail
 
 inline void register_all(const EnvPtr& env, bool sandbox = false) {
     register_core(env);
 
-    detail::for_each_active_module(
-        sandbox, [&](const detail::ModuleEntry& mod) { mod.sandbox_register_fn(env, sandbox); },
-        [&](const detail::ModuleEntry& mod) { mod.register_fn(env); });
+    for (const auto& mod : detail::kModules) {
+        if (mod.sandbox_aware) {
+            mod.sandbox_register_fn(env, sandbox);
+        } else if (!mod.os_only || !sandbox) {
+            mod.register_fn(env);
+        }
+    }
 
     detail::register_stdlib_postamble(env, sandbox);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Lazy Registration
-// ─────────────────────────────────────────────────────────────────────────────
-// Registers module factories into a LazyRegistry instead of loading all
-// modules eagerly.  Modules are loaded on first access via Environment's
-// lazy-loading callback.  Core builtins (print, assert, type_of) and
-// choice variants are always loaded eagerly.
-
-// Populate a LazyRegistry with factories for all stdlib modules.
-// The registry should be installed on the Environment via install().
-inline void register_all_lazy(LazyRegistry& registry, const EnvPtr& env, bool sandbox = false) {
-    // Core builtins are always needed.
-    register_core(env);
-
-    detail::for_each_active_module(
-        sandbox,
-        [&](const detail::ModuleEntry& mod) {
-            registry.register_module(mod.name, [fn = mod.sandbox_register_fn,
-                                                sandbox](const EnvPtr& e) { fn(e, sandbox); });
-        },
-        [&](const detail::ModuleEntry& mod) {
-            registry.register_module(mod.name, [fn = mod.register_fn](const EnvPtr& e) { fn(e); });
-        });
-
-    detail::register_stdlib_postamble(env, sandbox);
-
-    // Install the registry as the lazy loader for the environment.
-    registry.install(env);
 }
 
 } // namespace luma

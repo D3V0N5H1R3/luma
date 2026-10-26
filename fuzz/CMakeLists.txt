@@ -105,7 +105,6 @@ endfunction()
 # bytecode link luma_core.
 luma_add_fuzz_target(fuzz_lexer            fuzz_lexer.cpp            luma_analysis)
 luma_add_fuzz_target(fuzz_parser           fuzz_parser.cpp           luma_analysis)
-luma_add_fuzz_target(fuzz_resolver         fuzz_resolver.cpp         luma_analysis)
 luma_add_fuzz_target(fuzz_type_checker     fuzz_type_checker.cpp     luma_analysis)
 luma_add_fuzz_target(fuzz_linter           fuzz_linter.cpp           luma_analysis)
 luma_add_fuzz_target(fuzz_compiler         fuzz_compiler.cpp         luma_core)

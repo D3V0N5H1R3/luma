@@ -110,6 +110,32 @@ function void test_filesystem_is_directory_and_is_file() {
 }
 
 @test
+function void test_filesystem_utf8_file_names() {
+    # Luma strings are UTF-8; on Windows they used to be decoded in the ANSI
+    # code page, so a non-Latin-1 name could not be created, listed, read back
+    # or deleted.  The names are unique to this test (tests run in parallel).
+    string dir = "_fs_utf8_测试_é_feature"
+    string name = "数据_ü_feature.txt"
+    string file = dir + "/" + name
+
+    assert(Result.is_success(FileSystem.create_directory(dir)))
+    assert(Result.is_success(FileSystem.write_file(file, "héllo 世界")))
+
+    assert(Result.unwrap(FileSystem.exists(file)), "the UTF-8 named file exists")
+    assert(Result.unwrap(FileSystem.read_file(file)) == "héllo 世界", "content round-trips")
+
+    array<string> listed = Result.unwrap(FileSystem.list_files(dir))
+
+    assert(Array.contains(listed, name), "list_files returns the UTF-8 name unchanged")
+    assert(FileSystem.name(file) == name, "FileSystem.name keeps the UTF-8 name")
+    assert(String.contains(Result.unwrap(FileSystem.absolute_path(file)), "数据_ü_feature.txt"))
+
+    assert(Result.is_success(FileSystem.delete(file)))
+    assert(!Result.unwrap(FileSystem.exists(file)), "the UTF-8 named file is deleted")
+    assert(Result.is_success(FileSystem.delete_directory(dir)))
+}
+
+@test
 function void test_filesystem_list_files() {
     assert(Result.is_success(FileSystem.create_directory("_fs_test_listfiles_tmp")))
     assert(Result.is_success(FileSystem.write_file("_fs_test_listfiles_tmp/a.txt", "a")))

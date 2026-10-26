@@ -43,12 +43,15 @@ struct StackEffect {
 //   • local slot index bounds
 //
 // Jump target validation is deferred until after that pass, because forward
-// jumps may target offsets not yet visited.
+// jumps may target offsets not yet visited.  A target must be an instruction
+// boundary strictly inside the code (a target equal to the code size has no
+// instruction to run).
 //
 // Stack depth (underflow / overflow) is then checked by walking the control
 // flow graph from the entry point: each reachable instruction is simulated
 // with the deepest stack that reaches it along any path, following jump,
-// loop, exception-handler, and loop-exhaustion edges.
+// loop, exception-handler, and loop-exhaustion edges.  The walk also reports
+// any instruction whose fall-through path runs off the end of the code.
 
 class BytecodeVerifier {
 public:

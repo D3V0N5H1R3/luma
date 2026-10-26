@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_DIAGNOSTICS_RENDERER_HPP
+#define LUMA_DIAGNOSTICS_RENDERER_HPP
 
 #include <cstddef>
 #include <string>
@@ -57,3 +58,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_DIAGNOSTICS_RENDERER_HPP

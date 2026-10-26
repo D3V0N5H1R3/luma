@@ -106,9 +106,9 @@ The CLI module selects one of several modes based on command-line arguments. Eac
 | Test            | `luma --test, -t <file.luma>`   | Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM Test Runner           |
 | Sandbox         | `luma --box, -b <file.luma>`    | Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM (OS modules disabled) |
 | Project init    | `luma init`                     | Creates a `luma.json` project configuration in the current directory                            |
-| REPL            | `luma`                          | Loop: Lexer → Parser → Type Checker → Compiler → VM (`:file` adds Include Resolver)             |
-| REPL (explicit) | `luma --repl, -r`               | Loop: Lexer → Parser → Type Checker → Compiler → VM (`:file` adds Include Resolver)             |
-| Eval (stdin)    | `luma --eval, -e`               | Stdin → Lexer → Parser → Type Checker → Compiler → VM (no `@main` required)                     |
+| REPL            | `luma`                          | Loop: Lexer → Parser → Include Resolver → Type Checker → Compiler → VM                          |
+| REPL (explicit) | `luma --repl, -r`               | Loop: Lexer → Parser → Include Resolver → Type Checker → Compiler → VM                          |
+| Eval (stdin)    | `luma --eval, -e`               | Stdin → Lexer → Parser → Include Resolver → Type Checker → Compiler → VM (no `@main` required)  |
 
 ---
 
@@ -127,14 +127,15 @@ Each module has a single responsibility, a well-defined interface, and minimal k
 
 **Behaviour:**
 
-- Parses flags: `--test` / `-t`, `--check` / `-c`, `--strict` / `-s`, `--box` / `-b`, `--version` / `-v`, `--help` / `-h`, `--repl` / `-r`, `--eval` / `-e`, `--optimize` / `-O`, `--verify`, and the optional source file path. The `pkg` subcommand delegates to a package management handler.
-- Flags may appear in any order — the parser determines the requested command (run, test, check, etc.) and identifies the file path as the first non-flag argument.
-- Validates that the provided file path has the `.luma` extension.
-- On an unknown flag, computes the Levenshtein edit distance against all known flags and suggests the closest match (threshold ≤ 2): `error: unknown option '--hepl'; did you mean '--help'?`. Returns exit code 5 (`usage_error`).
-- Delegates to the REPL module (`--repl` / `-r` or no file argument), the standard-input evaluator (`--eval` / `-e`), the pipeline runner (file argument), the test runner (`--test` / `-t`), the type-checker (`--check` / `-c`), the package manager (`pkg`), or information output (`--version` / `-v`, `--help` / `-h`).
+- Parses flags: `--test` / `-t`, `--check` / `-c`, `--strict` / `-s`, `--box` / `-b`, `--version` / `-v`, `--help` / `-h`, `--repl` / `-r`, `--eval` / `-e`, `--optimize` / `-O`, `--verify`, and the optional source file path. The `init` subcommand (alias `pkg`) only creates a `luma.json` project file in the current directory; there is no package management.
+- Luma's own flags are honoured anywhere on the command line, before or after the `.luma` file, so `luma app.luma --test` tests the file. The first non-flag argument is the file path. Any other argument after the file is forwarded to the program, and everything after a literal `--` is forwarded unchanged, even if it looks like a flag.
+- `-O` / `--optimize` takes a level of `0`, `1`, or `2` (`-O2` or `-O 2`). A missing or invalid level is a usage error.
+- `validate_file_argument` runs before dispatch. These are usage errors (exit code 5): `--test` or `--check` without a file, a file without the `.luma` extension, a path that does not exist or is not a regular file, and program arguments given without a file.
+- On an unknown flag before the file, computes the Levenshtein edit distance against all known flags and suggests the closest match (threshold ≤ 2): `error: unknown option '--hepl'; did you mean '--help'?`. Returns exit code 5 (`usage_error`).
+- Delegates to the REPL module (`--repl` / `-r` or no file argument), the standard-input evaluator (`--eval` / `-e`), the pipeline runner (file argument), the test runner (`--test` / `-t`), the type-checker (`--check` / `-c`), the project initialiser (`init` / `pkg`), or information output (`--version` / `-v`, `--help` / `-h`).
 - Uses standardised exit codes: 0 (success), 1 (runtime error), 2 (type error), 3 (syntax error), 4 (compile error), 5 (usage error). The `exit_code::from_diagnostic_category()` function maps `DiagnosticCategory` values to their corresponding codes.
 
-**Dependencies:** Source Manager, Lexer, Parser, Include Resolver, Type Checker, Linter, Compiler, VM, Environment, Standard Library, Test Runner, Common (Terminal).
+**Dependencies:** Source Manager, Lexer, Parser, Include Resolver, Type Checker, Linter, Compiler, VM, Environment, Standard Library, Test Runner, Common (`common/terminal.hpp`).
 
 _Note:_ The CLI module has two roles: parsing command-line arguments (pure logic, no dependencies) and orchestrating the pipeline (depends on all pipeline phases). These are kept in a single module because separating them would add indirection without meaningful benefit — the orchestration logic is a straightforward sequential dispatch.
 
@@ -164,22 +165,23 @@ _Note:_ The CLI module has two roles: parsing command-line arguments (pure logic
 
 **Interface:**
 
-- Constructor: `Lexer(source, file_id)` — takes the source text and an optional file identifier (default 0 for REPL/inline use).
-- `tokenize() → vector<Token>` — Scan the source text and return all tokens. Throws `SyntaxError` on the first unrecognised character.
+- Constructor: `Lexer(source, diagnostics, file_id)` — takes the source text, a `DiagnosticCollector&` that receives every lexical diagnostic, and an optional file identifier (default 0 for REPL/inline use).
+- `tokenize() → vector<Token>` — Scan the source text and return all tokens, always ending with `EndOfFile`. Lexical errors are reported to the collector rather than thrown.
 
 **Behaviour:**
 
 - Single-pass, character-by-character scanning from left to right.
 - Produces one `Token` per lexical unit: keyword, identifier, literal, operator, punctuation, annotation, or end-of-file.
-- Classifies numeric literals as `IntegerLiteral` (no decimal point or exponent) or `NumberLiteral` (contains `.` or `e`/`E`).
+- Classifies numeric literals as `IntegerLiteral` (no decimal point or exponent) or `NumberLiteral` (contains `.` or `e`/`E`). Hexadecimal (`0x`), binary (`0b`), and octal (`0o`) prefixes are recognised. A decimal point must be followed by a digit (`1.` is not a number), and a literal directly followed by a letter or digit that cannot belong to it (`0b102`, `123abc`) is an error. After `.` or `?.`, only digits are read, so `t.0.1` lexes as two tuple-index accesses.
+- Identifiers may contain bytes ≥ 0x80 only when they form well-formed UTF-8 letters; Unicode spaces and control characters are rejected.
 - Handles string interpolation by producing a sequence of tokens: `StringStart`, `StringMiddle` (between interpolation slots), and `StringEnd`, with normal expression tokens in between. Plain strings without interpolation produce a single `StringLiteral` token.
-- Handles triple-quoted multi-line strings (`"""..."""`) by stripping common leading whitespace (dedenting) and producing the same token types as single-line strings.
+- Handles triple-quoted multi-line strings (`"""..."""`) by dedenting the whole literal at once — the common leading whitespace is computed across every piece, including those between interpolations — and dropping the first and last line only when they are blank. Escape sequences are processed as in ordinary strings, after dedenting (`\$` suppresses interpolation). The result uses the same token types as single-line strings.
 - Recognises annotations (`@main`, `@test`) as `Annotation` tokens.
-- Skips whitespace (spaces, tabs, carriage returns, newlines, semicolons) and comments (`#` to end of line). Semicolons are treated as whitespace because they are optional in Luma.
-- Attaches a `SourceLocation` (file identifier, line, column) to every token.
-- On encountering an unrecognised character, throws a `SyntaxError` with its location and aborts scanning.
+- Skips whitespace (spaces, tabs, carriage returns, newlines, semicolons) and comments (`#` to end of line). Semicolons are treated as whitespace because they are optional in Luma. Each token records whether a newline preceded it (`preceded_by_newline`), which the parser uses for its newline rule.
+- Attaches a start location (`start_location`) and an end location (`location`, one past the last character) to every token.
+- On an unrecognised character, reports a syntax diagnostic anchored at the token start, emits an `Error` token, and continues scanning. Lexing stops after 100 errors.
 
-**Dependencies:** Source Manager (for file identifiers), Errors (for error types), Common (for resource limits).
+**Dependencies:** Source Manager (for file identifiers), Diagnostics (for the collector), Common (for resource limits and UTF-8 decoding).
 
 ### 4.4 Parser
 
@@ -188,18 +190,19 @@ _Note:_ The CLI module has two roles: parsing command-line arguments (pure logic
 **Interface:**
 
 - Constructor: `Parser(tokens)` — takes the token stream produced by the Lexer.
-- `parse() → Program` — Consume all tokens and return the root `Program` node. Throws `SyntaxError` on parse failure.
+- `parse() → Program` — Consume all tokens and return the root `Program` node. Syntax errors are collected as diagnostics (`get_errors()`) rather than thrown; the returned program contains everything that parsed successfully.
 
 **Behaviour:**
 
 - Recursive-descent parser consuming tokens from left to right.
 - Parses top-level declarations (`function`, `record`, `choice`, `interface`, `namespace`, `type`, `include`, `use`) and top-level statements.
 - Expression parsing uses precedence climbing (see Section 6.3 for the full precedence table).
+- Newline rule: Luma has no statement terminator, so a `(` or `[` that starts a new line (`Token::preceded_by_newline`) never continues the previous expression as a call or index — it begins a new statement. Binary operators and `|>` still continue an expression across lines.
 - Named arguments (`name: expr`) are parsed as part of call expressions and stored alongside positional arguments.
 - Attaches the `SourceLocation` of the primary token to each AST node.
-- On a parse error, throws a `SyntaxError` with the location and aborts; no partial AST is returned.
+- On a parse error, emits a diagnostic anchored at the offending token's start and throws the internal `ParseFailure` signal to the nearest recovery point. Recovery is local: a block body, namespace body, match-arm list, or choice-variant list catches it and resynchronises at the next statement or member inside the same block (`synchronize_in_block`), so one error does not cascade into false errors for the rest of the function. The top-level loop is the last recovery point (`synchronize`). Parsing stops after 100 errors.
 
-**Dependencies:** Lexer (token stream), AST, Errors, Common (for resource limits).
+**Dependencies:** Lexer (token stream), AST, Diagnostics, Common (for resource limits).
 
 ### 4.5 AST (Abstract Syntax Tree)
 
@@ -278,11 +281,11 @@ _Statements_ (perform an action, produce no value):
 _Declarations_ (define names at the top level or within a namespace):
 
 - `ChoiceDeclaration` — name, optional type parameters, and variant definitions. Each variant has a name and optional typed fields. Variants may reference the enclosing choice type (recursive ADTs), including generic self-references (e.g., `List<T>` containing `List<T>` fields). Choice declarations with all unit variants (no data fields) serve the same role as enumerations.
-- `FunctionDeclaration` — return type (before the name), name, parameters (with optional `trusted` and `mutable` modifiers, optional defaults), body, annotations.
+- `FunctionDeclaration` — return type (before the name), name, parameters (with an optional `mutable` modifier and optional defaults; `unique`/`borrow` are part of the parameter's type annotation), body, annotations.
 - `IncludeDeclaration` — file path string.
 - `InterfaceDeclaration` — name and required field definitions (name + type).
 - `NamespaceDeclaration` — name and contained declarations.
-- `RecordDeclaration` — name and field definitions (name + type + optional `private` flag).
+- `RecordDeclaration` — name and field definitions (name + type + optional default).
 - `TypeAliasDeclaration` — alias name and target type.
 - `UseDeclaration` — namespace name or namespace-qualified name.
 
@@ -308,6 +311,7 @@ _Declarations_ (define names at the top level or within a namespace):
 | `array<T>`            | `Array`          | One inner type (element type).                                                                                       |
 | `boolean`             | `Boolean`        | Primitive.                                                                                                           |
 | `channel<T>`          | `Channel`        | One inner type.                                                                                                      |
+| `decimal`             | `Decimal`        | Primitive. Exact base-10 value used by the `Decimal` module.                                                         |
 | `dictionary<T>`       | `Dictionary`     | One inner type (value type; key is always `string`).                                                                 |
 | `function(P...) -> R` | `Func`           | Inner types are parameter types; `return_type` holds `R`.                                                            |
 | `integer`             | `Integer`        | Primitive.                                                                                                           |
@@ -316,21 +320,28 @@ _Declarations_ (define names at the top level or within a namespace):
 | `optional<T>`         | `Optional`       | One inner type (the wrapped value type).                                                                             |
 | `range`               | `Range`          | Produced by range expressions (`a..b`, `a..=b`).                                                                     |
 | `reference<T>`        | `Reference`      | One inner type (the wrapped value type). Shared identity.                                                            |
-| `result<T>`           | `Result`         | One inner type (success value type).                                                                                 |
+| `result<T, E>`        | `Result`         | Inner types: success value type and error type. `result<T>` means `result<T, string>`.                               |
 | `socket`              | `Socket`         | Opaque handle for network connections.                                                                               |
 | `string`              | `String`         | Primitive.                                                                                                           |
 | `task<T>`             | `Task`           | One inner type (result type).                                                                                        |
 | `void`                | `Void`           | Return type of functions that produce no value.                                                                      |
+| `key_value_store<T>`  | `Record`         | Built-in container modelled as the named record `key_value_store`; the element type is kept.                         |
+| `queue<T>`            | `Record`         | Built-in container modelled as the named record `queue`; the element type is kept.                                   |
+| `set<T>`              | `Record`         | Built-in container modelled as the named record `set`; the element type is kept.                                     |
+| `stack<T>`            | `Record`         | Built-in container modelled as the named record `stack`; the element type is kept.                                   |
+| `xml`                 | `Record`         | Built-in handle modelled as the named record `xml`.                                                                  |
 | Choice                | `Choice`         | Named type; variant names and optional fields stored in the type checker tables. Declared with the `choice` keyword. |
 | Interface             | `Interface`      | Named structural type; field types stored in tables.                                                                 |
 | Namespace             | `Namespace`      | Internal tag used when a namespace name appears as a symbol.                                                         |
 | Record                | `Record`         | Named type; field types stored in the type checker tables.                                                           |
 | _(internal)_          | `StdlibAny`      | Internal marker for stdlib returns whose concrete type depends on arguments. Not user-accessible.                    |
-| _(internal)_          | `Unknown`        | Error-recovery placeholder during type inference.                                                                    |
+| _(internal)_          | `Unknown`        | Error-recovery placeholder during type inference. Unknown type names are errors, not `Unknown`.                      |
+
+A `result` inferred from `success(...)` or from a stdlib signature leaves its error type open (`StdlibAny`). The built-in containers keep their type argument in `inner_types`, so a `queue<integer>` and a `queue<string>` are distinct types.
 
 **Key Rules:**
 
-- `integer` and `number` are distinct types. Mixed arithmetic (`integer op number`) implicitly promotes the `integer` operand to `number` and produces a `number` result. `integer` also widens to `number` in assignments.
+- `integer` and `number` are distinct types. Mixed arithmetic (`integer op number`) implicitly promotes the `integer` operand to `number` and produces a `number` result. `integer` also widens to `number` in assignments. Arithmetic on two `integer` values stays `integer`: at runtime an overflow raises an error and never silently widens to `number`.
 - `none` is the empty case of `optional<T>`. It is assignable to `optional<T>` variables. Use `some(value)` to wrap a value. Assigning `none` to a concrete type such as `integer` is a compile-time error.
 - Interface satisfaction is structural — a record satisfies an interface if it has all required fields with assignable types.
 - Type aliases are fully transparent — the alias and its underlying type are interchangeable.
@@ -351,7 +362,10 @@ _Declarations_ (define names at the top level or within a namespace):
 **Behaviour:**
 
 - Collects all `IncludeDeclaration` nodes from the parsed AST.
-- For each include, resolves the path relative to the including file's directory (falls back to the working directory when no file path is available, e.g. from the REPL).
+- Decodes include paths and `LUMA_PATH` entries as UTF-8 (`path_from_utf8`), so non-ASCII file names resolve on every platform. A path that cannot be represented on the host fails with an error instead of throwing.
+- Rejects directory traversal before touching the file system: any `.` or `..` component (so `./x.luma` is rejected too) gives `include rejected: '<path>' contains directory traversal`.
+- Resolves the path in a fixed order. An include anchored to a file (it has an including file on disk) tries the including file's directory, then each `LUMA_PATH` directory, and never falls back to the working directory. An unanchored include (REPL input, `--eval`, standard input) tries the working directory first, then `LUMA_PATH`, and must be relative (`include rejected: '<path>' is an absolute path`). A miss reports `cannot load included file '<path>': file not found` with a hint naming the directories searched.
+- Containment fails closed: the canonical target must lie inside the including file's directory tree or a `LUMA_PATH` directory (`include rejected: '<path>' resolves outside the allowed directory tree`). If the including file's directory cannot be canonicalised, the include is rejected (`include rejected: cannot resolve the directory of the file including '<path>'`) rather than the check being skipped.
 - Rejects symbolic links — emits a compile error with the message `include rejected: '<path>' contains a symbolic link in its path chain`.
 - Checks the Source Manager's registry to skip already-loaded files (each file is included at most once, deduplicated by canonical path).
 - Maintains an `InclusionStack` depth counter to enforce `k_max_include_depth` and guard against runaway nesting. Circular and self includes need no separate cycle check — the include-once registry above already prevents any file from being entered twice.
@@ -396,6 +410,19 @@ _Type validation:_
 - Verify that logical operators are applied only to booleans.
 - Verify that try-statements are well-typed: the try body is checked; the catch binding (if present) is registered as an immutable `string` in a new scope (it holds the error message string) and the catch body is checked; the optional `finally` body is checked.
 
+_Hard errors (never downgraded to warnings):_
+
+- Unknown type names anywhere a type is written: variable declarations, parameters, return types, record/interface/choice fields, aliases, lambda parameters, and tuple bindings. Bound generic type parameters are exempt, and a bare name inside a namespace finds that namespace's own types.
+- A `result<T>` value that is discarded instead of bound, propagated with `?`, or dropped with `_ = expr`.
+- A `unique` local that leaves scope without being consumed, or is used after it was consumed.
+- Returning a value from a `void` function (returning a `void` call is allowed), and a non-`void` function — including one with an empty body — that can fall off its end without returning.
+- Named-argument errors: an unknown name, a parameter given twice, a missing required parameter, or a wrong argument count (`type_check_helpers::map_call_arguments`).
+- `??` on a value that is neither `optional` nor `result`; plain `.field` or `[i]` on an `optional<T>` (use `?.`, `?[`, `??`, or `match`).
+- Destructuring a value that is not a tuple, in a declaration or a `for` loop.
+- A compound assignment (`+=`, `-=`, `*=`, `%=`) that would store a `number` into an `integer` variable.
+- `?` whose propagated error type does not fit the enclosing function's error type.
+- `assert` with other than one or two arguments, or a non-`boolean` condition (a piped value is the condition).
+
 _Exhaustiveness checking:_
 
 - Match on `boolean` must cover `true` and `false`.
@@ -407,8 +434,7 @@ _Exhaustiveness checking:_
 _Linter warnings:_
 
 - Always-false condition — `while false { ... }` loop body will never execute.
-- Discarded result — a function returning `result<T>` is called and the return value is not used.
-- Discarded value — a non-void function call expression whose return value is not assigned, piped, or otherwise consumed. Suppress with `_ = expr`.
+- Discarded value — a non-void function call expression whose return value is not assigned, piped, or otherwise consumed. Suppress with `_ = expr`. (A discarded `result<T>` is a hard error, not a warning.)
 - Downcast always fails — `downcast<T>` on a value whose type is incompatible with `T`.
 - Floating-point equality — `==` or `!=` on `number` values may give unexpected results due to rounding.
 - Function / namespace interpolation — interpolating a function or namespace in a string produces unhelpful output.
@@ -416,11 +442,11 @@ _Linter warnings:_
 - Mutable but never mutated — a variable or parameter is declared `mutable` but is never reassigned.
 - Not a Luma keyword — using `var` or `let` instead of `define`.
 - Optional chain not unwrapped — `?.` or `?[` result assigned to a non-`optional<T>` variable without a `??` fallback.
-- Redundant boolean — comparing a boolean with `true` or `false` (e.g. `x == true`, `x != false`) is redundant; use the boolean directly.
+- Redundant boolean — comparing a boolean with `true` or `false` (e.g. `x == true`, `x != false`) is redundant; use the boolean directly (lint rule W0017, `boolean-literal-comparison`).
 - Redundant downcast — `downcast<T>` on a value already known to be `T`.
 - Self-assignment — assigning a variable to itself has no effect.
 - Shadow variable — a local variable shadows a variable from an outer scope.
-- Unconsumed unique — a `unique` variable leaves scope without being consumed.
+- Unconsumed unique parameter — a `unique` parameter is never consumed (an unconsumed `unique` local is a hard error).
 - Unnecessary semicolon — Luma does not use semicolons.
 - Unreachable code — code appears after a `return`, `break`, or `continue`.
 - Unsafe trusted_downcast — `trusted_downcast` on an unrefined stdlib value has no compile-time safety guarantee.
@@ -434,7 +460,7 @@ By default, linter warnings are informational. With `--strict` (or `-s`), all li
 
 _Ownership tracking:_
 
-- Variables declared with `unique` must be consumed exactly once (passed to a function or assigned away). Using a consumed unique variable is a type error.
+- Variables declared with `unique` must be consumed exactly once (passed to a function or assigned away). Using a consumed unique variable is a type error. Branches merge conservatively: an `if` without an `else` counts as an empty `else` branch, so a value consumed in the `then` branch stays consumed afterwards.
 - Variables declared with `borrow` are read-only references and cannot be consumed or moved.
 
 _Annotation validation:_
@@ -446,12 +472,6 @@ _Annotation validation:_
 _Interface satisfaction:_
 
 - When a record value is passed where an interface type is expected, verify structural compatibility.
-
-_Information hiding:_
-
-- Track the set of `trusted` parameter names for the current function or lambda in `current_trusted_params_`.
-- When a `private` record field is accessed, require that the base object is a variable whose name is in `current_trusted_params_`. Otherwise, report a type error.
-- Construction of records always permits `private` fields to be supplied in the literal.
 
 **Dependencies:** AST, Type System.
 
@@ -489,7 +509,7 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 - Each scope is a hash map (`string → Binding`) where `Binding` holds the value, its type, and a mutability flag.
 - Lookup walks the scope chain from innermost to outermost.
-- The global scope is pre-populated by the Standard Library module with built-in function bindings.
+- The global scope is pre-populated at startup by the Standard Library's `register_all`, which binds every built-in function eagerly; there is no on-demand module loading. In sandbox mode the root scope also holds the `SandboxPolicy` that turns a lookup of a blocked module or withheld function into a "not available in sandbox mode" error (§11.5).
 
 **Dependencies:** Errors (for error types), Interpreter/Value (for the `Value` variant).
 
@@ -499,12 +519,12 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 **Interface:**
 
-- `register_all(environment)` — Populate the global environment with all built-in function bindings.
-- Each namespace module exposes a function that registers its functions into the environment under the qualified namespace prefix.
+- `register_all(environment, sandbox)` — Populate the global environment with all built-in function bindings, skipping OS-only modules and withholding the OS-touching functions of sandbox-aware modules when `sandbox` is `true`. Registration is always eager (see §11.3).
+- Each namespace module exposes one `register_<module>_ns(env)` function (sandbox-aware modules take `(env, sandbox)`) that registers its functions into the environment under the qualified namespace prefix.
 
 **Behaviour:**
 
-- Each built-in function is implemented as a `NativeFunction` — a callable value that receives a vector of runtime `Value` arguments and returns a `Value`.
+- Each built-in function is bound as a `NativeFunctionValue` — a named callable that receives the runtime `Value` arguments and returns a `Value`.
 - Native functions validate their arguments at runtime (argument count, argument types). On invalid input, they either return a `result<T>` containing `failure(...)` (for recoverable errors) or throw a C++ exception that the VM catches and converts into a `RuntimeError` with full source location (for unrecoverable errors such as wrong argument count or type).
 - Larger modules are split into multiple files for maintainability where doing so keeps each source file focused and testable.
 - Namespace functions are registered with their qualified name (e.g., `String.length`, `Array.map`) so that they are accessible via qualified calls and via `use` imports.
@@ -512,7 +532,7 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 See Section 11 for detailed organisation.
 
-**Dependencies:** Environment, Type System (for argument validation).
+**Dependencies:** Environment, Stdlib Catalog (`shared/stdlib/`, for function metadata and sandbox capabilities).
 
 ### 4.12 Error Reporter
 
@@ -532,6 +552,8 @@ See Section 11 for detailed organisation.
     - A clear, specific message describing what went wrong.
     - The offending source line with a caret (`^`) pointing to the exact position.
 - Diagnostic output is colourised when `stderr` is connected to an interactive terminal (ANSI escape codes). Category labels are bold red (errors) or bold yellow (warnings), source line gutters are cyan, carets are bold red, and hints are bold cyan. Colours are automatically suppressed when output is piped or redirected.
+- Control bytes and malformed UTF-8 that come from source files (in messages, source lines, hints, labels, and file names) are printed as `\xNN` escapes (`display_text.hpp`), so a hostile source file cannot send terminal escape sequences.
+- Every diagnostic's caret sits on the offending token and underlines it. `DiagnosticBuilder::add_span` anchors a span whose location records a token start (§5.1) at that start and keeps the one-past-the-end column as the span's end, so type-checker, linter, and runtime diagnostics — anchored on AST and source-map locations — report the token's first column and underline the whole token. Lexer and parser diagnostics pass the token's `start_location` and `location` as an explicit span. The language server maps the same span to the diagnostic's range.
 - Example output:
 
     ```text
@@ -544,7 +566,7 @@ See Section 11 for detailed organisation.
 
 - Errors are written to `stderr`. Normal output goes to `stdout`.
 
-**Dependencies:** Source Manager (to retrieve source lines), Common (Terminal for colourised output).
+**Dependencies:** Source Manager (to retrieve source lines), Common (`common/terminal.hpp` for colourised output).
 
 ### 4.13 REPL
 
@@ -552,17 +574,18 @@ See Section 11 for detailed organisation.
 
 **Interface:**
 
-- `run()` — Start the REPL loop. Returns when the user exits.
+- `run_repl(sandbox)` — Start the REPL loop (`sandbox` mirrors `--box`). Returns when the user exits.
+- `run_eval(sandbox) → int` — Evaluate standard input once (`--eval`) and return the exit code: 2 for a type error, 4 for a compile error (including a failed `include`), 1 for a runtime error.
 
 **Behaviour:**
 
 - Displays a prompt (`luma>`) and reads a line of input.
 - The prompt and continuation prompt (`...`) are colourised when `stdout` is connected to an interactive terminal — the main prompt is bold, the continuation prompt is cyan. Expression results are prefixed with a cyan `=>`.
-- Runs Lexer → Parser → Type Checker → Compiler → VM on each input. The type checker checks each input incrementally against the inputs that ran before it (`TypeChecker::check_incremental`), so a line sees earlier definitions and may redefine them.
+- Runs Lexer → Parser → Include Resolver → Type Checker → Compiler → VM on each input. `include` declarations in REPL input and `--eval` are resolved by `repl_detail::resolve_input_includes`, anchored at the working directory (see §4.7). The type checker checks each input incrementally against the inputs that ran before it (`TypeChecker::check_incremental`), so a line sees earlier definitions and may redefine them.
 - Maintains a persistent environment across lines — variables and functions defined in one line are available in subsequent lines. The VM retains each input's compiled function table, since a function declared on one line is called by later ones.
 - Prints the result of expressions automatically (prefixed with `=>`).
-- Handles REPL commands: `:quit` / `:q`, `:help` / `:h`, `:clear` / `:c`, `:file <path>` / `:f <path>`.
-- The `:file` command loads a `.luma` file through the full pipeline (Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM), registers its declarations in the REPL environment, and executes its top-level statements. All definitions become available for subsequent interactive use.
+- Handles REPL commands: `:quit` / `:q`, `:help` / `:h`, `:clear` / `:c`, `:file <path>` / `:f <path>`. `repl_detail::parse_repl_command` matches the command word exactly and trims its argument; a line starting with `:` never reaches the Luma parser. An unknown command or a missing or extra argument prints a usage message (`Usage: :file <path>`, `Unknown command: :foo …`).
+- The `:file` command loads a `.luma` file through Lexer → Parser → Include Resolver → Type Checker → Compiler → VM (no Linter), registers its declarations in the REPL environment, and executes its top-level statements. Include warnings are printed. Every `:file` re-reads the file from disk and registers the text under a fresh name (`<path> (reload N)`), so an edited file runs its new contents; includes that were already loaded are not re-read.
 - On error, displays the error message and returns to the prompt without crashing.
 - Does not require a `@main` function — each line is evaluated directly.
 
@@ -570,31 +593,30 @@ See Section 11 for detailed organisation.
 
 ### 4.14 Test Runner
 
-**Responsibility:** Discover and execute all `@test`-annotated functions, report results, and set the process exit code.
+**Responsibility:** Compile a test file, run every `@test`-annotated function, report results, and set the process exit code.
 
 **Interface:**
 
-- `run_tests(program, interpreter, global_env) → vector<TestResult>` — Execute all test functions and return a list of individual results.
-- `print_test_results(results) → TestCounts` — Print one line per test result and a summary line. Returns pass and fail counts.
+- `run_tests_file(path, strict, sandbox) → int` (`cli_tester.cpp`) — The `--test` entry point. Compiles the file with `compile_program` (`require_main = false`, peephole optimisation, `--strict` honoured), registers the standard library with `register_all(global_env, sandbox)`, and runs the tests on a fresh `VM`. Returns exit code 0 when every test passes and 1 (`runtime_error`) otherwise; a compile-time failure returns that phase's exit code before any test runs.
+- `VM::execute_tests(functions, top_level) → bool` — Runs the tests and prints the results. Returns `true` when every test passed.
 
 **Behaviour:**
 
-- Scans the AST for all functions annotated with `@test`.
-- Executes each test function in a child environment of the global environment.
-- Catches assertion failures and runtime errors within each test.
-- Records each test as `PASS` (completed without error) or `failure` (assertion failed or runtime error occurred).
-- `print_test_results` prints all results after execution completes:
+- `execute_tests` first runs the top-level chunk, so declarations and top-level variables are defined.
+- It then collects every `CompiledFunction` whose `is_test` flag the compiler set from the `@test` annotation, in function-table order (source order). With none, it prints `no tests found` and succeeds.
+- Each test runs on the same VM through `run_top_level`, exactly like `@main`. A test that returns normally passes. Any `std::exception` (a failed `assert`, a runtime error, an uncaught error from a task scope) marks it failed; `Process.exit` throws `ExitSignal`, which is not a `std::exception`, so it still ends the whole run. After a failure the VM truncates its stack, clears its frames and exception handlers, and resets `base_depth_`, so the next test starts cleanly. `run()` has already retired any `task_scope` the failing test left open.
+- Results are printed as each test finishes, then a summary line:
 
     ```text
-    [PASS] test_addition
-    [FAIL] test_division — assertion failed: expected 4 but got 5
+      pass  test_addition
+      FAIL  test_division: assertion failed
+
+    2 test(s): 1 passed, 1 failed
     ```
 
-    `[PASS]` is coloured green and `[FAIL]` is coloured red when `stdout` is connected to an interactive terminal. The summary line is also colourised.
-- Prints a summary line: `N passed, M failed.`
-- The caller uses the returned `TestCounts` to set a non-zero process exit code if any test failed (exit code 1 — `runtime_error`, suitable for CI integration).
+    `pass` is coloured green and `FAIL` red when `stdout` is connected to an interactive terminal, and the summary counts are coloured the same way.
 
-**Dependencies:** Interpreter, Environment, Error Reporter, Common (Terminal).
+**Dependencies:** Compiler (via `compile_program`), VM, Environment, Standard Library, Common (`common/terminal.hpp`).
 
 ### 4.15 Concurrency Module
 
@@ -610,17 +632,22 @@ See Section 12 for detailed design.
 
 **Interface:**
 
-- `ResourceLimits` — A struct of mutable `static inline` values defining upper bounds for resource consumption (call depth, parser expression depth, string interpolation nesting depth, collection sizes, string size, string repeat count and pad width, regex pattern size, process output size, environment variable name and value size, task queue size, open socket count). Defaults can be overridden at startup from `LUMA_LIMIT_*` environment variables via `ResourceLimits::init_from_env()`. Fixed bounds that are baked into data-structure sizing or compiled bytecode (e.g. VM value-stack depth, display nesting depth) live in the companion `CompileTimeLimits` namespace as `constexpr` constants.
-- TTY detection (`stderr_is_tty()`, `stdout_is_tty()`), ANSI colour helpers, and `enable_ansi_escapes()` for Windows virtual terminal processing live in `core/runtime/cli/terminal.hpp`.
+- `ResourceLimits` — A struct of mutable `static inline` values defining upper bounds for resource consumption (call depth, parser expression depth, string interpolation nesting depth, collection sizes, string size, string repeat count and pad width, regex pattern size, process output size, environment variable name and value size, task queue size, open socket count). Defaults can be overridden at startup from `LUMA_LIMIT_*` environment variables via `ResourceLimits::init_from_env()`. Each override must lie in [1, ceiling]: zero or a non-number is ignored with a warning, and a value above the limit's ceiling (an extra column of the limit X-macro) is clamped with a warning. Fixed bounds that are baked into data-structure sizing or compiled bytecode (e.g. VM value-stack depth, display nesting depth) live in the companion `CompileTimeLimits` namespace as `constexpr` constants.
+- Terminal helpers (`terminal.hpp`) — TTY detection (`stderr_is_tty()`, `stdout_is_tty()`), ANSI colour helpers for each stream, and `enable_ansi_escapes()` for Windows virtual terminal processing. Header-only; the old `core/runtime/cli/terminal.hpp` path is a forwarding header.
+- UTF-8 helpers (`utf8.hpp`, `utf8_iterator.hpp`) — a strict RFC 3629 decoder (`utf8_decode` returns the code point and its length; overlongs, surrogates, `F5`–`FF` lead bytes, and truncated sequences decode as U+FFFD with length 1) and an iterator whose step always matches the decoded length.
+- Path helpers (`path_utils.hpp`) — `path_from_utf8()` / `path_to_utf8()` convert between UTF-8 strings and `std::filesystem::path` on every platform.
 - Escape utilities (`escape.hpp`) — Policy-based string escape/unescape functions for JSON, JavaScript, HTML, and XML contexts, used by the JSON, XML, and HTTP stdlib modules to prevent injection attacks during serialization.
+- Other shared building blocks: `LruCache` (`lru_cache.hpp`; a capacity of 0 throws `std::invalid_argument`), overflow-checked arithmetic (`overflow.hpp`), `Decimal` arithmetic (`decimal.hpp`), Base64 and other codecs, `ScopeGuard`, and `ScopeStack`.
 
 **Behaviour:**
 
 - Centralises all resource-limit constants in one location so that modules do not scatter magic numbers.
 - Limits are intentionally generous for normal programs but prevent pathological inputs from exhausting system resources (denial-of-service prevention).
-- Terminal colour functions cache the TTY check result on first call. When `stderr`/`stdout` is not a terminal, colour functions return empty strings so output remains clean in pipes and redirects.
+- Terminal colour functions cache the TTY check result on first call. When `stderr`/`stdout` is not a terminal, colour functions return empty strings so output remains clean in pipes and redirects. Each colour helper follows the TTY state of the stream it writes to.
 
-**Dependencies:** None (header-only).
+**Dependencies:** None. Most of the module is header-only; `base64_codec.cpp`, `decimal.cpp`, `resource_limits.cpp`, and `string_utils.cpp` are compiled sources.
+
+The front-end has its own small shared directory, `core/analysis/common/` (`scope_manager.hpp`, `utf8_validation.hpp`), for helpers used only by analysis code.
 
 ### 4.17 Compiler
 
@@ -639,8 +666,10 @@ See Section 12 for detailed design.
 - Uses precedence-aware expression compilation with stack-effect tracking.
 - Emits forward jumps for control flow (`if`, `match`, `for`, `while`) and patches them after the branch body is compiled.
 - Resolves upvalues using a CLox-style capture chain: each `CompilerScope` (one per function or lambda) tracks which enclosing locals are captured.
-- Supports 105 opcodes across 25 categories (see Section 5.5).
-- Operands are big-endian: `u16` for constant-pool, name-table, and local-slot indices; `u32` for jump offsets and `ConstantLong` indices.
+- Non-local exits — `return`, the failure path of `?`, `break`, and `continue` — that leave one or more `try` blocks emit `TryEnd` and compile each pending `finally` body inline before jumping (`emit_try_unwind`). `break`/`continue` run those `finally` bodies before popping the loop's locals (`emit_loop_scope_unwind`), and a value already on the operand stack (the return value, the `?` failure) is protected by a scratch slot while the `finally` bodies run (see §7.6).
+- Supports 105 opcodes across 25 categories (see Section 5.5). Some are reserved: the VM and verifier accept them, but the compiler never emits them (see §7.17).
+- Operands are big-endian: `u16` for constant-pool, name-table, and local-slot indices; `u32` for jump offsets (and the reserved `ConstantLong`).
+- A full constant pool or name table is reported as a compile-error diagnostic, not thrown as an exception.
 
 **Dependencies:** AST, Source Location, Interpreter Value, Diagnostics.
 
@@ -652,20 +681,23 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 
 **Interface:**
 
-- `VM(env, source_manager)` — Constructs a VM with a global environment and source manager.
-- `execute(functions, top_level)` — Run a compiled program (top-level chunk + functions).
+- `VM(env)` — Constructs the root VM over a global environment.
+- `VM(env, pool, compiled_fns)` — Constructs a task VM for a spawned task: it shares the parent's thread pool and function table, and `env` is the read-only global snapshot described in §12.5.
+- `execute(functions, top_level)` — Run a compiled program (top-level chunk, then `@main`).
 - `execute_function(func)` — Execute a single function (used by the REPL).
-- `execute_tests(functions)` — Discover and run `@test`-annotated functions.
+- `execute_tests(functions, top_level)` — Run the top-level chunk, then every `@test`-annotated function.
 
 **Behaviour:**
 
-- Maintains a value stack (max 65,536 entries) and a call-frame stack (max 256 frames).
-- The dispatch loop (`run_dispatch`) fetches, decodes, and executes one opcode per iteration.
-- Function calls push a new `CallFrame` with an instruction pointer (`ip`) into the callee's `Chunk` and a `slots` pointer into the value stack.
-- Closures capture upvalues as `shared_ptr<Value>` references, enabling upvalue sharing between closures.
-- Exception handling uses a separate handler stack managed by `VMExceptionManager`; each handler records the catch IP, frame index, and stack depth for unwinding.
-- Structured concurrency: `Spawn` creates a lightweight per-thread VM that shares the parent's thread pool. `TaskScopeBegin`/`TaskScopeEnd` manage structured task scopes. `Await` blocks until a task completes and pushes its result.
-- Native stdlib functions call back into user-defined compiled functions via a `vm_call_fn_` callback, enabling higher-order functions like `Array.map`.
+- The value stack is a fixed block of 65,536 `Value` slots (`std::unique_ptr<Value[]>` in `VMStack`) addressed by raw `base`/`top`/`limit` pointers, so push and pop never reallocate. Each thread keeps a small pool of spare blocks, so a spawned task reuses a stack instead of allocating several MiB.
+- Every path that lowers the stack top other than `pop()` — return, exception unwinding, tail calls, the native-callback error path, string interpolation, test reset — calls `VMStack::truncate_to`, which destroys the values above the new top immediately (§9).
+- The call-frame stack holds at most 256 frames. The effective call-depth limit is the smaller of `ResourceLimits::max_call_depth` (overridable through `LUMA_LIMIT_MAX_CALL_DEPTH`) and 256; exceeding it raises `call stack overflow: maximum recursion depth (N) exceeded`.
+- `run()` fetches one opcode per iteration and calls its handler through `k_dispatch_table`, a 256-entry table of pointers to `VM` member functions (`op_*`). Every byte value has an entry; undefined opcodes map to `op_invalid`.
+- Function calls push a `CallFrame` holding a raw `const CompiledFunction*`, a raw `FunctionValue*` closure, the instruction pointer, the cached end of the chunk, and the frame's `slot_offset` into the value stack.
+- Closures capture upvalues by value; mutable captures share a `shared_ptr<Value>` cell so every closure sees the same mutations.
+- Exception handling uses a separate handler stack (`VMExceptionHandler`); each handler records the catch IP, frame index, stack depth, and `task_scope` depth for unwinding. A returning (or tail-calling) frame drops its own handlers, and a handler is validated before use.
+- Structured concurrency: `Spawn` creates a lightweight task VM that shares the parent's thread pool. `TaskScopeBegin`/`TaskScopeEnd` manage structured task scopes. `Await` blocks until a task completes and pushes its result. `run()` records how many task scopes were open on entry and retires any extra ones on every exit path (§12.4).
+- Native stdlib functions call back into user-defined compiled functions through `vm_native_callable_`, enabling higher-order functions like `Array.map` (§7.12).
 
 **Dependencies:** Compiler (Chunk, Opcode), Concurrency (Thread Pool, Task Scope, Cancellation Token), Diagnostics, Interpreter Value, Standard Library (Native Function).
 
@@ -678,15 +710,16 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 - `Diagnostic` — A complete diagnostic: severity, category, message, source spans, optional hint, and suggested fixes.
 - `DiagnosticBuilder` — Fluent builder: `diag::error("msg").primary(loc).hint("try X").build()`.
 - `DiagnosticRenderer` — Formats diagnostics to the terminal with source context and carets.
-- `DiagnosticEmitter` — Base class for diagnostic-emitting compiler passes. Each phase (Lexer, Parser, TypeChecker, Linter, NameResolver) inherits from `DiagnosticEmitter` and receives a default category and source tag, providing uniform `emit_error()` and `emit_warning()` methods.
+- `DiagnosticEmitter` — Base class for diagnostic-emitting compiler passes. Each phase (Lexer, Parser, TypeChecker, Linter) inherits from `DiagnosticEmitter` and receives a default category and source tag, providing uniform `emit_error()` and `emit_warning()` methods.
 
 **Behaviour:**
 
 - Supports four severity levels: `Error`, `Warning`, `Hint`, `Info`.
 - Primary spans display carets (`^`), secondary spans display dashes, following the Rust `rustc` diagnostic style.
 - `Fix` values carry suggested text replacements, enabling future auto-fix tooling.
+- Untrusted text (source lines, quoted lexemes, file names) is passed through `display_text.hpp`, which shows control bytes and malformed UTF-8 as `\xNN`.
 
-**Dependencies:** Source Manager, Source Location.
+**Dependencies:** Source Manager, Source Location, Common (`common/terminal.hpp` for colour).
 
 ### 4.20 Linter
 
@@ -703,11 +736,14 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 3. Self-assignment (`x = x`)
 4. Unreachable code after return/break/continue
 5. Discarded result values
-6. Always-false/always-true conditions
+6. Always-false/always-true conditions (W0008)
 7. Incompatible comparisons
 8. Floating-point equality
 9. Empty blocks
 10. Redundant else after return
+11. Comparison with a boolean literal, such as `x == true` (W0017 `boolean-literal-comparison`)
+
+A variable's initializer is linted before the new name is declared, so `integer x = x + 1` that shadows an outer `x` counts as a use of the outer variable. `LintPass` runs even after the type checker failed (`run_after_failure()`, §4.21).
 
 **Dependencies:** AST, Diagnostics.
 
@@ -717,8 +753,8 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 
 **Interface:**
 
-- `Pass` (abstract) — Virtual interface with `name()`, `run(Program&, PipelineResult&)`, and `required_passes()` (returns dependency names using `pass_name::` constants).
-- `Pipeline` — Owns a sequence of passes. `.add(pass)` chains them; `.run(program)` executes them sequentially, stopping at the first error-producing pass. Records per-pass timing in `PipelineResult::timings`.
+- `Pass` (abstract) — Virtual interface with `name()`, `run(Program&, PipelineResult&)`, `required_passes()` (returns dependency names using `pass_name::` constants), and `run_after_failure()` (default `false`).
+- `Pipeline` — Owns a sequence of passes. `.add(pass)` chains them; `.run(program)` executes them in order. Once a pass reports errors, later passes are skipped unless they opt in through `run_after_failure()`. The advisory `LintPass` opts in, so lint warnings are still reported for a program that failed type checking. Records per-pass timing in `PipelineResult::timings`.
 
 **Behaviour:**
 
@@ -727,41 +763,27 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 
 **Dependencies:** AST (forward-declared), Diagnostics.
 
-### 4.22 Name Resolver
+### 4.22 Optimizer
 
-**Responsibility:** Resolve all variable references to stack-slot indices for O(1) access in the bytecode compiler.
-
-**Interface:**
-
-- `NameResolver::resolve(program) → vector<Diagnostic>` — Walk the AST, resolve names, and annotate variables with slot information.
-
-**Behaviour:**
-
-- Produces `ResolvedVar` values with `frame_depth` (0 = local, 1+ = enclosing), `slot_index`, and `is_mutable`.
-- Pushes and pops `ResolveScope` objects that track local definitions.
-- Detects undeclared variables and emits diagnostics.
-
-**Dependencies:** AST (Expression, Statement), Diagnostics, Source Location.
-
-### 4.23 Optimizer
-
-**Responsibility:** Apply peephole optimizations and constant folding to compiled bytecode, reducing instruction count without changing semantics.
+**Responsibility:** Rewrite compiled bytecode into a shorter equivalent, without changing any observable behaviour — including which runtime errors are raised and their wording.
 
 **Interface:**
 
-- `Optimizer(level)` — Construct with optimization level: 0 (pass-through), 1 (peephole only), 2 (peephole + constant folding + dead code elimination).
+- `Optimizer(level)` — Construct with optimization level: 0 (pass-through), 1 (peephole only), 2 (all passes plus cross-function inlining).
 - `optimize(chunk) → size_t` — Optimize a `Chunk` in-place. Returns the number of bytes eliminated.
+- `inline_small_functions(caller_chunk, functions) → size_t` — Cross-function inlining (level 2 only). `OptimizerPass` runs it on every chunk before `optimize()`, so the inlined code benefits from the other passes.
 
 **Behaviour:**
 
-- Peephole pass: replaces known sequences (e.g., `Push(0) + Add` → no-op, `Push(1) + Add` → `Increment`).
-- Constant folding pass: folds `Constant(a) + Constant(b) + ArithOp` into a single `Constant(result)`.
-- Unary folding pass: folds `Constant(a) + UnaryOp` into `Constant(result)`.
+- The passes come from a registry (`Optimizer::passes()`), each with a minimum level: `peephole` (level 1), then `constant_fold`, `unary_fold`, `comparison_fold`, `dead_code`, `jump_threading`, `dead_store`, and `tail_call` (level 2). They run repeatedly until none eliminates anything, and then `compact()` removes the dead bytes.
+- Peephole: folds `True; Not` / `False; Not`, inverts `Equal; Not` / `NotEqual; Not` (only equality, which is NaN-safe), cancels `Dup; Pop`, `Swap; Swap`, and `None; Pop`, merges repeated `IntToNumber` and `Constant(int); IntToNumber`, and fuses `GetLocal; Return` → `GetLocalReturn` and `SetLocal; GetLocal` (same slot) → `SetLocal; Dup`. It never fuses across a jump target. Arithmetic "identities" such as `x + 0` or `-(-x)` are deliberately not removed, because the operator can raise an error for some runtime values. `One; Add` and `One; Subtract` are not fused into `Increment` / `Decrement`: that would change the overflow message of `x + 1` from "in addition" to "in increment".
+- Constant folding: folds `Constant(a); Constant(b); ArithOp` (and unary and comparison forms) into one constant. A fold that would overflow an integer is left in place for the VM, which raises the error at runtime; folding never widens an integer result to `number`. Mixed integer/number equality folds through `Value::equals`, which compares exactly.
+- Inlining replaces `MakeClosure; Call 0` with the callee's body only when the callee has no upvalues, ends with its only `Return`, is straight-line code (no jumps, terminators, or other control flow before the final `Return`), uses no chunk-local operands (constants, names, locals, upvalues), and the `Call` is not a jump target.
 - Integrated into the pipeline via `OptimizerPass`.
 
 **Dependencies:** Chunk, Opcode.
 
-### 4.24 Bytecode Verifier
+### 4.23 Bytecode Verifier
 
 **Responsibility:** Validate structural integrity of compiled bytecode before execution, catching compiler bugs and corrupt bytecode early.
 
@@ -772,14 +794,14 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 **Behaviour:**
 
 - Checks that all opcodes are valid and operands are in-bounds.
-- Validates that jump targets land on valid instruction boundaries.
-- Checks constant-pool and name-table indices.
-- Walks the control flow graph from the entry point (each frame starts with the callee plus its arguments) to detect stack underflows and overflows, following jump, loop, catch-handler, and loop-exhaustion edges and simulating the deepest stack at merge points.
-- Integrated into the pipeline via `VerifierPass`, and run on every deserialized `.lumc` function; a clean result lets the VM skip operand-truncation and constant-index checks.
+- Validates that jump targets land on valid instruction boundaries strictly inside the code: a jump to `code.size()` (one past the end) is rejected, as is a `Loop` that would land before the start.
+- Checks constant-pool and name-table indices, upvalue indices, and local-slot indices.
+- Walks the control flow graph from the entry point (each frame starts with the callee plus its arguments) to detect stack underflows and overflows, following jump, loop, catch-handler, and loop-exhaustion edges and simulating the deepest stack at merge points. Control flow that can run off the end of the chunk without a terminator is reported (`falls off the end of the code`), and so is a loop whose body grows the stack on every iteration. A step budget bounds the walk on crafted input.
+- Integrated into the pipeline via `VerifierPass`, and run on every deserialized `.lumc` function; a clean result lets the VM skip operand-truncation and constant-index checks. `--verify` bypasses both compilation caches, so the verifier always sees freshly compiled bytecode.
 
 **Dependencies:** Chunk, CompiledFunction.
 
-### 4.25 Compilation Cache
+### 4.24 Compilation Cache
 
 **Responsibility:** Avoid re-compiling unchanged source files by caching compilation results in memory.
 
@@ -791,14 +813,14 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 
 **Behaviour:**
 
-- Keyed by (absolute path, compilation options, content hash). When content or options change, the cached entry is invalidated. Because the key covers only the entry point, each entry also records its included files; `get` re-hashes them (`are_source_dependencies_current`) and misses if any was edited or deleted.
+- Keyed by (absolute path, compilation options, content hash). The options carry the full optimization level (`OptimizationLevel`), so `-O1` and `-O2` artifacts never share an entry. When content or options change, the cached entry is invalidated. Because the key covers only the entry point, each entry also records its included files; `get` re-hashes them (`are_source_dependencies_current`) and misses if any was edited or deleted.
 - Uses LRU eviction when the cache exceeds `max_entries`.
 - Thread-safe (guarded by mutex) for use by the language server's analysis thread.
-- Complements the on-disk `.lumc` cache (§4.26), which persists compiled bytecode across process restarts.
+- Complements the on-disk `.lumc` cache (§4.25), which persists compiled bytecode across process restarts.
 
 **Dependencies:** Compiler (CompileArtifact).
 
-### 4.26 Bytecode Serializer (On-Disk `.lumc` Cache)
+### 4.25 Bytecode Serializer (On-Disk `.lumc` Cache)
 
 **Responsibility:** Persist compiled bytecode to disk so that unchanged source files skip the lex → parse → type-check → compile pipeline on subsequent runs, giving near-instant startup.
 
@@ -813,16 +835,16 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 
 **Behaviour:**
 
-- After a successful compile, `run_file` (in `cli_runner.cpp`) writes the bytecode to a `<source>.lumc` file **next to the source**. On the next run it first checks the in-memory `CompilationCache` (§4.25), then attempts `read_file`; a valid hit executes the deserialized bytecode without recompiling.
+- After a successful compile, `run_file` (in `cli_runner.cpp`) writes the bytecode to a `<source>.lumc` file **next to the source**. On the next run it first checks the in-memory `CompilationCache` (§4.24), then attempts `read_file`; a valid hit executes the deserialized bytecode without recompiling. `--strict` and `--verify` skip both caches.
 - **Invalidation:** the disk cache key mixes the FNV-1a source hash with the optimization level, so editing the source or changing `-O` produces a miss. `read_file` rejects a stale or damaged file — recompiling from source — on bad magic, format-version mismatch, source-hash mismatch, or corruption (see `DeserializeError`). `run_file` then re-hashes every recorded dependency (each `include`d file) and recompiles if one was edited or deleted. A newly created file that would shadow a resolved include is not detected until a dependency or the entry point changes.
-- `.lumc` files are a **transparent cache, not a distribution format**: bumping `k_bytecode_format_version` simply rejects old files (`DeserializeError::VersionMismatch`) rather than migrating them. They are safe to delete and are git-ignored.
+- `.lumc` files are a **transparent cache, not a distribution format**: bumping `k_bytecode_format_version` (currently 9) simply rejects old files (`DeserializeError::VersionMismatch`) rather than migrating them. The version is also bumped for codegen fixes, so stale caches never keep running miscompiled code. They are safe to delete and are git-ignored.
 - Only normal program runs produce `.lumc` files; `--check` and `--test` compile in memory and write nothing. A failed write (e.g. a read-only directory) emits a warning to stderr and execution continues.
 
-**File format:** A 28-byte header (`"LUMC"` magic, u32 format version, u32 flags, u64 FNV-1a source hash, u64 timestamp), a dependency table (count + per-dependency path and u64 content hash), and a function table (count + per-function metadata, bytecode chunk, constant pool, source map, and name table).
+**File format:** A 28-byte header (`"LUMC"` magic, u32 format version, u32 flags, u64 FNV-1a source hash, u64 timestamp), a dependency table (count + per-dependency path and u64 content hash), and a function table (count + per-function metadata, bytecode chunk, constant pool, source map, and name table). Each source-map entry is 24 bytes: the instruction offset plus the location's file id, line, column, start line, and start column, so runtime errors from cached bytecode keep their caret on the token.
 
 **Dependencies:** Chunk, CompiledFunction, `common/hash.hpp` (FNV-1a).
 
-### 4.27 Debugger (DAP)
+### 4.26 Debugger (DAP)
 
 **Responsibility:** Provide interactive debugging of Luma programs via the Debug Adapter Protocol (DAP).
 
@@ -854,11 +876,15 @@ Attached to every token and every AST node. Carries the information needed to pr
 
 ```text
 SourceLocation {
-    file_id : integer # identifies the source file in the Source Manager
-    line    : integer # 1-based line number
-    column  : integer # 1-based column number
+    file_id      : integer # identifies the source file in the Source Manager
+    line         : integer # 1-based line number
+    column       : integer # 1-based column number
+    start_line   : integer # where the token it was copied from begins (0 = unknown)
+    start_column : integer # (0 = unknown)
 }
 ```
+
+A token carries two locations (see §5.2). AST nodes use the location of their primary token. A location copied from a token points one past the token's last character, and the lexer also stamps the token's start into `start_line`/`start_column`, so every copy — AST nodes, compiler source maps — still knows where the token begins. `start()` returns that start (or the location itself when it is unknown); equality and ordering compare only `file_id`, `line`, and `column`.
 
 ### 5.2 Token
 
@@ -866,12 +892,16 @@ Produced by the Lexer, consumed by the Parser.
 
 ```text
 Token {
-    type     : TokenType       # keyword, operator, literal, identifier, etc.
-    lexeme   : string          # the raw text of the token
-    literal  : optional<Value> # pre-computed value for literals (integer, number, string, boolean)
-    location : SourceLocation
+    type                : TokenType       # keyword, operator, literal, identifier, etc. (defaults to Error)
+    lexeme              : string          # the token text (processed for string literals)
+    literal             : optional<Value> # pre-computed value for literals (integer, number, string, boolean)
+    location            : SourceLocation  # one past the token's last character; start_line/start_column = its first character
+    start_location      : SourceLocation  # the token's first character (line 0 = unset, synthesised token)
+    preceded_by_newline : bool            # at least one newline separates it from the previous token
 }
 ```
+
+`location` keeps the historical one-past-the-end convention, but also records the token's start (§5.1), so every diagnostic anchored on a token-derived location puts its caret on the token itself; for string literals, whose lexeme is processed, the start cannot be reconstructed from `location` and the lexeme width. `preceded_by_newline` drives the parser's newline rule (§4.4).
 
 **Token types** (grouped by category):
 
@@ -884,7 +914,7 @@ Token {
 | Literals      | `BooleanLiteral`, `IntegerLiteral`, `NoneLiteral`, `NumberLiteral`, `StringEnd`, `StringLiteral`, `StringMiddle`, `StringStart`                                                                                                                                                                                                                                                                                                                                                         |
 | Operators     | `AmpersandAmpersand`, `Arrow`, `Bang`, `BangEquals`, `BangGreater`, `DotDot`, `DotDotEquals`, `Equals`, `EqualsEquals`, `Greater`, `GreaterEquals`, `GreaterGreater`, `Less`, `LessEquals`, `Minus`, `MinusEquals`, `MinusMinus`, `Percent`, `PercentEquals`, `Pipe`, `PipeGreater`, `PipePipe`, `Plus`, `PlusEquals`, `PlusPlus`, `QuestionBracket`, `QuestionDot`, `QuestionMark`, `QuestionQuestion`, `Slash`, `SlashEquals`, `SlashSlash`, `SlashSlashEquals`, `Star`, `StarEquals` |
 | Punctuation   | `Colon`, `ColonColon`, `Comma`, `Dot`, `LeftBrace`, `LeftBracket`, `LeftParen`, `RightBrace`, `RightBracket`, `RightParen`                                                                                                                                                                                                                                                                                                                                                              |
-| Special       | `EndOfFile`                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Special       | `EndOfFile`, `Error` (synthetic recovery token emitted when the lexer meets unrecognised input)                                                                                                                                                                                                                                                                                                                                                                                         |
 | Type keywords | `ArrayType`, `BooleanType`, `DecimalType`, `DictionaryType`, `IntegerType`, `NumberType`, `OptionalType`, `ResultType`, `StringType` (container/handle types such as `queue`, `set`, `task`, `xml` are ordinary identifiers, not keyword tokens)                                                                                                                                                                                                                                        |
 
 ### 5.3 AST Nodes
@@ -942,38 +972,44 @@ Chunk {
 }
 
 CompiledFunction {
-    name      : string
-    chunk     : Chunk                 # the function's bytecode
-    arity     : integer               # number of parameters
-    upvalues  : vector<Upvalue>       # captured variables from enclosing scopes
-    is_main   : bool
-    is_test   : bool
+    name           : string
+    chunk          : Chunk            # the function's bytecode
+    arity          : integer          # total number of parameters
+    required_arity : integer          # parameters without a default value
+    param_names    : vector<string>   # for named-argument reordering
+    upvalues       : vector<Upvalue>  # captured variables from enclosing scopes
+    is_main        : bool
+    is_test        : bool
 }
 
 Upvalue {
-    index    : uint8_t                # slot index in the enclosing scope
-    is_local : bool                   # true if captured from the immediately enclosing scope
+    index      : uint16_t             # slot index in the enclosing frame
+    is_local   : bool                 # true if captured from the immediately enclosing scope
+    is_mutable : bool                 # true if the captured variable is mutable (shared cell)
 }
 
 CallFrame {
-    function    : CompiledFunction*   # the function being executed
-    ip          : const uint8_t*      # instruction pointer into the chunk's code
-    slots       : Value*              # pointer into the VM's value stack
-    slot_offset : size_t              # absolute position in the value stack
-    closure     : shared_ptr<FunctionValue> # the FunctionValue with captured upvalues
+    function        : const CompiledFunction* # the function being executed
+    closure         : FunctionValue*          # raw pointer; the callee value in slot 0 keeps it alive
+    ip              : const uint8_t*          # instruction pointer into the chunk's code
+    code_end        : const uint8_t*          # one past the chunk's last byte (cached for jumps)
+    slot_offset     : size_t                  # index of the frame's slot 0 in the value stack
+    global_bindings : vector<Binding*>*       # lazily resolved per-function global inline cache
 }
 ```
 
 **Opcode categories (105 opcodes):**
 
+Opcodes marked _reserved_ are defined, decoded by the disassembler, and accepted by the VM and verifier, but the compiler never emits them.
+
 | Category        | Count | Opcodes                                                                                                   |
 | --------------- | ----- | --------------------------------------------------------------------------------------------------------- |
-| Stack           | 6     | `Constant`, `ConstantLong`, `Pop`, `Dup`, `Dup2`, `Swap`                                                  |
+| Stack           | 6     | `Constant`, `ConstantLong` (reserved), `Pop`, `Dup`, `Dup2`, `Swap`                                       |
 | Variables       | 6     | `GetLocal`, `SetLocal`, `GetUpvalue`, `SetUpvalue`, `GetGlobal`, `SetGlobal`                              |
 | Literals        | 5     | `None`, `True`, `False`, `Zero`, `One`                                                                    |
 | Arithmetic      | 9     | `Add`, `Subtract`, `Multiply`, `Divide`, `IntDivide`, `Modulo`, `Negate`, `Increment`, `Decrement`        |
 | Comparison      | 6     | `Equal`, `NotEqual`, `Less`, `LessEqual`, `Greater`, `GreaterEqual`                                       |
-| Logical         | 3     | `Not`, `And`, `Or`                                                                                        |
+| Logical         | 3     | `Not`, `And` (reserved), `Or` (reserved)                                                                  |
 | Strings         | 2     | `Concatenate`, `Interpolate`                                                                              |
 | Collections     | 8     | `MakeArray`, `MakeDict`, `MakeTuple`, `MakeRange`, `MakeRangeInc`, `IndexGet`, `IndexSet`, `IndexGetOpt`  |
 | Records         | 5     | `MakeRecord`, `GetField`, `SetField`, `GetFieldOpt`, `RecordWith`                                         |
@@ -982,9 +1018,9 @@ CallFrame {
 | Downcast        | 3     | `Downcast`, `TrustedDowncast`, `IsType`                                                                   |
 | Control flow    | 5     | `Jump`, `JumpIfFalse`, `JumpIfTrue`, `Loop`, `NullCoalesce`                                               |
 | Functions       | 5     | `Call`, `CallNamed`, `TailCall`, `Return`, `MakeClosure`                                                  |
-| Pipe            | 2     | `Pipe`, `ErrorPipe`                                                                                       |
+| Pipe            | 2     | `Pipe` (reserved), `ErrorPipe` (reserved) — pipes compile to ordinary calls (§7.8)                        |
 | Exception       | 3     | `TryCatch`, `TryEnd`, `Rethrow`                                                                           |
-| Match           | 3     | `MatchStart`, `MatchArm`, `MatchEnd` (defined but unused — match compiles to jumps)                       |
+| Match           | 3     | `MatchStart`, `MatchArm`, `MatchEnd` (reserved — match compiles to jumps)                                 |
 | Containment     | 1     | `Contains`                                                                                                |
 | Concurrency     | 4     | `Spawn`, `Await`, `TaskScopeBegin`, `TaskScopeEnd`                                                        |
 | Iteration       | 3     | `ForIterInit`, `ForIterStep`, `ForIterStepKV`                                                             |
@@ -994,7 +1030,7 @@ CallFrame {
 | Copy-on-write   | 5     | `UniqueLocal`, `UniqueUpvalue`, `UniqueGlobal`, `GetFieldUnique`, `IndexGetUnique`                        |
 | Module          | 1     | `EndModule`                                                                                               |
 
-> **Note:** `Break` and `Continue` are not opcodes. Break compiles to scope-cleanup `Pop`s followed by a forward `Jump` (patched at loop exit). Continue compiles to scope-cleanup `Pop`s followed by a backward `Loop` instruction.
+> **Note:** `Break` and `Continue` are not opcodes. Each first runs the `finally` bodies of any `try` blocks it leaves inside the loop, then emits scope-cleanup `Pop`s for the loop's locals, then a forward `Jump` (break, patched at loop exit) or a backward `Loop` (continue).
 
 ### 5.6 Binding
 
@@ -1019,7 +1055,7 @@ This section traces the complete path of a Luma program from source text to exec
 
 The CLI validates the path and then the Source Manager reads the file from disk:
 
-1. Validate that the file path has the `.luma` extension (performed by the CLI before invoking the Source Manager; throws `SyntaxError` on mismatch).
+1. Validate that the file path has the `.luma` extension and names an existing regular file (performed by the CLI's `validate_file_argument` before invoking the Source Manager; a failure is a usage error, exit code 5).
 2. Read the file contents as a byte stream into a string. Strip the UTF-8 BOM if present. No further UTF-8 validation is performed.
 3. Assign a unique `FileId` identifier (starting at 1; 0 is reserved for REPL input).
 4. Split the source text into lines for error context display.
@@ -1035,12 +1071,12 @@ The Lexer scans the source text and produces a token stream:
 4. For string literals:
     - If the string contains `${`, produce `StringStart`, then `InterpolationStart`, tokenize the embedded expression normally, produce `InterpolationEnd`, continue with `StringMiddle` or `StringEnd`.
     - If no interpolation, produce a single `StringLiteral`.
-5. For triple-quoted strings (`"""`), consume until the closing `"""`, compute the common leading whitespace, strip it, and produce the dedented content using the same interpolation token sequence.
-6. Attach a `SourceLocation` to each token.
+5. For triple-quoted strings (`"""`), consume until the closing `"""`, compute the common leading whitespace across the whole literal (every piece, including those between interpolations), strip it, drop the first and last line if they are blank, then process escape sequences, and produce the content using the same interpolation token sequence.
+6. Attach a start location and an end location to each token, and record whether a newline preceded it.
 7. Append an `EndOfFile` token.
 8. Return the completed token stream.
 
-**Error recovery:** On an unrecognised character, throw a `SyntaxError` with the character and its location. Scanning stops at the first unrecognised character.
+**Error recovery:** On an unrecognised character or malformed literal, report a diagnostic to the `DiagnosticCollector`, emit an `Error` token, and keep scanning, so one run reports every lexical error. Scanning stops after 100 errors.
 
 ### 6.3 Phase 3 — Parsing
 
@@ -1071,15 +1107,16 @@ Luma has no bitwise operators: the lexer rejects `&`, `^`, `~`, and `<<` with a 
 1. The pipe operator (`|>`) is parsed as a left-associative binary operator that rewrites into a function call (the left-hand value becomes the first argument).
 2. Named arguments (`name: expr`) are parsed as part of call expressions and stored alongside positional arguments.
 3. Each AST node receives the `SourceLocation` of its primary token.
+4. Newlines are significant only at one point: a `(` or `[` that starts a new line begins a new statement instead of calling or indexing the previous expression. Binary operators and `|>` at the start of a line still continue the expression.
 
-**Error recovery:** On a parse error, throw a `SyntaxError` with the location and abort parsing. The error surfaces to the caller immediately.
+**Error recovery:** On a parse error, emit a diagnostic and resynchronise locally — at the next statement or member inside the enclosing block body, namespace body, match-arm list, or choice-variant list, or at the next top-level declaration. Parsing continues, so a single run reports independent errors from different functions without cascading false errors. Parsing stops after 100 errors. The pipeline still does not type-check a program with syntax errors (§10.3).
 
 ### 6.4 Phase 4 — Include Resolution
 
 After parsing the main file, includes are resolved before type checking. This keeps include handling separate from type analysis (Separation of Concerns):
 
 1. Walk the AST and collect all `IncludeDeclaration` nodes.
-2. For each included path: a. Resolve the path relative to the directory of the including file. b. Check the Source Manager's registry — if already loaded, skip (each file is included at most once). c. Check the inclusion stack for cycles. If the file is already on the stack, report a circular inclusion error and stop. d. Load, lex, and parse the included file (phases 1–3). e. Recursively resolve any includes within the included file. f. Merge the included file's declarations into the main program's declaration list.
+2. For each included path: a. Reject traversal (`.` or `..` components) and, for unanchored input, absolute paths. b. Search the including file's directory and then `LUMA_PATH` — or, for REPL and `--eval` input, the working directory and then `LUMA_PATH` (§4.7). c. Check containment and symbolic links on the canonical path. d. Check the Source Manager's registry — if already loaded, skip (each file is included at most once, which also makes circular includes harmless). e. Load, lex, and parse the included file (phases 1–3). f. Recursively resolve any includes within the included file, up to a depth of 64. g. Merge the included file's declarations into the main program's declaration list.
 3. The result is a single merged AST containing declarations from all files.
 
 ### 6.5 Phase 5 — Type Checking
@@ -1087,7 +1124,7 @@ After parsing the main file, includes are resolved before type checking. This ke
 The Type Checker walks the merged AST and validates all type constraints:
 
 1. Build a scope stack mirroring the lexical structure.
-2. Register all top-level declarations (functions, records, choices, interfaces, type aliases, namespaces) so that forward references are valid. During namespace registration, any member declared with the `internal` keyword is recorded in the `internal_members_` set using its fully qualified name (e.g., `"Geometry.helper"`).
+2. Register all top-level declarations in three passes — type-like declarations (records, choices, interfaces, type aliases, namespaces) first, then `use` declarations, then function signatures — so that a signature can reference a type declared later in the file. During namespace registration, any member declared with the `internal` keyword is recorded in the `internal_members_` set using its fully qualified name (e.g., `"Geometry.helper"`).
 3. Resolve `use` declarations by importing names into the current scope, skipping any names in `internal_members_`.
 4. Walk each function body, validating every expression and statement:
     - Infer the type of each expression bottom-up.
@@ -1126,7 +1163,7 @@ The compiler translates a type-checked AST into a flat bytecode stream that a st
 
 - **One compilation unit per function.** Each function, lambda, and the top-level script produces its own `CompiledFunction` containing a `Chunk` (bytecode + constant pool + source map + name table).
 - **Two-pass top-level compilation.** Pass 1 compiles all declarations (functions, records, choices, interfaces, namespaces) to register them as globals. Pass 2 compiles top-level statements. This allows forward references between top-level functions.
-- **No intermediate representation.** The compiler emits bytecode directly from the AST — there is no SSA, control-flow graph, or optimisation pass.
+- **No intermediate representation.** The compiler emits bytecode directly from the AST — there is no SSA or control-flow-graph IR. Optimisation is a separate, optional step that rewrites the finished bytecode (`-O1`/`-O2`, see §4.22); a few constant expressions are also folded during the AST walk (`ConstFolder`).
 
 ### 7.2 Compiler Architecture
 
@@ -1164,18 +1201,21 @@ All multi-byte operands are encoded in **big-endian** byte order.
 | Format            | Size     | Description                          | Used by                                                                                          |
 | ----------------- | -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | (none)            | 1 byte   | Opcode only, no operands             | `Pop`, `Dup`, `Add`, `Return`, etc.                                                              |
-| u8                | 2 bytes  | Opcode + 1-byte operand              | `Interpolate`, `MakeTuple`, `Call`, `Spawn`, `Print`, `Assert`, `RecordWith`                     |
-| u16               | 3 bytes  | Opcode + 2-byte operand (big-endian) | `Constant`, `GetLocal`, `SetLocal`, `Jump`, `JumpIfFalse`, `Loop`, `GetField`, `MakeArray`, etc. |
-| u32               | 5 bytes  | Opcode + 4-byte operand (big-endian) | `ConstantLong`                                                                                   |
+| u8                | 2 bytes  | Opcode + 1-byte operand              | `Interpolate`, `Call`, `TailCall`, `Spawn`, `Print`, `Assert`, `MakeChoiceConstructor`           |
+| u16               | 3 bytes  | Opcode + 2-byte operand (big-endian) | `Constant`, `GetLocal`, `SetLocal`, `GetField`, `MakeArray`, `MakeDict`, `MakeTuple`, etc.       |
+| u32               | 5 bytes  | Opcode + 4-byte operand (big-endian) | `Jump`, `JumpIfFalse`, `JumpIfTrue`, `Loop`, `NullCoalesce`, `TryCatch`, `ConstantLong`          |
 | u8 + u8           | 3 bytes  | Opcode + two 1-byte operands         | `CallNamed` (pos_count, named_count)                                                             |
-| u16 + u8          | 4 bytes  | Opcode + u16 + u8                    | `MakeRecord` (type_name, field_count)                                                            |
-| u16 + u8 + inline | variable | Opcode + u16 + u8 + inline u16s      | `MakeRecord` (followed by field name indices)                                                    |
+| u16 + u8          | 4 bytes  | Opcode + u16 + u8                    | `MakeClosure` (func_index, upvalue_count)                                                        |
+| u16 + u8 + inline | variable | Opcode + u16 + u8 + inline u16s      | `MakeRecord` (type_name, field_count, then field name indices)                                   |
+| u8 + inline       | variable | Opcode + u8 + inline u16s            | `RecordWith` (override_count, then field name indices)                                           |
 
 **Jump encoding:**
 
-- Forward jumps (`Jump`, `JumpIfFalse`, `JumpIfTrue`, `NullCoalesce`): The u16 operand is a **forward offset** added to the instruction pointer after reading the operand bytes.
-- Backward jumps (`Loop`): The u16 operand is a **backward offset** subtracted from the instruction pointer. The offset includes the 2 operand bytes themselves.
-- `TryCatch`: The u16 operand is the offset from the current IP to the catch block entry point.
+- Forward jumps (`Jump`, `JumpIfFalse`, `JumpIfTrue`, `NullCoalesce`): The u32 operand is a **forward offset** added to the instruction pointer after reading the operand bytes.
+- Backward jumps (`Loop`): The u32 operand is a **backward offset** subtracted from the instruction pointer after reading the operand. The offset includes the 4 operand bytes themselves.
+- `TryCatch`: The u32 operand is the forward offset from the end of the instruction to the catch block entry point.
+
+32-bit offsets let a single function body exceed 64 KB.
 
 ### 7.5 Jump Patching
 
@@ -1183,17 +1223,21 @@ Forward jumps require backpatching because the target offset is not known when t
 
 ```text
 1. emit_jump(Op::JumpIfFalse)
-   → emits: JumpIfFalse 0xFF 0xFF
+   → emits: JumpIfFalse 0xFF 0xFF 0xFF 0xFF   (k_jump_placeholder)
    → returns: offset of the first placeholder byte
 
 2. [compile the body that the jump skips over]
 
 3. patch_jump(offset)
-   → calculates: distance = current_code_size - offset - 2
-   → writes distance as big-endian u16 at the placeholder offset
+   → calculates: distance = current_code_size - offset - 4
+   → writes distance as big-endian u32 at the placeholder offset
 ```
 
-Break statements inside loops use the same mechanism: each `break` emits `Jump 0xFF 0xFF` and stores the placeholder offset in the enclosing `LoopInfo::breaks` vector. When the loop body compilation finishes, all break offsets are patched to jump past the loop exit.
+`emit_loop(loop_start)` writes `Loop` with the backward distance `code_size_after_opcode - loop_start + 4`.
+
+Break statements inside loops use the same mechanism: each `break` emits `Jump 0xFF 0xFF 0xFF 0xFF` and stores the placeholder offset in the enclosing `LoopInfo::breaks` vector. When the loop body compilation finishes, all break offsets are patched to jump past the loop exit.
+
+The compiler's `emit_jump`, `patch_jump`, and `emit_loop` wrappers all clear `last_was_return`. That flag lets a function body that already ends in `Return` skip the implicit `None; Return`; a patched jump can land at the current end of the code, so after any patch the implicit return must still be emitted, or the jump would target one past the last instruction.
 
 ### 7.6 Control Flow Compilation
 
@@ -1234,46 +1278,92 @@ ForIterInit                    # convert iterable → (iterable, index=0) state 
 ; declare hidden __iter__ local (slot N)
 None                           # placeholder for loop variable
 ; declare loop_var local (slot N+1)
-Zero                           # placeholder for index variable (if present)
-; declare index_var local (slot N+2, optional)
+None                           # placeholder for index/key variable (only for `for i, x in …`)
+; declare index_var local (slot N+2)
 loop_start:
 GetLocal __iter__              # load iterator state
 ForIterStep                    # → (element, true) or (false)
+                               #   indexed loops use ForIterStepKV → (value, key, true) or (false)
 JumpIfFalse → exit_label       # exhausted?
 Pop                            # discard the true flag
+; indexed loops only: SetLocal index_var; Pop   (store the key/index)
 SetLocal loop_var              # store element
 Pop                            # discard the copy left by SetLocal
+; destructuring loops: GetLocal loop_var; Constant i; IndexGet; SetLocal var_i; Pop (per variable)
 [body]
-; if index_var: GetLocal index_var → Increment → SetLocal index_var → Pop
 Loop → loop_start
 exit_label:
 Pop                            # discard the false flag
 ```
 
-`ForIterInit` creates an internal tuple `(iterable, 0)` as iterator state. `ForIterStep` advances the index and pushes either `(element, true)` or `(false)`. `ForIterStepKV` is used for key-value iteration (e.g., `for key, value in dict`) and pushes `(value, key, true)` or `(false)`.
+`ForIterInit` creates an internal tuple `(iterable, 0)` as iterator state. `ForIterStep` advances the index and pushes either `(element, true)` or `(false)`. A loop with an index or key variable (`for i, x in array`, `for key, value in dict`) uses `ForIterStepKV` instead, which pushes `(value, key, true)` or `(false)`; for arrays and strings the key is the element index, so the compiler never increments the index itself. A destructuring loop (`for (a, b) in pairs`) stores each element in a hidden local and unpacks it with `IndexGet`.
 
 #### Break and Continue
 
-These are not opcodes. They compile to stack cleanup followed by jump instructions:
+These are not opcodes. They compile to cleanup followed by jump instructions (`emit_loop_scope_unwind`):
 
-- **Break:** Emit `Pop` for each local deeper than the loop's `scope_depth`, then emit a forward `Jump` (placeholder). The offset is stored in `LoopInfo::breaks` and patched when the loop finishes.
-- **Continue:** Emit `Pop` for each local deeper than the loop's `scope_depth`, then emit `Loop` with a backward offset to `loop_start`.
+1. **Run pending `finally` bodies.** For every `try` block entered inside the loop, emit `TryEnd` and compile its `finally` body inline, innermost first (`emit_try_unwind`). This happens _before_ the loop's locals are popped, because a `finally` body may read those locals and is compiled against the current slot layout.
+2. **Pop the loop's locals.** Emit `Pop` for each local deeper than the loop's `scope_depth`.
+3. **Jump.** `break` emits a forward `Jump` (placeholder stored in `LoopInfo::breaks` and patched when the loop finishes); `continue` emits `Loop` with a backward offset to `loop_start`.
 
 #### Try/Catch/Finally
+
+`try`/`catch` without `finally`:
 
 ```text
 TryCatch → catch_label         # push exception handler
 [try_body]
 TryEnd                         # pop handler (normal exit)
-Jump → finally_label
-catch_label:                   # VM pushes error message string onto stack
+Jump → end_label
+catch_label:                   # VM pushes the error message string
 ; declare catch_var local
 [catch_body]
-finally_label:
-[finally_body]                 # (if present)
+; scope end pops catch_var
+end_label:
 ```
 
-The VM's `ExceptionHandler` records the catch IP, the frame index, and the stack depth. On error, the VM unwinds frames and the stack back to the handler state, pushes the error message as a string, and jumps to the catch IP.
+`try`/`finally` without `catch` runs the `finally` body on both paths and re-raises the error on the error path:
+
+```text
+TryCatch → cleanup_label
+[try_body]
+TryEnd
+Jump → finally_label
+cleanup_label:                 # error string on the stack
+; declare hidden __error__ local
+[finally_body]
+GetLocal __error__
+Rethrow                        # propagate the original error
+finally_label:
+[finally_body]                 # normal path
+```
+
+`try`/`catch`/`finally` is lowered as two nested single-handler layers, `try { try A catch(e) B } finally C`, so `C` also runs when the catch body `B` throws, returns, breaks, or continues:
+
+```text
+TryCatch → outer_cleanup       # outer handler (protects A and B)
+TryCatch → inner_catch         # inner handler (protects A)
+[A]
+TryEnd                         # pop inner handler
+Jump → inner_done
+inner_catch:                   # error string on the stack
+; declare catch_var local
+[B]
+inner_done:
+TryEnd                         # pop outer handler
+Jump → outer_done
+outer_cleanup:                 # error escaped A or B
+; declare hidden __error__ local
+[C]
+GetLocal __error__
+Rethrow
+outer_done:
+[C]                            # normal path
+```
+
+A `return`, the failure path of `?`, or a `break`/`continue` inside a protected body emits `TryEnd` plus the pending `finally` bodies before it leaves (`emit_try_unwind`). Each handler is detached while its own `finally` is compiled, so a non-local exit inside a `finally` still runs the enclosing `finally` bodies without recursing forever. The value already on the operand stack (the return value, or the failure that `?` propagates) is covered by a scratch slot (`ScratchSlotGuard`) while the `finally` bodies are compiled, so a local declared in a `finally` body gets its own slot instead of the return value's. In `@main`, which has no caller to return a failure to, `?` compiles to a plain `Unwrap`: a failure raises a `RuntimeError` carrying the failure text (`none` raises the standard unwrap-on-none message), so an enclosing `catch` receives it and an uncaught one ends the program with exit code 1. This applies only to `@main` itself, not to lambdas declared inside it.
+
+The VM's `ExceptionHandler` records the catch IP, the frame index, the stack depth, and the `task_scope` depth. On error, the VM unwinds frames, task scopes, and the stack back to the handler state, pushes the error message as a string, and jumps to the catch IP (§7.13).
 
 #### Match Statement
 
@@ -1333,7 +1423,7 @@ At runtime, `MakeClosure` creates a `FunctionValue` referencing the compiled fun
 - `is_local = true`: Copy the value directly from the enclosing frame's stack slot.
 - `is_local = false`: Forward from the enclosing frame's own upvalue array (for variables captured from grandparent scopes).
 
-**Capture semantics:** Luma uses **value capture**. The captured value is copied at closure-creation time. The original local can be popped normally when its scope ends. This differs from CLox's heap-allocated open-upvalue model but simplifies the implementation and avoids garbage collection.
+**Capture semantics:** Luma uses **value capture**. The captured value is copied at closure-creation time. The original local can be popped normally when its scope ends. This differs from CLox's heap-allocated open-upvalue model but simplifies the implementation and avoids garbage collection. The exception is a capture of a `mutable` variable (`Upvalue::is_mutable`): it is stored in a shared `shared_ptr<Value>` cell (`FunctionValue::upvalue_cells`), so every closure that captures it observes the others' writes.
 
 ### 7.8 Pipe Operator Compilation
 
@@ -1371,64 +1461,69 @@ end_label:
 
 ### 7.9 Virtual Machine Architecture
 
-The VM is a stack-based bytecode interpreter with a single-pass dispatch loop.
+The VM is a stack-based bytecode interpreter with a table-driven dispatch loop.
 
 ```text
 VM
-┌─────────────────────────────────────────────────┐
-│ stack_  : vector<Value>        (max 65,536)     │
-│ frames_ : vector<CallFrame>    (max 256)        │
-│ exception_handlers_ : vector<ExceptionHandler>  │
-│ global_env_ : shared_ptr<Environment>           │
-│ compiled_functions_ : const vector<CompiledFunction>*│
-│ thread_pool_ : unique_ptr<ThreadPool>           │
-│ task_scopes_ : vector<unique_ptr<TaskScope>>    │
-│ base_depth_ : size_t                            │
-│ vm_call_fn_ : CallFn                            │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ stack_  : VMStack                                            │
+│   storage : unique_ptr<Value[]>  (65,536 slots, pooled)      │
+│   base / top / limit : Value*                                │
+│   frames  : vector<CallFrame>    (max 256)                   │
+│ exception_handler_ : VMExceptionHandler                      │
+│ global_env_ : EnvPtr                                         │
+│ compiled_functions_ : const vector<CompiledFunction>*        │
+│ task_manager_ : VMTaskManager (task_scopes, pool, ids)       │
+│ cancel_token_ : shared_ptr<CancellationToken> (task VMs)     │
+│ base_depth_ : size_t                                         │
+│ vm_native_callable_ : NativeCallable                         │
+│ global_cache_ / global_index_cache_                          │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Stack:** A flat `vector<Value>` shared by all call frames. Each frame owns a contiguous region of stack slots starting at `slot_offset`. Slot 0 holds the callee; subsequent slots hold parameters and locals.
+**Stack:** A fixed block of `Value` slots (`VMStack::storage`) shared by all call frames and addressed through raw `base`/`top`/`limit` pointers, so push and pop never reallocate. Each frame owns a contiguous region starting at `slot_offset`; slot 0 holds the callee, the following slots hold parameters and locals. Constructing a VM takes a block from a small per-thread pool and destroying it returns the block, so the many short-lived task VMs do not each allocate several MiB. `VMStack::truncate_to(new_top)` is the only way, apart from `pop()`, to lower the top: it destroys every value above the new top (§9).
 
 **Call frames:** A `vector<CallFrame>`, one per active function invocation. Each frame contains:
 
-- A pointer to its `CompiledFunction` (for bytecode and metadata access).
-- An instruction pointer (`ip`) into the function's `Chunk::code`.
-- A `slots` pointer into the value stack (for fast local-variable access).
-- A `slot_offset` for stack restoration on return.
-- A `closure` (`shared_ptr<FunctionValue>`) for upvalue access.
+- A raw pointer to its `CompiledFunction` (bytecode and metadata).
+- A raw `FunctionValue*` closure for upvalue access. The callee value in the frame's slot 0 keeps it alive.
+- An instruction pointer (`ip`) into the function's `Chunk::code`, plus the cached end of that code (`code_end`) for bounds checks on jumps.
+- A `slot_offset`: the index of slot 0 in the value stack. Locals are read as `stack_.base[slot_offset + slot]`.
+- A lazily resolved per-function global inline cache (`global_bindings`).
 
-**Exception handlers:** A stack of `ExceptionHandler` structs, each recording:
+**Exception handlers:** A stack of `ExceptionHandler` records, each holding:
 
 - `catch_ip` — The instruction to jump to on error.
 - `frame_index` — Which call frame owns this handler.
 - `stack_depth` — Stack depth to restore on error.
+- `task_scope_depth` — Number of open task scopes to keep on error.
 
 ### 7.10 Execution Lifecycle
 
 ```text
 execute(functions, top_level)
-├── run(top_level)                  # register declarations as globals
-│   ├── push CallFrame for top_level
-│   ├── run_dispatch()              # execute bytecode until Return/EndModule
-│   └── pop CallFrame
+├── run_top_level(top_level)        # register declarations as globals
+│   ├── wrap in FunctionValue, push it, call_closure()
+│   └── run()                       # until the frame returns
 ├── find @main in functions
-└── run(@main)                      # execute @main function
-    ├── push CallFrame for @main
-    ├── run_dispatch()
-    └── pop CallFrame
+└── run_top_level(@main)            # execute @main function
+    ├── wrap in FunctionValue, push it, call_closure()
+    └── run()
 ```
 
-`run(func)` sets up a `CallFrame`, pushes placeholder slots for locals, sets `base_depth_` to the current frame depth, and calls `run_dispatch()`. When `Return` pops the frame back to `base_depth_`, the dispatch loop exits and returns the result value.
+`run_top_level(func)` wraps the compiled function in a `FunctionValue`, pushes it as the callee, enters it with `call_closure()` (which pushes the `CallFrame`), and calls `run()`. When `Return` pops the frame back to `base_depth_`, `run()` exits and returns the result value.
 
-`run_dispatch()` is the core infinite loop. Each iteration:
+`run()` is the core loop. Each iteration:
 
-1. Reads the current call frame (`frames_.back()`).
-2. Fetches and decodes the next opcode (`*cf.ip++`).
-3. Executes the opcode via a `switch` statement.
-4. On `RuntimeError`, checks the exception handler stack. If a handler exists at or above `base_depth_`, unwinds to it. Otherwise, re-throws.
+1. Checks the debugger's pause flag (one relaxed atomic load when no debugger is attached).
+2. Bounds-checks the instruction pointer, so crafted bytecode that runs off the end raises a runtime error instead of reading out of bounds.
+3. Fetches the next opcode byte and calls its handler through `k_dispatch_table`, a 256-entry `std::array` of pointers to `VM` member functions (`(this->*k_dispatch_table[opcode])()`). Undefined byte values map to `op_invalid`.
+4. Returns when a terminator handler (`Return`, `GetLocalReturn`, `EndModule`) has set `dispatch_return_value_`.
+5. On `RuntimeError` (or `std::runtime_error` from a native function), calls `handle_exception`. If a valid handler exists at or above `base_depth_`, the VM unwinds to it and continues; otherwise the exception propagates.
 
-`run_to_return()` is used when native stdlib functions need to call back into compiled user functions (e.g., `Array.map` calling a user lambda). It saves the current `base_depth_`, sets a new one, calls `run_dispatch()`, and restores the previous base depth. This allows nested dispatch loops.
+`run()` records the number of open task scopes on entry. On every way out other than a normal return — an uncaught error, any other C++ exception such as `ExitSignal`, or debugger termination — it retires the scopes opened since (`unwind_task_scopes_to`): cancel, join, and pop. This covers every caller: the top-level entry points, native callbacks, spawned tasks, and `@test` runs.
+
+`run_to_return()` is used when the VM must run a frame it has already pushed to completion from inside a handler. It lowers `base_depth_` to the surrounding frame depth, calls `run()`, and restores the previous base depth even on exception, so nested `run()` activations stay balanced.
 
 ### 7.11 Function Calling Convention
 
@@ -1437,13 +1532,15 @@ Before Call:
     stack: [...] [callee] [arg0] [arg1] ... [argN]
 
 Call(N+1):
-    1. Create new CallFrame
-    2. frame.function = callee.compiled
-    3. frame.ip = function.chunk.code.data()
-    4. frame.slot_offset = stack_size - arg_count - 1
-    5. frame.slots = stack.data() + slot_offset
-    6. frame.closure = callee (for upvalue access)
-    7. Push frame onto frames_
+    1. Check call depth, cancellation, and that N+1 ≥ required_arity
+    2. Pad missing optional parameters with none (the callee's own
+       bytecode then computes their default values)
+    3. Push a CallFrame:
+         function    = callee.compiled
+         closure     = callee (raw FunctionValue*)
+         ip          = function.chunk.code.data()
+         code_end    = ip + function.chunk.code.size()
+         slot_offset = stack_size - arg_count - 1
 
 During execution:
     slot[0] = callee (self reference)
@@ -1454,58 +1551,65 @@ During execution:
 
 Return:
     1. Pop return value from stack
-    2. Pop CallFrame
-    3. Resize stack to callee's slot_offset (discard all slots)
-    4. Push return value
+    2. Drop this frame's exception handlers
+    3. Pop CallFrame
+    4. truncate_to(callee's slot_offset) — destroys all of the frame's slots
+    5. Push return value
 ```
+
+`TailCall` checks arity the same way, drops the current frame's handlers, moves the callee and arguments down over the current frame, and reuses the `CallFrame` in place.
+
+Every frame-pushing path calls `validate_call_depth()`. The effective limit is `min(ResourceLimits::max_call_depth, 256)`: `LUMA_LIMIT_MAX_CALL_DEPTH` can lower it but never raise it past the frame stack's capacity.
 
 **Native function calls** pop the arguments into a `vector<Value>`, pop the callee, invoke the native C++ function directly, and push the result. No `CallFrame` is created.
 
 ### 7.12 Native Callback Mechanism
 
-Standard library higher-order functions (e.g., `Array.map`, `Array.filter`, `Array.reduce`) accept user-defined compiled functions as arguments. When a native function needs to call a compiled user function, it uses the `vm_call_fn_` callback:
+Standard library higher-order functions (e.g., `Array.map`, `Array.filter`, `Array.reduce`) accept user-defined compiled functions as arguments. When a native function needs to call a compiled user function, it uses the VM's `vm_native_callable_` (a `NativeCallable` installed by `init_call_fn()`):
 
-1. The callback pushes the callee and arguments onto the VM stack.
-2. It creates a new `CallFrame` pointing to the compiled function.
-3. It calls `run_to_return()`, which enters a nested dispatch loop.
-4. When the user function returns, `run_to_return()` captures the result and returns it to the native function.
+1. The callable pushes the callee and arguments onto the VM stack.
+2. It sets `base_depth_` to the current frame count and calls `call_value`, which pushes a new `CallFrame` for a compiled callee.
+3. It calls `run()`, which enters a nested dispatch loop and returns when that frame returns.
+4. The result is returned to the native function. On an exception, the callable pops the frames it pushed, discards their exception handlers, truncates the stack back to its saved size, restores `base_depth_`, and rethrows. `run()` has already retired any task scope the callback opened.
 
-The `CallFnScope` RAII guard registers this callback with the standard library's thread-local `CallFn` slot during execution.
+The `NativeCallableScope` RAII guard installs this callable in the standard library's thread-local slot for the duration of `execute()`, `execute_function()`, `execute_tests()`, and each spawned task.
 
 ### 7.13 Exception Handling at Runtime
 
 ```text
-TryCatch <catch_offset>         # Push ExceptionHandler {catch_ip, frame_index, stack_depth}
+TryCatch <catch_offset>         # Push ExceptionHandler {catch_ip, frame_index, stack_depth, task_scope_depth}
 [try body]
 TryEnd                          # Pop ExceptionHandler (normal exit)
-Jump → finally
+Jump → after
 
 catch_label:                    # (entered via exception)
 [catch body]
 
-finally:
-[finally body]
+after:
 ```
 
 When a `RuntimeError` is thrown (or a `std::runtime_error` from a native function):
 
 1. Check if the handler stack is non-empty and the top handler's `frame_index >= base_depth_`.
-2. Pop the handler.
-3. Unwind: pop frames until `frames_.size() == handler.frame_index + 1`.
-4. Restore the stack: `stack_.resize(handler.stack_depth)`.
-5. Push the error message as a `Value{string}`.
-6. Set `frames_.back().ip = handler.catch_ip`.
-7. Continue the dispatch loop (now executing catch-block bytecode).
+2. Pop the handler and validate it: its frame must still exist, its stack and task-scope depths must not exceed the current ones, and its catch IP must lie inside that frame's code. An invalid handler (possible only in crafted bytecode, because a returning frame drops its handlers) is treated as "no handler".
+3. Retire task scopes opened after the handler was installed (`unwind_task_scopes_to(task_scope_depth)`).
+4. Unwind: pop frames until `frames_.size() == handler.frame_index + 1`.
+5. Restore the stack with `truncate_to(handler.stack_depth)`, destroying the abandoned values.
+6. Push the error message as a `Value{string}` (a typed error payload is converted to its text).
+7. Set `frames_.back().ip = handler.catch_ip`.
+8. Continue the dispatch loop (now executing catch-block bytecode).
 
 If no handler is found (or the handler belongs to an outer execution context below `base_depth_`), the exception propagates through the C++ call stack.
 
 ### 7.14 Concurrency Execution Model
 
-**Spawn:** The `Spawn` opcode pops the callee and arguments (deep-copied for thread safety), creates a `std::promise<Value>`, and enqueues a task on the thread pool. The task creates a lightweight child VM (`VM(env, shared_pool, compiled_fns)`) that shares the parent's thread pool and global environment. The child VM executes the callee and sets the promise. A `TaskValue` wrapping the `future<Value>` is pushed onto the parent's stack.
+**Spawn:** The `Spawn` opcode pops the callee and arguments (non-primitive values are deep-copied for thread safety) and creates a `std::promise<Value>`. It gives the task its own `CancellationToken`, whose parent is the enclosing `task_scope`'s token (or, outside any scope, the spawning task's own token). It enqueues the task on the thread pool and pushes a `TaskValue` wrapping the shared future. The task constructs a lightweight task VM (`VM(env, pool, compiled_fns)`) that shares the parent's thread pool and function table. Its `env` is a read-only, deep-copied snapshot of the globals (`spawn_environment()`), shared by every task spawned from the same globals (§12.5). The task VM executes the callee and sets the promise.
 
-**Await:** Pops the `TaskValue` and calls `future.get()`, blocking until the spawned task completes. Pushes the result. Checks for cooperative cancellation before blocking.
+**Await:** Checks for cancellation (throwing `CancelledException`), pops the `TaskValue`, and waits for the future inside a `ThreadPool::BlockingRegion`, so the pool can start a compensating worker if every worker is blocked (§12.2). A task VM re-checks its own cancellation every 10 ms while it waits. Pushes the result. Awaiting the same task again returns the same result.
 
-**Task scopes:** `TaskScopeBegin` creates a `TaskScope` (linked to the parent scope, if any) and sets it as `current_scope_`. All tasks spawned within this scope are tracked by the scope. `TaskScopeEnd` calls `scope.join_all()` to wait for all child tasks and pushes their results as an array. On error, the scope cancels all children before re-throwing.
+**Cancellation points:** A task VM checks its token at loop back-edges, calls, tail calls, and `await`. Blocking `Channel` operations (`send`, `receive`, `send_all`, `consume`, `select`) also give up when the task is cancelled.
+
+**Task scopes:** `TaskScopeBegin` creates a `TaskScope` whose token is chained to the running task's token, links it to the enclosing scope, and makes it the thread's current scope (`VMTaskManager::current_scope`). Tasks spawned within this scope are registered as its children. `TaskScopeEnd` calls `join_all()` and pushes the results as an array in spawn order. The join collects children in completion order: the first child that fails with a real error cancels its siblings at once, and that error is rethrown after every child has finished. A child cancelled on its own contributes `none` and is not a failure. `TaskScopeEnd` refuses to end a scope that is not the current one.
 
 ### 7.15 REPL Execution Model
 
@@ -1535,18 +1639,18 @@ Each line shows the byte offset, the opcode name, operand values, and (where app
 
 ### 7.17 Opcode Reference
 
-The complete opcode set (105 opcodes) with stack effects. Stack notation: `(before → after)`, where the top of stack is rightmost.
+The complete opcode set (105 opcodes) with stack effects. Stack notation: `(before → after)`, where the top of stack is rightmost. Opcodes marked **reserved** are defined, disassembled, and accepted by the VM and verifier, but the compiler never emits them; they keep their numbers so the opcode table and the `.lumc` format stay stable.
 
 #### Stack Manipulation
 
-| Opcode         | Operands  | Stack Effect      | Description                                    |
-| -------------- | --------- | ----------------- | ---------------------------------------------- |
-| `Constant`     | u16 index | `(→ value)`       | Push `constants[index]` onto the stack.        |
-| `ConstantLong` | u32 index | `(→ value)`       | Push `constants[index]` (large constant pool). |
-| `Pop`          | —         | `(value →)`       | Discard top of stack.                          |
-| `Dup`          | —         | `(a → a a)`       | Duplicate top of stack.                        |
-| `Dup2`         | —         | `(a b → a b a b)` | Duplicate top two stack values.                |
-| `Swap`         | —         | `(a b → b a)`     | Swap top two values.                           |
+| Opcode         | Operands  | Stack Effect      | Description                                                       |
+| -------------- | --------- | ----------------- | ----------------------------------------------------------------- |
+| `Constant`     | u16 index | `(→ value)`       | Push `constants[index]` onto the stack.                           |
+| `ConstantLong` | u32 index | `(→ value)`       | **Reserved.** Push `constants[index]`; the pool is capped at u16. |
+| `Pop`          | —         | `(value →)`       | Discard top of stack.                                             |
+| `Dup`          | —         | `(a → a a)`       | Duplicate top of stack.                                           |
+| `Dup2`         | —         | `(a b → a b a b)` | Duplicate top two stack values.                                   |
+| `Swap`         | —         | `(a b → b a)`     | Swap top two values.                                              |
 
 #### Variables
 
@@ -1571,17 +1675,19 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 
 #### Arithmetic
 
-| Opcode      | Operands | Stack Effect     | Description                                                                          |
-| ----------- | -------- | ---------------- | ------------------------------------------------------------------------------------ |
-| `Add`       | —        | `(a b → result)` | Add. Integer + integer → integer; any number mix → number; string + string → string. |
-| `Subtract`  | —        | `(a b → result)` | Subtract. Integer or number operands.                                                |
-| `Multiply`  | —        | `(a b → result)` | Multiply. Integer or number operands.                                                |
-| `Divide`    | —        | `(a b → result)` | Divide. Checks for division by zero. Integer / integer → integer.                    |
-| `IntDivide` | —        | `(a b → result)` | Integer division. Both operands must be integers.                                    |
-| `Modulo`    | —        | `(a b → result)` | Modulo. Both operands must be integers.                                              |
-| `Negate`    | —        | `(a → -a)`       | Negate. Integer or number.                                                           |
-| `Increment` | —        | `(a → a+1)`      | Increment integer by 1.                                                              |
-| `Decrement` | —        | `(a → a-1)`      | Decrement integer by 1.                                                              |
+| Opcode      | Operands | Stack Effect     | Description                                                                                                                                                  |
+| ----------- | -------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Add`       | —        | `(a b → result)` | Add. Integer + integer → integer; any number mix → number; string + string → string. Integer overflow raises `integer overflow in addition`.                 |
+| `Subtract`  | —        | `(a b → result)` | Subtract. Integer or number operands. Integer overflow raises `integer overflow in subtraction`.                                                             |
+| `Multiply`  | —        | `(a b → result)` | Multiply. Integer or number operands. Integer overflow raises `integer overflow in multiplication`.                                                          |
+| `Divide`    | —        | `(a b → result)` | True division. Always yields a `number`, even for two integers (`7 / 2` is `3.5`). Raises on division by zero and on overflow to infinity.                   |
+| `IntDivide` | —        | `(a b → result)` | Floor division (`//`), rounding toward −∞. Both operands must be integers.                                                                                   |
+| `Modulo`    | —        | `(a b → result)` | Truncating remainder (`%`): the result takes the sign of the dividend. Integer or number operands (`number` uses `fmod`).                                    |
+| `Negate`    | —        | `(a → -a)`       | Negate. Integer or number. Negating the minimum integer raises `integer overflow in negation`.                                                               |
+| `Increment` | —        | `(a → a+1)`      | Increment integer by 1 (`++`). Overflow raises `integer overflow in increment`.                                                                              |
+| `Decrement` | —        | `(a → a-1)`      | Decrement integer by 1 (`--`). Overflow raises `integer overflow in decrement`.                                                                              |
+
+Integer arithmetic never silently widens to `number`; an overflowing result is always a runtime error. Finite `number` operands that overflow to infinity raise `number overflow in <operation>`.
 
 #### Comparison
 
@@ -1594,13 +1700,15 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 | `Greater`      | —        | `(a b → bool)` | Same type dispatch as `Less`.                               |
 | `GreaterEqual` | —        | `(a b → bool)` | Same type dispatch as `Less`.                               |
 
+`Value::equals()` compares an integer and a number exactly: they are equal only if the number is a whole value equal to the integer, even above 2⁵³. Functions, native functions, sockets, XML nodes, and key-value stores compare by identity (so a value always equals itself); a function's identity is set when its closure is created and kept by value-semantics copies, so a `mutable` copy of a function equals the original. Channels and tasks compare their shared state.
+
 #### Logical
 
-| Opcode | Operands | Stack Effect   | Description                                                                     |
-| ------ | -------- | -------------- | ------------------------------------------------------------------------------- |
-| `Not`  | —        | `(a → bool)`   | Logical negation via `is_truthy()`.                                             |
-| `And`  | —        | `(a b → bool)` | Logical AND. The compiler also uses `JumpIfFalse` for short-circuit evaluation. |
-| `Or`   | —        | `(a b → bool)` | Logical OR. The compiler also uses `JumpIfTrue` for short-circuit evaluation.   |
+| Opcode | Operands | Stack Effect   | Description                                                                |
+| ------ | -------- | -------------- | -------------------------------------------------------------------------- |
+| `Not`  | —        | `(a → bool)`   | Logical negation via `is_truthy()`.                                        |
+| `And`  | —        | `(a b → bool)` | **Reserved.** Logical AND; `&&` short-circuits with `JumpIfFalse` instead. |
+| `Or`   | —        | `(a b → bool)` | **Reserved.** Logical OR; `\|\|` short-circuits with `JumpIfTrue` instead. |
 
 #### Strings
 
@@ -1615,7 +1723,7 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 | -------------- | --------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `MakeArray`    | u16 count | `(elem₁ ... elemₙ → array)`           | Create array from `count` stack values.                                                                                 |
 | `MakeDict`     | u16 count | `(key₁ val₁ ... keyₙ valₙ → dict)`    | Create dictionary from `count` key-value pairs.                                                                         |
-| `MakeTuple`    | u8 count  | `(elem₁ ... elemₙ → tuple)`           | Create tuple from `count` stack values.                                                                                 |
+| `MakeTuple`    | u16 count | `(elem₁ ... elemₙ → tuple)`           | Create tuple from `count` stack values.                                                                                 |
 | `MakeRange`    | —         | `(start end → range)`                 | Create exclusive range `[start, end)`.                                                                                  |
 | `MakeRangeInc` | —         | `(start end → range)`                 | Create inclusive range `[start, end]`.                                                                                  |
 | `IndexGet`     | —         | `(container index → value)`           | Index into array, dict, string, tuple, or choice. Supports range slicing.                                               |
@@ -1682,6 +1790,8 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 
 #### Pipe Operators
 
+Both pipe opcodes are **reserved**: `a |> f(b)` compiles to an ordinary `Call` with `a` as the first argument, and `a !> f` to the `Dup`/`IsSuccess`/`JumpIfFalse` sequence in §7.8.
+
 | Opcode      | Operands | Stack Effect                       | Description                                                                                                                                      |
 | ----------- | -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `Pipe`      | —        | `(value callee → [call])`          | Call `callee(value)`. Reorders stack and calls.                                                                                                  |
@@ -1693,9 +1803,11 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 | ---------- | ---------------- | ------------ | ----------------------------------------------------- |
 | `TryCatch` | u32 catch_offset | `(→)`        | Push an `ExceptionHandler`.                           |
 | `TryEnd`   | —                | `(→)`        | Pop the `ExceptionHandler` (normal completion).       |
-| `Rethrow`  | —                | `(value →)`  | Re-throw TOS as `RuntimeError` (used by try/finally). |
+| `Rethrow`  | —                | `(value →)`  | Re-throw TOS as `RuntimeError` (used by try/finally); `none` re-throws a task cancellation. |
 
-#### Match (Unused)
+#### Match (Reserved)
+
+`match` compiles to test-and-jump sequences (§7.6), so the compiler never emits these opcodes.
 
 | Opcode       | Operands | Stack Effect | Description                             |
 | ------------ | -------- | ------------ | --------------------------------------- |
@@ -1735,7 +1847,9 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 | `TypeOf`    | —            | `(value → string)`             | Push the type name of the value.                           |
 | `EndModule` | —            | `(→)`                          | End of bytecode stream. Returns `none` from dispatch loop. |
 
-**Fused opcodes (peephole optimisations):**
+**Fused opcodes (superinstructions):**
+
+The compiler emits `IncrementLocal`/`DecrementLocal` for `++`/`--` on a local and `SetLocalPop` for an assignment to a local; the peephole pass produces `GetLocalReturn`. A fusion must keep the runtime error wording of the code it replaces, which is why `x + 1` is never fused into `Increment` (§4.22).
 
 | Opcode           | Operands | Stack Effect | Description                                                    |
 | ---------------- | -------- | ------------ | -------------------------------------------------------------- |
@@ -1773,7 +1887,7 @@ Copying a value shares its storage, so a write must first make sure no other val
 Luma uses a **static, strong, manifest** type system:
 
 - **Static:** All types are checked before execution. No type-related surprises at runtime (except for `downcast`).
-- **Strong:** No implicit type coercions between unrelated types. `integer` and `number` are distinct. Mixing them in arithmetic implicitly promotes the `integer` operand to `number` — this is the only automatic numeric promotion in the language and is not a general coercion.
+- **Strong:** No implicit type coercions between unrelated types. `integer` and `number` are distinct. Mixing them in arithmetic implicitly promotes the `integer` operand to `number` — this is the only automatic numeric promotion in the language and is not a general coercion. An `integer` result is never widened at runtime: integer overflow raises an error.
 - **Manifest:** Variable types are explicitly declared by the programmer (e.g., `integer x = 10`). There is no type inference for variable declarations.
 
 ### 8.2 Type Compatibility Rules
@@ -1798,7 +1912,11 @@ The type parameter `T` is checked at each usage site:
 
 #### Bounded Generics
 
-A type parameter may carry interface bounds (`<T: Comparable>` or `<T: A + B>`). The Type Checker verifies that the concrete type passed at each call site structurally satisfies every listed interface before allowing the substitution. Bounds are stored in the `TypeParam` struct alongside the parameter name and checked during `infer_generic_call`.
+A type parameter may carry interface bounds (`<T: Comparable>` or `<T: A + B>`). The Type Checker verifies that the concrete type passed at each call site structurally satisfies every listed interface before allowing the substitution. Bounds are stored in the `TypeParam` struct alongside the parameter name and checked during inference.
+
+#### Inference
+
+`GenericResolver::infer_call(func, fn_name, call, arg_types, named_arg_types)` binds type parameters at a call site. It reuses the argument types the caller has already inferred (positional and named), so no argument is type-checked twice, and it maps arguments to parameters through `type_check_helpers::map_call_arguments`, which also reports arity and named-argument errors. Inference looks inside nested types: tuples, function types (including the return type), generic records, interfaces and choices, built-in containers, and the error type of `result<T, E>`. A value piped into a generic function (`x |> f()`) takes part in inference as the first argument.
 
 #### Turbofish — Explicit Type Arguments
 
@@ -1815,6 +1933,8 @@ No registration, no `implements` keyword, no runtime cost. The check is performe
 ## 9 — Memory Management Strategy
 
 The interpreter uses C++ RAII and smart pointers for fully automatic memory management. There is no manual allocation and no garbage collector. Reference counting reclaims values deterministically; the only construct that can form a cycle — and therefore leak — is `reference<T>`, which is diagnosable via the `LUMA_DIAGNOSE_REFERENCE_CYCLES` shutdown detector (see §19.4).
+
+Values on the VM stack are released deterministically too. Every path that lowers the stack top — a return, exception unwinding, a tail call, the native-callback error path, string interpolation, a test reset — goes through `VMStack::truncate_to`, which destroys the values above the new top at once. A returned function's locals therefore release their resources (an open socket, a large array) immediately, and no stale copy keeps a reference count high enough to force a needless copy-on-write copy.
 
 ### 9.1 Ownership Model
 
@@ -1850,7 +1970,7 @@ The interpreter uses C++ RAII and smart pointers for fully automatic memory mana
 
 | Category       | When               | Examples                                                                  |
 | -------------- | ------------------ | ------------------------------------------------------------------------- |
-| `CompileError` | Include resolution | Circular include, missing include file.                                   |
+| `CompileError` | Include resolution | Missing include file, rejected include path, include depth exceeded.      |
 | `RuntimeError` | Execution          | Division by zero, index out of bounds, unwrap on failure, channel errors. |
 | `SyntaxError`  | Lexing or parsing  | Unexpected token, unterminated string, invalid character.                 |
 | `TypeError`    | Type checking      | Type mismatch, undefined variable, non-exhaustive match.                  |
@@ -1872,8 +1992,8 @@ Analysis-phase errors (syntax, type, compile, lint) are represented as `Diagnost
 
 ### 10.3 Error Reporting Principles
 
-1. **Report as many type errors as possible per phase.** The type checker collects all type errors before stopping. The lexer and parser abort on the first error. This minimises the number of compile-fix-compile cycles for type issues.
-2. **Never proceed to the next phase if the current phase produced errors.** If the lexer finds errors, the parser is not invoked. If the parser finds errors, the type checker is not invoked. This prevents confusing cascading errors.
+1. **Report as many errors as possible per phase, without cascades.** The lexer and parser collect diagnostics and recover — the parser locally, at the next statement or member inside the same block — so independent syntax errors in different functions are reported together while one error does not produce a chain of false ones. Each stops after 100 errors. The type checker collects all type errors before stopping. This minimises the number of compile-fix-compile cycles.
+2. **Never run a dependent phase on a broken program.** If the lexer or parser reported errors, the type checker is not invoked; if the type checker reported errors, nothing is compiled. The pipeline skips every pass after a failure unless the pass opts in through `Pass::run_after_failure()`. Only the advisory linter does, so its warnings are still shown for a program with type errors. This prevents confusing cascading errors.
 3. **Every error includes a source location.** The Error Reporter uses the Source Manager to display the offending line and mark the precise column.
 4. **Messages are specific and actionable.** "Type mismatch: expected `number`, got `string`" is better than "type error." Include the names of the expected and actual types, the variable name, or the function name wherever relevant.
 
@@ -1882,9 +2002,16 @@ Analysis-phase errors (syntax, type, compile, lint) are represented as `Diagnost
 Runtime errors in Luma are surfaced through two mechanisms:
 
 - **`result<T>` values** — Functions that can fail return `result<T>`. The caller handles the failure explicitly via `match`, `??`, `Result.unwrap_or`, or `Result.is_success`. This is the primary and preferred mechanism.
-- **Hard runtime errors** — Conditions that cannot be expressed as `result<T>` (division by zero on raw arithmetic, index out of bounds with `[]`, `Result.unwrap` on a `failure` value) terminate execution immediately with a `RuntimeError` including the full source location. The channel layer signals closed, full, and empty channels internally with `RuntimeError` subclasses (`ChannelClosedError`, `ChannelFullError`, `ChannelEmptyError`); the `Channel` module translates them into `false` or `failure` return values, so apart from invalid arguments only an unbounded channel reaching its maximum queue size surfaces as a runtime error.
+- **Hard runtime errors** — Conditions that cannot be expressed as `result<T>` (division by zero on raw arithmetic, integer overflow, index out of bounds with `[]`, `Result.unwrap` on a `failure` value) terminate execution immediately with a `RuntimeError` including the full source location, unless a `try`/`catch` catches it. The channel layer signals closed, full, and empty channels internally with `RuntimeError` subclasses (`ChannelClosedError`, `ChannelFullError`, `ChannelEmptyError`); the `Channel` module translates them into `false` or `failure` return values, so apart from invalid arguments only an unbounded channel reaching its maximum queue size surfaces as a runtime error.
 
-The interpreter does not expose exceptions to user code. C++ exceptions are used only internally for control flow (break, continue, return) and are caught at the appropriate scope boundary.
+Luma has no `throw` statement and no exception objects. Code can intercept a hard runtime error with `try`/`catch`, which binds only the error message as a `string` (§7.13).
+
+Ordinary control flow never uses C++ exceptions. `break` and `continue` compile to `Pop`s followed by a `Jump` or `Loop`, after inlining any pending `finally` bodies. `return` compiles to the `Return` opcode (or `TailCall`). Inside the interpreter, C++ exceptions carry only genuinely exceptional conditions:
+
+- `RuntimeError` (and `std::runtime_error` from native functions) for runtime errors. `run()` dispatches them to the nearest Luma `catch` handler, or lets them propagate to the CLI, which reports them with exit code 1.
+- `ExitSignal` for `Process.exit(code)`, caught in `main()`.
+- `CancelledException` for cooperative task cancellation (§12.4).
+- `ParseFailure`, which the parser uses only to unwind to its nearest recovery point (§4.4).
 
 ---
 
@@ -1918,7 +2045,7 @@ Standard Library
 ├── Log module               — Log.information, Log.warning, Log.error, Log.set_level, ...
 ├── Math module              — Math.floor, Math.square_root, Math.pi, ...
 ├── Optional module          — Optional.is_some, Optional.is_none, Optional.unwrap, Optional.unwrap_or, ...
-├── Order module             — Order.sort_by, Order.min_by, Order.max_by, Order.group_by, ...
+├── Order module             — Order.of, Order.reverse, Order.then, Order.to_number, Order.from_number, Order.is_less, ...
 ├── Process module           — Process.run, Process.get_environment_variable, Process.exit, ...
 ├── Queue module             — Queue.new, Queue.enqueue, Queue.dequeue, Queue.peek, ...
 ├── Random module            — Random.generate_number, Random.generate_integer, Random.choice, ...
@@ -1940,31 +2067,40 @@ Two in-tree developer guides document the registration machinery for contributor
 
 ### 11.2 Native Function Interface
 
-Every built-in function is implemented as a `NativeFunction`:
+Every built-in function is bound as a `NativeFunctionValue`:
 
 ```text
-NativeFunction {
-    name            : string                          # qualified name, e.g. "String.length"
-    parameter_types : vector<Type>                    # expected argument types
-    return_type     : Type                            # return type
-    body            : function(vector<Value>) → Value # the C++ implementation
+NativeFunctionValue {
+    name     : string         # qualified name, e.g. "String.length"
+    function : NativeFunction # (span<const Value> args, SourceLocation) → Value
 }
 ```
 
-At startup, the Standard Library module iterates over all namespace modules and calls their registration function, which adds `NativeFunction` bindings to the global environment.
+Type information does not live on the runtime value. The `StdlibCatalog` (`shared/stdlib/stdlib_catalog.hpp`) is the single source of truth for every function's arity, parameter types, return type, and sandbox capability; the type checker and the language server both read it, and the conformance test checks that every registered function appears in it.
+
+Modules register functions through a fluent builder (`function_builder.hpp`):
+
+- `ModuleBuilder{"Module", env}` qualifies names with the module prefix. `.func(name, arity)` returns a `FuncBuilder`; `.constant(name, value)` binds an immutable constant; `.native(name, fn)` and `.func_if(condition, …)` register raw functions.
+- `FuncBuilder::extract_body(extractor, body)` registers a method-style function through `define_method` (`native_function.hpp`): it checks the arity, extracts the first argument with the given `expect_*` extractor, and passes it to `body` as `self`. The extracted value is bound with `decltype(auto)`, so a string or container extractor yields a reference into the argument rather than a copy. `raw_unary`, `raw_binary`, and `raw_body` register functions that take the argument span directly, with an arity check.
+- Every argument after the first must also go through an `expect_*` helper, so a wrong type reports a located, readable error rather than an internal one.
 
 ### 11.3 Registration Flow
 
 ```text
 main()
   → create global Environment
-  → StandardLibrary::register_all(environment)
-      → CoreBuiltins::register(environment) # print, assert, type_of
-      → StringModule::register(environment) # String.length, String.uppercase, ...
-      → ArrayModule::register(environment)  # Array.map, Array.filter, ...
-      → ... (one call per namespace module)
+  → register_all(environment, sandbox)
+      → register_core(environment)               # print, assert, type_of
+      → for each entry in kModules:              # stdlib_registry.hpp
+          sandbox-aware → register_<module>_ns(environment, sandbox)
+          os_only       → skipped when sandbox, else register_<module>_ns(environment)
+          otherwise     → register_<module>_ns(environment)
+      → register_stdlib_postamble(environment, sandbox)
+          # stdlib choice variants; sandbox-blocked modules and withheld functions
   → load and execute user program
 ```
+
+`kModules` is the single module table: 25 always-available modules, 4 sandbox-aware modules (Compression, Hash, Log, Terminal), and 8 OS-only modules. Registration is always eager: every executable entry point (CLI run, test runner, REPL, `--eval`, and the debugger) calls `register_all`, which binds every active module before any user code runs. There is no deferred or on-demand loading path; a name lookup that misses the global environment is simply an undefined name, or a sandbox denial (§11.5).
 
 ### 11.4 Security Boundaries
 
@@ -1977,12 +2113,19 @@ Several standard library modules interact with the operating system. These modul
 | `Http`              | Validate header names and values — reject CRLF characters to prevent header injection. Return `result<T>` on failure.                                                                                                                                      |
 | `Console`           | Return `result<T>` on failure.                                                                                                                                                                                                                             |
 | `Log`               | Validate file paths for `set_output`. Return `result<T>` on failure.                                                                                                                                                                                       |
-| `Process`           | Validate command strings. Do not pass raw user input to the shell without sanitisation.                                                                                                                                                                    |
-| `RegularExpression` | Limit pattern size (`max_regex_pattern_size`). Uses C++ `std::regex` (ECMAScript dialect). No backtracking protection — nested quantifiers can cause exponential time on pathological input. `find_all` and `split` iteration bounded by `max_array_size`. |
-| `Socket`            | Validate host and port inputs. Return `result<T>` on connection failure. Enforce timeouts. Limit total open sockets (`max_open_sockets`).                                                                                                                  |
+| `Process`           | Commands are tokenized and run without a shell (`.bat`/`.cmd` refused on Windows). Pids are range-checked. Pipes and handles are RAII-owned and not inherited by children. Timeouts kill the child's whole process tree.                                   |
+| `RegularExpression` | Limit pattern size (`max_regex_pattern_size`). Uses C++ `std::regex` (ECMAScript dialect). A ReDoS guard on the cleaned pattern rejects nested or overlapping quantified groups. Outputs are bounded by size limits.                                       |
+| `Socket`            | Validate host and port inputs. Return `result<T>` on connection failure. Try every resolved address. Connect times out (30 s default); receive/accept block unless `Socket.set_timeout` is called. Close-on-exec. Limit open sockets (`max_open_sockets`). |
 | `Xml`               | Validate file paths for `parse_file` / `write_file`. Return `result<T>` on failure.                                                                                                                                                                        |
 
 The numeric values behind these limits (`max_regex_pattern_size`, `max_array_size`, `max_open_sockets`, and the rest) and their `LUMA_LIMIT_*` overrides are listed in the canonical [resource-limit table](Luma_Performance_Guide.md#6--resource-limits) in the Performance Guide.
+
+Further rules that apply across modules:
+
+- File reads enforce the size limit while reading (`read_file_bounded`), not only by checking the file size first, and Console line reads use one bounded reader.
+- On POSIX, socket waits use `poll()`; `select()` with `FD_SET` would write past its buffer for a descriptor of 1024 or more.
+- Sockets and child-process pipes are created close-on-exec (non-inheritable on Windows, where a child inherits only its own stdout/stderr pipe ends).
+- An HTTP response that is truncated, oversized, or malformed fails with `Http.Error.Malformed`; chunked transfer encoding takes precedence over `Content-Length`.
 
 ### 11.5 Sandbox Mode
 
@@ -1997,7 +2140,12 @@ When the interpreter is started with `--box` (or `-b`), the `register_all` funct
 - `Socket` — TCP and UDP networking
 - `Xml` — XML file I/O
 
-All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`. They are withheld at registration; `register_stdlib_postamble` finds them by registering each sandbox-aware module into a scratch environment and blocks them by name, so calling one reports the same "not available in sandbox mode" error as a blocked module. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
+All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`) remain available. Four of them are sandbox-aware and withhold individual functions that reach the host:
+
+- `Compression`, `Hash`, and `Log` withhold their file I/O: `Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`.
+- `Terminal` withholds its console-input functions: `Terminal.enable_raw_mode`, `Terminal.enable_mouse`, `Terminal.read_key`, `Terminal.read_key_timeout`, `Terminal.get_input`, `Terminal.read_line`, and `Terminal.get_cursor_position`. Output, state queries, the `disable_*` functions, and the headless `test_*` functions stay available.
+
+The withheld functions are left out at registration; `register_stdlib_postamble` finds them by registering each sandbox-aware module into a scratch environment (`sandbox_withheld_functions()`) and blocks them by name, so calling one reports the same "not available in sandbox mode" error as a blocked module. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, console input, or spawn processes.
 
 Attempting to call a function from a sandbox-blocked module produces a clear error message (`'Module.function' is not available in sandbox mode (--box)`) instead of the generic "undefined variable" error. The `Environment` class maintains a set of blocked module prefixes that is checked during variable lookup.
 
@@ -2017,19 +2165,21 @@ Luma provides structured concurrency through three primitives:
 
 ### 12.2 Thread Pool
 
-The interpreter maintains a thread pool that executes spawned tasks. The pool is created once at startup and shut down when the program exits.
+The interpreter maintains a thread pool that executes spawned tasks. The root VM creates it lazily on the first `spawn` and shuts it down when the VM is destroyed; task VMs share their parent's pool.
 
 ```text
 ThreadPool {
-    workers      : vector<thread>    # worker threads
-    task_queue   : thread-safe queue # pending work items
-    worker_count : integer           # defaults to hardware concurrency
+    workers         : vector<thread>    # base workers plus compensating workers
+    task_queue      : thread-safe queue # pending work items
+    worker_count    : integer           # base size defaults to hardware concurrency
+    blocked_workers : atomic<size_t>    # workers inside a BlockingRegion
 }
 ```
 
 - `spawn fn(args)` enqueues a work item (the function call) onto the task queue and returns a `TaskValue` handle immediately.
 - Worker threads dequeue work items and execute them.
-- The task handle wraps a `std::future<Value>` that the caller can `await`.
+- The task handle wraps a `std::shared_future<Value>` that the caller can `await`.
+- **Compensating workers.** A worker that waits for other pool work — `await`, a `task_scope` join, a blocking `Channel` operation, or a blocking `Task` function — enters a `ThreadPool::BlockingRegion`, which counts it as blocked. When every worker is blocked and work is still queued, the pool starts one more worker, up to 256 above the base size. Without this, a fixed-size pool deadlocks as soon as every worker waits on a task that is still queued, for example a nested `task_scope` on a single-core machine. On a thread that is not a pool worker (the main VM thread), a `BlockingRegion` does nothing.
 
 ### 12.3 Task Lifecycle
 
@@ -2045,7 +2195,7 @@ stateDiagram-v2
 - **Running:** A worker thread is executing the function.
 - **Completed:** The function has returned. The result (a `Value`) is stored in the future.
 
-Un-awaited tasks are not tracked per-scope. When the `Interpreter` is destroyed at program exit, the `ThreadPool` destructor sets `should_stop_` and joins all worker threads. The worker loop drains the pending task queue before exiting, so all enqueued tasks that have not yet started are still executed to completion. Tasks that are already running are allowed to finish before the thread is joined.
+Every task belongs to a `task_scope` (a bare `spawn` is a compile error), so normally every task is joined when its scope ends. When the root VM is destroyed at program exit, the `ThreadPool` destructor sets `should_stop_` and joins all worker threads. The worker loop drains the pending task queue before exiting, so all enqueued tasks that have not yet started are still executed to completion. Tasks that are already running are allowed to finish before the thread is joined.
 
 ### 12.4 Structured Concurrency — `task_scope`
 
@@ -2062,26 +2212,35 @@ task_scope {
 
 **Implementation:**
 
-- `TaskScope` holds a shared `CancellationToken` and a list of child `TaskValue` handles.
-- Each `spawn` inside a scope registers its task as a child and shares the scope's cancellation token.
-- At scope exit, `join_all()` awaits every child. Results are collected in spawn order and returned as an `array<T>`.
-- If any child throws, `cancel_all()` sets the cancellation token, causing cooperative cancellation of remaining siblings. The first error is rethrown.
+- `TaskScope` owns a `CancellationToken` and a list of child `TaskValue` handles. The scope's token is chained to the token of the task that opened it (none for a scope on the main thread), so cancelling that task also cancels the scope's children.
+- Each `spawn` inside a scope registers its task as a child. The task gets **its own** token whose parent is the scope's token: `Task.cancel(t)` cancels only `t`, while cancelling the scope reaches every child.
+- At scope exit, `join_all()` collects the children **in completion order**. The first child that fails with a real error cancels its remaining siblings at once (`cancel_all()`); that error is rethrown after every child has completed or been cancelled. A child that was cancelled on its own contributes `none` and is not a failure. Results are returned in spawn order as an `array<T>`.
+- If an error escapes `run()` while scopes opened by that activation are still open — for example, out of a lambda passed to `Array.map` — `run()` retires them: it cancels, joins, and pops each one, so later spawns never attach to a dead scope (§7.10). The exception dispatcher does the same for scopes opened inside a `try` block it unwinds.
+- `~VM` touches the thread's current scope only if the VM still owns open scopes, and then restores the scope that was current before them, so a scratch VM (the debugger's conditional-breakpoint evaluator) never disturbs the debuggee's scope.
 
 **Cancellation model — cooperative:**
 
-- `CancellationToken` wraps an `atomic<bool>`. Tasks check the token at yield points (function calls, loop iterations, await).
-- Cancellation does not forcefully terminate threads — tasks must check `is_cancelled()` and throw `CancelledException`.
-- Scopes may be nested. Each child scope has its own token and a pointer to its parent scope.
+- `CancellationToken` wraps an `atomic<bool>` plus an optional parent token; `is_cancelled()` is true when the token or any ancestor is cancelled. Tokens form a tree: scope → task → nested scope → task.
+- A task VM checks its token at loop back-edges, calls, tail calls, and `await`. Blocking `Channel` operations (`send`, `receive`, `send_all`, `consume`, `select`) and waits inside `await` re-check it every 10 ms while blocked.
+- Cancellation does not forcefully terminate threads — a cancelled task throws `CancelledException` at its next check, and `await` on a cancelled task raises `CancelledException`.
+- A task's own cancellation skips its `catch` handlers but runs its `finally` handlers (the compiled form of `finally`, recognised by `is_cleanup_handler()` from their closing `Rethrow`). The handler receives `none` as its error value, so its `Rethrow` re-raises `CancelledException` instead of a `RuntimeError`, and it runs shielded from further cancellation checks until then. A task that ends with any error while its token is cancelled completes as cancelled, so `join_all`, `await`, and the `Task.*` waits never count it as a failure.
 
 **Thread-local tracking:**
 
-- `Interpreter::current_scope_` (thread-local) points to the active `TaskScope` on the current thread.
-- When a task is spawned, it captures the current scope's token and registers itself. Outside a scope, `current_scope_` is `nullptr` and the task runs unstructured (fire-and-forget).
+- `VMTaskManager::current_scope` (thread-local) points to the active `TaskScope` on the current thread. A task starts with no current scope and restores the worker's previous value when it finishes.
+- Outside any scope, a spawned task's token is parented to the spawning task's token (or has no parent on the main thread), and the task runs unstructured.
 - The type checker rejects `spawn` outside a `task_scope` with a compile-time error — in programs, test files and the REPL alike. Only compilation that bypasses the type checker (debugger expression evaluation) could still reach the unstructured runtime path.
 
 ### 12.5 Task Environment Isolation
 
-Each spawned task receives a **deep copy** of the environment at the point of spawning. Tasks do not share mutable state with the spawning scope or with each other. This eliminates data races by design.
+Each spawned task runs against a **read-only, deep-copied snapshot** of the global environment taken at the point of spawning (`VM::spawn_environment()`). Tasks never share mutable state with the spawning code or with each other through globals:
+
+- The snapshot has two layers. The immutable bindings — the whole standard library — are copied into a base layer, rebuilt only when the number of globals changes. The mutable user globals are copied into a small top layer, rebuilt only after the parent VM writes a global. A rebuild deep-copies only the bindings written since the previous snapshot (each `Binding` records a write version); every other binding shares its earlier copy. Sibling tasks share the same snapshot, which is safe because it is never written.
+- A task that assigns a global raises `cannot assign to global variable 'x' from a spawned task`. Type-checked programs never do this — functions cannot reach top-level variables — so only unchecked code (the REPL, debugger evaluation, C++ embedding) can hit it.
+- A task spawned from inside a task reuses its parent's snapshot.
+- Arguments and the callee are deep-copied as well (§7.14).
+
+One known limit remains: a closure stored in a global that carries captured mutable state shares that state between tasks that call it concurrently, because the snapshot copies the closure once.
 
 Communication between tasks happens exclusively through channels (copy-on-send semantics).
 
@@ -2125,11 +2284,12 @@ graph TD
 - **Expression auto-print:** If the input is a standalone expression (not an assignment or declaration), the result is printed automatically with `=>` prefix.
 - **No `@main` requirement:** The REPL evaluates input directly without requiring a main function.
 - **Error isolation:** Errors in one input do not corrupt state. The REPL catches errors and returns to the prompt.
-- **Commands:** Lines starting with `:` are REPL commands, not Luma code:
+- **Commands:** Lines starting with `:` are REPL commands, never Luma code. The command word must match exactly; an unknown command or a wrong argument prints a usage message:
     - `:quit` / `:q` — Exit the REPL.
     - `:help` / `:h` — Print available commands.
     - `:clear` / `:c` — Reset the environment.
-    - `:file <path>` / `:f <path>` — Load and execute a `.luma` file in the current session.
+    - `:file <path>` / `:f <path>` — Load and execute a `.luma` file in the current session. The file is re-read from disk every time.
+- **Includes:** `include` declarations work in REPL input and in `--eval`, resolved from the working directory and then `LUMA_PATH`.
 
 ---
 
@@ -2137,20 +2297,20 @@ graph TD
 
 ### 14.1 Test Discovery
 
-The `--test` mode drives the full pipeline (Lexer → Parser → Include Resolver → Type Checker → Linter) and then scans the typed AST for all functions carrying the `@test` annotation.
+The `--test` mode drives the full pipeline (Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler) without requiring `@main`. The compiler sets `is_test` on the `CompiledFunction` of every function carrying the `@test` annotation, and `VM::execute_tests` collects those functions from the function table (§4.14).
 
 ### 14.2 Test Execution
 
 Each test function is executed independently:
 
-1. Create a child environment (child of the global environment containing standard library bindings and user-defined declarations).
-2. Call the test function with no arguments.
-3. If the function completes without error → `PASS`.
-4. If `assert` fails or a runtime error occurs → `failure`, with the error message recorded.
+1. The top-level chunk runs once, before any test, defining declarations and top-level variables.
+2. Each test is called with no arguments on the same VM, through the same entry path as `@main`.
+3. If the function returns normally → `pass`.
+4. If `assert` fails or a runtime error escapes the test → `FAIL`, with the error message printed. The VM resets its stack, frames, and exception handlers before the next test.
 
 ### 14.3 Test Isolation
 
-Each test runs in a child environment of the global environment. Variables declared inside a test function are isolated — they exist only for the duration of that test and are discarded when it ends. However, mutations to top-level mutable variables (in the global environment) are visible to subsequent tests. Execution order is deterministic (declaration order in the source file), but tests must not depend on order.
+Each test runs in its own call frame. Variables declared inside a test function are locals of that frame — they exist only for the duration of that test and are destroyed when it ends. However, all tests share one global environment, so mutations to top-level mutable variables are visible to subsequent tests. Execution order is deterministic (source order), but tests must not depend on order.
 
 ### 14.4 Assert Mechanism
 
@@ -2171,7 +2331,7 @@ include "utils.luma"
 
 The `include` declaration instructs the interpreter to load and compile another source file. Include resolution is performed as a dedicated phase between parsing and type checking (see Phase 4 in Section 6.4):
 
-1. Resolve the path relative to the directory of the _including_ file.
+1. Resolve the path: first relative to the directory of the _including_ file, then against each `LUMA_PATH` directory. Input with no file (REPL, `--eval`) searches the working directory first, then `LUMA_PATH`. A file-anchored include never falls back to the working directory. The resolved file must stay inside the including directory's tree or a `LUMA_PATH` directory (§4.7).
 2. Check the Source Manager's registry to see if this file has already been loaded.
     - If already loaded, skip it (each file is included at most once).
     - If not loaded, load, lex, and parse it.
@@ -2203,19 +2363,19 @@ luma/
 │   ├── main.cpp         # entry point — parses CLI args and dispatches
 │   ├── analysis/        # front-end: source text → typed AST
 │   │   ├── ast/         # AST node type definitions (§4.5)
+│   │   ├── common/      # helpers shared by analysis code only (scope manager, UTF-8 validation)
 │   │   ├── diagnostics/ # structured diagnostics and terminal rendering (§4.19)
 │   │   ├── errors/      # RuntimeError — VM/stdlib runtime exception type
 │   │   ├── lexer/       # tokenisation (§4.3)
 │   │   ├── linter/      # post-type-check code-quality warnings (§4.20)
 │   │   ├── parser/      # recursive-descent AST construction (§4.4)
 │   │   ├── pipeline/    # composable compilation-pass pipeline (§4.21)
-│   │   ├── resolver/    # name resolution to stack-slot indices (§4.22)
 │   │   ├── source/      # source loading and location tracking (§4.2)
 │   │   └── types/       # static type checker and stdlib signatures (§4.6, §4.8)
-│   ├── common/          # shared utilities — caches, resource limits, codecs, UTF-8 (§4.16)
+│   ├── common/          # shared utilities — terminal, caches, resource limits, codecs, UTF-8 (§4.16)
 │   └── runtime/         # back-end: bytecode compilation and execution
 │       ├── cli/         # argument parsing, pipeline orchestration, test runner (§4.1, §4.14)
-│       ├── compiler/    # AST-to-bytecode compiler, optimizer, verifier, caches (§4.17, §4.23–§4.26)
+│       ├── compiler/    # AST-to-bytecode compiler, optimizer, verifier, caches (§4.17, §4.22–§4.25)
 │       ├── concurrency/ # channels, task_scope, thread pool (§4.15)
 │       ├── include/     # file inclusion and deduplication (§4.7)
 │       ├── interpreter/ # runtime Value variant, environment, control flow (§4.9, §4.10)
@@ -2381,14 +2541,15 @@ Rather than pay for a cycle collector (whose correctness is delicate in the pres
 - This matches Luma's default immutability philosophy.
 - The simplicity gain outweighs the performance cost for the targeted use cases.
 
-### 19.6 Deep Copy for Task Environments (Not Shared State)
+### 19.6 Read-Only Snapshots for Task Environments (Not Shared State)
 
-**Decision:** Each spawned task receives a deep copy of its captured environment.
+**Decision:** Each spawned task runs against a read-only, deep-copied snapshot of the globals, and receives deep copies of its callee and arguments. Writing a global from a task is a runtime error.
 
 **Rationale (Secure by Default, Explicit Over Implicit):**
 
 - Shared mutable state between threads is the primary source of concurrency bugs.
-- Deep copying makes each task self-contained and race-free by construction.
+- Deep copying makes each task self-contained and race-free by construction. Making the snapshot read-only lets sibling tasks share one copy, and the two-layer cache (immutable stdlib bindings copied once, mutable user globals re-copied only after a write, and then only the bindings that were written) keeps `spawn` cheap.
+- Rejecting a global write from a task, rather than letting it modify a private copy, turns a silent lost update into a clear error.
 - Communication between tasks is explicit — via channels — not implicit through shared variables.
 
 ### 19.7 Multi-Phase Pipeline (Not Single-Pass)
@@ -2400,7 +2561,7 @@ Rather than pay for a cycle collector (whose correctness is delicate in the pres
 - Each phase has a single, clear responsibility.
 - Errors are caught at the earliest possible phase — syntax errors during parsing, type errors during checking — before execution begins.
 - Each phase can be tested independently.
-- The strict boundary (stop on error) prevents cascading errors that confuse the user.
+- The strict boundary (stop on error) prevents cascading errors that confuse the user. Within a phase, the lexer and parser recover locally and keep collecting diagnostics; across phases, only the advisory linter runs after a failure (`run_after_failure()`).
 
 ### 19.8 No Exceptions in User Code (Result-Based Error Handling)
 
@@ -2411,7 +2572,7 @@ Rather than pay for a cycle collector (whose correctness is delicate in the pres
 - `result<T>` makes error handling explicit — the caller must handle the failure case.
 - Exceptions create invisible control-flow paths that are hard to reason about, especially for beginners.
 - `match` with `success`/`failure` arms is more readable and harder to get wrong than try/catch.
-- C++ exceptions are used only _internally_ within the interpreter for control flow (break, continue, return) and are never exposed to the Luma programmer.
+- C++ exceptions are used only _internally_ within the interpreter, for runtime errors, `Process.exit`, and task cancellation — never for `break`, `continue`, or `return`, which compile to jumps and `Return` (§10.4). The programmer sees only the error message, through `try`/`catch`.
 
 ---
 

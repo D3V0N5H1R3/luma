@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -32,13 +33,24 @@ public:
     // present name maps to its existing index.  Throws std::overflow_error when
     // the table is full.
     [[nodiscard]] std::uint16_t add(std::string_view name) {
+        if (auto index = try_add(name)) {
+            return *index;
+        }
+
+        throw std::overflow_error{
+            std::format("Name table overflow (more than {} names)", k_max_size)};
+    }
+
+    // Like add(), but returns std::nullopt instead of throwing when `name` is
+    // new and the table is full.  The compiler uses this to report a located
+    // diagnostic.
+    [[nodiscard]] std::optional<std::uint16_t> try_add(std::string_view name) {
         if (auto it = index_.find(name); it != index_.end()) {
             return it->second;
         }
 
         if (names_.size() >= k_max_size) {
-            throw std::overflow_error{
-                std::format("Name table overflow (more than {} names)", k_max_size)};
+            return std::nullopt;
         }
 
         const auto idx = static_cast<std::uint16_t>(names_.size());

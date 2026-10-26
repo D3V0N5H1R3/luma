@@ -51,6 +51,7 @@ private:
     [[nodiscard]] SourceLocation current_location() const;
     void add_token(TokenType type, std::string_view lexeme);
     void add_token(TokenType type, std::string_view lexeme, TokenLiteral literal);
+    void stamp_token_starts();
     void skip_whitespace_and_comments();
     void scan_token();
     // Attempt to close an interpolation when '}' is encountered inside
@@ -91,24 +92,39 @@ private:
         return character >= '0' && character <= '9';
     }
 
-    // ASCII letter or underscore, plus any non-ASCII UTF-8 byte
-    // (>= k_utf8_ascii_max), so Unicode letters are accepted in identifiers.
-    [[nodiscard]] static constexpr bool is_alpha(char character) noexcept {
+    // ASCII letter or underscore.
+    [[nodiscard]] static constexpr bool is_ascii_alpha(char character) noexcept {
         return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
-               character == '_' || static_cast<unsigned char>(character) >= k_utf8_ascii_max;
+               character == '_';
     }
 
-    // ASCII-only alphanumeric check, extended with is_alpha's Unicode
-    // multibyte acceptance.
-    [[nodiscard]] static constexpr bool is_alnum(char character) noexcept {
-        return is_digit(character) || is_alpha(character);
-    }
+    // Byte width of the identifier character at the cursor, or 0 when the
+    // cursor is not on one.  ASCII letters, '_' and (when `allow_digit`) digits
+    // are one byte wide.  A non-ASCII character is accepted only when it is a
+    // well-formed UTF-8 sequence that is neither a control character nor
+    // Unicode whitespace (e.g. U+00A0 NO-BREAK SPACE), so Unicode letters work
+    // in identifiers while malformed bytes and invisible spaces are rejected.
+    [[nodiscard]] std::size_t identifier_char_width(bool allow_digit) const;
+
+    // Consume a run of identifier characters (letters, digits, '_', Unicode).
+    void consume_identifier_chars();
+
+    // Diagnose and skip a non-ASCII byte sequence that cannot start a token
+    // (malformed UTF-8 or a Unicode whitespace/control character).
+    void scan_invalid_non_ascii(SourceLocation location);
 
     [[nodiscard]] bool is_prefixed_literal(char prefix_char) const;
 
     void scan_number();
+    // After '.' or '?.', a number names a tuple member: lex digits only, so
+    // `t.0.1` is two member accesses rather than the decimal `0.1`.
+    void scan_member_index();
     void scan_prefixed_literal(bool (*is_valid_digit)(char), int base, std::string_view kind_name,
                                std::string_view hint_example, std::size_t start);
+    // Diagnose identifier characters glued to the end of a numeric literal
+    // (the '2' in `0b102`, the 'abc' in `123abc`) and consume them so they do
+    // not re-lex as a separate token.  Returns true when such a suffix existed.
+    bool consume_invalid_number_suffix(std::string_view kind_name, SourceLocation start);
     [[nodiscard]] bool has_valid_exponent() const;
     void consume_exponent();
 
@@ -146,9 +162,31 @@ private:
     void scan_triple_quoted_string_continuation();
     void scan_triple_quoted_string_body(bool is_continuation);
     [[nodiscard]] char scan_escape_char();
+    // The character an escape sequence `\<character>` stands for, or nullopt
+    // for an unknown escape.  Single source of truth for the escape table.
+    [[nodiscard]] static std::optional<char> escape_value(char character) noexcept;
 
     // Triple-quoted string helpers to reduce nesting depth.
     [[nodiscard]] bool try_consume_triple_quote(std::string& raw);
+
+    // A triple-quoted literal is dedented as a WHOLE: its common indentation
+    // is computed across every text piece between interpolations, so the
+    // lexer emits each piece's token with a placeholder lexeme, records the
+    // piece's raw (still-escaped) source text here, and rewrites the lexemes
+    // once the closing quotes are reached.  One entry per open literal;
+    // nested triple-quoted literals inside an interpolation push their own.
+    struct TripleQuotedPiece {
+        std::size_t token_index{0};
+        std::string raw;
+    };
+
+    std::vector<std::vector<TripleQuotedPiece>> open_triple_quoted_;
+
+    // Record `raw` as the source text of the token just emitted.
+    void record_triple_quoted_piece(std::string raw);
+    // Dedent and unescape the innermost open triple-quoted literal and write
+    // the results into its tokens' lexemes (and literal payloads).
+    void finish_triple_quoted_string();
 
     // Shared helper: emit a syntax-category error diagnostic.
     // Reorders parameters relative to emit_error for caller convenience
@@ -156,8 +194,10 @@ private:
     void emit_syntax_error(std::string message, SourceLocation loc, std::string_view hint = {},
                            DiagnosticCode code = DiagnosticCode::None);
 
-    // Shared helper: emit interpolation start tokens and push interpolation state.
-    void begin_interpolation(bool is_triple_quoted);
+    // Shared helper: emit interpolation start tokens and push interpolation
+    // state.  Returns false (leaving the cursor on '$') when the nesting limit
+    // is reached.
+    [[nodiscard]] bool begin_interpolation(bool is_triple_quoted);
     // Shared helper: emit a diagnostic if interpolation depth is exceeded.
     // Returns false and emits a diagnostic if the limit is reached.
     [[nodiscard]] bool check_interpolation_depth();
@@ -165,6 +205,14 @@ private:
     DiagnosticCollector& collector_;
     FileId file_id_{0};
     std::vector<Token> tokens_;
+
+    // Source position (1-based) of the first character of the token currently
+    // being scanned; add_token() stamps it onto every token's start_location.
+    SourceLocation token_start_{};
+
+    // Set when whitespace skipping crosses a newline; add_token() transfers it
+    // to the next token's preceded_by_newline flag and clears it.
+    bool newline_pending_{false};
 
     // Source position (1-based) of the first character of the string segment
     // currently being scanned.  String tokens store a PROCESSED lexeme, so their

@@ -343,6 +343,12 @@ void register_linearalgebra_vectors(const EnvPtr& env) {
                 return make_failure_value("LinearAlgebra.outer: vectors must be non-empty");
             }
 
+            // The result is len(a) × len(b): two vectors at the array limit
+            // would otherwise allocate limit² doubles.
+            require_matrix_within_limit(a.size(), b.size(), "outer",
+                                        std::format("result dimensions {}x{}", a.size(), b.size()),
+                                        "use shorter vectors", loc);
+
             std::vector<std::vector<double>> result(a.size(), std::vector<double>(b.size(), 0.0));
 
             for (std::size_t i{0}; i < a.size(); ++i) {

@@ -71,26 +71,32 @@ string joined = String.join(parts, ", ")
 
 ## 4 — Recursion Limits
 
-Luma enforces a maximum call-stack depth by default to bound recursion (see the [resource-limit table](#6--resource-limits) for the value and its `LUMA_LIMIT_MAX_CALL_DEPTH` override). Deeply recursive algorithms should use iterative alternatives or raise the limit.
+Luma enforces a maximum call-stack depth to bound recursion (see the [resource-limit table](#6--resource-limits) for the value and its `LUMA_LIMIT_MAX_CALL_DEPTH` override). Exceeding it raises `call stack overflow: maximum recursion depth (N) exceeded`. The VM also has a fixed frame limit of 256, and the effective depth is the smaller of the two — so the override can lower the limit but cannot raise it above 256. Deeply recursive algorithms should use an iterative alternative or a tail call (see [Tail Call Optimization](Luma_User_Manual.md#tail-call-optimization)), which reuses the current frame.
 
 ## 5 — Loop Iteration Limits
 
-The `while` loop has a default maximum iteration count (see the [resource-limit table](#6--resource-limits) for the value and its `LUMA_LIMIT_MAX_WHILE_ITERATIONS` override). This prevents accidental infinite loops from freezing the interpreter.
+`while` loops share an iteration budget (see the [resource-limit table](#6--resource-limits) for the value and its `LUMA_LIMIT_MAX_WHILE_ITERATIONS` override). The budget is a single running count of loop iterations, not a per-loop count: a `for` loop resets it when it starts, but a `while` loop does not, so a run of `while` loops — including nested ones — draws on the same budget. Exceeding it raises `loop exceeded maximum iteration count (N)`. This prevents accidental infinite loops from freezing the interpreter.
 
 ## 6 — Resource Limits
 
-This is the canonical reference for Luma's resource limits; the defaults below mirror `core/common/resource_limits.hpp`. All limits can be overridden via environment variables prefixed with `LUMA_LIMIT_`. See [Software Architecture](Luma_Software_Architecture.md) §4.16 for the full `ResourceLimits` design and the additional internal limits it defines.
+This is the canonical reference for Luma's resource limits; the defaults below mirror `core/common/resource_limits.hpp`. All limits can be overridden via environment variables prefixed with `LUMA_LIMIT_`. Each override must be a whole number from 1 up to the limit's ceiling: a value of `0` or a value that is not a number is ignored with a warning (the default stays in force), and a value above the ceiling is clamped to the ceiling with a warning. The ceilings keep the recursion limits safely below the depth at which the native stack would overflow. See [Software Architecture](Luma_Software_Architecture.md) §4.16 for the full `ResourceLimits` design and the additional limits it defines.
 
-| Resource               | Default      | Environment Variable                |
-| ---------------------- | ------------ | ----------------------------------- |
-| Max call depth         | 256          | `LUMA_LIMIT_MAX_CALL_DEPTH`         |
-| Max array size         | 10,000,000   | `LUMA_LIMIT_MAX_ARRAY_SIZE`         |
-| Max dictionary size    | 10,000,000   | `LUMA_LIMIT_MAX_DICTIONARY_SIZE`    |
-| Max string size        | 256 MB       | `LUMA_LIMIT_MAX_STRING_SIZE`        |
-| Max regex pattern size | 10,000 bytes | `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE` |
-| Max while iterations   | 10,000,000   | `LUMA_LIMIT_MAX_WHILE_ITERATIONS`   |
-| Max open sockets       | 1,000        | `LUMA_LIMIT_MAX_OPEN_SOCKETS`       |
-| Max task queue size    | 100,000      | `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`    |
+| Resource                | Default      | Ceiling           | Environment Variable                 |
+| ----------------------- | ------------ | ----------------- | ------------------------------------ |
+| Max call depth          | 256          | 4,096             | `LUMA_LIMIT_MAX_CALL_DEPTH`          |
+| Max parse depth         | 128          | 512               | `LUMA_LIMIT_MAX_PARSE_DEPTH`         |
+| Max expression depth    | 1,000        | 4,000             | `LUMA_LIMIT_MAX_EXPRESSION_DEPTH`    |
+| Max interpolation depth | 32           | 256               | `LUMA_LIMIT_MAX_INTERPOLATION_DEPTH` |
+| Max JSON nesting depth  | 128          | 512               | `LUMA_LIMIT_MAX_JSON_NESTING_DEPTH`  |
+| Max array size          | 10,000,000   | 1,000,000,000     | `LUMA_LIMIT_MAX_ARRAY_SIZE`          |
+| Max dictionary size     | 10,000,000   | 1,000,000,000     | `LUMA_LIMIT_MAX_DICTIONARY_SIZE`     |
+| Max string size         | 256 MB       | 4 GiB             | `LUMA_LIMIT_MAX_STRING_SIZE`         |
+| Max regex pattern size  | 10,000 bytes | 1,000,000 bytes   | `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`  |
+| Max while iterations    | 10,000,000   | 1,000,000,000,000 | `LUMA_LIMIT_MAX_WHILE_ITERATIONS`    |
+| Max open sockets        | 1,000        | 65,536            | `LUMA_LIMIT_MAX_OPEN_SOCKETS`        |
+| Max task queue size     | 100,000      | 100,000,000       | `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`     |
+
+The effective call depth is also capped by the VM's fixed frame limit of 256 (see [§4](#4--recursion-limits)). The remaining limits — for example the queue, stack, set, channel, HTTP, and process-output sizes — follow the same `LUMA_LIMIT_<NAME>` pattern; their defaults and ceilings are listed in `core/common/resource_limits.hpp`.
 
 ## 7 — Interpreter Optimisations
 

@@ -105,8 +105,7 @@ configure time with `-DLUMA_FUZZ_QUICK_TIME=<secs>`.
 | ----------------------- | ---------------------------------------- | ---------------------------------------------------------------------- |
 | `fuzz_lexer`            | Lexer                                    | Tokenises arbitrary byte sequences                                     |
 | `fuzz_parser`           | Lexer → Parser                           | Constructs ASTs from random token streams                              |
-| `fuzz_resolver`         | Lexer → Parser → Resolver                | Exercises name resolution and scope handling                           |
-| `fuzz_type_checker`     | Lexer → Parser → Resolver → Type Checker | Validates the type checker against arbitrary programs                  |
+| `fuzz_type_checker`     | Lexer → Parser → Type Checker            | Validates the type checker against arbitrary programs                  |
 | `fuzz_linter`           | Lexer → Parser → Linter                  | Feeds arbitrary AST shapes through the linter                          |
 | `fuzz_compiler`         | Lexer → Parser → Compiler                | Compiles random ASTs to bytecode                                       |
 | `fuzz_optimizer`        | Lexer → Parser → Compiler → Optimizer    | Runs all optimisation levels on arbitrary bytecode                     |
@@ -383,7 +382,7 @@ All targets are built from a small set of shared headers:
   `encode`/`decode` callables for `std::optional`-returning decoders. Shared by
   `fuzz_encoder` and `fuzz_compression`; depends only on `fuzz_harness.hpp`.
 - **[fuzz_frontend.hpp](fuzz_frontend.hpp)** — analysis-stage helpers (`lex`,
-  `parse`, `resolve`, `type_check`, `lint`, `has_error`) that depend only on
+  `parse`, `type_check`, `lint`, `has_error`) that depend only on
   `luma_analysis`. Used by the analysis-only targets.
 - **[fuzz_pipeline.hpp](fuzz_pipeline.hpp)** — back-end helpers
   (`compile_ready_program`, `compile`, `resolve_includes`, `run_full_pipeline`)

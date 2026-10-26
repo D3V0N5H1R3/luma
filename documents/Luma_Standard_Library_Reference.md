@@ -4,6 +4,8 @@ Complete reference for Luma's built-in functions and standard library modules. E
 
 This reference was previously part of the [User Manual](Luma_User_Manual.md). For language syntax and semantics, see the [User Manual](Luma_User_Manual.md); for error-handling conventions, see [Error Handling](Luma_Error_Handling.md).
 
+> **File paths are UTF-8 on every platform.** Every function that takes a file path — the `FileSystem` functions, `Hash.*_file`, `Compression.*_file`, `Log.set_output`, `KeyValueStore.open` and `open_read_only`, `Csv.read_file` and `write_file`, `Xml.deserialize_file` and `write_file`, and `Http.download` — reads it as UTF-8, so a name such as `"测试.txt"` or `"café/notes.md"` works on Windows as well as on Linux and macOS. On Windows, a path string that is not valid UTF-8 is rejected with `invalid path '…': path is not valid UTF-8`, reported the same way as the function's other invalid-path errors (on POSIX any byte sequence is a valid path). Paths that functions return to Luma — for example from `FileSystem.list_files`, `FileSystem.absolute_path`, and `Process.current_directory` — and paths embedded in error messages are UTF-8 too.
+
 ---
 
 ## Table of Contents
@@ -126,7 +128,7 @@ These require no namespace prefix:
 | `Array.take_while(array, function)`      | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Take elements while predicate is true; fail if predicate throws                      |
 | `Array.unique(array)`                    | `(array<T>)`                           | `array<T>`                     | Deduplicate elements                                                                 |
 | `Array.unzip(array)`                     | `(array<(T, U)>)`                      | `(array<T>, array<U>)`         | Split an array of pairs into two parallel arrays (inverse of `zip`)                  |
-| `Array.windows(array, n)`                | `(array<T>, integer)`                  | `result<array<array<T>>>`      | Overlapping sliding windows of size `n`; fail if `n` is not > 0                      |
+| `Array.windows(array, n)`                | `(array<T>, integer)`                  | `result<array<array<T>>>`      | Overlapping windows of size `n`; fail if `n` ≤ 0 or windows × `n` exceeds the limit  |
 | `Array.zip(a, b)`                        | `(array<T>, array<U>)`                 | `array<(T, U)>`                | Pair elements into tuples; truncates to shorter array                                |
 | `Array.scan(array, init, function)`      | `(array<T>, U, function(U, T) -> U)`   | `result<array<U>>`             | Like reduce but returns all intermediate values; fail if callback throws             |
 | `Array.intersperse(array, separator)`    | `(array<T>, T)`                        | `array<T>`                     | Insert `separator` between each pair of elements                                     |
@@ -233,6 +235,8 @@ Closing a channel stops further sends, but receivers still get every value that 
 
 The only runtime errors are invalid arguments — a `new_buffered` capacity that is not positive or exceeds the maximum queue size, or a negative timeout — and `send`, `send_all`, or `send_timeout` on an unbounded channel that already holds the maximum queue size (`LUMA_LIMIT_MAX_CHANNEL_QUEUE_SIZE`, default 1,000,000); `try_send` returns `false` instead.
 
+**Cancellation:** inside a spawned task, the blocking `Channel.send`, `Channel.send_all`, `Channel.receive`, `Channel.consume`, and `Channel.select` give up as soon as the task is cancelled (by `Task.cancel` or by its `task_scope`) instead of blocking forever — the call does not return, and the task ends with its cancellation error. Code running outside any task has nothing to cancel, so there these calls block until they can complete; `send_timeout` and `receive_timeout` are bounded by their timeout instead.
+
 ```luma
 channel<integer> ch = Channel.new_buffered(2)
 _ = Channel.send(ch, 1)
@@ -309,7 +313,7 @@ match decoded {
 | `Console.write_to_stderr(message)`              | `(string)`         | `result<boolean>`       | Write to stderr                                                                                   |
 | `Console.write_to_stdout(message)`              | `(string)`         | `result<boolean>`       | Write to stdout                                                                                   |
 
-> **Resource limit** — Console input is bounded by the maximum string size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_STRING_SIZE`). `Console.prompt` and `Console.read_from_stdin` return `failure` if the input would exceed it.
+> **Resource limit** — Console input is bounded by the maximum string size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_STRING_SIZE`). Every line-reading function — `prompt`, `prompt_integer`, `prompt_number`, `prompt_with_default`, `confirm`, and `read_line` — returns `failure` (`input line exceeds maximum size`) for a longer line and discards the rest of that line, so the next read starts on a fresh one. `Console.read_lines` and `Console.read_from_stdin` return `failure` if the total input would exceed the limit.
 
 > **Console vs FileSystem:** `Console` handles console I/O — reading from stdin and writing to stdout/stderr. `FileSystem` handles file content — reading, writing, and appending data — as well as file metadata and paths (checking existence, querying size, listing directories, copying, renaming, and manipulating path components). Use `Console` for interactive console I/O; use `FileSystem` to read, write, and manage files and directories.
 
@@ -689,7 +693,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.create_directory(path)`           | `(string)`                 | `result<boolean>`                    | Create a directory                                                                             |
 | `FileSystem.create_directories(path)`         | `(string)`                 | `result<boolean>`                    | Create a directory and any missing parents (`mkdir -p`); no-op if it exists                    |
 | `FileSystem.delete(path)`                     | `(string)`                 | `result<boolean>`                    | Delete a file                                                                                  |
-| `FileSystem.delete_directory(path)`           | `(string)`                 | `result<boolean>`                    | Delete a directory; fail if path is not a directory                                            |
+| `FileSystem.delete_directory(path)`           | `(string)`                 | `result<boolean>`                    | Recursively delete a directory; refuses the working directory and its ancestors                |
 | `FileSystem.exists(path)`                     | `(string)`                 | `result<boolean>`                    | Whether the path exists                                                                        |
 | `FileSystem.extension(path)`                  | `(string)`                 | `string`                             | File extension (e.g. `".png"`)                                                                 |
 | `FileSystem.get_modified_time(path)`          | `(string)`                 | `result<number>`                     | Last-modified time as a Unix timestamp; fail on error                                          |
@@ -700,7 +704,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.is_relative(path)`                | `(string)`                 | `boolean`                            | Whether the path is relative                                                                   |
 | `FileSystem.is_symbolic_link(path)`           | `(string)`                 | `result<boolean>`                    | Whether the path is a symbolic link                                                            |
 | `FileSystem.join(a, b)`                       | `(string, string)`         | `string`                             | Join path components (two or more) into an absolute path resolved against the working directory |
-| `FileSystem.kind(path)`                       | `(string)`                 | `result<FileSystem.FileKind>`        | Classify a path as `File`, `Directory`, `Symlink`, or `Other`; fail if the path does not exist |
+| `FileSystem.kind(path)`                       | `(string)`                 | `result<FileSystem.FileKind>`        | Classify a path as `File`, `Directory`, `SymbolicLink`, or `Other`; fail if missing            |
 | `FileSystem.list_directories(path)`           | `(string)`                 | `result<array<string>>`              | List subdirectories                                                                            |
 | `FileSystem.list_files(path)`                 | `(string)`                 | `result<array<string>>`              | List files in a directory                                                                      |
 | `FileSystem.list_recursively(path)`           | `(string)`                 | `result<array<string>>`              | Recursively list all files and subdirectories beneath a directory                              |
@@ -714,7 +718,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.read_file_limited(path, maximum)` | `(string, integer)`        | `result<string>`                     | Read file; fail if it exceeds `maximum` bytes                                                  |
 | `FileSystem.read_file_typed(path)`            | `(string)`                 | `result<string, FileSystem.IoError>` | Read entire file; on failure the error is a typed `FileSystem.IoError` instead of a string     |
 | `FileSystem.read_lines(path)`                 | `(string)`                 | `result<array<string>>`              | Read file as array of lines                                                                    |
-| `FileSystem.relative(path, base)`             | `(string, string)`         | `string`                             | Relative path from `base`; fail if the result escapes the working-directory sandbox            |
+| `FileSystem.relative(path, base)`             | `(string, string)`         | `string`                             | Lexical relative path from `base`; never fails, no filesystem access or sandbox check          |
 | `FileSystem.rename(old, new)`                 | `(string, string)`         | `result<boolean>`                    | Rename a file                                                                                  |
 | `FileSystem.rename_directory(old, new)`       | `(string, string)`         | `result<boolean>`                    | Rename a directory; fail if path is not a directory                                            |
 | `FileSystem.size(path)`                       | `(string)`                 | `result<integer>`                    | File size in bytes                                                                             |
@@ -725,6 +729,12 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.write_lines(path, lines)`         | `(string, array<string>)`  | `result<boolean>`                    | Write array of lines to file                                                                   |
 
 `copy`, `delete`, `delete_directory`, `list_directories`, and `list_files` reject symbolic links and return `failure` to prevent symlink-following attacks.
+
+`FileSystem.delete_directory` removes the whole directory tree. It fails if the path is not a directory, and it refuses to delete the current working directory or any of its ancestors. The check compares file identity, not spelling, so `"."`, `"sub/.."`, a different letter case on Windows, or a symlinked alias of the working directory are all refused.
+
+`FileSystem.relative(path, base)` is purely lexical: it computes the relative path from `base` to `path` as strings (the result may begin with `..`), never touches the filesystem, and never fails. It applies no working-directory sandbox check, because the path it returns is relative to `base` rather than to the working directory — the sandbox is enforced when a path is actually used for I/O.
+
+> **Resource limit** — `read_file`, `read_file_typed`, and `read_lines` are bounded by the maximum string size, `read_bytes` by the maximum array size, and `read_file_limited` by its `maximum` argument. The bound is checked against the file size up front and enforced again while reading, so a file that grows after the check (or misreports its size) cannot exceed it; an oversized file returns `failure`.
 
 `FileSystem.FileInfo` record fields: `size` (`integer`, bytes; `0` for directories and other non-regular files), `modified_time` (`number`, fractional seconds since the Unix epoch, matching `get_modified_time`), `is_directory` (`boolean`), `is_file` (`boolean`), `is_symbolic_link` (`boolean`), and `kind` (`FileSystem.FileKind`, the single mutually-exclusive answer described below). `metadata` answers in one call what `size`, `get_modified_time`, `is_directory`, `is_file`, `is_symbolic_link`, and `kind` answer individually; the `is_symbolic_link` flag reflects the path itself (it is not followed) while the size, time, and directory/file flags follow symlinks.
 
@@ -775,7 +785,7 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | `Hash.algorithms()`                  | `()`                                         | `array<string>`  | List supported algorithm names                                                                                     |
 | `Hash.crc32(s)`                      | `(string)`                                   | `integer`        | CRC-32 checksum                                                                                                    |
 | `Hash.digest(algorithm, s)`          | `(Hash.Algorithm \| string, string)`         | `string`         | Digest `s` with the named algorithm; accepts the `Hash.Algorithm` choice or its string name                        |
-| `Hash.digest_file(algorithm, path)`  | `(Hash.Algorithm \| string, string)`         | `result<string>` | Streaming file digest with the named algorithm (`md5`/`sha1`/`sha256`/`sha512`); accepts the choice or string name |
+| `Hash.digest_file(algorithm, path)`  | `(Hash.Algorithm \| string, string)`         | `result<string>` | File-content digest with the named algorithm (`md5`/`sha1`/`sha256`/`sha512`); accepts the choice or string name   |
 | `Hash.hmac_sha256(key, message)`     | `(string, string)`                           | `string`         | HMAC-SHA-256                                                                                                       |
 | `Hash.hmac_sha512(key, message)`     | `(string, string)`                           | `string`         | HMAC-SHA-512                                                                                                       |
 | `Hash.md5(s)`                        | `(string)`                                   | `string`         | MD5 digest (32-char hex)                                                                                           |
@@ -791,6 +801,8 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | `Hash.sha512(s)`                     | `(string)`                                   | `string`         | SHA-512 digest (128-char hex)                                                                                      |
 | `Hash.sha512_typed(s)`               | `(string)`                                   | `Hash.Digest`    | SHA-512 digest tagged with its algorithm                                                                           |
 | `Hash.verify(algorithm, data, hash)` | `(Hash.Algorithm \| string, string, string)` | `boolean`        | Verify `hash` matches `data`; accepts the `Hash.Algorithm` choice or its string name                               |
+
+> **Resource limit** — The file functions (`md5_file`, `sha1_file`, `sha256_file`, `sha512_file`, and `digest_file`) read the whole file into memory, bounded by the maximum string size (`LUMA_LIMIT_MAX_STRING_SIZE`). An oversized file — or one whose size cannot be determined, such as a FIFO — returns `failure` up front, and the bound is enforced again while reading, so a file that grows after the check cannot exceed it.
 
 `Hash.Algorithm` is a choice type with five variants — `Md5`, `Sha1`, `Sha256`, `Sha512`, `Crc32` — the discoverable, closed set of algorithms that `Hash.digest` and `Hash.verify` accept. Both functions take `Hash.Algorithm | string`: passing the choice variant is autocompleted and a typo becomes a compile error, while the string form (`"sha256"`, matching `Hash.algorithms()`) keeps every existing call working. This is the same "stringly-typed argument → choice, keep the string form for compatibility" dual-form as `Terminal.Color | string`.
 
@@ -850,6 +862,8 @@ HTTP/1.1 client built on raw sockets. `https://` URLs use TLS (via Mbed TLS) whe
 
 `Http.Response` record fields: `status` (`integer`), `reason` (`string`), `body` (`string`), `headers` (`dictionary<string>`).
 
+A request succeeds only once the whole response has been read. When a response carries both `Transfer-Encoding: chunked` and `Content-Length`, chunked framing wins (RFC 9112 §6.3), and any bytes the server sends past `Content-Length` are dropped. A truncated response (the connection closes before the headers or the declared body are complete), a response larger than the maximum response size, or malformed chunked framing is a `failure` — `Http.Error.Malformed` from `Http.get_typed` — never a `success` carrying a silently shortened body. Request timeouts (the `"timeout"` option of `Http.request`, the `timeout_milliseconds` argument of `Http.request_with`, and an `Http.Request`'s `timeout_ms`) are clamped to the range 1–2147483647 milliseconds; the default is 30 seconds.
+
 `Http.Cookie` is a flat record decoding a `Set-Cookie` header — `name: string`, `value: string`, `domain: string`, `path: string`, `expires: string`, `secure: boolean`, `http_only: boolean`. `Http.parse_cookie(header)` returns `result<Http.Cookie>` (the parse is lenient — unknown attributes are ignored — and fails only when the mandatory `name=value` pair is missing or its name is empty), and `Http.cookie_header(cookie)` formats a cookie back into a header string. A `Set-Cookie` value from `Http.Response.headers` is otherwise an opaque string a program must hand-split on `;` and `=`; this pair gives it the same structured treatment `Http.parse_url` gives a URL.
 
 `Http.MediaType` is a record decoding a `Content-Type` header value — `type: string`, `subtype: string`, `parameters: dictionary<string>`. `Http.parse_media_type(header)` returns `result<Http.MediaType>`: `"text/html; charset=utf-8"` becomes `{ type = "text", subtype = "html", parameters = { charset = "utf-8" } }`. The `type`/`subtype` are lower-cased (RFC 9110 makes them case-insensitive) and parameter keys lower-cased, while parameter values keep their case (a quoted value like `boundary="a b c"` is unquoted); the parse is lenient on the parameter list but fails when the essential `type/subtype` form is absent. This gives the last stringly-typed response header the same structured treatment as `Http.parse_url` / `Http.parse_cookie`, so deciding "is this JSON?" (`mt.subtype == "json"`) or reading the charset no longer means manual string splitting.
@@ -892,7 +906,7 @@ failure(_e) { print("request failed") }
 }
 ```
 
-`Http.Error` is a choice type classifying _why_ a request failed at the transport level — `InvalidUrl` (unsupported scheme, empty or malformed host), `ConnectionFailed` (DNS resolution, socket, or send failure), `Timeout` (the connection did not complete within the timeout), `TlsError` (a TLS handshake failure, or an `https://` request in a build without TLS support), `TooManyRedirects` (reserved for future redirect following — not currently produced), `Blocked` (an SSRF-guarded private/reserved/loopback target, or a CRLF-injected request), and `Malformed` (an empty or unparseable response). It is surfaced by `Http.get_typed(url)`, which returns `result<Http.Response, Http.Error>`: the value on success is the same `Http.Response` record `Http.get` returns, and the error on failure is the typed category, so a program can retry only on `Timeout`, fall back only on `ConnectionFailed`, or distinguish a `Blocked` URL from a `Malformed` response — instead of substring-matching an opaque message. This is an opt-in, additive companion (mirroring `FileSystem.read_file_typed` / `FileSystem.IoError`): the plain `Http.get` and every other `Http` request function keep their string-error `result<Http.Response>`.
+`Http.Error` is a choice type classifying _why_ a request failed at the transport level — `InvalidUrl` (unsupported scheme, empty or malformed host), `ConnectionFailed` (DNS resolution, socket, or send failure), `Timeout` (the connection did not complete within the timeout), `TlsError` (a TLS handshake failure, or an `https://` request in a build without TLS support), `TooManyRedirects` (reserved for future redirect following — not currently produced), `Blocked` (an SSRF-guarded private/reserved/loopback target, or a CRLF-injected request), and `Malformed` (an empty, truncated, oversized, or unparseable response — there is no separate too-large variant). It is surfaced by `Http.get_typed(url)`, which returns `result<Http.Response, Http.Error>`: the value on success is the same `Http.Response` record `Http.get` returns, and the error on failure is the typed category, so a program can retry only on `Timeout`, fall back only on `ConnectionFailed`, or distinguish a `Blocked` URL from a `Malformed` response — instead of substring-matching an opaque message. This is an opt-in, additive companion (mirroring `FileSystem.read_file_typed` / `FileSystem.IoError`): the plain `Http.get` and every other `Http` request function keep their string-error `result<Http.Response>`.
 
 ```luma
 match Http.get_typed("http://example.com/api") {
@@ -977,7 +991,7 @@ choice Json.Value {
 }
 ```
 
-`Json.parse(s)` returns a `result<Json.Value>`, so a `match` over the parsed value is exhaustive and autocompleted — "is this a string or an object?" becomes a compile-checked question rather than a stringly-typed guess. The `as_string` / `as_number` / `as_boolean` / `as_array` / `as_object` accessors extract a variant's payload as a `result` (failing on a type mismatch), while `field(v, key)` and `index(v, i)` return an `optional<Json.Value>` for safe navigation (`none` on a missing key, out-of-bounds index, or wrong container type). `Json.to_string(v)` serialises a `Json.Value` back to compact JSON, emitting object keys in sorted order and integral numbers without a trailing decimal. The existing dynamic `Json.deserialize` / `Json.get` / `Json.serialize` API is unchanged for simple cases.
+`Json.parse(s)` returns a `result<Json.Value>`, so a `match` over the parsed value is exhaustive and autocompleted — "is this a string or an object?" becomes a compile-checked question rather than a stringly-typed guess. The `as_string` / `as_number` / `as_boolean` / `as_array` / `as_object` accessors extract a variant's payload as a `result` (failing on a type mismatch), while `field(v, key)` and `index(v, i)` return an `optional<Json.Value>` for safe navigation (`none` on a missing key, out-of-bounds index, or wrong container type). `Json.to_string(v)` serialises a `Json.Value` back to compact JSON, emitting object keys in sorted order and integral numbers without a trailing decimal. Because a `Json.Value` can be built at runtime (for example by wrapping a value in `Json.Value.JsonArray` in a loop), `to_string` enforces its own bounds: it raises a runtime error if the value nests deeper than the JSON nesting depth limit, holds more array elements and object members in total than `max_json_elements`, or would serialise to more than the maximum string size. The existing dynamic `Json.deserialize` / `Json.get` / `Json.serialize` API is unchanged for simple cases.
 
 ```luma
 function string summarise(Json.Value v) {
@@ -1029,9 +1043,9 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.is_empty(s)`                 | `(key_value_store)`                                                       | `boolean`                 | Whether the store has zero entries                                                         |
 | `KeyValueStore.is_read_only(s)`             | `(key_value_store)`                                                       | `boolean`                 | Whether the store was opened read-only                                                     |
 | `KeyValueStore.keys(s)`                     | `(key_value_store)`                                                       | `array<string>`           | All keys                                                                                   |
-| `KeyValueStore.open(path)`                  | `(string)`                                                                | `result<key_value_store>` | Open or create a store file                                                                |
+| `KeyValueStore.open(path)`                  | `(string)`                                                                | `result<key_value_store>` | Open a store (empty if missing); fail if an existing file can't be read fully              |
 | `KeyValueStore.open_read_only(path)`        | `(string)`                                                                | `result<key_value_store>` | Open an existing store read-only; fail if missing                                          |
-| `KeyValueStore.reload(s)`                   | `(key_value_store)`                                                       | `result<key_value_store>` | Re-read from disk                                                                          |
+| `KeyValueStore.reload(s)`                   | `(key_value_store)`                                                       | `result<key_value_store>` | Re-read from disk; fail (store unchanged) if the file can't be read fully                  |
 | `KeyValueStore.remove(s, key)`              | `(key_value_store, string)`                                               | `result<key_value_store>` | Remove a key; fail if read-only                                                            |
 | `KeyValueStore.save(s)`                     | `(key_value_store)`                                                       | `result<string>`          | Write to disk                                                                              |
 | `KeyValueStore.set(s, key, value)`          | `(key_value_store, string, string)`                                       | `result<key_value_store>` | Set a key; fail if read-only                                                               |
@@ -1040,6 +1054,10 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.transaction(s, apply)`       | `(key_value_store, function(key_value_store) -> result<key_value_store>)` | `result<key_value_store>` | Run `apply`; commit (and persist a file-backed store) on `success`, roll back on `failure` |
 | `KeyValueStore.update(s, key, function)`    | `(key_value_store, string, function(optional<string>) -> string)`         | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only                                        |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                                                       | `array<string>`           | All values                                                                                 |
+
+`KeyValueStore.save` (and a committing `transaction` on a file-backed store) writes atomically: the entries are written to a uniquely named temporary file next to the store, which is then renamed over the store file. If any step fails — including the final rename — the temporary file is removed, the previous store file is left untouched, and the call returns `failure`. There is deliberately no copy fallback, since copying over the target in place could leave a truncated store if interrupted.
+
+> **Resource limit** — Loading a store (`open`, `open_read_only`, `reload`) reads the file under the same bound as `FileSystem.read_file`: its size is checked up front and the limit is enforced again while reading. An existing store file that cannot be read completely — too large, unreadable, corrupt (a non-empty line with no tab separator), or over the entry or key/value size limits — makes `open`, `open_read_only`, and `reload` return `failure` (a failed `reload` leaves the current store unchanged), so a later `save` can never overwrite data that was not loaded. Only a missing file starts an empty store (and only for `open` and `reload`).
 
 ### Transactions
 
@@ -1106,7 +1124,7 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.project(a, b)`                   | `(array<number>, array<number>)`               | `result<array<number>>`        | Projection of `a` onto `b`; fail on dimension mismatch or zero `b`              |
 | `LinearAlgebra.reject(a, b)`                    | `(array<number>, array<number>)`               | `result<array<number>>`        | Perpendicular component `a - proj_b(a)`; fail on dimension mismatch or zero `b` |
 | `LinearAlgebra.linear_interpolation(a, b, t)`   | `(array<number>, array<number>, number)`       | `result<array<number>>`        | Component-wise `a + t·(b − a)`; fail on dimension mismatch                      |
-| `LinearAlgebra.outer(a, b)`                     | `(array<number>, array<number>)`               | `result<array<array<number>>>` | Outer product with entry `(i,j) = a[i]·b[j]`                                    |
+| `LinearAlgebra.outer(a, b)`                     | `(array<number>, array<number>)`               | `result<array<array<number>>>` | Outer product `(i,j) = a[i]·b[j]`; runtime error past the matrix element limit  |
 | `LinearAlgebra.rank(matrix)`                    | `(array<array<number>>)`                       | `integer`                      | Matrix rank via Gaussian elimination                                            |
 | `LinearAlgebra.is_identity(matrix)`             | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is the identity                                              |
 | `LinearAlgebra.is_diagonal(matrix)`             | `(array<array<number>>)`                       | `boolean`                      | Whether all off-diagonal entries are zero                                       |
@@ -1401,7 +1419,7 @@ The existing numeric comparator convention (a `function(T, T) -> number` returni
 | Function                                                 | Parameter Types              | Return Type                                    | Description                                                                              |
 | -------------------------------------------------------- | ---------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `Process.current_directory()`                            | `()`                         | `result<string>`                               | Current working directory                                                                |
-| `Process.execute(cmd)`                                   | `(string)`                   | `result<Process.CommandOutput>`                | Execute shell command, capturing stdout **and** stderr separately                        |
+| `Process.execute(cmd)`                                   | `(string)`                   | `result<Process.CommandOutput>`                | Execute a tokenized command (no shell), capturing stdout **and** stderr separately       |
 | `Process.exit(code)`                                     | `(integer)`                  | `none`                                         | Terminate the program with exit code                                                     |
 | `Process.exit_status(output)`                            | `(Process.CommandOutput)`    | `Process.ExitStatus`                           | Classify a `CommandOutput`'s `exit_code` sign convention                                 |
 | `Process.get_all_environment_variables()`                | `()`                         | `dictionary<string>`                           | All environment variables as a dictionary                                                |
@@ -1414,7 +1432,7 @@ The existing numeric comparator convention (a `function(T, T) -> number` returni
 | `Process.find_executable(name)`                          | `(string)`                   | `optional<string>`                             | Absolute path of `name` on `PATH` (honouring `PATHEXT` on Windows), or `none`; read-only |
 | `Process.get_process_id()`                               | `()`                         | `integer`                                      | Current process ID                                                                       |
 | `Process.has_environment_variable(name)`                 | `(string)`                   | `boolean`                                      | Whether the environment variable is set                                                  |
-| `Process.run(cmd)`                                       | `(string)`                   | `result<Process.ProcessResult>`                | Execute shell command and capture stdout                                                 |
+| `Process.run(cmd)`                                       | `(string)`                   | `result<Process.ProcessResult>`                | Execute a tokenized command (no shell) and capture stdout                                |
 | `Process.set_environment_variable(name, value)`          | `(string, string)`           | `result<none>`                                 | Set environment variable; fail if name/value exceeds 32 KB or OS rejects                 |
 | `Process.signal(process_id, signal)`                     | `(integer, Process.Signal)`  | `result<boolean>`                              | Send a `Process.Signal` to another process by pid; fail if the OS rejects the request    |
 
@@ -1431,9 +1449,13 @@ match Process.run_command(cmd) {
 }
 ```
 
+> **Windows batch scripts** — On Windows, every launch path (`run`, `execute`, `run_command`, `run_command_typed`, and `run_command_timeout`) refuses to start a `.bat` or `.cmd` file, because Windows would run it through `cmd.exe`, which re-interprets the carefully quoted arguments as shell syntax. The extension check ignores letter case, a directory or drive prefix, an NTFS stream suffix (`::$DATA`), and trailing dots, spaces, path separators, or `.` components (`x.bat\.`), and it is repeated on the file the name resolves to; a program name that itself ends in a dot, a space, or a path separator is refused as well. `run_command_typed` reports the refusal as `Process.Error.InvalidCommand`; the other functions return a `failure`. To run a batch script deliberately, invoke `cmd.exe` explicitly — `Process.command("cmd.exe", ["/c", "script.bat"])` — and quote its arguments for `cmd` yourself.
+
+> **Unicode on Windows** — Program names, arguments, and environment variable names and values are UTF-8 on every platform. On Windows, processes are launched and the environment is read and written through the Unicode (wide-character) system APIs, so non-ASCII text such as `"café"` reaches the child process and round-trips through `set_environment_variable` / `get_environment_variable` intact, and a program is found on `PATH` even when its folder or name is not ASCII. Text that is not valid UTF-8 makes the launch or `set_environment_variable` fail instead of being garbled.
+
 `Process.ProcessResult` record fields: `exit_code` (`integer`), `output` (`string`).
 
-`Process.run_command_timeout(cmd, timeout_milliseconds)` is the timeout-bounded companion of `run_command`: it runs the same shell-free `Process.Command` but, if the child has not exited within `timeout_milliseconds` milliseconds, forcibly kills it (SIGKILL on POSIX; a kill-on-close Job Object that terminates the whole child process tree on Windows) and returns a `failure`. This is the safety affordance that prevents a hung or runaway child — a stuck network call, a program waiting on input it will never receive, an infinite loop — from freezing the Luma program forever. A command that exits within the deadline returns exactly the same `result<Process.CommandOutput>` as `run_command` (a negative exit code, surfaced as `failure`, still signals a launch failure such as an unknown program). `timeout_milliseconds` must be a positive integer; a non-positive value fails immediately without launching anything. On a timeout the failure message reads `command timed out after <n> ms`, and the child's partial output is discarded.
+`Process.run_command_timeout(cmd, timeout_milliseconds)` is the timeout-bounded companion of `run_command`: it runs the same shell-free `Process.Command` but, if the child has not exited within `timeout_milliseconds` milliseconds, forcibly kills it together with its descendants (SIGKILL to the child's own process group on POSIX; a kill-on-close Job Object that terminates the whole child process tree on Windows) and returns a `failure`. The deadline also covers a child that closes its standard output and error but keeps running, so detaching from its output streams cannot outlive the timeout. On POSIX the child's standard input is `/dev/null`, because its own process group puts it outside the terminal's foreground job, and on Linux the child is also killed if the interpreter itself dies. This is the safety affordance that prevents a hung or runaway child — a stuck network call, a program waiting on input it will never receive, an infinite loop — from freezing the Luma program forever. A command that exits within the deadline returns exactly the same `result<Process.CommandOutput>` as `run_command` (a negative exit code, surfaced as `failure`, still signals a launch failure such as an unknown program). `timeout_milliseconds` must be a positive integer; a non-positive value fails immediately without launching anything. On a timeout the failure message reads `command timed out after <n> ms`, and the child's partial output is discarded.
 
 ```luma
 # Cap a potentially slow tool at two seconds so it can never hang the script.
@@ -1486,7 +1508,7 @@ failure(_other) { print("git could not be launched") }
 }
 ```
 
-`Process.Signal` is a choice type with four variants — `Terminate`, `Kill`, `Interrupt`, `Hangup` — a portable, match-able request to end another process, consumed by `Process.signal(process_id, signal)` (which returns `result<boolean>`: `success(true)` when the OS accepted the request, and a `failure` when it did not — for example no such process, or insufficient permission). On POSIX the four variants map directly to `SIGTERM`, `SIGKILL`, `SIGINT`, and `SIGHUP`. On Windows there are no POSIX signals, so the mapping is deliberately lossy: `Terminate` and `Kill` both call `TerminateProcess`, `Interrupt` sends a `CTRL_C_EVENT` to the target's console group where possible, and `Hangup` degrades to `TerminateProcess`. Because it uses no magic signal numbers and a `match` over it is exhaustive, calling code stays portable and readable. Like the rest of `Process`, `signal` is OS-only (unavailable in `--box` sandbox mode).
+`Process.Signal` is a choice type with four variants — `Terminate`, `Kill`, `Interrupt`, `Hangup` — a portable, match-able request to end another process, consumed by `Process.signal(process_id, signal)` (which returns `result<boolean>`: `success(true)` when the OS accepted the request, and a `failure` when it did not — for example no such process, or insufficient permission). On POSIX the four variants map directly to `SIGTERM`, `SIGKILL`, `SIGINT`, and `SIGHUP`. On Windows there are no POSIX signals, so the mapping is deliberately lossy: `Terminate` and `Kill` both call `TerminateProcess`, `Interrupt` sends a `CTRL_C_EVENT` to the target's console group where possible, and `Hangup` degrades to `TerminateProcess`. Because it uses no magic signal numbers and a `match` over it is exhaustive, calling code stays portable and readable. `process_id` must be a positive process id that fits in 32 bits: on every platform a value ≤ 0 fails with `pid must be a positive process id`, and a value above 2147483647 fails with `pid … is out of range`, before any signal is sent (on POSIX, `kill(2)` would otherwise read such values as a process group or "every process"). Like the rest of `Process`, `signal` is OS-only (unavailable in `--box` sandbox mode).
 
 ```luma
 match Process.signal(child_pid, Process.Signal.Terminate) {
@@ -1520,7 +1542,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.peek(queue)`                   | `(queue)`                         | `result<T>`              | View front element; fail if empty                      |
 | `Queue.reduce(queue, init, function)` | `(queue, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                 |
 | `Queue.reverse(queue)`                | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
-| `Queue.to_array(queue)`               | `(queue)`                         | `array<T>`               | Convert to array                                       |
+| `Queue.to_array(queue)`               | `(queue)`                         | `array<T>`               | Convert to array; a typed `queue<T>` gives `array<T>`  |
 
 ## 26 — Random
 
@@ -1692,7 +1714,9 @@ print(year.text)  # "2024"
 
 > **Engine limitation (medium risk)** — The C++ standard library's `std::regex` ECMAScript engine has **no native support** for named capture groups: neither `(?<name>...)` nor `(?P<name>...)` parses, and both throw a compile error from `std::regex` directly. Named-group support is therefore implemented entirely client-side: before compiling the pattern, Luma strips the `<name>`/`P<name>` annotation down to a plain `(` (preserving the group's ordinal position exactly, so nothing about the underlying match semantics changes) and separately records a group-index-to-name map, which is used after matching to populate `named_groups`. Once compiled, a named group behaves exactly like an ordinary capturing group — there is no way to distinguish "named" at the regex-engine level, only in Luma's bookkeeping around it. A malformed or unterminated named-group annotation (e.g. a missing `>`) is left untouched and surfaces as an ordinary invalid-pattern failure (`is_valid` returns `false`, and the fallible functions return `failure`) rather than a crash. `(?<=...)` and `(?<!...)` (lookbehind assertions) are recognized as _not_ named-group syntax and are left unchanged — though `std::regex`'s ECMAScript grammar does not support lookbehind at all (only lookahead, `(?=...)`/`(?!...)`), so a pattern using it will fail to compile regardless of named-group handling.
 
-> **Resource limits** — Regular expression patterns are capped at a maximum byte size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`). Patterns exceeding the limit return `failure` (or `false` from `is_valid`). The regex engine uses the ECMAScript dialect provided by the C++ standard library. There is no built-in protection against catastrophic backtracking — patterns with nested quantifiers such as `(a+)+b` can take exponential time on non-matching input. When processing untrusted patterns, keep them simple and avoid nested repetition operators (`*`, `+`, `{n,m}` inside groups that are themselves repeated).
+> **Resource limits** — Regular expression patterns are capped at a maximum byte size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`). Patterns exceeding the limit return `failure` (or `false` from `is_valid`). `replace`, `replace_all`, `replace_with`, and `replace_all_with` raise a runtime error if the result would exceed the maximum string size — a pattern that matches the empty string matches at every position, so the output can far outgrow the input. The regex engine uses the ECMAScript dialect provided by the C++ standard library.
+
+> **ReDoS guard** — Every entry point rejects patterns that are likely to cause catastrophic backtracking: a repeated group whose body is itself quantified (`(a+)+`, `((a+))+`, `(?:a+)+`), and a repeated group whose alternatives can match the same text (`(a|aa)+`, `(.|a)+`, `(a|)+`). A rejected pattern makes the fallible functions return `failure`, `is_valid` return `false`, and `compile_typed` report `Unsafe`. The check looks through named groups (it runs on the pattern after the `<name>` annotations are stripped, so `(?<n>a|aa)+` is caught), and it treats character classes, class escapes (`\d`, `\w`, `\s`), code-unit escapes (`\x`, `\u`, `\c`), and back-references (`\1`–`\9`) as wildcards that may overlap any alternative. Under the `CaseInsensitive` flag, alternatives that differ only in letter case — `(a|A)+` — are rejected too. Disjoint alternation such as `(cat|dog)+` is allowed. The guard is a conservative heuristic: it may refuse some safe patterns (such as `(ab|ac)+`) and does not prove linear-time matching, so keep untrusted patterns simple and avoid nested repetition.
 
 `RegularExpression.Error` is a choice type classifying _why_ a pattern was rejected — `InvalidSyntax(message)` (a typo the engine could not parse, carrying its diagnostic message), `Unsafe` (rejected by the ReDoS guard as catastrophically slow, e.g. the nested quantifier `(a+)+`), and `TooLarge` (past the pattern size limit). It is surfaced by `RegularExpression.compile_typed(pattern)`, which returns `result<string, RegularExpression.Error>`: on success the payload is the validated pattern (reusable directly in `matches`/`find`/`replace`), and on failure the typed category tells a beginner apart a typo from a pattern that was refused for being dangerously slow or too big — a distinction the module already computes internally but that `is_valid`'s bare `boolean` and the other functions' opaque string error hide. This is opt-in and additive (mirroring `Http.get_typed` / `Http.Error` and `FileSystem.read_file_typed` / `FileSystem.IoError`): `is_valid` and every string-error function are unchanged.
 
@@ -1862,7 +1886,7 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 | `Set.reduce(set, initial, function)`   | `(set, U, function(U, T) -> U)` | `result<U>`          | Fold elements with accumulator; fail if `function` throws             |
 | `Set.remove(set, value)`               | `(set, T)`                      | `set`                | Set without `v`                                                       |
 | `Set.symmetric_difference(set, other)` | `(set, set)`                    | `set`                | Elements in one but not both                                          |
-| `Set.to_array(set)`                    | `(set)`                         | `array<T>`           | Convert to array                                                      |
+| `Set.to_array(set)`                    | `(set)`                         | `array<T>`           | Convert to array; a typed `set<T>` gives `array<T>`                   |
 | `Set.union(set, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                            |
 
 ## 32 — Socket
@@ -1902,6 +1926,8 @@ Cross-platform TCP and UDP networking.
 | `Socket.udp_send(socket, data, host, port)`                      | `(socket, string, string, integer)` | `result<integer>`               | Send UDP datagram                                                                        |
 
 > **Resource limit** — A program may hold only a bounded number of open sockets at the same time (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_OPEN_SOCKETS`). Attempting to create more returns `failure("socket limit reached — too many open sockets")`. Close sockets that are no longer needed to stay within the limit.
+
+> **Timeouts** — `Socket.connect` and `Socket.connect_typed` apply a default 30-second connect timeout; `connect_timeout` and `connect_timeout_typed` take an explicit one. A connect tries every address the host name resolves to, in turn, until one accepts — so a dual-stack `localhost` works whichever address family the server listens on. Reads and `accept` have **no** default timeout: `receive`, `receive_typed`, `receive_all`, `receive_line`, `receive_bytes`, and `accept` block until data, end of stream, or a connection arrives. Call `Socket.set_timeout` to bound send and receive waits.
 
 `Socket.Address` record fields: `host: string`, `port: integer`. Returned by `Socket.local_address_parts` and `Socket.remote_address_parts` so the caller reads the host and port directly instead of splitting a `"host:port"` string (which is fragile for IPv6).
 
@@ -1959,19 +1985,21 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.push(stack, value)`            | `(stack, T)`                      | `stack`                     | Push to top                                                                                                     |
 | `Stack.reduce(stack, init, function)` | `(stack, U, function(U, T) -> U)` | `result<U>`                 | Fold elements from bottom to top; fail if callback throws                                                       |
 | `Stack.reverse(stack)`                | `(stack)`                         | `stack`                     | Reverse element order (top becomes bottom)                                                                      |
-| `Stack.to_array(stack)`               | `(stack)`                         | `array<T>`                  | Convert to array                                                                                                |
+| `Stack.to_array(stack)`               | `(stack)`                         | `array<T>`                  | Convert to array; a typed `stack<T>` gives `array<T>`                                                           |
 
 ## 34 — Statistics
 
 Descriptive statistics over numeric arrays. Split out of `Math` so the four maths modules each cover one cohesive domain: `Math` (scalar arithmetic, trigonometry, number theory, geometry), `Calculus`, `LinearAlgebra`, and `Statistics` (whole-dataset summaries). The plain aggregate `Math.sum` stays in `Math`; every function here reduces or summarises a whole array.
 
-| Function                               | Parameter Types   | Return Type      | Description                        |
-| -------------------------------------- | ----------------- | ---------------- | ---------------------------------- |
-| `Statistics.mean(array)`               | `(array<number>)` | `result<number>` | Arithmetic mean; fail if empty     |
-| `Statistics.median(array)`             | `(array<number>)` | `result<number>` | Median value; fail if empty        |
-| `Statistics.mode(array)`               | `(array<number>)` | `result<number>` | Most frequent value; fail if empty |
-| `Statistics.standard_deviation(array)` | `(array<number>)` | `result<number>` | Standard deviation; fail if empty  |
-| `Statistics.variance(array)`           | `(array<number>)` | `result<number>` | Population variance; fail if empty |
+| Function                               | Parameter Types   | Return Type      | Description                                                    |
+| -------------------------------------- | ----------------- | ---------------- | -------------------------------------------------------------- |
+| `Statistics.mean(array)`               | `(array<number>)` | `result<number>` | Arithmetic mean; fail if empty or the result is not finite     |
+| `Statistics.median(array)`             | `(array<number>)` | `result<number>` | Median value; fail if empty or the result is not finite        |
+| `Statistics.mode(array)`               | `(array<number>)` | `result<number>` | Most frequent value; fail if empty or the result is not finite |
+| `Statistics.standard_deviation(array)` | `(array<number>)` | `result<number>` | Standard deviation; fail if empty or the result is not finite  |
+| `Statistics.variance(array)`           | `(array<number>)` | `result<number>` | Population variance; fail if empty or the result is not finite |
+
+A statistic that is not a finite number — because an element is `NaN` or infinite, or the computation overflows — is reported as a `failure` (for example `"Statistics.mean: result is not a finite number"`) rather than a `success` carrying `NaN` or an infinity, consistent with `Math.round_to` and `Math.log_base`.
 
 ## 35 — String
 
@@ -1988,7 +2016,7 @@ Descriptive statistics over numeric arrays. Split out of `Math` so the four math
 | `String.contains(value, sub)`                   | `(string, string)`                   | `boolean`         | Whether `s` contains `sub`                                                                 |
 | `String.contains_ignore_case(value, sub)`       | `(string, string)`                   | `boolean`         | Whether `s` contains `sub`, ignoring ASCII case                                            |
 | `String.count(value, sub)`                      | `(string, string)`                   | `integer`         | Number of non-overlapping occurrences of `sub`                                             |
-| `String.dedent(value)`                          | `(string)`                           | `string`          | Remove common leading whitespace                                                           |
+| `String.dedent(value)`                          | `(string)`                           | `string`          | Remove common leading spaces/tabs of non-blank lines; keeps line endings                   |
 | `String.delete(value, start, end)`              | `(string, integer, integer)`         | `result<string>`  | Remove codepoint range `[start, end)`; fail if out of bounds or `start > end`              |
 | `String.ends_with(value, suffix)`               | `(string, string)`                   | `boolean`         | Whether `s` ends with `suffix`                                                             |
 | `String.ends_with_any(value, suffixes)`         | `(string, array<string>)`            | `boolean`         | Whether `s` ends with any element of `suffixes`                                            |
@@ -2017,8 +2045,8 @@ Descriptive statistics over numeric arrays. Split out of `Math` so the four math
 | `String.lines(value)`                           | `(string)`                           | `array<string>`   | Split into lines on `\n`, `\r\n`, `\r`; no trailing empty after a final newline            |
 | `String.lowercase(value)`                       | `(string)`                           | `string`          | Convert to lowercase                                                                       |
 | `String.matches(value, glob)`                   | `(string, string)`                   | `result<boolean>` | Glob match (`*` = any chars, `?` = one char)                                               |
-| `String.pad_left(value, width, fill)`           | `(string, integer, string)`          | `result<string>`  | Left-pad to `width`; fail if `width` exceeds the maximum                                   |
-| `String.pad_right(value, width, fill)`          | `(string, integer, string)`          | `result<string>`  | Right-pad to `width`; fail if `width` exceeds the maximum                                  |
+| `String.pad_left(value, width, fill)`           | `(string, integer, string)`          | `result<string>`  | Left-pad to `width`; fail if `width` is negative or exceeds the maximum                    |
+| `String.pad_right(value, width, fill)`          | `(string, integer, string)`          | `result<string>`  | Right-pad to `width`; fail if `width` is negative or exceeds the maximum                   |
 | `String.parse_integer(value)`                   | `(string)`                           | `result<integer>` | Parse string as integer                                                                    |
 | `String.parse_number(value)`                    | `(string)`                           | `result<number>`  | Parse string as number                                                                     |
 | `String.remove_prefix(value, prefix)`           | `(string, string)`                   | `string`          | Remove leading prefix                                                                      |
@@ -2035,7 +2063,7 @@ Descriptive statistics over numeric arrays. Split out of `Math` so the four math
 | `String.starts_with(value, prefix)`             | `(string, string)`                   | `boolean`         | Whether `s` starts with `prefix`                                                           |
 | `String.starts_with_any(value, prefixes)`       | `(string, array<string>)`            | `boolean`         | Whether `s` starts with any element of `prefixes`                                          |
 | `String.substring(value, start, end)`           | `(string, integer, integer)`         | `string`          | Substring by codepoint indices                                                             |
-| `String.template(template, variables)`          | `(string, dictionary<string>)`       | `string`          | Replace `{key}` placeholders from dictionary                                               |
+| `String.template(template, variables)`          | `(string, dictionary<string>)`       | `string`          | Single-pass `{key}` substitution; values not re-expanded, unknown keys kept as written     |
 | `String.title_case(value)`                      | `(string)`                           | `string`          | Capitalise first letter of each word                                                       |
 | `String.to_bytes(value)`                        | `(string)`                           | `array<integer>`  | UTF-8 byte values                                                                          |
 | `String.to_camel_case(value)`                   | `(string)`                           | `string`          | Convert to `camelCase`                                                                     |
@@ -2056,7 +2084,15 @@ Descriptive statistics over numeric arrays. Split out of `Math` so the four math
 
 > **Note:** `String.uppercase()`, `String.lowercase()`, `String.equals_ignore_case()`, and `String.contains_ignore_case()` only fold ASCII characters (a–z, A–Z). Non-ASCII UTF-8 code points (e.g., `ü`, `é`, `ñ`) are compared or passed through unchanged. Use these functions only when working with ASCII text.
 
-> **Resource limits** — `String.center`, `String.pad_left`, and `String.pad_right` cap their target `width`, and `String.repeat` caps its repeat count and result size. See the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits) for Luma's resource limits and their `LUMA_LIMIT_*` overrides.
+> **Note:** `String.template` makes a single left-to-right pass over the template: each `{key}` found in `variables` is replaced by its value, substituted values are never re-scanned (so a value that itself contains `{other}` stays literal), and an unknown or unterminated placeholder is kept exactly as written. `String.dedent` treats spaces and tabs as indentation and removes the longest leading run common to every non-blank line, comparing it character by character like Python's `textwrap.dedent` (so a tab never matches a space); blank lines do not affect the common prefix, and every line ending — including a trailing newline — is preserved.
+
+```luma
+dictionary<string> variables = {"name": "Ada", "greeting": "Hello {name}"}
+string text = String.template("{greeting}! {missing}", variables)
+# text == "Hello {name}! {missing}" — the substituted value is not re-expanded
+```
+
+> **Resource limits** — `String.center`, `String.pad_left`, and `String.pad_right` cap their target `width` (and fail with `width must not be negative` for a negative one), and `String.repeat` caps its repeat count and result size. `String.indent`, `String.insert`, `String.replace`, `String.replace_all`, `String.replace_range`, and `String.template` raise a runtime error if the result would exceed the maximum string size. The same output bounds apply outside `String`: `RegularExpression.replace`, `replace_all`, `replace_with`, and `replace_all_with` raise a runtime error past the maximum string size; `Json.to_string` raises one past the JSON nesting depth, `max_json_elements`, or the maximum string size; `Array.windows` returns `failure` when the number of windows × the window size exceeds the maximum array size; and `LinearAlgebra.outer` raises the maximum-matrix-element-count error. See the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits) for Luma's resource limits and their `LUMA_LIMIT_*` overrides.
 
 **Constants:**
 
@@ -2090,11 +2126,11 @@ task<integer> t = spawn compute(42) # ok — direct call
 # task<integer> t = spawn fn        # error: spawn requires a function call expression
 ```
 
-Each `task` value may be awaited only once. Awaiting the same task a second time produces a runtime error (`await called on an already-consumed task`).
+A `task` value may be awaited more than once: every `await` of the same task returns the same outcome — the same value, or the same error. Awaiting a task that was cancelled raises a cancellation error (`task cancelled`).
 
 ### Structured Concurrency with `task_scope`
 
-A `task_scope` block provides structured concurrency — all tasks spawned inside the block are automatically awaited before the scope exits. The scope returns an `array` of the results in spawn order. If any child task fails, the remaining siblings are cancelled cooperatively and the error propagates out of the scope.
+A `task_scope` block provides structured concurrency — all tasks spawned inside the block are automatically awaited before the scope exits. The scope returns an `array` of the results in spawn order. The join is **fail-fast**: the first child that fails with a genuine error immediately cancels its remaining siblings cooperatively, and that error propagates out of the scope once every child has finished or been cancelled. A child cancelled on its own with `Task.cancel` is not a failure — it contributes `none` to the result array and its siblings keep running.
 
 ```luma
 array<integer> results = task_scope {
@@ -2131,12 +2167,12 @@ Using `spawn` outside a `task_scope` is a compile-time error. Wrap spawns in a `
 | `Task.all(tasks)`                                                  | `(array<task<T>>)`                    | `result<array<T>>` | Wait for all; return results in order                                                                      |
 | `Task.all_settled(tasks)`                                          | `(array<task<T>>)`                    | `array<result<T>>` | Await every task; one result each, never fails as a whole (fail-slow)                                      |
 | `Task.any(tasks)`                                                  | `(array<task<T>>)`                    | `result<T>`        | First successful result; ignore failures                                                                   |
-| `Task.cancel(task)`                                                | `(task<T>)`                           | `boolean`          | Cancel a task cooperatively; `true` if token set                                                           |
+| `Task.cancel(task)`                                                | `(task<T>)`                           | `boolean`          | Cancel only this task; `true` for a spawned task, `false` for `completed`/`failed`                         |
 | `Task.completed(value)`                                            | `(T)`                                 | `task<T>`          | A task already completed with `value` (like `Promise.resolve`)                                             |
 | `Task.delay(milliseconds)`                                         | `(integer)`                           | `none`             | Sleep for `milliseconds` milliseconds                                                                      |
 | `Task.failed(message)`                                             | `(string)`                            | `task<T>`          | A task already failed with `message` (like `Promise.reject`)                                               |
 | `Task.flat_map(task, function)`                                    | `(task<T>, function(T) -> task<U>)`   | `result<U>`        | Chain with another spawn                                                                                   |
-| `Task.is_cancelled(task)`                                          | `(task<T>)`                           | `boolean`          | Whether the task's cancellation token is set                                                               |
+| `Task.is_cancelled(task)`                                          | `(task<T>)`                           | `boolean`          | Whether the task or its enclosing `task_scope` has been cancelled                                          |
 | `Task.is_done(task)`                                               | `(task<T>)`                           | `result<boolean>`  | Whether the task has completed                                                                             |
 | `Task.map(task, function)`                                         | `(task<T>, function(T) -> U)`         | `result<U>`        | Transform completed value                                                                                  |
 | `Task.map_n(tasks, function)`                                      | `(array<task<T>>, function(T) -> U)`  | `result<array<U>>` | Map over all task results                                                                                  |
@@ -2146,6 +2182,8 @@ Using `spawn` outside a `task_scope` is a compile-time error. Wrap spawns in a `
 | `Task.sequence(tasks)`                                             | `(array<task<T>>)`                    | `result<array<T>>` | Await each in order; collect results                                                                       |
 | `Task.timeout(task, milliseconds)`                                 | `(task<T>, integer)`                  | `result<T>`        | Await with timeout; fail on timeout                                                                        |
 | `Task.timeout_or(task, milliseconds, default)`                     | `(task<T>, integer, T)`               | `T`                | Task's value if it completes within `milliseconds`, else `default` (timeout or failure)                    |
+
+**Cancellation.** Every spawned task owns its own cancellation token, chained to the token of its enclosing `task_scope`. `Task.cancel(t)` sets only `t`'s token, so its siblings and the scope are unaffected; it returns `true` for every spawned task and `false` for a task created already resolved by `Task.completed` or `Task.failed`. Cancelling a task also cancels the tasks it spawned inside its own `task_scope` blocks. `Task.is_cancelled(t)` reports `true` when `t`'s own token **or** an enclosing scope's token is set — for example after a failing sibling cancelled the scope. Cancellation is cooperative: a task notices it at its next check (a loop iteration, a function call, an `await`, or a blocking `Channel` wait) and ends with a cancellation error, which `await` raises as `task cancelled`. On its way out, the cancelled task's own `catch` blocks do not intercept the cancellation, but its `finally` blocks run to completion (their loops and calls do not stop again; a blocking `Channel` wait still gives up); a task that ends with any error while it is being cancelled counts as cancelled, not failed.
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
@@ -2227,6 +2265,10 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.test_stop()`                         | `()`                                  | `string`                          | End the headless test session; return the final captured output                                             |
 | `Terminal.underline(text)`                     | `(string)`                            | `string`                          | Underlined styled text                                                                                      |
 | `Terminal.write(text)`                         | `(string)`                            | `none`                            | Write without trailing newline                                                                              |
+
+> **Sandbox mode** — Under `--box`, `Terminal` stays available but withholds the functions that read the interactive console or switch it into an input mode: `enable_raw_mode`, `enable_mouse`, `read_key`, `read_key_timeout`, `get_input`, `read_line`, and `get_cursor_position`. Calling one raises a runtime error such as `'Terminal.read_key' is not available in sandbox mode (--box)`. The output functions (styling, colours, cursor movement, screen control), the state queries (`is_terminal`, `size`, `is_in_raw_mode`, `is_mouse_enabled`, …), the `disable_raw_mode` and `disable_mouse` restores, and the headless `test_*` harness remain available. See [Sandbox and Threat Model](Luma_Sandbox.md#4--guarantees).
+
+**Restoring the terminal on exit:** the first `Terminal.enable_raw_mode()` registers a restore-on-exit hook. If the program then ends while still in raw mode — an uncaught runtime error, `Process.exit`, or simply finishing without `Terminal.disable_raw_mode()` — the interpreter leaves raw mode and disables mouse reporting before exiting, so the user's shell stays usable.
 
 ### Key and Mouse Event Names
 

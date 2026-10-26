@@ -177,6 +177,9 @@ void VM::handle_set_global() {
     auto name_idx = read_u16();
     const auto& name = checked_name(name_idx);
 
+    reject_global_write_in_task(name);
+    ++globals_version_; // Invalidates the cached task snapshot.
+
     Binding*& slot = global_slot(name_idx);
     if (slot == nullptr) {
         slot = lookup_global_cache(name);
@@ -189,6 +192,7 @@ void VM::handle_set_global() {
         }
 
         slot->value = peek();
+        slot->write_version = globals_version_; // Only this binding is re-copied.
     } else {
         // First definition — goes through the Environment to insert the
         // binding, then we cache the new entry in both the string-keyed and
@@ -197,6 +201,7 @@ void VM::handle_set_global() {
         auto* new_binding = global_env_->find_binding(name);
 
         if (new_binding != nullptr) {
+            new_binding->write_version = globals_version_;
             global_cache_.insert_or_update(name, new_binding);
             slot = new_binding;
         }
@@ -216,6 +221,8 @@ void VM::handle_loop(const std::uint8_t* code_start) {
         runtime_error(vm_errors::loop_target_before_start);
     }
     cf.ip -= offset;
+    // Loop back-edge: a cooperative cancellation point for spawned tasks.
+    check_cancellation();
     if (++loop_iterations_ > ResourceLimits::max_while_iterations) [[unlikely]] {
         loop_iterations_ = 0;
         runtime_error(
@@ -385,6 +392,18 @@ void VM::handle_tail_call(const std::uint8_t*& code_start, const std::uint8_t*& 
     if (callee.is_function() && (callee.as_function()->compiled != nullptr)) {
         const auto* compiled = callee.as_function()->compiled;
 
+        // A tail call is a call: honour cancellation here too, or a cancelled
+        // task stuck in tail recursion would never observe it.
+        check_cancellation();
+
+        // Mirror call_function(): a missing required argument (reachable from
+        // the REPL, which skips type checking, or crafted bytecode) must fail
+        // instead of silently running as `none`.
+        if (arg_count < compiled->required_arity) [[unlikely]] {
+            runtime_error(
+                vm_errors::missing_required_arguments(compiled->required_arity, arg_count));
+        }
+
         if (arg_count < compiled->arity) {
             for (int i = arg_count; i < compiled->arity; ++i) {
                 push(Value{});
@@ -403,11 +422,25 @@ void VM::handle_tail_call(const std::uint8_t*& code_start, const std::uint8_t*& 
         const auto count = static_cast<std::size_t>(arg_count);
         const auto src_base = stack_size() - count;
 
+        // Move the arguments down over the old frame's slots (src >= dest, so
+        // ascending order never clobbers an unread argument), then destroy
+        // everything above them — the old frame's locals and the moved-from
+        // argument slots — instead of leaving it alive above the top.
         for (std::size_t i = 0; i < count; ++i) {
-            stack_.base[base + 1 + i] = stack_.base[src_base + i];
+            const auto dest = base + 1 + i;
+            const auto src = src_base + i;
+
+            if (dest != src) {
+                stack_.base[dest] = std::move(stack_.base[src]);
+            }
         }
 
-        stack_.top = stack_.base + base + 1 + arg_count;
+        stack_.truncate_to(base + 1 + count);
+
+        // The frame now runs a different activation; a try handler the old
+        // activation left behind (only possible in crafted bytecode) must not
+        // resume into it.
+        exception_handler_.discard_frames_from(stack_.frames.size() - 1);
 
         // Reusing this frame for a different function invalidates its
         // per-function global inline cache.  cf.global_bindings points into

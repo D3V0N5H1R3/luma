@@ -20,9 +20,11 @@
 // Each container module still defines its own type-specific operations
 // (e.g. Queue.enqueue, Stack.push, Set.add) separately.
 
+#include <algorithm>
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -32,6 +34,13 @@
 #include "runtime/stdlib/common/native_function.hpp"
 
 namespace luma {
+
+// Linear value-equality membership test shared by the container modules
+// (Queue.contains, Stack.contains, and Set's dedup-on-insert path) so the
+// "any element equals the needle" rule lives in one place.
+[[nodiscard]] inline bool contains_value(std::span<const Value> elements, const Value& needle) {
+    return std::ranges::any_of(elements, [&needle](const Value& v) { return v.equals(needle); });
+}
 
 // ContainerOps<Container, ReverseEach, Unique> — registers common operations
 // for a container type.  Container must have an `elements` member of type

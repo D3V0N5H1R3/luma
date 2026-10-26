@@ -11,8 +11,8 @@ namespace luma {
 // §Component Usage — how the analysis/runtime scopes relate, and why they are
 // not unified into a single Scope<Symbol> / ScopeBase<T> base.
 // ─────────────────────────────────────────────────────────────────────────────
-// This is the single authoritative rationale; resolver.hpp, linter_tracker.hpp,
-// and type_info.hpp point here instead of repeating it.
+// This is the single authoritative rationale; linter_tracker.hpp and
+// type_info.hpp point here instead of repeating it.
 //
 // Components that USE ScopeStack<T>:
 //   - LinterTracker (analysis/linter/linter_tracker.hpp)
@@ -21,10 +21,6 @@ namespace luma {
 //       push/pop model is a natural fit.
 //
 // Components with CUSTOM scope implementations (cannot use ScopeStack<T>):
-//   - ResolveScope (analysis/resolver/resolver.hpp)
-//       shared_ptr-linked parent chain.  lookup() traverses parent pointers to
-//       resolve variables across enclosing scopes, adjusting frame_depth at each
-//       hop — a flat vector cannot express those parent relationships.
 //   - TypeScope (analysis/types/type_info.hpp)
 //       shared_ptr-linked parent chain.  Tracks ownership state
 //       (unique/borrow/consumed) with flow-sensitive snapshot/restore for
@@ -35,19 +31,18 @@ namespace luma {
 //       access (scope_stack[i]).  ScopeStack offers at(), but the compiler
 //       predates it and migrating offers no benefit.
 //
-// Why no shared base: the scopes differ in (1) element type — ResolvedVar (slot
-// index, frame_depth, mutability) vs VariableInfo (location, usage flags)
-// vs SymbolInfo (type + ownership); (2) architecture — shared_ptr parent-chain
-// vs flat vector; (3) frame-depth accounting — ResolveScope tracks it per hop,
-// the others have no equivalent.  ScopeStack<T> already covers the generic
-// push/pop pattern; the per-pass symbol semantics stay specialised.
+// Why no shared base: the scopes differ in (1) element type — VariableInfo
+// (location, usage flags) vs SymbolInfo (type + ownership) vs CompilerScope
+// (stack slots, upvalues); (2) architecture — shared_ptr parent-chain vs flat
+// vector.  ScopeStack<T> already covers the generic push/pop pattern; the
+// per-pass symbol semantics stay specialised.
 //
 // The push_scope / pop_scope RAII lifecycle IS now unified (was
 // TODO(refactor/A10)): analysis/common/scope_manager.hpp provides the
 // ScopeManager<Derived> CRTP mixin — the "IScopeManager" seam that standardises
 // only the make_scope_guard() enter/exit lifecycle without forcing a shared
-// storage layout.  NameResolver and the Linter inherit it and keep their
-// distinct scope element types and architectures above.  The TypeChecker
+// storage layout.  The Linter inherits it and keeps its scope element type
+// and architecture above.  The TypeChecker
 // deliberately stays out: it drives push/pop through its own virtual
 // IScopeService role interface (see analysis/types/type_checking_services_roles.hpp).
 // ─────────────────────────────────────────────────────────────────────────────

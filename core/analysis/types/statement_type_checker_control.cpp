@@ -20,17 +20,18 @@ void StatementTypeChecker::visit_for(const ForStatement& stmt) {
 
     ++tc_.context().loop_depth;
 
+    begin_loop_ownership_flow();
+
     tc_.push_scope();
 
     // Single cleanup for every exit path (the dictionary early-return and the
     // normal fall-through): pop the loop scope, decrement the loop-depth
     // counter, check for unique consumption inside the body, and restore the
-    // pre-loop ownership state.
+    // pre-loop ownership state (plus whatever a `break` path consumed).
     const ScopeGuard loop_cleanup{[&] {
         tc_.pop_scope();
         --tc_.context().loop_depth;
-        check_unique_consumption_in_loop(before_loop, stmt.location);
-        tc_.context().current_scope->restore_ownership(before_loop);
+        end_loop_ownership_flow(before_loop, !never_falls_through(stmt.body), stmt.location);
     }};
 
     const auto iterable_type = tc_.infer_expression_type(*stmt.iterable);
@@ -101,7 +102,17 @@ void StatementTypeChecker::visit_for(const ForStatement& stmt) {
                                                     {});
             }
         } else {
-            // Not a tuple — define vars as the element type for recovery.
+            // Not a tuple — report a concrete element type, then define the
+            // variables permissively for recovery.
+            if (element_type.kind != TypeInfo::Kind::StdlibAny &&
+                element_type.kind != TypeInfo::Kind::Unknown) {
+                tc_.error(std::format("cannot destructure '{}' into {} loop variables — "
+                                      "the elements are not tuples",
+                                      element_type.to_string(), stmt.destructure_variables.size()),
+                          stmt.location,
+                          "iterate over an array of tuples, or use a single loop variable");
+            }
+
             for (const auto& var : stmt.destructure_variables) {
                 tc_.context().current_scope->define(var, TypeInfo::make(TypeInfo::Kind::StdlibAny),
                                                     {});
@@ -153,59 +164,44 @@ void StatementTypeChecker::visit_if_statement(const IfStatement& stmt) {
 
     // Capture ownership state after then-branch.
     const auto after_then = tc_.context().current_scope->snapshot_ownership();
+    const bool then_exits = never_falls_through(stmt.then_body);
 
-    if (!stmt.else_body.empty()) {
-        // Restore to pre-branch state before checking else.
-        tc_.context().current_scope->restore_ownership(before);
-
-        {
-            auto scope = tc_.make_scope_guard();
-            check_statement_list(stmt.else_body);
+    if (stmt.else_body.empty()) {
+        // No else branch: the implicit empty else leaves ownership as it was
+        // before the if, so a unique variable consumed in the then-branch is
+        // consumed afterwards (it may have been moved) — unless the
+        // then-branch never falls through, in which case only the implicit
+        // else reaches the code after the if.
+        if (then_exits) {
+            tc_.context().current_scope->restore_ownership(before);
+        } else {
+            match_arm_binding::merge_branch_ownership(tc_, before, {after_then, before});
         }
 
-        const auto after_else = tc_.context().current_scope->snapshot_ownership();
-
-        // Merge: a unique variable is consumed after if/else only if
-        // it was consumed in BOTH branches.  If consumed in only one
-        // branch, mark it consumed (conservative — prevents use-after-
-        // move on the path where it was consumed).
-        for (const auto& entry : before) {
-            // Bind plain locals rather than capturing the structured binding
-            // by reference in the lambda below: clang-analyzer mis-models a
-            // captured structured-binding reference as an undefined pointer
-            // (a known core.NullDereference false positive).
-            const auto& name = entry.first;
-            const bool was_consumed_before = entry.second;
-
-            // A variable's consumed flag after a branch, falling back to its
-            // pre-branch state when the branch left it untouched.
-            const auto consumed_after = [&](const TypeScope::OwnershipSnapshot& snapshot) {
-                for (const auto& snapshot_entry : snapshot) {
-                    if (snapshot_entry.first == name) {
-                        return snapshot_entry.second;
-                    }
-                }
-
-                return was_consumed_before;
-            };
-
-            const bool consumed_in_then = consumed_after(after_then);
-            const bool consumed_in_else = consumed_after(after_else);
-
-            const auto* sym = tc_.lookup_variable(name);
-
-            if ((sym != nullptr) && sym->is_unique) {
-                // If consumed on any path, mark consumed (safe default).
-                tc_.context().current_scope->mark_consumed(name,
-                                                           consumed_in_then || consumed_in_else);
-            }
-        }
-    } else {
-        // No else branch: restore to pre-branch state.  A unique variable
-        // consumed only in the then-branch is NOT reliably consumed
-        // (the else path did not consume it), so restore original state.
-        tc_.context().current_scope->restore_ownership(before);
+        return;
     }
+
+    // Restore to pre-branch state before checking else.
+    tc_.context().current_scope->restore_ownership(before);
+
+    {
+        auto scope = tc_.make_scope_guard();
+        check_statement_list(stmt.else_body);
+    }
+
+    const auto after_else = tc_.context().current_scope->snapshot_ownership();
+
+    std::vector<TypeScope::OwnershipSnapshot> falling_through;
+
+    if (!then_exits) {
+        falling_through.push_back(after_then);
+    }
+
+    if (!never_falls_through(stmt.else_body)) {
+        falling_through.push_back(after_else);
+    }
+
+    match_arm_binding::merge_branch_ownership(tc_, before, falling_through);
 }
 
 void StatementTypeChecker::visit_match_statement(const MatchStatement& stmt) {
@@ -224,7 +220,7 @@ void StatementTypeChecker::visit_match_statement(const MatchStatement& stmt) {
 
         tc_.push_scope();
 
-        check_match_arm_comparison(arm, subject_type);
+        match_arm_binding::check_arm_comparison(tc_, arm, subject_type, stmt.location);
         match_arm_binding::bind_arm_names(tc_, arm, subject_type);
         match_arm_binding::bind_choice_fields(tc_, arm, subject_type, stmt.location, true);
 
@@ -250,60 +246,14 @@ void StatementTypeChecker::visit_match_statement(const MatchStatement& stmt) {
 
         tc_.pop_scope();
 
-        // Capture ownership state after this arm.
-        arm_snapshots.push_back(tc_.context().current_scope->snapshot_ownership());
+        // Capture ownership state after this arm, unless the arm never
+        // reaches the code after the match.
+        if (arm.body_expr || !never_falls_through(arm.body)) {
+            arm_snapshots.push_back(tc_.context().current_scope->snapshot_ownership());
+        }
     }
 
-    match_arm_binding::merge_arm_ownership(tc_, before, arm_snapshots);
-}
-
-void StatementTypeChecker::check_match_arm_comparison(const MatchArm& arm,
-                                                      const TypeInfo& subject_type) {
-    // Range arms carry no comparison value, so validate their subject type
-    // before the comparison-value early-return below.  Like integer-case arms,
-    // a range only matches an integer subject.
-    if (arm.kind() == MatchArm::Kind::IntegerRangeCase &&
-        subject_type.kind != TypeInfo::Kind::Integer &&
-        subject_type.kind != TypeInfo::Kind::StdlibAny &&
-        subject_type.kind != TypeInfo::Kind::Unknown) {
-        tc_.error(
-            std::format("match arm has range case but subject is '{}'", subject_type.to_string()),
-            arm.range_location(), "range case arms can only match integer values");
-
-        return;
-    }
-
-    if (!arm.comparison_value()) {
-        return;
-    }
-
-    const auto arm_val_type = tc_.infer_expression_type(*arm.comparison_value());
-
-    // Validate comparison type compatibility with subject.
-    if (arm.kind() == MatchArm::Kind::IntegerCase && subject_type.kind != TypeInfo::Kind::Integer &&
-        subject_type.kind != TypeInfo::Kind::StdlibAny &&
-        subject_type.kind != TypeInfo::Kind::Unknown) {
-        tc_.error(
-            std::format("match arm has integer case but subject is '{}'", subject_type.to_string()),
-            arm.comparison_value()->location, "integer case arms can only match integer values");
-    } else if (arm.kind() == MatchArm::Kind::StringCase &&
-               subject_type.kind != TypeInfo::Kind::String &&
-               subject_type.kind != TypeInfo::Kind::StdlibAny &&
-               subject_type.kind != TypeInfo::Kind::Unknown) {
-        tc_.error(
-            std::format("match arm has string case but subject is '{}'", subject_type.to_string()),
-            arm.comparison_value()->location, "string case arms can only match string values");
-    } else if (arm.kind() == MatchArm::Kind::Comparison &&
-               !tc_.is_assignable(subject_type, arm_val_type) &&
-               !tc_.is_assignable(arm_val_type, subject_type) &&
-               subject_type.kind != TypeInfo::Kind::StdlibAny &&
-               subject_type.kind != TypeInfo::Kind::Unknown) {
-        tc_.error(std::format("match comparison type '{}' is not compatible with subject "
-                              "type '{}'",
-                              arm_val_type.to_string(), subject_type.to_string()),
-                  arm.comparison_value()->location,
-                  "ensure the case value type matches the match subject type");
-    }
+    match_arm_binding::merge_branch_ownership(tc_, before, arm_snapshots);
 }
 
 void StatementTypeChecker::visit_block(const BlockStatement& stmt) {
@@ -342,17 +292,18 @@ void StatementTypeChecker::visit_while(const WhileStatement& stmt) {
     // would use a consumed value — that is an error.
     const auto before = tc_.context().current_scope->snapshot_ownership();
 
+    begin_loop_ownership_flow();
+
     {
         auto scope = tc_.make_scope_guard();
         check_statement_list(stmt.body);
     }
 
-    // Check: any outer unique variable newly consumed inside the loop?
-    check_unique_consumption_in_loop(before, stmt.location);
-
-    // Restore original state — the loop may not execute, so ownership
-    // state should not change based on the loop body.
-    tc_.context().current_scope->restore_ownership(before);
+    // Check: any outer unique variable newly consumed inside the loop?  Then
+    // restore the original state — the loop may not execute, so ownership
+    // state should not change based on the loop body — except for what a
+    // `break` path consumed on its way out of the loop.
+    end_loop_ownership_flow(before, !never_falls_through(stmt.body), stmt.location);
 }
 
 void StatementTypeChecker::visit_try(const TryStatement& stmt) {
@@ -477,6 +428,79 @@ bool StatementTypeChecker::match_definitely_returns(const MatchStatement& match_
     }
 
     return true;
+}
+
+bool StatementTypeChecker::never_falls_through(std::span<const StatementPtr> stmts) const {
+    for (const auto& stmt : stmts) {
+        switch (stmt->kind) {
+            case StatementKind::Return:
+            case StatementKind::Break:
+            case StatementKind::Continue:
+                return true;
+
+            case StatementKind::If: {
+                const auto& if_stmt = static_cast<const IfStatement&>(*stmt);
+
+                if (!if_stmt.else_body.empty() && never_falls_through(if_stmt.then_body) &&
+                    never_falls_through(if_stmt.else_body)) {
+                    return true;
+                }
+
+                break;
+            }
+
+            case StatementKind::Block: {
+                if (never_falls_through(static_cast<const BlockStatement&>(*stmt).statements)) {
+                    return true;
+                }
+
+                break;
+            }
+
+            case StatementKind::While: {
+                // `while true` without a break targeting it never completes:
+                // its body can only return or loop again.
+                const auto& while_stmt = static_cast<const WhileStatement&>(*stmt);
+
+                if (is_boolean_literal(*while_stmt.condition) &&
+                    static_cast<const LiteralExpression&>(*while_stmt.condition).boolean_value() &&
+                    !body_can_break(while_stmt.body)) {
+                    return true;
+                }
+
+                break;
+            }
+
+            case StatementKind::Try: {
+                const auto& try_stmt = static_cast<const TryStatement&>(*stmt);
+
+                if (never_falls_through(try_stmt.try_body) &&
+                    (try_stmt.catch_body.empty() || never_falls_through(try_stmt.catch_body))) {
+                    return true;
+                }
+
+                break;
+            }
+
+            case StatementKind::Match: {
+                const auto& match_stmt = static_cast<const MatchStatement&>(*stmt);
+
+                if (tc_.is_match_exhaustive(match_stmt) &&
+                    std::ranges::all_of(match_stmt.arms, [this](const MatchArm& arm) {
+                        return never_falls_through(arm.body);
+                    })) {
+                    return true;
+                }
+
+                break;
+            }
+
+            default:
+                break;
+        }
+    }
+
+    return false;
 }
 
 bool StatementTypeChecker::body_can_break(const std::vector<StatementPtr>& stmts) const {

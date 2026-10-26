@@ -1,11 +1,13 @@
 // Windows implementations of the platform_process primitives.
 // Compiled only on Windows (see core/runtime/CMakeLists.txt).
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <limits>
 #include <optional>
 #include <string>
@@ -14,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "analysis/errors/error.hpp"
 #include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/stdlib/system/platform_process.hpp"
@@ -27,7 +30,7 @@ namespace luma::platform_process {
 
 // Build a safe Windows command-line string by individually quoting each
 // argument according to the MSVC CRT parsing rules.  This prevents
-// metacharacter injection when using CreateProcessA.  Declared in
+// metacharacter injection when using CreateProcessW.  Declared in
 // platform_process.hpp so the quoting grammar can be unit tested directly.
 std::string build_windows_cmdline(const std::vector<std::string>& argv) {
     std::string cmdline{};
@@ -81,99 +84,379 @@ std::string build_windows_cmdline(const std::vector<std::string>& argv) {
     return cmdline;
 }
 
-// Windows implementation: spawn via CreateProcessA with a pipe for stdout/stderr.
-std::pair<int, std::string> execute_command(std::string_view cmd) {
+namespace {
+
+// Convert UTF-8 text (every Luma string) to UTF-16 for the wide Win32 APIs.
+// Returns nullopt for ill-formed UTF-8.  The narrow "A" APIs must not be used:
+// they decode the bytes in the ANSI code page, mangling non-ASCII program
+// names, arguments and environment values.
+[[nodiscard]] std::optional<std::wstring> utf8_to_wide(std::string_view utf8) {
+    if (utf8.empty()) {
+        return std::wstring{};
+    }
+
+    if (utf8.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        return std::nullopt;
+    }
+
+    const int source_len = static_cast<int>(utf8.size());
+    const int len =
+        MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), source_len, nullptr, 0);
+
+    if (len <= 0) {
+        return std::nullopt;
+    }
+
+    std::wstring wide(static_cast<std::size_t>(len), L'\0');
+
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), source_len, wide.data(),
+                            len) != len) {
+        return std::nullopt;
+    }
+
+    return wide;
+}
+
+// RAII owner for a Win32 HANDLE.  Every pipe end, process, thread and job handle
+// in this file is held by one, so no early return or exception can leak it.
+class UniqueHandle {
+public:
+    UniqueHandle() = default;
+
+    explicit UniqueHandle(HANDLE handle) noexcept : handle_{handle} {}
+
+    ~UniqueHandle() {
+        reset();
+    }
+
+    UniqueHandle(const UniqueHandle&) = delete;
+    UniqueHandle& operator=(const UniqueHandle&) = delete;
+
+    UniqueHandle(UniqueHandle&& other) noexcept : handle_{std::exchange(other.handle_, nullptr)} {}
+
+    UniqueHandle& operator=(UniqueHandle&& other) noexcept {
+        if (this != &other) {
+            reset(std::exchange(other.handle_, nullptr));
+        }
+
+        return *this;
+    }
+
+    [[nodiscard]] HANDLE get() const noexcept {
+        return handle_;
+    }
+
+    [[nodiscard]] bool valid() const noexcept {
+        return handle_ != nullptr && handle_ != INVALID_HANDLE_VALUE;
+    }
+
+    void reset(HANDLE handle = nullptr) noexcept {
+        if (valid()) {
+            CloseHandle(handle_);
+        }
+
+        handle_ = handle;
+    }
+
+private:
+    HANDLE handle_{nullptr};
+};
+
+// An anonymous pipe whose write end is handed to the child (inheritable) and
+// whose read end stays private to the parent (non-inheritable).
+struct ChildPipe {
+    UniqueHandle read;
+    UniqueHandle write;
+};
+
+[[nodiscard]] bool create_child_pipe(ChildPipe& pipe) {
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
 
-    HANDLE read_pipe = nullptr;
-    HANDLE write_pipe = nullptr;
+    HANDLE read_end = nullptr;
+    HANDLE write_end = nullptr;
 
-    if (CreatePipe(&read_pipe, &write_pipe, &sa, 0) == FALSE) {
-        return {-1, ""};
+    if (CreatePipe(&read_end, &write_end, &sa, 0) == FALSE) {
+        return false;
     }
 
-    // Prevent the read handle from being inherited by the child.
-    SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0);
+    pipe.read.reset(read_end);
+    pipe.write.reset(write_end);
 
-    STARTUPINFOA si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = write_pipe;
-    si.hStdError = write_pipe;
+    // The child must never inherit the parent's read end.
+    return SetHandleInformation(read_end, HANDLE_FLAG_INHERIT, 0) != FALSE;
+}
 
-    PROCESS_INFORMATION pi{};
+// A PROC_THREAD_ATTRIBUTE_LIST carrying PROC_THREAD_ATTRIBUTE_HANDLE_LIST, which
+// restricts the handles a child inherits to exactly `handles` even though
+// CreateProcess is called with bInheritHandles=TRUE.  Without it the child would
+// inherit EVERY inheritable handle in the interpreter — including the pipe write
+// ends of other Process.* calls running concurrently on other tasks, whose
+// readers would then never see EOF while this unrelated child lives.
+class InheritedHandleList {
+public:
+    explicit InheritedHandleList(std::vector<HANDLE> handles) : handles_{std::move(handles)} {
+        SIZE_T size{0};
 
-    // Tokenize and re-quote to prevent metacharacter injection,
-    // matching the POSIX path which uses tokenize + execvp.
-    auto argv = tokenize_command(cmd);
+        // The sizing call is documented to fail with ERROR_INSUFFICIENT_BUFFER.
+        (void)InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
 
-    if (argv.empty()) {
-        CloseHandle(read_pipe);
-        CloseHandle(write_pipe);
-
-        return {-1, ""};
-    }
-
-    std::string safe_cmd{build_windows_cmdline(argv)};
-
-    const BOOL ok = CreateProcessA(nullptr, safe_cmd.data(), nullptr, nullptr, TRUE,
-                                   CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
-
-    // Close the write end — the child owns its copy.
-    CloseHandle(write_pipe);
-
-    if (ok == FALSE) {
-        CloseHandle(read_pipe);
-
-        return {-1, ""};
-    }
-
-    // Read child stdout.
-    std::string output{};
-    std::array<char, k_pipe_buffer_size> buffer{};
-    DWORD bytes_read{0};
-
-    while (ReadFile(read_pipe, buffer.data(), static_cast<DWORD>(buffer.size()), &bytes_read,
-                    nullptr) != FALSE &&
-           bytes_read > 0) {
-        if (output.size() + bytes_read > ResourceLimits::max_process_output_size) {
-            TerminateProcess(pi.hProcess, 1);
-
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            CloseHandle(read_pipe);
-
-            return {-1, ""};
+        if (size == 0) {
+            return;
         }
-        output.append(buffer.data(), bytes_read);
+
+        storage_.resize(size);
+
+        if (InitializeProcThreadAttributeList(list(), 1, 0, &size) == FALSE) {
+            return;
+        }
+
+        initialized_ = true;
+
+        valid_ =
+            UpdateProcThreadAttribute(list(), 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles_.data(),
+                                      handles_.size() * sizeof(HANDLE), nullptr, nullptr) != FALSE;
     }
 
-    WaitForSingleObject(pi.hProcess, INFINITE);
+    ~InheritedHandleList() {
+        if (initialized_) {
+            DeleteProcThreadAttributeList(list());
+        }
+    }
 
-    DWORD exit_code{0};
+    InheritedHandleList(const InheritedHandleList&) = delete;
+    InheritedHandleList& operator=(const InheritedHandleList&) = delete;
+    InheritedHandleList(InheritedHandleList&&) = delete;
+    InheritedHandleList& operator=(InheritedHandleList&&) = delete;
 
-    GetExitCodeProcess(pi.hProcess, &exit_code);
+    // The attribute list, or nullptr if it could not be built.
+    [[nodiscard]] LPPROC_THREAD_ATTRIBUTE_LIST get() noexcept {
+        return valid_ ? list() : nullptr;
+    }
 
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    CloseHandle(read_pipe);
+private:
+    [[nodiscard]] LPPROC_THREAD_ATTRIBUTE_LIST list() noexcept {
+        return reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage_.data());
+    }
 
-    // Windows DWORD exit codes > INT_MAX are clamped to -1 to match POSIX WEXITSTATUS behaviour.
-    const int safe_code = (exit_code > static_cast<DWORD>(std::numeric_limits<int>::max()))
-                              ? -1
-                              : static_cast<int>(exit_code);
+    // UpdateProcThreadAttribute stores a pointer to this array, so it must
+    // outlive the CreateProcess call — hence a member, not a parameter.
+    std::vector<HANDLE> handles_;
+    std::vector<std::byte> storage_{};
+    bool initialized_{false};
+    bool valid_{false};
+};
 
-    return {safe_code, std::move(output)};
+// The process and primary-thread handles of a launched child.
+struct ChildProcess {
+    UniqueHandle process;
+    UniqueHandle thread;
+};
+
+// Call a Win32 "fill this buffer" API that returns the required size (including
+// the terminator) when the buffer is too small and the written length
+// (excluding it) on success.  Returns nullopt when the API fails.
+template <typename Fill> [[nodiscard]] std::optional<std::wstring> fill_growing_buffer(Fill fill) {
+    std::wstring buffer(MAX_PATH, L'\0');
+
+    // Two attempts suffice: the first failure reports the exact size needed.
+    // The path can change between calls, so give up rather than loop.
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        const DWORD capacity = static_cast<DWORD>(buffer.size());
+        const DWORD length = fill(buffer.data(), capacity);
+
+        if (length == 0) {
+            return std::nullopt;
+        }
+
+        if (length < capacity) {
+            buffer.resize(length);
+
+            return buffer;
+        }
+
+        buffer.resize(length);
+    }
+
+    return std::nullopt;
+}
+
+// Resolve `program` to the file CreateProcess would start: a name with a
+// directory or drive part is made absolute by GetFullPathNameW (which applies
+// Win32 normalisation — `.` components, trailing dots and spaces), a bare name
+// is searched for with SearchPathW, appending `.exe` only when it has no
+// extension, as CreateProcess does (PATHEXT is never consulted).  An existing
+// file's 8.3 short name is then expanded to its long name.  Returns nullopt
+// when nothing resolves; the textual check still applies in that case.
+[[nodiscard]] std::optional<std::wstring> resolve_launch_path(const std::wstring& program) {
+    const bool has_directory = program.find_first_of(L"/\\:") != std::wstring::npos;
+
+    auto resolved = fill_growing_buffer([&program, has_directory](wchar_t* out, DWORD capacity) {
+        return has_directory
+                   ? GetFullPathNameW(program.c_str(), capacity, out, nullptr)
+                   : SearchPathW(nullptr, program.c_str(), L".exe", capacity, out, nullptr);
+    });
+
+    if (!resolved) {
+        return std::nullopt;
+    }
+
+    if (auto long_path = fill_growing_buffer([&resolved](wchar_t* out, DWORD capacity) {
+            return GetLongPathNameW(resolved->c_str(), out, capacity);
+        })) {
+        return long_path;
+    }
+
+    return resolved;
+}
+
+[[nodiscard]] std::string batch_script_refusal(std::string_view program) {
+    return std::format("Process: refusing to launch the batch script '{}': Windows runs "
+                       ".bat/.cmd files through cmd.exe, which would re-interpret the "
+                       "arguments as shell syntax",
+                       program);
+}
+
+} // namespace
+
+std::optional<std::string> windows_launch_refusal(std::string_view program) {
+    if (is_windows_batch_script(program)) {
+        return batch_script_refusal(program);
+    }
+
+    if (has_normalised_away_suffix(program)) {
+        return std::format("Process: refusing to launch '{}': Windows drops a trailing dot, "
+                           "space, or path separator from a program name, which can disguise "
+                           "a batch script",
+                           program);
+    }
+
+    // A NUL would end the command line early, so CreateProcess would see a
+    // different program name than the one checked above.
+    if (program.find('\0') != std::string_view::npos) {
+        return std::string{"Process: refusing to launch a program name containing a NUL character"};
+    }
+
+    const auto wide_program = utf8_to_wide(program);
+
+    if (wide_program && !wide_program->empty()) {
+        if (const auto resolved = resolve_launch_path(*wide_program)) {
+            const std::string resolved_utf8 = wstring_to_utf8(*resolved);
+
+            if (is_windows_batch_script(resolved_utf8)) {
+                return batch_script_refusal(program);
+            }
+        }
+    }
+
+    return std::nullopt;
 }
 
 namespace {
 
+// Refuse to launch a batch script.  CreateProcess would silently run it through
+// `cmd.exe /c`, whose own metacharacter parsing re-interprets the arguments that
+// build_windows_cmdline quoted for the MSVC CRT ("BatBadBut").  Thrown before
+// any pipe or handle is acquired; the Process module reports it as a failure
+// result.  An argument containing NUL is refused too: the command line is a
+// C string, so the NUL would silently drop every later argument.
+void ensure_not_batch_script(const std::vector<std::string>& argv) {
+    if (argv.empty()) {
+        return;
+    }
+
+    if (auto refusal = windows_launch_refusal(argv.front())) {
+        throw RuntimeError{*std::move(refusal),
+                           {},
+                           "invoke cmd.exe explicitly (e.g. Process.command(\"cmd.exe\", [\"/c\", "
+                           "\"script.bat\", ...])) and quote the arguments for cmd yourself"};
+    }
+
+    if (std::ranges::any_of(
+            argv, [](const std::string& arg) { return arg.find('\0') != std::string::npos; })) {
+        throw RuntimeError{"Process: refusing to launch with an argument containing a NUL "
+                           "character",
+                           {},
+                           "remove the NUL character from the argument"};
+    }
+}
+
+// Launch `argv` with stdout / stderr redirected to the given inheritable write
+// handles, which are the ONLY handles the child inherits.  Returns the child on
+// success, or nullopt with the Win32 error code in `error_out`.
+[[nodiscard]] std::optional<ChildProcess> launch_child(const std::vector<std::string>& argv,
+                                                       HANDLE out_write, HANDLE err_write,
+                                                       DWORD extra_flags, DWORD& error_out) {
+    std::vector<HANDLE> inherited{out_write};
+
+    if (err_write != out_write) {
+        inherited.push_back(err_write);
+    }
+
+    InheritedHandleList attributes{std::move(inherited)};
+
+    if (attributes.get() == nullptr) {
+        error_out = ERROR_INVALID_PARAMETER;
+
+        return std::nullopt;
+    }
+
+    // The quoted command line is UTF-8; launch through the wide API so
+    // non-ASCII program names and arguments reach the child intact.
+    auto cmdline = utf8_to_wide(build_windows_cmdline(argv));
+
+    if (!cmdline) {
+        error_out = ERROR_NO_UNICODE_TRANSLATION;
+
+        return std::nullopt;
+    }
+
+    STARTUPINFOEXW si{};
+    si.StartupInfo.cb = sizeof(si);
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    si.StartupInfo.hStdOutput = out_write;
+    si.StartupInfo.hStdError = err_write;
+    si.lpAttributeList = attributes.get();
+
+    PROCESS_INFORMATION pi{};
+
+    const BOOL ok = CreateProcessW(nullptr, cmdline->data(), nullptr, nullptr, TRUE,
+                                   CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT | extra_flags,
+                                   nullptr, nullptr, &si.StartupInfo, &pi);
+
+    if (ok == FALSE) {
+        error_out = GetLastError();
+
+        return std::nullopt;
+    }
+
+    return ChildProcess{.process = UniqueHandle{pi.hProcess}, .thread = UniqueHandle{pi.hThread}};
+}
+
+// Windows DWORD exit codes > INT_MAX are clamped to -1 to match POSIX
+// WEXITSTATUS behaviour.
+[[nodiscard]] int clamp_exit_code(DWORD exit_code) {
+    return (exit_code > static_cast<DWORD>(std::numeric_limits<int>::max()))
+               ? -1
+               : static_cast<int>(exit_code);
+}
+
+// Wait for the child to exit and return its clamped exit code.
+[[nodiscard]] int wait_for_exit_code(HANDLE process) {
+    WaitForSingleObject(process, INFINITE);
+
+    DWORD exit_code{0};
+
+    GetExitCodeProcess(process, &exit_code);
+
+    return clamp_exit_code(exit_code);
+}
+
 // Drain a pipe read handle into `out`, enforcing the process output-size limit.
-// Returns false and sets `overflow` if the limit is exceeded.  Shared by the
-// stdout (main-thread) and stderr (helper-thread) readers in
-// execute_command_captured.
+// Sets `overflow` and kills the child if the limit is exceeded, so the peer
+// stream also unblocks and its reader finishes instead of deadlocking on a full
+// pipe.  Shared by every capture path in this file.
 void drain_pipe(HANDLE read_handle, std::string& out, std::atomic<bool>& overflow,
                 HANDLE process_handle) {
     std::array<char, k_pipe_buffer_size> buffer{};
@@ -185,8 +468,6 @@ void drain_pipe(HANDLE read_handle, std::string& out, std::atomic<bool>& overflo
         if (out.size() + bytes_read > ResourceLimits::max_process_output_size) {
             overflow.store(true);
 
-            // Kill the child so the peer stream also unblocks and its reader
-            // (the other thread) finishes instead of deadlocking on a full pipe.
             TerminateProcess(process_handle, 1);
 
             return;
@@ -196,15 +477,11 @@ void drain_pipe(HANDLE read_handle, std::string& out, std::atomic<bool>& overflo
     }
 }
 
-} // namespace
-
 // Maps a Win32 CreateProcess failure code (from GetLastError) onto the
 // POSIX-style errno that CapturedOutput::launch_errno carries, so
 // Process.run_command_typed classifies a Windows launch failure with the same
 // logic as POSIX.  Unmapped codes collapse to a generic launch failure (errno 0
 // would be misread as "launched", so a non-zero sentinel is used).
-namespace {
-
 [[nodiscard]] int launch_errno_from_win32(DWORD code) {
     switch (code) {
         case ERROR_FILE_NOT_FOUND:
@@ -225,9 +502,65 @@ namespace {
     }
 }
 
+[[nodiscard]] CapturedOutput launch_failure(DWORD create_error) {
+    CapturedOutput failure{};
+    failure.launch_errno = launch_errno_from_win32(create_error);
+
+    return failure;
+}
+
 } // namespace
 
-// Windows implementation: spawn via CreateProcessA with two pipes so stdout and
+// Windows implementation: spawn via CreateProcessW with one pipe shared by
+// stdout and stderr.
+std::pair<int, std::string> execute_command(std::string_view cmd) {
+    // Tokenize (which throws on an unclosed quote) and vet the program before
+    // acquiring any handle, matching the POSIX path which uses tokenize + execvp.
+    const auto argv = tokenize_command(cmd);
+
+    if (argv.empty()) {
+        return {-1, ""};
+    }
+
+    ensure_not_batch_script(argv);
+
+    ChildPipe pipe{};
+
+    if (!create_child_pipe(pipe)) {
+        return {-1, ""};
+    }
+
+    DWORD create_error{0};
+    auto child = launch_child(argv, pipe.write.get(), pipe.write.get(), 0, create_error);
+
+    // Close the write end — the child owns its copy, and our reads only see EOF
+    // once every write end is closed.
+    pipe.write.reset();
+
+    if (!child) {
+        return {-1, ""};
+    }
+
+    std::string output{};
+    std::array<char, k_pipe_buffer_size> buffer{};
+    DWORD bytes_read{0};
+
+    while (ReadFile(pipe.read.get(), buffer.data(), static_cast<DWORD>(buffer.size()), &bytes_read,
+                    nullptr) != FALSE &&
+           bytes_read > 0) {
+        if (output.size() + bytes_read > ResourceLimits::max_process_output_size) {
+            TerminateProcess(child->process.get(), 1);
+
+            return {-1, ""};
+        }
+
+        output.append(buffer.data(), bytes_read);
+    }
+
+    return {wait_for_exit_code(child->process.get()), std::move(output)};
+}
+
+// Windows implementation: spawn via CreateProcessW with two pipes so stdout and
 // stderr are captured separately.  stderr is drained on a helper thread while
 // stdout is drained on the calling thread, so neither pipe filling can deadlock
 // the other.
@@ -247,94 +580,49 @@ CapturedOutput execute_argv_captured(std::vector<std::string> argv) {
         return {};
     }
 
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
+    ensure_not_batch_script(argv);
 
-    HANDLE out_read = nullptr;
-    HANDLE out_write = nullptr;
-    HANDLE err_read = nullptr;
-    HANDLE err_write = nullptr;
+    ChildPipe out_pipe{};
+    ChildPipe err_pipe{};
 
-    if (CreatePipe(&out_read, &out_write, &sa, 0) == FALSE) {
+    if (!create_child_pipe(out_pipe) || !create_child_pipe(err_pipe)) {
         return {};
     }
 
-    if (CreatePipe(&err_read, &err_write, &sa, 0) == FALSE) {
-        CloseHandle(out_read);
-        CloseHandle(out_write);
-
-        return {};
-    }
-
-    // The child must not inherit either read handle.
-    SetHandleInformation(out_read, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(err_read, HANDLE_FLAG_INHERIT, 0);
-
-    STARTUPINFOA si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = out_write;
-    si.hStdError = err_write;
-
-    PROCESS_INFORMATION pi{};
-
-    std::string safe_cmd{build_windows_cmdline(argv)};
-
-    const BOOL ok = CreateProcessA(nullptr, safe_cmd.data(), nullptr, nullptr, TRUE,
-                                   CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
-
-    // Capture the failure code immediately, before the CloseHandle calls below
-    // can overwrite the thread's last error.
-    const DWORD create_error = (ok == FALSE) ? GetLastError() : 0;
+    DWORD create_error{0};
+    auto child = launch_child(argv, out_pipe.write.get(), err_pipe.write.get(), 0, create_error);
 
     // The child owns its copies of the write ends.
-    CloseHandle(out_write);
-    CloseHandle(err_write);
+    out_pipe.write.reset();
+    err_pipe.write.reset();
 
-    if (ok == FALSE) {
-        CloseHandle(out_read);
-        CloseHandle(err_read);
-
-        CapturedOutput launch_failure{};
-        launch_failure.launch_errno = launch_errno_from_win32(create_error);
-
-        return launch_failure;
+    if (!child) {
+        return launch_failure(create_error);
     }
 
     std::string out_output{};
     std::string err_output{};
     std::atomic<bool> out_overflow{false};
     std::atomic<bool> err_overflow{false};
+    const HANDLE process = child->process.get();
 
     // Drain stderr on a helper thread so a full stdout pipe and a full stderr
     // pipe cannot deadlock each other.
-    std::thread err_thread([&]() { drain_pipe(err_read, err_output, err_overflow, pi.hProcess); });
+    std::thread err_thread(
+        [&]() { drain_pipe(err_pipe.read.get(), err_output, err_overflow, process); });
 
-    drain_pipe(out_read, out_output, out_overflow, pi.hProcess);
+    drain_pipe(out_pipe.read.get(), out_output, out_overflow, process);
 
     err_thread.join();
 
-    WaitForSingleObject(pi.hProcess, INFINITE);
-
-    DWORD exit_code{0};
-
-    GetExitCodeProcess(pi.hProcess, &exit_code);
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    CloseHandle(out_read);
-    CloseHandle(err_read);
+    const int exit_code = wait_for_exit_code(process);
 
     if (out_overflow.load() || err_overflow.load()) {
         return {};
     }
 
     CapturedOutput captured{};
-    // Windows DWORD exit codes > INT_MAX are clamped to -1 to match POSIX WEXITSTATUS behaviour.
-    captured.exit_code = (exit_code > static_cast<DWORD>(std::numeric_limits<int>::max()))
-                             ? -1
-                             : static_cast<int>(exit_code);
+    captured.exit_code = exit_code;
     captured.standard_output = std::move(out_output);
     captured.standard_error = std::move(err_output);
 
@@ -358,81 +646,48 @@ CapturedOutput execute_argv_captured_timeout(std::vector<std::string> argv,
         return {};
     }
 
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
+    ensure_not_batch_script(argv);
 
-    HANDLE out_read = nullptr;
-    HANDLE out_write = nullptr;
-    HANDLE err_read = nullptr;
-    HANDLE err_write = nullptr;
+    ChildPipe out_pipe{};
+    ChildPipe err_pipe{};
 
-    if (CreatePipe(&out_read, &out_write, &sa, 0) == FALSE) {
+    if (!create_child_pipe(out_pipe) || !create_child_pipe(err_pipe)) {
         return {};
     }
-
-    if (CreatePipe(&err_read, &err_write, &sa, 0) == FALSE) {
-        CloseHandle(out_read);
-        CloseHandle(out_write);
-
-        return {};
-    }
-
-    SetHandleInformation(out_read, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(err_read, HANDLE_FLAG_INHERIT, 0);
 
     // Job Object that kills every process it contains when its last handle is
     // closed, so a crash on our side also cleans up the child tree.  Best-effort:
     // if it cannot be created we fall back to terminating just the direct child.
-    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+    UniqueHandle job{CreateJobObjectW(nullptr, nullptr)};
 
-    if (job != nullptr) {
+    if (job.valid()) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_limits{};
         job_limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &job_limits,
+        SetInformationJobObject(job.get(), JobObjectExtendedLimitInformation, &job_limits,
                                 sizeof(job_limits));
     }
-
-    STARTUPINFOA si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdOutput = out_write;
-    si.hStdError = err_write;
-
-    PROCESS_INFORMATION pi{};
-
-    std::string safe_cmd{build_windows_cmdline(argv)};
 
     // Create suspended so the child is assigned to the job BEFORE it can run and
     // spawn grandchildren — otherwise a grandchild could escape the job and hold
     // the pipe open past the timeout.
-    const BOOL ok = CreateProcessA(nullptr, safe_cmd.data(), nullptr, nullptr, TRUE,
-                                   CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &si, &pi);
+    DWORD create_error{0};
+    auto child = launch_child(argv, out_pipe.write.get(), err_pipe.write.get(), CREATE_SUSPENDED,
+                              create_error);
 
-    const DWORD create_error = (ok == FALSE) ? GetLastError() : 0;
+    out_pipe.write.reset();
+    err_pipe.write.reset();
 
-    CloseHandle(out_write);
-    CloseHandle(err_write);
-
-    if (ok == FALSE) {
-        CloseHandle(out_read);
-        CloseHandle(err_read);
-
-        if (job != nullptr) {
-            CloseHandle(job);
-        }
-
-        CapturedOutput launch_failure{};
-        launch_failure.launch_errno = launch_errno_from_win32(create_error);
-
-        return launch_failure;
+    if (!child) {
+        return launch_failure(create_error);
     }
+
+    const HANDLE process = child->process.get();
 
     // Assign to the job (best-effort: nested jobs are supported on Windows 8+),
     // then release the suspended primary thread so the child begins executing.
-    const bool have_job = (job != nullptr) && (AssignProcessToJobObject(job, pi.hProcess) != 0);
+    const bool have_job = job.valid() && (AssignProcessToJobObject(job.get(), process) != 0);
 
-    ResumeThread(pi.hThread);
+    ResumeThread(child->thread.get());
 
     std::string out_output{};
     std::string err_output{};
@@ -441,15 +696,17 @@ CapturedOutput execute_argv_captured_timeout(std::vector<std::string> argv,
 
     // Drain BOTH streams on helper threads so the calling thread can block on the
     // process handle with a timeout instead of on a ReadFile.
-    std::thread out_thread([&]() { drain_pipe(out_read, out_output, out_overflow, pi.hProcess); });
-    std::thread err_thread([&]() { drain_pipe(err_read, err_output, err_overflow, pi.hProcess); });
+    std::thread out_thread(
+        [&]() { drain_pipe(out_pipe.read.get(), out_output, out_overflow, process); });
+    std::thread err_thread(
+        [&]() { drain_pipe(err_pipe.read.get(), err_output, err_overflow, process); });
 
     // Clamp the timeout to a valid finite DWORD: INFINITE (0xFFFFFFFF) would mean
     // "wait forever", defeating the deadline, so cap just below it.
     const DWORD wait_ms = (timeout_ms >= static_cast<std::int64_t>(INFINITE))
                               ? (INFINITE - 1)
                               : static_cast<DWORD>(timeout_ms);
-    const DWORD wait_result = WaitForSingleObject(pi.hProcess, wait_ms);
+    const DWORD wait_result = WaitForSingleObject(process, wait_ms);
 
     const bool timed_out = (wait_result == WAIT_TIMEOUT);
 
@@ -459,30 +716,17 @@ CapturedOutput execute_argv_captured_timeout(std::vector<std::string> argv,
     // is unavailable, and then only on timeout to preserve the non-timeout path's
     // behaviour of letting the child exit on its own.
     if (have_job) {
-        TerminateJobObject(job, 1);
+        TerminateJobObject(job.get(), 1);
     } else if (timed_out) {
-        TerminateProcess(pi.hProcess, 1);
+        TerminateProcess(process, 1);
     }
 
     out_thread.join();
     err_thread.join();
 
     // The process has now exited (naturally or via termination); reap its exit
-    // code and release every handle.
-    WaitForSingleObject(pi.hProcess, INFINITE);
-
-    DWORD exit_code{0};
-
-    GetExitCodeProcess(pi.hProcess, &exit_code);
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    CloseHandle(out_read);
-    CloseHandle(err_read);
-
-    if (job != nullptr) {
-        CloseHandle(job);
-    }
+    // code.  Every handle is released by its UniqueHandle owner.
+    const int exit_code = wait_for_exit_code(process);
 
     if (timed_out) {
         CapturedOutput timeout_result{};
@@ -496,10 +740,7 @@ CapturedOutput execute_argv_captured_timeout(std::vector<std::string> argv,
     }
 
     CapturedOutput captured{};
-    // Windows DWORD exit codes > INT_MAX are clamped to -1 to match POSIX WEXITSTATUS behaviour.
-    captured.exit_code = (exit_code > static_cast<DWORD>(std::numeric_limits<int>::max()))
-                             ? -1
-                             : static_cast<int>(exit_code);
+    captured.exit_code = exit_code;
     captured.standard_output = std::move(out_output);
     captured.standard_error = std::move(err_output);
 
@@ -511,7 +752,7 @@ std::int64_t current_process_id() {
 }
 
 bool send_signal(std::int64_t pid, SignalKind signal) {
-    if (pid < 0 || pid > static_cast<std::int64_t>(std::numeric_limits<DWORD>::max())) {
+    if (pid <= 0 || pid > static_cast<std::int64_t>(std::numeric_limits<DWORD>::max())) {
         return false;
     }
 
@@ -525,19 +766,26 @@ bool send_signal(std::int64_t pid, SignalKind signal) {
         return GenerateConsoleCtrlEvent(CTRL_C_EVENT, process_id) != 0;
     }
 
-    const HANDLE handle = OpenProcess(PROCESS_TERMINATE, FALSE, process_id);
-    if (handle == nullptr) {
+    const UniqueHandle handle{OpenProcess(PROCESS_TERMINATE, FALSE, process_id)};
+
+    if (!handle.valid()) {
         return false;
     }
 
-    const BOOL ok = TerminateProcess(handle, 1);
-    CloseHandle(handle);
-
-    return ok != 0;
+    return TerminateProcess(handle.get(), 1) != 0;
 }
 
 int set_environment_variable(const std::string& name, const std::string& value) {
-    return _putenv_s(name.c_str(), value.c_str());
+    // Wide API, mirroring safe_getenv (which reads the wide environment and
+    // returns UTF-8): _putenv_s would store the UTF-8 bytes as ANSI text.
+    const auto wide_name = utf8_to_wide(name);
+    const auto wide_value = utf8_to_wide(value);
+
+    if (!wide_name || !wide_value) {
+        return EINVAL;
+    }
+
+    return _wputenv_s(wide_name->c_str(), wide_value->c_str());
 }
 
 std::optional<std::vector<std::pair<std::string, std::string>>> all_environment_variables() {

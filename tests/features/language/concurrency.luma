@@ -487,6 +487,162 @@ function void test_task_cancel_returns_true_for_scoped_task() {
     }
 }
 
+function integer count_to(channel<integer> started, channel<integer> stopped_at, integer limit) {
+    mutable integer counter = 0
+
+    try {
+        boolean _sent = Channel.send(started, 1)
+
+        while counter < limit {
+            counter += 1
+        }
+    } finally {
+        boolean _reported = Channel.send(stopped_at, counter)
+    }
+
+    return counter
+}
+
+@test
+function void test_task_cancel_cancels_only_that_task() {
+    # Every task has its own cancellation token: cancelling one task leaves
+    # its siblings running, and the cancelled task is not reported as a
+    # failure when the scope ends.  The task signals that it is running
+    # before it is cancelled and reports where its loop stopped: the
+    # cancellation must stop the loop at a back-edge, long before the loop
+    # iteration limit (10,000,000) would have ended it.
+    channel<integer> started = Channel.new()
+    channel<integer> stopped_at = Channel.new()
+    channel<integer> sibling_stopped_at = Channel.new()
+    mutable string outcome = ""
+
+    try {
+        task_scope {
+            task<integer> cancelled_task = spawn count_to(started, stopped_at, 500000000)
+            integer _running = Channel.receive(started) |> Result.unwrap()
+            task<integer> sibling_task = spawn count_to(started, sibling_stopped_at, 10)
+
+            boolean _cancelled = Task.cancel(cancelled_task)
+
+            integer first = await sibling_task
+            integer second = await sibling_task
+
+            assert(first == 10 && second == 10, "awaiting a task twice returns its result")
+            assert(Task.is_cancelled(cancelled_task), "the cancelled task observes its token")
+            assert(!Task.is_cancelled(sibling_task), "the sibling is not cancelled")
+        }
+
+        outcome = "scope completed"
+    } catch(err) {
+        outcome = err
+    }
+
+    assert(outcome == "scope completed", "cancelling one task does not fail the scope")
+
+    result<integer> stopped = Channel.try_receive(stopped_at)
+
+    assert(Result.is_success(stopped) && Result.unwrap(stopped) < 10000000,
+           "the cancellation stops the loop at a back-edge")
+}
+
+function integer count_with_cleanup(channel<integer> started, integer limit) {
+    mutable integer counter = 0
+
+    try {
+        boolean _sent = Channel.send(started, 1)
+
+        while counter < limit {
+            counter += 1
+        }
+    } finally {
+        counter += 0
+    }
+
+    return counter
+}
+
+@test
+function void test_cancelled_task_inside_try_finally_does_not_fail_scope() {
+    # A finally block must not turn the cancellation into an ordinary error
+    # that fails the whole scope.
+    channel<integer> started = Channel.new()
+    mutable string outcome = ""
+
+    try {
+        task_scope {
+            task<integer> cancelled_task = spawn count_with_cleanup(started, 500000000)
+            integer _running = Channel.receive(started) |> Result.unwrap()
+
+            boolean _cancelled = Task.cancel(cancelled_task)
+        }
+
+        outcome = "scope completed"
+    } catch(err) {
+        outcome = err
+    }
+
+    assert(outcome == "scope completed", "a cancelled task's finally does not fail the scope")
+}
+
+function integer log_cancellation(channel<integer> started, channel<string> log) {
+    mutable integer counter = 0
+
+    try {
+        boolean _sent = Channel.send(started, 1)
+
+        while counter >= 0 {
+            counter += 1
+        }
+    } catch(_err) {
+        boolean _caught = Channel.send(log, "catch")
+    } finally {
+        boolean _cleaned = Channel.send(log, "finally")
+    }
+
+    return counter
+}
+
+@test
+function void test_cancellation_runs_finally_but_not_catch() {
+    # Cancellation is not an ordinary error: the cancelled task's catch block
+    # does not intercept it, but its finally block still runs.
+    channel<integer> started = Channel.new()
+    channel<string> log = Channel.new()
+
+    task_scope {
+        task<integer> cancelled_task = spawn log_cancellation(started, log)
+        integer _running = Channel.receive(started) |> Result.unwrap()
+
+        boolean _cancelled = Task.cancel(cancelled_task)
+    }
+
+    assert(Channel.try_receive(log) == success("finally"), "the finally block runs")
+    assert(Result.is_failure(Channel.try_receive(log)), "the catch block does not run")
+}
+
+function integer middle_scope(integer x) {
+    array<integer> inner = task_scope {
+        spawn compute_square(x)
+    }
+
+    return inner[0]
+}
+
+@test
+function void test_many_tasks_with_nested_scopes_complete() {
+    # Each task blocks its worker while joining its own task_scope.  With more
+    # such tasks than pool workers, the pool must start extra workers rather
+    # than deadlock.
+    array<integer> results = task_scope {
+        for i in 0 .. 64 {
+            spawn middle_scope(i)
+        }
+    }
+
+    assert(Array.length(results) == 64, "every nested-scope task completed")
+    assert(results[63] == 63 * 63, "results keep spawn order")
+}
+
 # ─── Failure results — timeouts and closed channels ───
 
 @test

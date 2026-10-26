@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_DIAGNOSTICS_DIAGNOSTIC_STATS_HPP
+#define LUMA_DIAGNOSTICS_DIAGNOSTIC_STATS_HPP
 
 #include <cstddef>
 #include <vector>
@@ -77,3 +78,5 @@ struct DiagnosticStats {
 };
 
 } // namespace luma
+
+#endif // LUMA_DIAGNOSTICS_DIAGNOSTIC_STATS_HPP

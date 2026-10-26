@@ -1,5 +1,8 @@
 // Standard library tests: Encoder.
 
+#include <string>
+#include <vector>
+
 #include "stdlib_test_helpers.hpp"
 
 static void test_encoder_base64_decode() {
@@ -182,6 +185,27 @@ static void test_encoder_text_latin1() {
     ASSERT_EVAL_FAILURE("Encoder.encode_text(\"😀\", Encoder.Encoding.Latin1)");
 }
 
+static void test_encoder_text_rejects_ill_formed_utf8_cleanly() {
+    // A Luma string normally holds valid UTF-8, but a native caller can pass
+    // arbitrary bytes.  encode_text advances by the length utf8_decode actually
+    // consumed, so a truncated sequence or a stray continuation byte is reported
+    // as U+FFFD (not representable) instead of being stepped over by the lead
+    // byte's nominal length.
+    const auto env = luma::test::make_std_env();
+    const SourceLocation loc{};
+    const auto encode = env->get("Encoder.encode_text", loc);
+    const auto latin1 = eval("Encoder.Encoding.Latin1");
+
+    for (const std::string bytes : {std::string{"A\xE2\x82"}, std::string{"A\x80"
+                                                                          "B"}}) {
+        std::vector<Value> args{Value{bytes}, latin1};
+        const auto v = encode.as_native_function()->function(args, loc);
+
+        ASSERT_RESULT_FAILURE(v);
+        ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("U+FFFD") != std::string::npos);
+    }
+}
+
 static void test_encoder_decode_text_failures() {
     // A byte outside 0–255 is rejected.
     ASSERT_EVAL_FAILURE("Encoder.decode_text([300], Encoder.Encoding.Ascii)");
@@ -277,6 +301,7 @@ int main() {
     RUN(test_encoder_text_utf8_roundtrip);
     RUN(test_encoder_text_ascii);
     RUN(test_encoder_text_latin1);
+    RUN(test_encoder_text_rejects_ill_formed_utf8_cleanly);
     RUN(test_encoder_decode_text_failures);
     RUN(test_encoder_decode_base64_typed_success);
     RUN(test_encoder_decode_base64_typed_invalid);

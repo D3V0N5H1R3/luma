@@ -11,6 +11,7 @@
 #include "analysis/ast/declaration.hpp"
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/source/source_manager.hpp"
+#include "common/string_hash.hpp"
 
 namespace luma {
 
@@ -29,6 +30,15 @@ using ParseFileCallback = std::function<std::optional<Program>(
 // includes out of the header.
 [[nodiscard]] ParseFileCallback make_default_parse_callback();
 
+// Loads `path` into `source_manager` like SourceManager::try_load(), except
+// that a path the manager has already registered is re-read from disk instead
+// of returning the registered (possibly stale) text.  The fresh text is
+// registered as a virtual file named "<path> (reload N)" with a new file id;
+// the suffix contains no path separator, so the file's directory — the anchor
+// for its relative includes — is unchanged, and earlier text stays alive for
+// diagnostics that point into it.
+[[nodiscard]] LoadResult load_fresh_source(SourceManager& source_manager, std::string_view path);
+
 // Forward declarations for implementation-only types.
 class InclusionStack;
 
@@ -41,8 +51,9 @@ class InclusionStack;
 // After resolution, all IncludeDeclaration nodes are removed and replaced
 // by the declarations from the included files.
 //
-// If LUMA_PATH is set, its directories are searched (in order) when a
-// file is not found relative to the including file's directory.
+// Relative include paths resolve against the including file's directory (or,
+// for REPL/stdin input with no file, the current working directory); if the
+// file is not found there, the LUMA_PATH directories are searched in order.
 //
 // ── Responsibilities ──
 //
@@ -52,8 +63,16 @@ class InclusionStack;
 //
 //  2. Depth limiting   — enforce a maximum include nesting depth to guard
 //     against runaway recursion.  Circular and self includes need no separate
-//     cycle check: the Source Manager's include-once registry prevents any
-//     file from being entered twice.  Entry point: enforce_depth_limit().
+//     cycle check: the include-once rule prevents any file from being entered
+//     twice.  Entry point: enforce_depth_limit().
+//
+// ── Include-once rule ──
+//
+// By default a file counts as already included once it is registered in the
+// Source Manager, which is right for a single program: the entry file is
+// registered before resolution, and every included file as it is entered.
+// One input of a multi-input session (the REPL) needs session mode instead —
+// see set_session_included().
 //
 // ── Coupling note ──
 //
@@ -82,9 +101,31 @@ public:
         return diagnostics_;
     }
 
+    // Switches the resolver to session mode, for one input of a session whose
+    // inputs may be rejected after their includes were resolved (the REPL).
+    // A rejected input's included files stay registered in the Source Manager
+    // although their declarations never reached the session, so registration
+    // cannot be the include-once rule there: only the canonical paths in
+    // `already_included` (the files of the session's committed inputs, plus
+    // the input's own file) and the files this resolver has already included
+    // count as included.  A file the Source Manager has registered before is
+    // re-read from disk (load_fresh_source), so edits made since then apply.
+    void set_session_included(StringSet already_included);
+
+    // Canonical paths of the files the last resolve() call read, in the order
+    // they were included.  A session commits these once its input is kept.
+    [[nodiscard]] const std::vector<std::string>& included_files() const noexcept {
+        return included_files_;
+    }
+
 private:
-    // Recursively resolve includes, tracking the inclusion stack for
-    // cycle detection.  Returns false if any error was emitted.
+    // Returns true when the include-once rule says `canonical` was already
+    // included (see set_session_included() for session mode).
+    [[nodiscard]] bool is_already_included(const std::string& canonical) const;
+
+    // Recursively resolve includes, tracking the include nesting depth for
+    // the depth limit (cycles need no tracking — see enforce_depth_limit).
+    // Returns false if any error was emitted.
     [[nodiscard]] bool resolve_includes(Program& program, InclusionStack& inclusion_stack);
 
     // Process a single include declaration: validate, resolve, parse,
@@ -118,10 +159,20 @@ private:
     [[nodiscard]] bool enforce_allowed_root(const std::filesystem::path& canonical_path,
                                             const IncludeDeclaration& include_decl);
 
-    // Resolve a relative include path against the directory of the
-    // file that contains the include declaration.
-    // Falls back to LUMA_PATH directories if not found locally.
-    [[nodiscard]] std::string resolve_path(std::string_view include_path, FileId file_id) const;
+    // Resolve the include path against the directory of the file that
+    // contains the include declaration — or, for REPL/stdin input that has no
+    // file, the current working directory — then against each LUMA_PATH
+    // directory in order.  Returns the first existing candidate, or
+    // std::nullopt when none exists (a file-anchored include never falls back
+    // to the working directory).
+    [[nodiscard]] std::optional<std::filesystem::path>
+    resolve_path(const std::filesystem::path& include_path, FileId file_id) const;
+
+    // The directory relative includes in `file_id` resolve against, or
+    // std::nullopt when the include comes from REPL/stdin input with no file.
+    // An empty path means the directory could not be determined, which makes
+    // the containment check fail closed.
+    [[nodiscard]] std::optional<std::filesystem::path> including_directory(FileId file_id) const;
 
     // Returns true if the canonical path is within the base directory of the
     // including file or any of the configured search paths (LUMA_PATH).
@@ -136,16 +187,16 @@ private:
     // Enforce the maximum include nesting depth.  Returns false and emits a
     // diagnostic when the current depth reaches k_max_include_depth.
     //
-    // Circular and self includes are not detected here: SourceManager's
-    // include-once registry (checked before this call) already prevents any
-    // file from being entered more than once, so no cycle can recurse.
+    // Circular and self includes are not detected here: the include-once rule
+    // (checked before this call) already prevents any file from being entered
+    // more than once, so no cycle can recurse.
     [[nodiscard]] bool enforce_depth_limit(const IncludeDeclaration& include_decl,
                                            const InclusionStack& inclusion_stack);
 
     //=== Include processing helpers ===
 
-    // Load an included file via SourceManager.
-    // Returns the loaded SourceFile on success, or nullptr on error.
+    // Load an included file via SourceManager (re-read from disk in session
+    // mode).  Returns the loaded SourceFile on success, or nullptr on error.
     [[nodiscard]] const SourceFile* load_include_file(const std::string& canonical,
                                                       const IncludeDeclaration& include_decl);
 
@@ -173,6 +224,10 @@ private:
     std::vector<Diagnostic> diagnostics_;
     std::vector<std::filesystem::path>
         search_paths_; // Pre-computed fs::path objects from LUMA_PATH.
+    // Session mode only: the canonical paths that count as already included,
+    // grown by every file this resolver includes.
+    std::optional<StringSet> session_included_;
+    std::vector<std::string> included_files_; // Files read by the last resolve().
 };
 
 } // namespace luma

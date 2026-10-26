@@ -956,6 +956,74 @@ static void test_generic_function_calls_generic_function() {
                        "array<integer> xs = wrap(identity(99))\n"));
 }
 
+// ─── Regression: inference through records, tuples, and function types ───
+
+static void test_generic_inference_through_record_rejects_wrong_result() {
+    ASSERT_TRUE(fails_with("record Box<T> {\n"
+                           "    T value\n"
+                           "}\n"
+                           "function<T> T unwrap(Box<T> b) {\n"
+                           "    return b.value\n"
+                           "}\n"
+                           "Box<string> b = Box<string> { value = \"hi\" }\n"
+                           "integer n = unwrap(b)\n",
+                           DiagnosticCode::TypeMismatch));
+}
+
+static void test_generic_inference_through_tuple_rejects_wrong_result() {
+    ASSERT_TRUE(fails_with("function<A, B> B second((A, B) pair) {\n"
+                           "    return pair.1\n"
+                           "}\n"
+                           "integer n = second((1, \"two\"))\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("function<A, B> B second((A, B) pair) {\n"
+                       "    return pair.1\n"
+                       "}\n"
+                       "string s = second((1, \"two\"))\n"));
+}
+
+static void test_generic_inference_through_function_type_rejects_wrong_result() {
+    ASSERT_TRUE(fails_with("function<T, U> U apply(T value, function(T) -> U f) {\n"
+                           "    return f(value)\n"
+                           "}\n"
+                           "integer n = apply(1, (integer x) -> \"text\")\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("function<T, U> U apply(T value, function(T) -> U f) {\n"
+                       "    return f(value)\n"
+                       "}\n"
+                       "string s = apply(1, (integer x) -> \"text\")\n"));
+}
+
+// ─── Regression: named arguments and pipes on generic calls ───
+
+static void test_generic_call_with_named_argument() {
+    ASSERT_TRUE(passes("function<T> T identity(T value) { return value }\n"
+                       "integer n = identity(value: 42)\n"));
+    ASSERT_TRUE(fails_with("function<T> T identity(T value) { return value }\n"
+                           "string s = identity(value: 42)\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(fails_with_message("function<T> T identity(T value) { return value }\n"
+                                   "integer n = identity(val: 42)\n",
+                                   "no parameter named 'val'"));
+}
+
+static void test_generic_call_named_argument_type_checked() {
+    ASSERT_TRUE(fails_with("function<T> T pick(T first, T second) { return first }\n"
+                           "integer n = pick(1, second: \"two\")\n",
+                           DiagnosticCode::TypeMismatch));
+}
+
+static void test_generic_pipe_infers_from_piped_value() {
+    ASSERT_TRUE(fails_with("function<T> T identity(T value) { return value }\n"
+                           "string s = 42 |> identity()\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("function<T> T identity(T value) { return value }\n"
+                       "integer n = 42 |> identity()\n"));
+    ASSERT_TRUE(fails_with("function<T> T pick(T first, T second) { return first }\n"
+                           "integer n = 1 |> pick(\"two\")\n",
+                           DiagnosticCode::TypeMismatch));
+}
+
 int main() {
     // ─── Recursive ADTs ───
 
@@ -1109,5 +1177,14 @@ int main() {
     RUN(test_generic_function_returns_generic_record);
     RUN(test_generic_function_takes_generic_record);
     RUN(test_generic_function_calls_generic_function);
+
+    // ─── Regression: generic inference, named arguments, pipes ───
+
+    RUN(test_generic_inference_through_record_rejects_wrong_result);
+    RUN(test_generic_inference_through_tuple_rejects_wrong_result);
+    RUN(test_generic_inference_through_function_type_rejects_wrong_result);
+    RUN(test_generic_call_with_named_argument);
+    RUN(test_generic_call_named_argument_type_checked);
+    RUN(test_generic_pipe_infers_from_piped_value);
     return SUMMARY();
 }

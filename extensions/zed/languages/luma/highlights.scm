@@ -34,6 +34,7 @@
 ; ─── Numbers ───────────────────────────────────────────────────────
 
 (hex_literal) @number
+(octal_literal) @number
 (binary_literal) @number
 (float_literal) @number
 (integer_literal) @number

@@ -3,7 +3,7 @@
 #include "runtime/compiler/optimizer.hpp"
 
 // LibFuzzer entry point for the Luma bytecode optimizer.
-// Exercises lex → parse → resolve → type-check → compile → optimize, running
+// Exercises lex → parse → type-check → compile → optimize, running
 // every optimization level over the compiled bytecode.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(

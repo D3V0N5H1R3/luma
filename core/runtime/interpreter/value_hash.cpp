@@ -65,14 +65,13 @@ std::size_t hash_value_structural(const Value& v, int depth) noexcept {
         return std::hash<bool>{}(v.as_bool());
     }
     if (v.is_integer()) {
-        // ValueEqual compares an integer against a number by promoting the
-        // integer to double via Value::to_numeric() (see equals_numeric in
-        // value_equality.cpp), so integer(i) can equal number(double(i)) for
-        // ANY i — including |i| >= 2^53, where that promotion is lossy
-        // (integer(2^53) and integer(2^53 + 1) both promote to 2^53.0). To keep
-        // the hash/equality contract, every integer must therefore hash exactly
-        // as its promoted double. Distinct integers that share a promoted value
-        // simply collide into the same bucket, which is permitted.
+        // ValueEqual compares an integer against a number exactly (see
+        // integer_equals_number in value_equality.cpp): they are equal only
+        // when the number is the integer's exact value.  Hashing every integer
+        // as its promoted double therefore keeps the hash/equality contract —
+        // an integer and the number equal to it promote to the same double.
+        // Distinct integers above 2^53 that share a promoted value merely
+        // collide into the same bucket, which is permitted.
         return std::hash<double>{}(static_cast<double>(v.as_integer()));
     }
     if (v.is_number()) {
@@ -203,7 +202,8 @@ std::size_t hash_value_structural(const Value& v, int depth) noexcept {
     // plus functions, channels, tasks, sockets, and references.  These are
     // rarely used as Set elements or dictionary keys; return the type tag to
     // place all values of the same type in one bucket, and let ValueEqual
-    // distinguish them through identity comparison.
+    // distinguish them through identity comparison (Value::equals compares the
+    // underlying object for each of these types).
     return type_seed;
 }
 

@@ -12,8 +12,12 @@
 #include <string>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <io.h>
 #include <windows.h>
 #else
@@ -38,18 +42,28 @@ namespace luma {
 }
 #endif
 
-// Safe wrapper around environment variable lookup.
-// Uses _dupenv_s on MSVC to satisfy the Security Development
-// Lifecycle (/sdl) checks; falls back to std::getenv elsewhere.
+// Safe wrapper around environment variable lookup, returning the value as
+// UTF-8 on every platform.  On MSVC it reads the wide environment with
+// _wdupenv_s (which also satisfies the Security Development Lifecycle /sdl
+// checks) and converts to UTF-8 — the narrow _dupenv_s would return text in
+// the ANSI code page instead.  Elsewhere it uses std::getenv, whose bytes are
+// already UTF-8 on the platforms Luma supports.
 [[nodiscard]] inline std::optional<std::string> safe_getenv(const char* name) {
 #ifdef _MSC_VER
-    char* raw_buf{nullptr};
+    // Environment variable names are ASCII in practice; widen byte-by-byte.
+    std::wstring wide_name;
+
+    for (const char* p = name; *p != '\0'; ++p) {
+        wide_name += static_cast<wchar_t>(static_cast<unsigned char>(*p));
+    }
+
+    wchar_t* raw_buf{nullptr};
     std::size_t len{0};
 
-    if (_dupenv_s(&raw_buf, &len, name) == 0 && raw_buf != nullptr) {
-        const auto buf = std::unique_ptr<char, decltype(&free)>{raw_buf, free};
+    if (_wdupenv_s(&raw_buf, &len, wide_name.c_str()) == 0 && raw_buf != nullptr) {
+        const auto buf = std::unique_ptr<wchar_t, decltype(&free)>{raw_buf, free};
 
-        return std::string{buf.get()};
+        return wstring_to_utf8(std::wstring{buf.get()});
     }
     return std::nullopt;
 #else

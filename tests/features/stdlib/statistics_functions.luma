@@ -56,3 +56,31 @@ function void test_statistics_standard_deviation() {
     assert(Math.approximately_equal(standard_deviation, 2.0))
     assert(Result.is_failure(Statistics.standard_deviation([])))
 }
+
+@test
+function void test_statistics_extreme_values_do_not_overflow() {
+    # A plain running sum overflowed to infinity and was reported as success.
+    assert(Math.approximately_equal(Result.unwrap(Statistics.mean([1e308, 1e308])), 1e308))
+    assert(Math.approximately_equal(Result.unwrap(Statistics.median([1e308, 1e308])), 1e308))
+}
+
+@test
+function void test_statistics_non_finite_results_are_failures() {
+    assert(Result.is_failure(Statistics.mean([Math.infinity, 1.0])))
+    assert(Result.is_failure(Statistics.mode([Math.infinity])))
+    assert(Result.is_failure(Statistics.variance([1e308, -1e308])))
+}
+
+@test
+function void test_statistics_mean_and_variance_are_exact_for_small_integers() {
+    # An incremental mean rounded at every step: mean([0, 1, 6, 1]) used to be
+    # 1.9999999999999998 instead of sum / count.
+    assert(Statistics.mean([0, 1, 6, 1]) == success(2.0))
+    assert(Statistics.variance([0, 0, 1, 0]) == success(0.1875))
+}
+
+@test
+function void test_statistics_standard_deviation_survives_overflowing_variance() {
+    # The variance (1e616) is not representable, but its square root is.
+    assert(Statistics.standard_deviation([1e308, -1e308]) == success(1e308))
+}

@@ -38,6 +38,16 @@ thread_local TaskScope* VMTaskManager::current_scope{nullptr};
 VM_OPTIMIZE Value VM::run() {
     dispatch_return_value_.reset();
 
+    // task_scope blocks opened by this activation of the loop.  When an
+    // exception escapes run() (no Luma handler at or above base_depth_), those
+    // scopes must be retired here — cancelled, joined, popped — because no
+    // Op::TaskScopeEnd will ever run for them.  Left behind they would stay the
+    // thread's current scope (so later spawns attach to a dead scope), make the
+    // enclosing TaskScopeEnd join the wrong scope, and leave their children
+    // running unjoined.  This covers every caller of run(): the top-level entry
+    // points, native callbacks (init_call_fn), spawned tasks, and @test runs.
+    const auto scope_base = task_manager_.task_scopes.size();
+
     for (;;) {
         try {
             // Per-opcode debug-hook check.  The gating atomic is tested inline
@@ -46,6 +56,8 @@ VM_OPTIMIZE Value VM::run() {
             // shared_lock and copies the hook only once a pause is armed).
             if (debug_.pause_requested.load(std::memory_order_acquire)) [[unlikely]] {
                 if (check_debug_hooks()) {
+                    // Debugger termination abandons the running code mid-flight.
+                    unwind_task_scopes_to(scope_base);
                     return Value{};
                 }
             }
@@ -70,12 +82,24 @@ VM_OPTIMIZE Value VM::run() {
 
         } catch (const RuntimeError& e) {
             if (!handle_exception(e)) {
+                unwind_task_scopes_to(scope_base);
+                throw;
+            }
+        } catch (const CancelledException& e) {
+            if (!handle_exception(e)) {
+                unwind_task_scopes_to(scope_base);
                 throw;
             }
         } catch (const std::runtime_error& e) {
             if (!handle_exception(e)) {
+                unwind_task_scopes_to(scope_base);
                 throw;
             }
+        } catch (...) {
+            // Not a catchable Luma error (e.g. ExitSignal, std::bad_alloc):
+            // still retire this activation's scopes before it propagates.
+            unwind_task_scopes_to(scope_base);
+            throw;
         }
     }
     return Value{};

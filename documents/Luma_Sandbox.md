@@ -70,7 +70,7 @@ A module is **safe** if all of its functions are `None`. Sandbox mode blocks eve
 
 Sandbox mode today is **all-or-nothing** over the non-`None` capabilities: `--box` removes Console, FileSystem, Process, and Network access together. Finer-grained per-capability grants (for example, allowing FileSystem but not Network) are a planned extension; the capability tags already carry the information such a policy would need.
 
-A small number of modules are **sandbox-aware** (`Compression`, `Hash`, `Log`): they remain available but register a reduced, side-effect-free surface when the sandbox flag is set.
+A small number of modules are **sandbox-aware** (`Compression`, `Hash`, `Log`, `Terminal`): they remain available but register a reduced, side-effect-free surface when the sandbox flag is set — `Compression` and `Hash` withhold their file functions, `Log` withholds `set_output`, and `Terminal` withholds its console-input functions (see [§4](#4--guarantees)).
 
 ---
 
@@ -84,7 +84,21 @@ When run with `--box`, the interpreter guarantees that a program **cannot**:
 - read from or prompt on the interactive console,
 - reach a blocked module by any name-resolution path — the module is both **unregistered** (never bound in the environment) and **blocklisted** (a lookup produces a clear "not available in sandbox mode" error rather than a bare "undefined variable").
 
-Independently of the sandbox flag, the interpreter also bounds resource consumption via the limits centralised in `core/common/resource_limits.hpp` (maximum call depth, collection and string sizes, task-queue length, open sockets, and more; all overridable through `LUMA_LIMIT_*` environment variables), and the include resolver rejects circular includes, `..` path traversal, and symlinked include paths.
+The `Terminal` module stays available for output, but withholds every function that reads the interactive console or switches it into an input mode:
+
+| Withheld under `--box`  | Reason                                            |
+| ----------------------- | ------------------------------------------------- |
+| `enable_raw_mode`       | Switches the console into raw input mode          |
+| `enable_mouse`          | Switches on mouse input reporting                 |
+| `read_key`              | Reads a key from the console                      |
+| `read_key_timeout`      | Reads a key from the console, with a timeout      |
+| `get_input`             | Reads a structured key event from the console     |
+| `read_line`             | Reads an edited line from the console             |
+| `get_cursor_position`   | Reads the terminal's cursor report from stdin     |
+
+The output functions (styling, colours, cursor movement, screen control), the state queries (`is_terminal`, `size`, `is_in_raw_mode`, `is_mouse_enabled`, …), the `disable_raw_mode` and `disable_mouse` restores, and the headless `Terminal.test_*` harness remain available. The withheld functions keep `Capability::None` in the catalog, exactly like `Log.set_output`: tagging them `Console` would put the whole `Terminal` prefix in the module-level blocked set, contradicting the registry (`Terminal` is not `os_only`) and blocking the still-available output functions. They are blocked by name instead (see [§6](#6--enforcement)), so calling one raises the same "'Terminal.read_key' is not available in sandbox mode (--box)" error as a blocked module.
+
+Independently of the sandbox flag, the interpreter also bounds resource consumption via the limits centralised in `core/common/resource_limits.hpp` (maximum call depth, collection and string sizes, task-queue length, open sockets, and more; all overridable through `LUMA_LIMIT_*` environment variables), and the include resolver rejects `.`/`..` path traversal, include paths that resolve outside the including file's directory tree (and absolute include paths in REPL or standard-input code), and symlinked include paths (each file is included at most once, so circular includes are skipped rather than followed).
 
 ---
 
@@ -106,7 +120,7 @@ For executing **actively hostile** code, run the sandboxed interpreter behind OS
 Enforcement lives at the boundary between the standard-library registry and the runtime environment:
 
 - **Registration** — `register_all(env, sandbox)` in `core/runtime/stdlib/common/stdlib_registry.hpp` skips every module tagged `os_only` when `sandbox` is true, so blocked modules are never bound. The module table (`kModules`) is the single source of truth for which modules are OS-only.
-- **Blocklisting** — after registration, the same path records the blocked module prefixes on the environment via `set_sandbox_blocked`. The blocked set is derived from the catalog's capability tags (`stdlib::sandbox_blocked_modules()`), so it stays in lock-step with the capabilities rather than being maintained by hand. Sandbox-aware modules (`Compression`, `Hash`, `Log`) stay available but withhold their file functions; `register_stdlib_postamble` finds those by registering each such module in sandbox mode into a scratch environment and recording every catalog function it left out, and blocks them by name.
+- **Blocklisting** — after registration, the same path records the blocked module prefixes on the environment via `set_sandbox_blocked`. The blocked set is derived from the catalog's capability tags (`stdlib::sandbox_blocked_modules()`), so it stays in lock-step with the capabilities rather than being maintained by hand. Sandbox-aware modules (`Compression`, `Hash`, `Log`, `Terminal`) stay available but withhold their file functions (for `Terminal`, its console-input functions); `sandbox_withheld_functions()` in `stdlib_registry.hpp` finds those by registering each such module in sandbox mode into a scratch environment and recording every catalog function it left out, and `register_stdlib_postamble` blocks them by name.
 - **Lookup** — `Environment::get` resolves a qualified name, then, on a miss, calls `verify_sandbox_access`, which walks up to the root scope's `SandboxPolicy` (`core/runtime/interpreter/sandbox_policy.hpp`) and throws a `RuntimeError` — "'…' is not available in sandbox mode (--box)" — if the module prefix is blocked. The VM's global lookup (`VM::handle_get_global`) does not go through `Environment::get`, so on a miss it asks `Environment::sandbox_denial_hint` and raises the same message. This makes the failure explicit and diagnosable.
 
 The two independent tables (the registry's `os_only` flags and the catalog's capability-derived blocked set) must always name the same modules; a regression test enforces that invariant (see below).
@@ -116,7 +130,7 @@ The two independent tables (the registry's `os_only` flags and the catalog's cap
 ## 7 — Validation
 
 - **Capability and blocklist conformance** — `tests/runtime/stdlib_catalog_conformance_test.cpp` verifies that the blocked set contains exactly the OS-capable modules, that the registry's `os_only` flags and the catalog's blocked set agree, that a sandbox environment throws the sandbox error for each blocked module through the real lookup path, and that safe modules still resolve.
-- **Feature tests** — `tests/features/language/sandbox.luma` (run with `luma --box --test`) confirms that safe modules keep working and that FileSystem, Process, Socket, and Http access is rejected.
+- **Feature tests** — `tests/features/language/sandbox.luma` (run with `luma --box --test`) confirms that safe modules keep working, that FileSystem, Process, Socket, and Http access is rejected, and that `Terminal` keeps its output functions while its console-input functions (such as `Terminal.read_key`) are rejected with the sandbox error.
 - **Fuzzing** — the fuzz targets that execute arbitrary programs (`fuzz_vm`, `fuzz_structured`, and the whole pipeline via `fuzz_pipeline.hpp`) register the standard library **in sandbox mode**, so generated programs cannot perform real host side effects while fuzzing and the sandbox surface is itself continuously exercised. `fuzz_path` additionally carries an oracle that fails if the FileSystem path validator ever accepts a path that escapes the sandbox working directory. The fuzz workflow (`.github/workflows/fuzz.yml`) runs nightly on Linux/Clang with AddressSanitizer and a persisted, seeded corpus so coverage accumulates over time.
 
 > **Note:** Fuzzing is authoritative on Linux/Clang. On Windows, a clang-cl fuzz executable may `__fastfail` for reasons unrelated to Luma; validate seeds with `-runs=0` there and run real campaigns on Linux, as CI does.

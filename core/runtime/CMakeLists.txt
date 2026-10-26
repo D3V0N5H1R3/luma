@@ -195,7 +195,6 @@ luma_add_stdlib_library(utility
 luma_platform_source_pair(_line_editor repl/line_editor)
 
 luma_add_library(luma_core STATIC
-    cli/terminal.cpp
     cli/cli.cpp
     cli/cli_args.cpp
     cli/cli_commands.cpp
@@ -258,7 +257,6 @@ luma_add_library(luma_core STATIC
 
     # Stdlib — core and infrastructure
     stdlib/common/core_builtins_module.cpp
-    stdlib/common/lazy_registry.cpp
 )
 
 target_sources(luma_core PRIVATE

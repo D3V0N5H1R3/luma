@@ -420,7 +420,7 @@ function void test_optional_chain_auto_flatten_none_inner() {
 
 @test
 function void test_optional_zip_both_some() {
-    (integer left, integer right) = Optional.zip(some(1), some(2))
+    (integer left, integer right) = Optional.unwrap(Optional.zip(some(1), some(2)))
 
     assert(left == 1)
     assert(right == 2)
@@ -615,7 +615,7 @@ function void test_optional_map_type_change() {
 @test
 function void test_optional_zip_heterogeneous() {
     # zip pairs values of different types into a tuple.
-    (integer number_part, string text_part) = Optional.zip(some(1), some("x"))
+    (integer number_part, string text_part) = Optional.unwrap(Optional.zip(some(1), some("x")))
 
     assert(number_part == 1)
     assert(text_part == "x")

@@ -164,7 +164,32 @@ namespace {
 
 using namespace terminal_internal;
 
+// std::atexit handler: put the host terminal back the way we found it.  Must not
+// throw — an exception escaping an atexit handler calls std::terminate.
+void restore_terminal_at_exit() noexcept {
+    try {
+        restore_terminal_state();
+    } catch (...) { // NOLINT(bugprone-empty-catch)
+        // Best effort only: the process is already exiting.
+    }
+}
+
+// Register restore_terminal_at_exit exactly once, the first time the program
+// changes console state that would outlive it (raw mode, and with it mouse
+// reporting).  Raw mode clears ISIG and line buffering, so an uncaught
+// RuntimeError, Process.exit, or a return from the program without
+// Terminal.disable_raw_mode() would otherwise leave the user's shell unusable.
+// Registered lazily, after every namespace-scope object the handler touches has
+// been constructed, so it runs before their destructors.
+void ensure_exit_restore_registered() {
+    static std::once_flag registered;
+
+    std::call_once(registered, [] { (void)std::atexit(&restore_terminal_at_exit); });
+}
+
 void enter_raw_mode(const SourceLocation& loc) {
+    ensure_exit_restore_registered();
+
     const std::scoped_lock lock{terminal_mutex};
 
     if (raw_mode_active) {
@@ -442,43 +467,17 @@ void leave_raw_mode() {
     return false;
 }
 
-} // namespace
-
-// ============================================================================
-// Registration
-// ============================================================================
-
-void register_terminal_ns(const EnvPtr& env) {
+// Functions that read the interactive console (keyboard and mouse input, line
+// editing) or switch it into an input mode.  They are withheld in sandbox mode
+// (--box), which guarantees that a program cannot read from or prompt on the
+// interactive console — mirroring how Log.set_output is withheld.  The
+// output-only Terminal functions (styling, cursor movement, screen control), the
+// state queries, the always-safe disable_* restores, and the headless
+// Terminal.test_* harness stay available.  get_cursor_position (which reads the
+// terminal's cursor report from stdin) lives in terminal_module_ansi.cpp and is
+// withheld there.
+void register_terminal_input(const EnvPtr& env) {
     using namespace terminal_internal;
-
-    // === Terminal information ===
-
-    ModuleBuilder{"Terminal", env}
-        .func("is_terminal", 0)
-        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
-            return Value{stdout_is_terminal()};
-        })
-        .func("size", 0)
-        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
-            const auto [cols, rows] = query_terminal_size();
-
-            auto rec = std::make_shared<RecordValue>();
-            rec->type_name = "Size";
-            rec->fields.emplace_back("columns", Value{static_cast<std::int64_t>(cols)});
-            rec->fields.emplace_back("rows", Value{static_cast<std::int64_t>(rows)});
-
-            return Value{std::move(rec)};
-        })
-        .func("columns", 0)
-        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
-            return Value{static_cast<std::int64_t>(query_terminal_size().cols)};
-        })
-        .func("rows", 0)
-        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
-            return Value{static_cast<std::int64_t>(query_terminal_size().rows)};
-        });
-
-    // === Raw mode & key input ===
 
     ModuleBuilder{"Terminal", env}
         .func("enable_raw_mode", 0)
@@ -488,16 +487,6 @@ void register_terminal_ns(const EnvPtr& env) {
 
                 return Value{NullValue{}};
             });
-        })
-        .func("disable_raw_mode", 0)
-        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
-            leave_raw_mode();
-
-            return NullValue{};
-        })
-        .func("is_in_raw_mode", 0)
-        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
-            return Value{raw_mode_active.load()};
         })
         .func("read_key", 0)
         .raw_body([](std::span<const Value>, SourceLocation loc) -> Value {
@@ -578,11 +567,7 @@ void register_terminal_ns(const EnvPtr& env) {
             } catch (const RuntimeError& e) {
                 return failure_from_exception(e);
             }
-        });
-
-    // === Mouse input ===
-
-    ModuleBuilder{"Terminal", env}
+        })
         .func("enable_mouse", 0)
         .raw_body([](std::span<const Value>, SourceLocation) -> Value {
             if (headless_input_is_active()) {
@@ -608,6 +593,138 @@ void register_terminal_ns(const EnvPtr& env) {
 
             return make_success_value(Value{NullValue{}});
         })
+        .func("read_line", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const std::string& prompt = expect_string(args[0], "Terminal.read_line", loc);
+
+            const bool headless = headless_input_is_active();
+
+            if (!headless && !raw_mode_active) {
+                return make_failure_value(error_msg("Terminal", "read_line", k_raw_mode_required));
+            }
+
+            emit(prompt);
+
+            std::string line;
+
+            while (true) {
+                std::string key;
+
+                if (headless) {
+                    const auto scripted = next_scripted_key();
+
+                    if (!scripted) {
+                        return make_failure_value(
+                            error_msg("Terminal", "read_line", "end of scripted input"));
+                    }
+
+                    key = *scripted;
+                } else {
+                    try {
+                        key = terminal_detail::read_input(-1, loc, mouse_mode_active).key;
+                    } catch (const RuntimeError& e) {
+                        return failure_from_exception(e);
+                    }
+                }
+
+                if (key == "enter") {
+                    emit("\r\n");
+
+                    return make_success_value(Value{line});
+                }
+
+                if (key == "ctrl+c" || key == "ctrl+d") {
+                    return make_failure_value(
+                        error_msg("Terminal", "read_line", "input interrupted"));
+                }
+
+                if (key == "backspace") {
+                    if (!line.empty()) {
+                        line.pop_back();
+                        emit("\b \b");
+                    }
+
+                    continue;
+                }
+
+                if (key == "space") {
+                    line += ' ';
+                    emit(" ");
+
+                    continue;
+                }
+
+                if (is_printable_key(key)) {
+                    line += key;
+                    emit(key);
+                }
+            }
+        });
+}
+
+} // namespace
+
+void terminal_internal::restore_terminal_state() {
+    leave_raw_mode();
+}
+
+// ============================================================================
+// Registration
+// ============================================================================
+
+void register_terminal_ns(const EnvPtr& env, bool sandbox) {
+    using namespace terminal_internal;
+
+    // === Terminal information ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("is_terminal", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{stdout_is_terminal()};
+        })
+        .func("size", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            const auto [cols, rows] = query_terminal_size();
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Size";
+            rec->fields.emplace_back("columns", Value{static_cast<std::int64_t>(cols)});
+            rec->fields.emplace_back("rows", Value{static_cast<std::int64_t>(rows)});
+
+            return Value{std::move(rec)};
+        })
+        .func("columns", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{static_cast<std::int64_t>(query_terminal_size().cols)};
+        })
+        .func("rows", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{static_cast<std::int64_t>(query_terminal_size().rows)};
+        });
+
+    // === Raw mode state (restoring the console is always safe) ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("disable_raw_mode", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            leave_raw_mode();
+
+            return NullValue{};
+        })
+        .func("is_in_raw_mode", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{raw_mode_active.load()};
+        });
+
+    // === Console input (withheld in sandbox mode) ===
+
+    if (!sandbox) {
+        register_terminal_input(env);
+    }
+
+    // === Mouse input ===
+
+    ModuleBuilder{"Terminal", env}
         .func("disable_mouse", 0)
         .raw_body([](std::span<const Value>, SourceLocation) -> Value {
             if (headless_input_is_active()) {
@@ -712,77 +829,6 @@ void register_terminal_ns(const EnvPtr& env) {
             return make_success_value(Value{true});
         });
 
-    // === Line editing input ===
-
-    ModuleBuilder{"Terminal", env}
-        .func("read_line", 1)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const std::string& prompt = expect_string(args[0], "Terminal.read_line", loc);
-
-            const bool headless = headless_input_is_active();
-
-            if (!headless && !raw_mode_active) {
-                return make_failure_value(error_msg("Terminal", "read_line", k_raw_mode_required));
-            }
-
-            emit(prompt);
-
-            std::string line;
-
-            while (true) {
-                std::string key;
-
-                if (headless) {
-                    const auto scripted = next_scripted_key();
-
-                    if (!scripted) {
-                        return make_failure_value(
-                            error_msg("Terminal", "read_line", "end of scripted input"));
-                    }
-
-                    key = *scripted;
-                } else {
-                    try {
-                        key = terminal_detail::read_input(-1, loc, mouse_mode_active).key;
-                    } catch (const RuntimeError& e) {
-                        return failure_from_exception(e);
-                    }
-                }
-
-                if (key == "enter") {
-                    emit("\r\n");
-
-                    return make_success_value(Value{line});
-                }
-
-                if (key == "ctrl+c" || key == "ctrl+d") {
-                    return make_failure_value(
-                        error_msg("Terminal", "read_line", "input interrupted"));
-                }
-
-                if (key == "backspace") {
-                    if (!line.empty()) {
-                        line.pop_back();
-                        emit("\b \b");
-                    }
-
-                    continue;
-                }
-
-                if (key == "space") {
-                    line += ' ';
-                    emit(" ");
-
-                    continue;
-                }
-
-                if (is_printable_key(key)) {
-                    line += key;
-                    emit(key);
-                }
-            }
-        });
-
     // === Cursor shape ===
 
     ModuleBuilder{"Terminal", env}
@@ -876,7 +922,7 @@ void register_terminal_ns(const EnvPtr& env) {
 
     // === ANSI escape code registrations (split into terminal_module_ansi.cpp) ===
 
-    register_terminal_ansi(env);
+    register_terminal_ansi(env, sandbox);
 
     // === Headless interaction-testing API (split into terminal_testing.cpp) ===
 

@@ -93,6 +93,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <future>
 #include <iterator>
@@ -528,6 +529,13 @@ struct ChoiceValue {
 // To read upvalue i: if upvalue_cells[i] != null, dereference the cell;
 // otherwise read upvalues[i].
 struct FunctionValue {
+    // Allocates the identity of a newly created closure (see `identity`).
+    [[nodiscard]] static std::uint64_t next_identity() noexcept {
+        static std::atomic<std::uint64_t> counter{0};
+
+        return counter.fetch_add(1, std::memory_order_relaxed) + 1;
+    }
+
     std::string name;
     const CompiledFunction* compiled{nullptr};
     // The function table `compiled` belongs to, which its MakeClosure indices
@@ -544,16 +552,23 @@ struct FunctionValue {
     // `upvalues[i]` is unused in that case.
     std::vector<Value> upvalues;
     std::vector<std::shared_ptr<Value>> upvalue_cells;
+
+    // Equality identity: unique per closure creation and carried over by
+    // deep_copy, so a value-semantics copy (a `mutable` binding, a spawned
+    // task's argument) still equals the function it was copied from — just
+    // as every copy of a task handle shares its completion object.
+    std::uint64_t identity{next_identity()};
 };
 
-// C++ function exposed to Luma code — used for all stdlib bindings.
-// Wraps a NativeFunction callable with parameter/return type metadata
-// so the VM can produce meaningful error messages on type mismatches.
+// C++ function exposed to Luma code — used for all stdlib bindings and for
+// payload-bearing choice-variant constructors.  Carries only the qualified
+// name (for diagnostics and display) and the callable: argument and return
+// types are checked statically, against the StdlibCatalog
+// (shared/stdlib/stdlib_catalog.hpp) for stdlib functions, before any native
+// call runs.
 struct NativeFunctionValue {
     std::string name;
     NativeFunction function;
-    std::vector<std::string> parameter_types;
-    std::string return_type;
 };
 
 struct TaskValue {

@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/file_helpers.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -339,15 +340,15 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
                 const auto out_path = validate_path(args[1].as_string(), loc);
                 const auto content = file_helpers::read_file_contents(in_path, std::ios::binary);
                 if (!content) {
-                    return make_failure_value(
-                        std::format("Compression.gzip_file: cannot open '{}'", in_path.string()));
+                    return make_failure_value(std::format("Compression.gzip_file: cannot open '{}'",
+                                                          path_to_utf8(in_path)));
                 }
                 const auto compressed = compression::gzip_compress(*content);
                 if (!file_helpers::write_file_contents(out_path, compressed, std::ios::binary)) {
-                    return make_failure_value(
-                        std::format("Compression.gzip_file: cannot write '{}'", out_path.string()));
+                    return make_failure_value(std::format(
+                        "Compression.gzip_file: cannot write '{}'", path_to_utf8(out_path)));
                 }
-                return make_success_value(Value{out_path.string()});
+                return make_success_value(Value{path_to_utf8(out_path)});
             })
             .func("gunzip_file", 1)
             .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -355,8 +356,8 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
                 const auto safe = validate_path(args[0].as_string(), loc);
                 const auto content_opt = file_helpers::read_file_contents(safe, std::ios::binary);
                 if (!content_opt) {
-                    return make_failure_value(
-                        std::format("Compression.gunzip_file: cannot open '{}'", safe.string()));
+                    return make_failure_value(std::format(
+                        "Compression.gunzip_file: cannot open '{}'", path_to_utf8(safe)));
                 }
                 const auto& content = *content_opt;
                 const auto decompressed = compression::gzip_decompress(content);
@@ -381,15 +382,15 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
                 const auto content = file_helpers::read_file_contents(safe_in, std::ios::binary);
                 if (!content) {
                     return make_failure_value(std::format(
-                        "Compression.gzip_file_with: cannot read '{}'", safe_in.string()));
+                        "Compression.gzip_file_with: cannot read '{}'", path_to_utf8(safe_in)));
                 }
                 const auto compressed =
                     compression::gzip_compress(*content, static_cast<int>(level));
                 if (!file_helpers::write_file_contents(safe_out, compressed, std::ios::binary)) {
                     return make_failure_value(std::format(
-                        "Compression.gzip_file_with: cannot write '{}'", safe_out.string()));
+                        "Compression.gzip_file_with: cannot write '{}'", path_to_utf8(safe_out)));
                 }
-                return make_success_value(Value{safe_out.string()});
+                return make_success_value(Value{path_to_utf8(safe_out)});
             });
     }
 }

@@ -9,11 +9,14 @@ namespace luma {
 // ─────────── Variable & assignment statement handlers ───────────
 
 void Linter::visit_variable_declaration(const VariableDeclStatement& var) {
-    declare_local(var.name, var.location, var.is_mutable);
-
+    // Lint the initializer BEFORE declaring the new name: in a shadowing
+    // declaration such as `integer count = count + 1` the initializer reads the
+    // OUTER `count`, so it must be marked used before the inner one exists.
     if (var.initializer) {
         lint_expression(*var.initializer);
     }
+
+    declare_local(var.name, var.location, var.is_mutable);
 }
 
 void Linter::declare_local(std::string_view name, SourceLocation loc, bool is_mutable) {

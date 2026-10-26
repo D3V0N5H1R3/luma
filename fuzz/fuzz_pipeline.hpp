@@ -42,18 +42,16 @@ inline void apply_fuzz_resource_limits() {
     ResourceLimits::max_string_repeat = k_fuzz_max_string_repeat;
 }
 
-// Run lex → parse → resolve → type-check and return a compile-ready AST.
+// Run lex → parse → type-check and return a compile-ready AST.
 // Returns nullopt when the input has syntax or type errors, which is the
 // gate every compile/execute target shares: the compiler assumes a fully
-// resolved and typed AST, and feeding it recovered-but-invalid output can
-// trigger null dereferences.
+// typed AST, and feeding it recovered-but-invalid output can trigger null
+// dereferences.
 [[nodiscard]] inline std::optional<Program> compile_ready_program(const std::string& input) {
     auto parsed = parse(input);
     if (!parsed.ok) {
         return std::nullopt;
     }
-
-    do_not_optimize(resolve(parsed.program).size());
 
     if (has_error(type_check(parsed.program))) {
         return std::nullopt;
@@ -62,7 +60,7 @@ inline void apply_fuzz_resource_limits() {
     return std::move(parsed.program);
 }
 
-// Compile a resolved, type-checked program to bytecode.
+// Compile a type-checked program to bytecode.
 [[nodiscard]] inline CompileResult compile(Program& program) {
     Compiler compiler;
     return compiler.compile(program, /*repl_mode=*/false);

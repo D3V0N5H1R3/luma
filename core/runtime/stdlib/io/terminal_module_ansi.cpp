@@ -161,7 +161,7 @@ auto movement_body(char code) {
 
 } // namespace
 
-void register_terminal_ansi(const EnvPtr& env) {
+void register_terminal_ansi(const EnvPtr& env, bool sandbox) {
     // === Screen control ===
 
     ModuleBuilder{"Terminal", env}
@@ -289,53 +289,61 @@ void register_terminal_ansi(const EnvPtr& env) {
             emit("\033[u");
 
             return NullValue{};
-        })
-        .func("get_cursor_position", 0)
-        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
-            if (headless_input_is_active()) {
-                // No real terminal to query (CPR needs a live TTY round-trip);
-                // report failure so callers exercise their failure(_) branch.
-                return make_failure_value(
-                    error_msg("Terminal", "get_cursor_position",
-                              "cursor position is unavailable in a headless test session"));
-            }
+        });
 
-            if (!raw_mode_active) {
-                return make_failure_value(
-                    error_msg("Terminal", "get_cursor_position", k_raw_mode_required));
-            }
+    // === Cursor position report ===
+    // Reads the terminal's reply from stdin, so it is withheld in sandbox mode
+    // together with the other console-input functions (see terminal_module.cpp).
 
-            int row{1};
-            int col{1};
+    if (!sandbox) {
+        ModuleBuilder{"Terminal", env}
+            .func("get_cursor_position", 0)
+            .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+                if (headless_input_is_active()) {
+                    // No real terminal to query (CPR needs a live TTY round-trip);
+                    // report failure so callers exercise their failure(_) branch.
+                    return make_failure_value(
+                        error_msg("Terminal", "get_cursor_position",
+                                  "cursor position is unavailable in a headless test session"));
+                }
+
+                if (!raw_mode_active) {
+                    return make_failure_value(
+                        error_msg("Terminal", "get_cursor_position", k_raw_mode_required));
+                }
+
+                int row{1};
+                int col{1};
 
 #ifdef _WIN32
-            const HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+                const HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
 
-            CONSOLE_SCREEN_BUFFER_INFO csbi;
+                CONSOLE_SCREEN_BUFFER_INFO csbi;
 
-            if (!GetConsoleScreenBufferInfo(h, &csbi)) {
-                return make_failure_value(
-                    error_msg("Terminal", "get_cursor_position", "failed to read cursor position"));
-            }
+                if (!GetConsoleScreenBufferInfo(h, &csbi)) {
+                    return make_failure_value(error_msg("Terminal", "get_cursor_position",
+                                                        "failed to read cursor position"));
+                }
 
-            row = csbi.dwCursorPosition.Y + 1;
-            col = csbi.dwCursorPosition.X + 1;
+                row = csbi.dwCursorPosition.Y + 1;
+                col = csbi.dwCursorPosition.X + 1;
 #else
-            emit("\033[6n");
+                emit("\033[6n");
 
-            if (!terminal_detail::read_cpr_response(row, col)) {
-                return make_failure_value(error_msg("Terminal", "get_cursor_position",
-                                                    "failed to read cursor position response"));
-            }
+                if (!terminal_detail::read_cpr_response(row, col)) {
+                    return make_failure_value(error_msg("Terminal", "get_cursor_position",
+                                                        "failed to read cursor position response"));
+                }
 #endif
 
-            auto rec = std::make_shared<RecordValue>();
-            rec->type_name = "CursorPosition";
-            rec->fields.emplace_back("row", Value{static_cast<std::int64_t>(row)});
-            rec->fields.emplace_back("column", Value{static_cast<std::int64_t>(col)});
+                auto rec = std::make_shared<RecordValue>();
+                rec->type_name = "CursorPosition";
+                rec->fields.emplace_back("row", Value{static_cast<std::int64_t>(row)});
+                rec->fields.emplace_back("column", Value{static_cast<std::int64_t>(col)});
 
-            return make_success_value(Value{std::move(rec)});
-        });
+                return make_success_value(Value{std::move(rec)});
+            });
+    }
 
     // === Text styling ===
 

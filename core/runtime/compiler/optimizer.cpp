@@ -64,6 +64,13 @@ Optimizer::inline_small_functions(Chunk& caller_chunk,
     auto& code = caller_chunk.code;
     std::size_t eliminated = 0;
 
+    // A jump that lands on the Call would skip the MakeClosure on that path;
+    // after inlining it would land in the middle of the copied body (or in the
+    // nop padding), so such calls must not be inlined.  Inlining rewrites the
+    // caller in place without moving any instruction and copies only bodies
+    // free of jumps, so this set stays valid for the whole walk.
+    const auto jump_targets = collect_jump_targets(code);
+
     for (std::size_t i = 0; i + 4 < code.size();) {
         const auto op = static_cast<Op>(code[i]);
         const auto inst_size = instruction_size(code, i);
@@ -113,7 +120,8 @@ Optimizer::inline_small_functions(Chunk& caller_chunk,
 
         // We only handle: MakeClosure immediately followed by Call(0).
         // This covers constant-returning lambdas and zero-arg factory calls.
-        if (call_op != Op::Call || read_u8_checked(code, call_offset + 1) != 0) {
+        if (call_op != Op::Call || read_u8_checked(code, call_offset + 1) != 0 ||
+            jump_targets.contains(call_offset)) {
             i += inst_size;
             continue;
         }
@@ -142,18 +150,34 @@ Optimizer::inline_small_functions(Chunk& caller_chunk,
         // IncrementLocal/…) and upvalue indices.  The record-building ops embed
         // name-table indices in variable-length operands (category None), and
         // MakeClosure references the function table, so block those explicitly.
+        //
+        // The body must also be straight-line code.  A Return (or TailCall/
+        // Rethrow) before the final one would return from — or throw out of —
+        // the *caller* once copied, and a jump's relative offset would land
+        // somewhere else in the caller.  The callee is inlined before its own
+        // dead-code pass runs, so an unreachable mid-body `Return` is still
+        // present at this point (e.g. `() -> { return 1 }` used to compile to
+        // `One Return None Return`).
         bool safe_to_inline = true;
-        for (std::size_t j = 0; j < body_size;) {
+        std::size_t j = 0;
+        while (j < body_size) {
             const auto body_op = static_cast<Op>(callee_code[j]);
             const auto category = operand_category(body_op);
             if (category == OperandCategory::Constant || category == OperandCategory::Name ||
                 category == OperandCategory::Local || category == OperandCategory::Upvalue ||
                 body_op == Op::MakeRecord || body_op == Op::RecordWith ||
-                body_op == Op::MakeClosure) {
+                body_op == Op::MakeClosure || is_control_flow(body_op) || is_terminator(body_op) ||
+                is_jump(body_op)) {
                 safe_to_inline = false;
                 break;
             }
             j += instruction_size(callee_code, j);
+        }
+
+        // The final byte must be a Return opcode, not the operand byte of an
+        // instruction that straddles it.
+        if (j != body_size) {
+            safe_to_inline = false;
         }
 
         if (!safe_to_inline) {

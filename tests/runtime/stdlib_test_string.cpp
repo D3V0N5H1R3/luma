@@ -1,5 +1,9 @@
 // Standard library tests: String.
 
+#include <chrono>
+#include <cstddef>
+#include <string>
+
 #include "common/resource_limits.hpp"
 #include "stdlib_test_helpers.hpp"
 
@@ -855,7 +859,167 @@ static void test_string_character_class_constants() {
     ASSERT_TRUE(eval("String.is_ascii(String.punctuation)").as_bool());
 }
 
+// Evaluate `call` (a String.* expression whose argument comes from an
+// array<any>, so the type checker cannot reject it) inside a Luma try/catch and
+// return the caught error message ("" when nothing was thrown).  `result_type`
+// is the declared type of the call's result binding.
+static std::string caught_message(const std::string& result_type, const std::string& call) {
+    const auto v = eval(R"(
+        array<any> mixed = [42]
+        mutable string message = ""
+        try {
+            )" + result_type +
+                        " ignored = " + call + R"(
+        } catch (e) {
+            message = e
+        }
+        message
+    )");
+    return v.as_string();
+}
+
+static void test_string_secondary_args_are_type_checked() {
+    // Regression: arguments after the first were read with unchecked
+    // as_string()/as_integer(), so a wrong type surfaced as an opaque
+    // "internal error ... bad variant access" instead of a qualified error.
+    ASSERT_EQ(caught_message("boolean", "String.contains(\"hi\", mixed[0])"),
+              std::string{"String.contains: expected string, got 'integer'"});
+    ASSERT_EQ(caught_message("array<string>", "String.split(\"a,b\", mixed[0])"),
+              std::string{"String.split: expected string, got 'integer'"});
+    ASSERT_EQ(caught_message("string", "String.indent(\"a\", mixed[0])"),
+              std::string{"String.indent: expected string, got 'integer'"});
+    ASSERT_EQ(caught_message("boolean", "String.starts_with_any(\"a\", mixed)"),
+              std::string{"String.starts_with_any: expected string, got 'integer'"});
+}
+
+static void test_string_pad_negative_width() {
+    // Regression: a negative width was cast to size_t and misreported as
+    // "width exceeds maximum"; it now matches String.center.
+    ASSERT_TRUE(eval("String.pad_left(\"x\", -1, \" \") == "
+                     "failure(\"String.pad_left: width must not be negative\")")
+                    .as_bool());
+    ASSERT_TRUE(eval("String.pad_right(\"x\", -1, \" \") == "
+                     "failure(\"String.pad_right: width must not be negative\")")
+                    .as_bool());
+}
+
+static void test_string_template_single_pass() {
+    // Regression: keys were substituted one after another over already
+    // substituted text, so a value containing "{b}" was re-expanded (template
+    // injection) and the result depended on dictionary insertion order.
+    ASSERT_EQ(eval(R"(String.template("{a}", {"a": "{b}", "b": "SECRET"}))").as_string(), "{b}");
+    ASSERT_EQ(eval(R"(String.template("{b}{a}", {"a": "{b}", "b": "x"}))").as_string(), "x{b}");
+    // Unknown and unterminated placeholders are kept verbatim; a stray '{'
+    // before a real placeholder does not hide it.
+    ASSERT_EQ(eval(R"(String.template("{zz} {{a} {a", {"a": "1"}))").as_string(), "{zz} {1 {a");
+}
+
+// Regression: every '{' re-searched the rest of the template for '}' and hashed
+// the whole candidate name, so a long run of '{' before one '}' was O(N^2):
+// with ~200k braces and a dictionary large enough to be hash-indexed (more than
+// 8 entries) it took over 20 seconds; it now takes milliseconds.
+static void test_string_template_many_open_braces_is_linear() {
+    const auto start = std::chrono::steady_clock::now();
+    const auto v = eval(R"(String.template(Result.unwrap(String.repeat("{", 200000)) + "a}",
+        {"a": "1", "b": "2", "c": "3", "d": "4", "e": "5", "f": "6", "g": "7", "h": "8", "i": "9"}))");
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string().size(), std::size_t{200000});
+    ASSERT_EQ(v.as_string().substr(v.as_string().size() - 2), "{1");
+    ASSERT_TRUE(elapsed < std::chrono::seconds{3});
+
+    // Unknown placeholders after a run of braces keep their text.
+    ASSERT_EQ(eval(R"(String.template(Result.unwrap(String.repeat("{", 5)) + "zz}", {"a": "1"}))")
+                  .as_string(),
+              "{{{{{zz}");
+}
+
+static void test_string_indent_caps_output_size() {
+    // Regression: indent's output (lines × prefix) had no size limit.
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(64)};
+
+    // 10 lines × 8-byte prefix + 20 bytes = 100 > 64.
+    ASSERT_THROWS(eval(R"(String.indent("a\na\na\na\na\na\na\na\na\na\n", "########"))"));
+    ASSERT_EQ(eval(R"(String.indent("a\nb\n", "> "))").as_string(), "> a\n> b\n");
+}
+
+static void test_string_dedent_tabs_and_trailing_newline() {
+    // Regression: dedent used std::getline (dropping a trailing newline) and
+    // only counted spaces, so tab indentation was never removed.
+    ASSERT_EQ(eval(R"(String.dedent("  a\n  b\n"))").as_string(), "a\nb\n");
+    ASSERT_EQ(eval(R"(String.dedent("\ta\n\t\tb"))").as_string(), "a\n\tb");
+    // Blank lines do not constrain the common indentation.
+    ASSERT_EQ(eval(R"(String.dedent("    a\n\n    b"))").as_string(), "a\n\nb");
+    // A tab never matches a space: only the shared prefix is removed.
+    ASSERT_EQ(eval(R"(String.dedent(" \ta\n  b"))").as_string(), "\ta\n b");
+}
+
+static void test_string_edit_ops_on_truncated_utf8() {
+    // Regression: a string ending in a truncated multi-byte lead byte made
+    // utf8_byte_offset return an offset past size(), so insert/delete/
+    // replace_range threw std::out_of_range ("invalid string position").
+    ASSERT_EQ(
+        eval(
+            R"(Result.unwrap(String.insert(Result.unwrap(String.from_bytes([97, 226])), 2, "x")) |> String.to_bytes() |> Array.length())")
+            .as_integer(),
+        3);
+    ASSERT_EQ(
+        eval(R"(Result.unwrap(String.delete(Result.unwrap(String.from_bytes([97, 226])), 1, 2)))")
+            .as_string(),
+        "a");
+    ASSERT_EQ(
+        eval(
+            R"(Result.unwrap(String.replace_range(Result.unwrap(String.from_bytes([97, 226])), 1, 2, "b")))")
+            .as_string(),
+        "ab");
+}
+
+static void test_string_edit_ops_cap_output_size() {
+    // Regression: insert / replace_range / replace never checked
+    // max_string_size, so repeated calls could double a string past the limit.
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(8)};
+
+    ASSERT_THROWS(eval(R"(String.insert("abcdef", 3, "ghij"))"));
+    ASSERT_THROWS(eval(R"(String.replace_range("abcdef", 0, 1, "ghijk"))"));
+    ASSERT_THROWS(eval(R"(String.replace("abcdef", "a", "ghijk"))"));
+    ASSERT_TRUE(eval(R"(String.insert("abcd", 2, "xy") == success("abxycd"))").as_bool());
+}
+
+static void test_string_split_whitespace_caps_while_producing() {
+    // split_whitespace / words now check the array limit per token instead of
+    // materialising every token first; word_count counts without allocating.
+    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(3)};
+
+    ASSERT_THROWS(eval(R"(String.split_whitespace("a b c d e"))"));
+    ASSERT_THROWS(eval(R"(String.words("a b c d e"))"));
+    // word_count builds no array, so it is not subject to the array limit.
+    ASSERT_EQ(eval(R"(String.word_count("  a b\tc\nd e  "))").as_integer(), 5);
+}
+
+static void test_string_levenshtein_multibyte_and_invalid_bytes() {
+    // The distance is computed over codepoints decoded once up front.
+    ASSERT_EQ(eval(R"(String.levenshtein_distance("café", "cafe"))").as_integer(), 1);
+    ASSERT_EQ(eval(R"(String.levenshtein_distance("kitten", "sitting"))").as_integer(), 3);
+    // Distinct ill-formed bytes stay distinct (they both decode to U+FFFD).
+    ASSERT_EQ(
+        eval(
+            R"(String.levenshtein_distance(Result.unwrap(String.from_bytes([128])), Result.unwrap(String.from_bytes([129]))))")
+            .as_integer(),
+        1);
+}
+
 int main() {
+    RUN(test_string_secondary_args_are_type_checked);
+    RUN(test_string_pad_negative_width);
+    RUN(test_string_template_single_pass);
+    RUN(test_string_template_many_open_braces_is_linear);
+    RUN(test_string_indent_caps_output_size);
+    RUN(test_string_dedent_tabs_and_trailing_newline);
+    RUN(test_string_edit_ops_on_truncated_utf8);
+    RUN(test_string_edit_ops_cap_output_size);
+    RUN(test_string_split_whitespace_caps_while_producing);
+    RUN(test_string_levenshtein_multibyte_and_invalid_bytes);
     RUN(test_string_byte_length);
     RUN(test_string_byte_length_multibyte);
     RUN(test_string_characters_multibyte);

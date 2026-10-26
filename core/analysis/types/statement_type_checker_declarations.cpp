@@ -12,13 +12,11 @@
 namespace luma {
 
 void StatementTypeChecker::visit_variable_declaration(const VariableDeclStatement& stmt) {
-    const auto declared_type = tc_.resolve_type(stmt.type);
+    // Report first: it knows the declaration's location, and each problem in
+    // the annotation is reported only once.
+    (void)type_check_helpers::report_unknown_types(tc_, stmt.type, "", stmt.location);
 
-    if (declared_type.kind == TypeInfo::Kind::Unknown && !stmt.type.name().empty()) {
-        const auto hint = tc_.suggest_type_name(stmt.type.name());
-        tc_.error(std::format("unknown type '{}'", stmt.type.name()), stmt.location,
-                  hint.empty() ? "check the spelling or make sure the type is declared" : hint);
-    }
+    const auto declared_type = tc_.resolve_type(stmt.type);
 
     if (stmt.initializer) {
         const auto init_type = tc_.infer_expression_type(*stmt.initializer);
@@ -79,6 +77,13 @@ void StatementTypeChecker::visit_tuple_destructuring(const TupleDestructuringSta
                                       init_type.inner_types.size(), stmt.bindings.size()),
                           stmt.location);
             }
+        } else if (init_type.kind != TypeInfo::Kind::StdlibAny &&
+                   init_type.kind != TypeInfo::Kind::Unknown) {
+            tc_.error(std::format("cannot destructure a value of type '{}' — only tuples can be "
+                                  "destructured into ( … ) bindings",
+                                  init_type.to_string()),
+                      stmt.location,
+                      "destructure a tuple value, or bind the value to one variable");
         }
 
         std::vector<TypeInfo> declared_types;
@@ -86,6 +91,8 @@ void StatementTypeChecker::visit_tuple_destructuring(const TupleDestructuringSta
 
         for (std::size_t i{0}; i < stmt.bindings.size(); ++i) {
             const auto& [type_ann, name] = stmt.bindings[i];
+            (void)type_check_helpers::report_unknown_types(
+                tc_, type_ann, std::format(" for tuple binding '{}'", name), stmt.location);
             const auto declared = tc_.resolve_type(type_ann);
             declared_types.push_back(declared);
 
@@ -105,6 +112,8 @@ void StatementTypeChecker::visit_tuple_destructuring(const TupleDestructuringSta
             tc_, *stmt.initializer, TypeInfo::make_tuple(std::move(declared_types)), init_type);
     } else {
         for (const auto& [type_ann, name] : stmt.bindings) {
+            (void)type_check_helpers::report_unknown_types(
+                tc_, type_ann, std::format(" for tuple binding '{}'", name), stmt.location);
             tc_.context().current_scope->define(name, tc_.resolve_type(type_ann),
                                                 {.is_mutable = stmt.is_mutable});
         }

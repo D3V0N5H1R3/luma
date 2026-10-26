@@ -609,7 +609,91 @@ static void test_json_value_module_registered() {
     ASSERT_TRUE(env->has("Json.index"));
 }
 
+static void test_json_value_to_string_enforces_depth_limit() {
+    // Regression: Json.to_string recursed over a runtime-built Json.Value with
+    // no depth bound, so `v = JsonArray([v])` in a loop could overflow the
+    // native stack (uncatchable, even under --box).
+    const LimitGuard guard{ResourceLimits::max_json_nesting_depth, static_cast<std::size_t>(4)};
+
+    ASSERT_TRUE(throws_runtime(R"(
+        mutable Json.Value v = Json.Value.JsonNull
+        for _ in 0..10 {
+            v = Json.Value.JsonArray([v])
+        }
+        Json.to_string(v)
+    )"));
+
+    const auto shallow = eval(R"(
+        mutable Json.Value v = Json.Value.JsonNull
+        for _ in 0..3 {
+            v = Json.Value.JsonArray([v])
+        }
+        Json.to_string(v)
+    )");
+    ASSERT_EQ(shallow.as_string(), "[[[null]]]");
+}
+
+static void test_json_value_to_string_enforces_element_limit() {
+    // Regression: sharing one node twice per level (JsonArray([v, v]) x N)
+    // expands to 2^N nodes; the element count is now bounded.
+    const LimitGuard guard{ResourceLimits::max_json_elements, static_cast<std::size_t>(100)};
+
+    ASSERT_TRUE(throws_runtime(R"(
+        mutable Json.Value v = Json.Value.JsonNull
+        for _ in 0..10 {
+            v = Json.Value.JsonArray([v, v])
+        }
+        Json.to_string(v)
+    )"));
+}
+
+static void test_json_value_to_string_bounds_serialised_size() {
+    // Regression: only the raw string bytes were charged against
+    // max_string_size, so escaping ('"' -> 2 bytes, control characters -> 6)
+    // and structure (quotes, brackets, commas, literals, numbers) let the
+    // serialised text exceed the limit.
+    const std::string value_source = R"(
+        Json.Value.JsonObject({
+            "k": Json.Value.JsonArray([
+                Json.Value.JsonNumber(1.0), Json.Value.JsonNumber(2.5), Json.Value.JsonNumber(-1e300),
+                Json.Value.JsonBool(true), Json.Value.JsonBool(false), Json.Value.JsonNull,
+                Json.Value.JsonString("q\"\n\tz")
+            ]),
+            "e": Json.Value.JsonObject({"inner": Json.Value.JsonNull}),
+            "a": Json.Value.JsonArray([Json.Value.JsonNumber(123456789.0)])
+        })
+    )";
+    const std::string serialised = eval("Json.to_string(" + value_source + ")").as_string();
+
+    // The budget charged during conversion matches the output exactly.
+    {
+        const LimitGuard guard{ResourceLimits::max_string_size, serialised.size()};
+        ASSERT_EQ(eval("Json.to_string(" + value_source + ")").as_string(), serialised);
+    }
+
+    {
+        const LimitGuard guard{ResourceLimits::max_string_size, serialised.size() - 1};
+        ASSERT_TRUE(throws_runtime("Json.to_string(" + value_source + ")"));
+    }
+
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(16)};
+
+    // 10 quote characters are 10 string bytes but serialise to 22.
+    ASSERT_TRUE(throws_runtime(R"(Json.to_string(Json.Value.JsonString("\"\"\"\"\"\"\"\"\"\"")))"));
+    // No string data at all, but "[null,null,null,null,null]" is 26 bytes.
+    ASSERT_TRUE(throws_runtime(R"(Json.to_string(Json.Value.JsonArray([
+        Json.Value.JsonNull, Json.Value.JsonNull, Json.Value.JsonNull,
+        Json.Value.JsonNull, Json.Value.JsonNull])))"));
+    // 14 characters plus the two quotes fit exactly; 15 do not.
+    ASSERT_EQ(eval(R"(Json.to_string(Json.Value.JsonString("abcdefghijklmn")))").as_string(),
+              "\"abcdefghijklmn\"");
+    ASSERT_TRUE(throws_runtime(R"(Json.to_string(Json.Value.JsonString("abcdefghijklmno")))"));
+}
+
 int main() {
+    RUN(test_json_value_to_string_enforces_depth_limit);
+    RUN(test_json_value_to_string_enforces_element_limit);
+    RUN(test_json_value_to_string_bounds_serialised_size);
     RUN(test_json_get_path_array_index);
     RUN(test_json_get_path_bracket_index_lenient);
     RUN(test_json_get_path_missing);

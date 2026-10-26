@@ -3367,6 +3367,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "octal_literal"
+        },
+        {
+          "type": "SYMBOL",
           "name": "binary_literal"
         },
         {
@@ -3384,6 +3388,13 @@
       "content": {
         "type": "PATTERN",
         "value": "0[xX][0-9a-fA-F]+"
+      }
+    },
+    "octal_literal": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "0[oO][0-7]+"
       }
     },
     "binary_literal": {

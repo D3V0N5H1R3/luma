@@ -1,6 +1,7 @@
 // UTF-8 utility function unit tests.
 
 #include <cstdint>
+#include <initializer_list>
 #include <string>
 
 #include "common/utf8.hpp"
@@ -238,50 +239,53 @@ static void test_codepoint_len_invalid_bytes() {
     // 0xFE and 0xFF are never valid in UTF-8.
     ASSERT_EQ(utf8_codepoint_len(0xFE), 1);
     ASSERT_EQ(utf8_codepoint_len(0xFF), 1);
-    // 0xF5..0xF7 still match the 4-byte leading pattern (11110xxx) so the
-    // function reports 4 (it checks byte patterns, not Unicode validity).
-    ASSERT_EQ(utf8_codepoint_len(0xF5), 4);
+    // 0xF5..0xF7 match the 11110xxx pattern but can only encode values above
+    // U+10FFFF, and 0xC0/0xC1 can only start overlong forms (RFC 3629 §4).
+    ASSERT_EQ(utf8_codepoint_len(0xF5), 1);
+    ASSERT_EQ(utf8_codepoint_len(0xF7), 1);
+    ASSERT_EQ(utf8_codepoint_len(0xC0), 1);
+    ASSERT_EQ(utf8_codepoint_len(0xC1), 1);
     ASSERT_EQ(utf8_codepoint_len(0xFD), 1);
 }
 
 static void test_decode_truncated_two_byte() {
-    // Two-byte start byte with no continuation — falls back to raw byte.
+    // Two-byte start byte with no continuation — decodes as U+FFFD.
     std::string s{static_cast<char>(0xC3)};
-    ASSERT_EQ(utf8_decode_at(s, 0), 0xC3U);
+    ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_truncated_three_byte() {
     // Three-byte start byte with only one continuation.
     std::string s{static_cast<char>(0xE2), static_cast<char>(0x82)};
-    ASSERT_EQ(utf8_decode_at(s, 0), 0xE2U);
+    ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_truncated_four_byte() {
     // Four-byte start byte with only two continuations.
     std::string s{static_cast<char>(0xF0), static_cast<char>(0x9F), static_cast<char>(0x98)};
-    ASSERT_EQ(utf8_decode_at(s, 0), 0xF0U);
+    ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_invalid_continuation_two_byte() {
     // Two-byte leader followed by a non-continuation byte ('A', 0x41). The
-    // sequence is malformed, so decoding falls back to the raw lead byte
-    // rather than masking the following byte into a bogus codepoint.
+    // sequence is malformed, so decoding yields U+FFFD rather than masking
+    // the following byte into a bogus codepoint.
     std::string s{static_cast<char>(0xC3), 'A'};
-    ASSERT_EQ(utf8_decode_at(s, 0), 0xC3U);
+    ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_invalid_continuation_three_byte() {
     // Three-byte leader with a valid first continuation but an invalid second
-    // (0x41 is not 10xxxxxx) — falls back to the raw lead byte.
+    // (0x41 is not 10xxxxxx) — decodes as U+FFFD.
     std::string s{static_cast<char>(0xE2), static_cast<char>(0x82), 'A'};
-    ASSERT_EQ(utf8_decode_at(s, 0), 0xE2U);
+    ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_invalid_continuation_four_byte() {
-    // Four-byte leader whose final byte is not a continuation byte — falls back
-    // to the raw lead byte.
+    // Four-byte leader whose final byte is not a continuation byte — decodes
+    // as U+FFFD.
     std::string s{static_cast<char>(0xF0), static_cast<char>(0x9F), static_cast<char>(0x98), 'A'};
-    ASSERT_EQ(utf8_decode_at(s, 0), 0xF0U);
+    ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_count_bare_continuation_bytes() {
@@ -497,6 +501,109 @@ static void test_utf8_seek_to_codepoint() {
     ASSERT_EQ(utf8_seek_to_codepoint(s, 4), 10U); // After '😀'.
 }
 
+// ═══════════════════════════════════════════════════════════
+// Strict RFC 3629 decoding (regressions: overlongs, surrogates, out-of-range
+// leads and length/value disagreement were previously accepted)
+// ═══════════════════════════════════════════════════════════
+
+static std::string bytes(std::initializer_list<int> values) {
+    std::string out;
+    for (const int v : values) {
+        out += static_cast<char>(v);
+    }
+    return out;
+}
+
+static void expect_invalid_lead(const std::string& s) {
+    const auto decoded = utf8_decode(s, 0);
+    ASSERT_EQ(decoded.codepoint, k_utf8_replacement_char);
+    ASSERT_EQ(decoded.length, 1U);
+}
+
+static void test_decode_rejects_overlong_forms() {
+    expect_invalid_lead(bytes({0xC0, 0xAF}));             // overlong '/'
+    expect_invalid_lead(bytes({0xC1, 0xBF}));             // overlong U+007F
+    expect_invalid_lead(bytes({0xE0, 0x80, 0xAF}));       // overlong '/'
+    expect_invalid_lead(bytes({0xE0, 0x9F, 0xBF}));       // overlong U+07FF
+    expect_invalid_lead(bytes({0xF0, 0x80, 0x80, 0xAF})); // overlong '/'
+    expect_invalid_lead(bytes({0xF0, 0x8F, 0xBF, 0xBF})); // overlong U+FFFF
+}
+
+static void test_decode_rejects_surrogates() {
+    expect_invalid_lead(bytes({0xED, 0xA0, 0x80})); // U+D800
+    expect_invalid_lead(bytes({0xED, 0xBF, 0xBF})); // U+DFFF
+    // U+D7FF (just below the surrogate block) is valid.
+    const auto below = utf8_decode(bytes({0xED, 0x9F, 0xBF}), 0);
+    ASSERT_EQ(below.codepoint, 0xD7FFU);
+    ASSERT_EQ(below.length, 3U);
+}
+
+static void test_decode_rejects_out_of_range() {
+    expect_invalid_lead(bytes({0xF4, 0x90, 0x80, 0x80})); // U+110000
+    expect_invalid_lead(bytes({0xF5, 0x80, 0x80, 0x80}));
+    expect_invalid_lead(bytes({0xF7, 0xBF, 0xBF, 0xBF})); // was 0x1FFFFF
+    expect_invalid_lead(bytes({0xF8, 0x88, 0x80, 0x80, 0x80}));
+    expect_invalid_lead(bytes({0xFF}));
+    const auto max = utf8_decode(bytes({0xF4, 0x8F, 0xBF, 0xBF}), 0);
+    ASSERT_EQ(max.codepoint, 0x10FFFFU);
+    ASSERT_EQ(max.length, 4U);
+}
+
+static void test_decode_bare_continuation_and_truncation() {
+    expect_invalid_lead(bytes({0x80}));
+    expect_invalid_lead(bytes({0xBF, 0x41}));
+    expect_invalid_lead(bytes({0xE2, 0x82}));       // truncated 3-byte
+    expect_invalid_lead(bytes({0xE3, 0x41, 0x42})); // bad continuation
+    // Past the end: nothing to consume.
+    ASSERT_EQ(utf8_decode(std::string{"a"}, 1).length, 0U);
+}
+
+static void test_decode_reports_length() {
+    const std::string s = "A\xC3\xA4\xE2\x82\xAC\xF0\x9F\x98\x80";
+    ASSERT_EQ(utf8_decode(s, 0).length, 1U);
+    ASSERT_EQ(utf8_decode(s, 1).length, 2U);
+    ASSERT_EQ(utf8_decode(s, 3).length, 3U);
+    ASSERT_EQ(utf8_decode(s, 6).length, 4U);
+    static_assert(utf8_decode(std::string_view{"\xC3\xA4"}, 0).codepoint == 0xE4U);
+}
+
+static void test_iterator_invalid_sequence_does_not_swallow_bytes() {
+    // "\xE3AB": an E3 lead followed by ASCII must yield U+FFFD, 'A', 'B' —
+    // previously next() returned 0xE3 and skipped "AB".
+    const std::string s = "\xE3"
+                          "AB";
+    UTF8Iterator it{s};
+    ASSERT_EQ(static_cast<std::uint32_t>(it.next()), k_utf8_replacement_char);
+    ASSERT_EQ(static_cast<std::uint32_t>(it.next()), static_cast<std::uint32_t>('A'));
+    ASSERT_EQ(static_cast<std::uint32_t>(it.next()), static_cast<std::uint32_t>('B'));
+    ASSERT_TRUE(it.at_end());
+    ASSERT_EQ(it.codepoint_index(), 3U);
+    ASSERT_EQ(utf8_count(s), 3);
+    ASSERT_EQ(utf8_codepoint_count(s), 3);
+}
+
+static void test_byte_offset_clamped_on_truncated_tail() {
+    // "abc\xE3": a truncated trailing lead byte must not push offsets past
+    // size() (callers use the result with substr / operator[]).
+    const std::string s = "abc\xE3";
+    ASSERT_EQ(utf8_count(s), 4);
+    ASSERT_EQ(utf8_byte_offset(s, 4), s.size());
+    ASSERT_EQ(utf8_byte_offset(s, 100), s.size());
+    ASSERT_EQ(utf8_seek_to_codepoint(s, 100), s.size());
+    ASSERT_EQ(utf8_advance(s, 3), 1U);
+    ASSERT_EQ(utf8_char_at_byte(s, 3), std::string{"\xE3"});
+
+    const std::string four = "x\xF0\x9F\x98";
+    UTF8Iterator it{four};
+    while (!it.at_end()) {
+        it.advance();
+    }
+    ASSERT_EQ(it.byte_offset(), four.size());
+    // next() at the end is safe and does not move.
+    ASSERT_EQ(static_cast<std::uint32_t>(it.next()), k_utf8_replacement_char);
+    ASSERT_EQ(it.byte_offset(), four.size());
+}
+
 // ─── main ───
 
 int main() {
@@ -580,6 +687,15 @@ int main() {
 
     // utf8_seek_to_codepoint.
     RUN(test_utf8_seek_to_codepoint);
+
+    // Strict decoding.
+    RUN(test_decode_rejects_overlong_forms);
+    RUN(test_decode_rejects_surrogates);
+    RUN(test_decode_rejects_out_of_range);
+    RUN(test_decode_bare_continuation_and_truncation);
+    RUN(test_decode_reports_length);
+    RUN(test_iterator_invalid_sequence_does_not_swallow_bytes);
+    RUN(test_byte_offset_clamped_on_truncated_tail);
 
     // Round-trip.
     RUN(test_round_trip);

@@ -186,6 +186,17 @@ function void test_regularexpression_redos_rejected() {
     assert(RegularExpression.is_valid("(cat|dog)+"))
     assert(RegularExpression.is_valid("(a|b|c)+"))
 
+    # The guard checks the pattern the engine actually compiles: a named group
+    # cannot hide an ambiguous alternation, and \x escapes count as wildcards.
+    assert(!RegularExpression.is_valid("(?<n>a|aa)+"))
+    assert(!RegularExpression.is_valid("(?P<n>a|aa)+"))
+    assert(!RegularExpression.is_valid("(\\x61|a)+"))
+
+    # Under case-insensitive matching, (a|A)+ is ambiguous.
+    assert(Result.is_failure(
+        RegularExpression.matches_with("aA", "(a|A)+", [RegularExpression.Flags.CaseInsensitive])
+    ))
+
     # Every operation reports a failure result for a dangerous pattern.
     assert(!Result.is_success(RegularExpression.matches("aaaa", "(a+)+")))
     assert(!Result.is_success(RegularExpression.find("aaaa", "(a+)+")))

@@ -144,14 +144,19 @@ int run_file(const std::string& path, const RunOptions& options, CompilationCach
     return with_error_handling([&path, &options, &cache](SourceManager& source_manager) {
         // Load source text so the cache can hash it for invalidation.
         const auto& source_file = source_manager.load(path);
-        const CompilationCache::Options cache_opts{
-            options.optimize_level != OptimizationLevel::None, false};
+        const CompilationCache::Options cache_opts{.optimization_level = options.optimize_level,
+                                                   .debug_info = false};
 
-        // Strict mode treats warnings as errors, but cached artifacts record no
-        // warnings — serving one would skip check_strict_warnings() and let a
-        // program that should fail (exit 2) run and exit 0.  Force the full
-        // compile path whenever strict is requested so warnings are re-checked.
-        if (!options.strict) {
+        // Both caches are bypassed when a flag must act on a fresh compile:
+        //   --strict treats warnings as errors, but cached artifacts record no
+        //     warnings — serving one would skip check_strict_warnings() and let
+        //     a program that should fail (exit 2) run and exit 0.
+        //   --verify checks the bytecode before execution; a cache hit (notably
+        //     a tampered .lumc whose header still matches the source hash)
+        //     would otherwise run without ever being verified.
+        const bool use_caches = !options.strict && !options.verify;
+
+        if (use_caches) {
             if (auto cached = cache.get(path, source_file.text, cache_opts)) {
                 return execute_bytecode(cached->top_level, cached->functions, options.args,
                                         options.sandbox);
@@ -161,9 +166,10 @@ int run_file(const std::string& path, const RunOptions& options, CompilationCach
         // Disk cache — survives across process restarts.
         const auto raw_hash = BytecodeSerializer::hash_source(source_file.text);
         const auto cache_key = compute_cache_key(raw_hash, options.optimize_level);
-        const auto cache_file = BytecodeSerializer::cache_path_for(path);
+        // `path` is UTF-8 (and decodes, since load() above succeeded).
+        const auto cache_file = BytecodeSerializer::cache_path_for(path_from_utf8(path));
 
-        if (!options.strict) {
+        if (use_caches) {
             if (auto hit = try_load_from_disk_cache(cache_file, cache_key)) {
                 cache.put(path, source_file.text, hit->artifact, cache_opts, hit->dependencies);
                 return execute_bytecode(hit->artifact.top_level, hit->artifact.functions,

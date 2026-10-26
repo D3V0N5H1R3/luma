@@ -144,11 +144,12 @@ struct SerializerLimits {
     static constexpr std::size_t k_max_bytecode_file_size = 100'000'000; // 100 MB
 
     // Size in bytes of a single source-map entry in the serialized format:
-    // offset (u32) + file_id (u32) + line (u32) + column (u32) = 16 bytes.
+    // offset (u32) + file_id (u32) + line (u32) + column (u32) + start_line
+    // (u32) + start_column (u32) = 24 bytes.
     // The deserializer uses this to bound the source-map entry count read from
     // an untrusted .lumc file against the remaining input, preventing an
     // unbounded reservation (out-of-memory) from a corrupt or malicious file.
-    static constexpr std::size_t k_source_map_entry_bytes = 16;
+    static constexpr std::size_t k_source_map_entry_bytes = 24;
 
     // Minimum number of bytes a serialized string occupies: its u32 length
     // prefix. The actual string may be longer, but a count of string entries

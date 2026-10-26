@@ -142,13 +142,15 @@ function void test_all_positional_still_works() {
 
 @test
 function void test_unknown_named_argument_throws() {
-    # 'count' matches no parameter of subtract, so binding fails at runtime.
-    # The call still type-checks (two arguments, arity matches), so the error
-    # surfaces from the VM rather than the type checker.
+    # 'count' matches no parameter of subtract.  A direct call is rejected by
+    # the type checker, but through a function value the parameter names are
+    # unknown statically (two arguments, arity matches), so binding fails in
+    # the VM instead.
     mutable string caught = ""
+    function(integer, integer) -> integer operation = subtract
 
     try {
-        integer _ = subtract(a: 10, count: 3)
+        integer _ = operation(a: 10, count: 3)
     } catch(err) {
         caught = err
     }

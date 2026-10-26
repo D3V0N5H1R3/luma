@@ -11,10 +11,12 @@
 #include <string>
 #include <vector>
 
+#include "analysis/source/source_location.hpp"
 #include "runtime/compiler/bytecode_serializer.hpp"
 #include "runtime/compiler/compiler_limits.hpp"
 #include "runtime/compiler/constant_pool.hpp"
 #include "runtime/compiler/name_table.hpp"
+#include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
@@ -125,6 +127,29 @@ static void test_round_trip_preserves_function_flags() {
     ASSERT_FALSE(result->functions[1].is_test);
 }
 
+// The start of the token behind each source-map entry must survive the .lumc
+// round-trip, so a runtime error from cached bytecode puts its caret on the
+// token rather than one past it.
+static void test_round_trip_preserves_source_map_token_start() {
+    CompiledFunction top;
+    top.name = "<top-level>";
+    auto& chunk = top.mutable_chunk();
+    chunk.code.push_back(static_cast<std::uint8_t>(Op::EndModule));
+    chunk.source_map.append(
+        0,
+        SourceLocation{.file_id = 0, .line = 5, .column = 12, .start_line = 5, .start_column = 11});
+
+    const auto bytes = BytecodeSerializer::serialize(top, {}, /*source_hash=*/0);
+    const auto result = BytecodeSerializer::deserialize(bytes);
+
+    ASSERT_TRUE(static_cast<bool>(result));
+    const auto loc = result->top_level.chunk().source_map.location_at(0);
+    ASSERT_EQ(loc.line, 5);
+    ASSERT_EQ(loc.column, 12);
+    ASSERT_EQ(loc.start_line, 5);
+    ASSERT_EQ(loc.start_column, 11);
+}
+
 // ─── Malformed input: oversized source-map count ───
 //
 // Regression test for a fuzz-found out-of-memory: a u32 source-map entry count
@@ -152,7 +177,7 @@ static void test_rejects_truncated_source_map() {
     std::vector<std::uint8_t> bytes;
     put_header(bytes, /*func_count=*/1);
     put_empty_function_prefix(bytes);
-    put_u32(bytes, 4); // claims 4 entries (64 bytes) but provides none
+    put_u32(bytes, 4); // claims 4 entries (96 bytes) but provides none
 
     const auto result = BytecodeSerializer::deserialize(bytes);
 
@@ -528,6 +553,7 @@ static void test_rejects_dependency_count_exceeding_input() {
 int main() {
     RUN(test_round_trip_minimal);
     RUN(test_round_trip_preserves_function_flags);
+    RUN(test_round_trip_preserves_source_map_token_start);
     RUN(test_round_trip_preserves_dependencies);
     RUN(test_rejects_oversized_dependency_count);
     RUN(test_rejects_dependency_count_exceeding_input);

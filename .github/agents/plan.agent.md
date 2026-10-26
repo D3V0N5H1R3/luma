@@ -34,7 +34,7 @@ For the full per-module map, see the [Module Layout](../copilot-instructions.md#
 
 | Directory        | Purpose                                                  |
 | ---------------- | -------------------------------------------------------- |
-| `core/analysis/` | Front-end: lexer, parser, type checker, linter, resolver |
+| `core/analysis/` | Front-end: lexer, parser, types, linter, diagnostics     |
 | `core/runtime/`  | Back-end: compiler, VM, stdlib, concurrency              |
 | `tests/`         | C++ unit tests and Luma feature tests                    |
 

@@ -107,6 +107,45 @@ Chunk& Compiler::current_chunk() {
     return current_scope().function.mutable_chunk();
 }
 
+std::uint16_t Compiler::emit_constant(Value value, SourceLocation loc) {
+    auto index = current_chunk().constants.try_add(std::move(value));
+
+    if (!index) {
+        // The pool's u16 index space is exhausted.  Report it once per function
+        // as a located compile error (instead of letting ConstantPool's
+        // std::overflow_error escape compile()), and keep emitting a
+        // well-formed instruction so compilation can finish and report.
+        if (!current_scope().constant_overflow_reported) {
+            current_scope().constant_overflow_reported = true;
+            auto e = compiler_errors::too_many_constants(CompilerLimits::k_max_constants);
+            error(e.message, loc, e.hint);
+        }
+
+        index = 0;
+    }
+
+    emit_u16(Op::Constant, *index, loc);
+    return *index;
+}
+
+std::uint16_t Compiler::add_name(std::string_view name) {
+    auto index = current_chunk().names.try_add(name);
+
+    if (!index) {
+        if (!current_scope().name_overflow_reported) {
+            current_scope().name_overflow_reported = true;
+            auto e = compiler_errors::too_many_names(CompilerLimits::k_max_names);
+            // add_name() takes no location; the most recently emitted
+            // instruction belongs to the construct that needs the name.
+            error(e.message, current_chunk().location_at(current_offset()), e.hint);
+        }
+
+        index = 0;
+    }
+
+    return *index;
+}
+
 // ─────────── Error reporting ───────────
 
 void Compiler::error(std::string_view message, SourceLocation loc, std::string_view hint) {

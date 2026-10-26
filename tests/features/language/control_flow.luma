@@ -534,6 +534,115 @@ function void test_finally_return_overrides_try_return() {
     assert(try_return_overridden_by_finally_return() == 2)
 }
 
+# Regression: `return <value>` ran the finally body while the return value sat
+# untracked on the stack, so a local declared in the finally body was given
+# the return value's slot and read 42 instead of its own value.
+function integer return_through_finally_with_local(reference<string> log) {
+    try {
+        return 42
+    } finally {
+        string message = "done"
+        Reference.set(log, message)
+    }
+}
+
+@test
+function void test_return_through_finally_keeps_finally_locals_apart() {
+    reference<string> log = Reference.new("")
+
+    integer returned = return_through_finally_with_local(log)
+
+    assert(returned == 42)
+    assert(Reference.get(log) == "done")
+}
+
+# Same invariant for the failure path of the `?` operator.
+function result<integer> failing_parse() {
+    return failure("bad input")
+}
+
+function result<integer> propagate_through_finally(reference<string> log) {
+    try {
+        integer parsed = failing_parse()?
+        Reference.set(log, "unreached ${parsed}")
+    } finally {
+        string message = "cleanup"
+        Reference.set(log, message)
+    }
+
+    return success(0)
+}
+
+@test
+function void test_question_mark_through_finally_keeps_finally_locals_apart() {
+    reference<string> log = Reference.new("")
+
+    result<integer> outcome = propagate_through_finally(log)
+
+    assert(Result.is_failure(outcome))
+    assert(Reference.get(log) == "cleanup")
+}
+
+# Regression: `break`/`continue` popped the loop body's locals before running
+# the enclosing finally body, which still read them by slot.
+@test
+function void test_break_through_finally_reads_loop_body_locals() {
+    mutable string seen = ""
+    mutable integer i = 0
+
+    while i < 3 {
+        string label = "x${i}"
+
+        try {
+            if i == 1 {
+                break
+            }
+        } finally {
+            string suffix = "!"
+            seen = "${seen}${label}${suffix}"
+        }
+
+        i += 1
+    }
+
+    assert(seen == "x0!x1!")
+}
+
+@test
+function void test_continue_through_finally_reads_loop_body_locals() {
+    mutable string seen = ""
+
+    for i in 0 .. 3 {
+        string label = "c${i}"
+
+        try {
+            if i < 2 {
+                continue
+            }
+        } finally {
+            seen = "${seen}${label};"
+        }
+    }
+
+    assert(seen == "c0;c1;c2;")
+}
+
+# Regression: when the last statement of a parameterless function was an
+# if/else whose else-branch ended in `return`, the implicit trailing return was
+# dropped and the then-branch ran off the end of the bytecode.
+function boolean always_ready() {
+    return true
+}
+
+@test
+function void test_if_else_ending_in_return_reaches_implicit_return() {
+    if always_ready() {
+        assert(always_ready())
+    } else {
+        return
+    }
+}
+
 # ─── Scope and Shadowing ──────────────────────────────────
 
 # Shadowing is linted (W0012) and --strict promotes it to an error; the `_`

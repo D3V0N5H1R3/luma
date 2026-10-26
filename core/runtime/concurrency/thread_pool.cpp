@@ -4,10 +4,19 @@
 #include <future>
 #include <iostream>
 #include <stdexcept>
+#include <system_error>
 
 #include "common/resource_limits.hpp"
 
 namespace luma {
+
+namespace {
+
+// The pool whose worker_loop() is running on this thread, or nullptr on a
+// thread that is not a pool worker.  Lets BlockingRegion find its pool.
+thread_local ThreadPool* tls_worker_pool = nullptr;
+
+} // namespace
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -35,6 +44,7 @@ ThreadPool::ThreadPool(std::size_t thread_count) {
     try {
         for (std::size_t i{0}; i < thread_count; ++i) {
             workers_.emplace_back([this, i] { worker_loop(i); });
+            live_workers_.fetch_add(1, std::memory_order_relaxed);
         }
     } catch (...) {
         // Tear the partially-built pool down cleanly, then rethrow so the
@@ -168,6 +178,64 @@ void ThreadPool::enqueue(std::function<void()>&& task) {
     { const std::scoped_lock lock{mutex_}; }
 
     task_available_cv_.notify_one();
+
+    // If every worker is blocked waiting on other pool work, nobody would pick
+    // this task up — start a compensating worker for it.
+    maybe_add_compensating_worker();
+}
+
+std::size_t ThreadPool::worker_count() const noexcept {
+    return live_workers_.load(std::memory_order_acquire);
+}
+
+void ThreadPool::maybe_add_compensating_worker() {
+    // Lock-free fast path: the common case has at least one runnable worker.
+    if (blocked_workers_.load(std::memory_order_acquire) <
+        live_workers_.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!has_any_work()) {
+        return;
+    }
+
+    const std::scoped_lock lock{mutex_};
+
+    // Re-check under the lock so concurrent callers start one worker, not one
+    // each, and never after shutdown has begun (the destructor joins workers_
+    // after setting should_stop_ under this same mutex, so no thread is added
+    // once it starts joining).
+    if (should_stop_.load(std::memory_order_acquire) ||
+        blocked_workers_.load(std::memory_order_acquire) <
+            live_workers_.load(std::memory_order_acquire) ||
+        workers_.size() >= worker_states_.size() + k_max_compensating_workers) {
+        return;
+    }
+
+    const auto worker_id = workers_.size();
+
+    try {
+        workers_.emplace_back([this, worker_id] { worker_loop(worker_id); });
+        live_workers_.fetch_add(1, std::memory_order_release);
+    } catch (const std::system_error& error) {
+        // Out of OS threads: keep running with the workers we have.
+        std::cerr << "ThreadPool: could not start a compensating worker: " << error.what() << '\n';
+    }
+}
+
+ThreadPool::BlockingRegion::BlockingRegion() : pool_{tls_worker_pool} {
+    if (pool_ == nullptr) {
+        return;
+    }
+
+    pool_->blocked_workers_.fetch_add(1, std::memory_order_acq_rel);
+    pool_->maybe_add_compensating_worker();
+}
+
+ThreadPool::BlockingRegion::~BlockingRegion() {
+    if (pool_ != nullptr) {
+        pool_->blocked_workers_.fetch_sub(1, std::memory_order_acq_rel);
+    }
 }
 
 bool ThreadPool::try_dequeue_local(std::size_t worker_id, std::function<void()>& task) {
@@ -233,7 +301,13 @@ bool ThreadPool::has_any_work() const {
 }
 
 bool ThreadPool::fetch_next_task(std::size_t worker_id, std::function<void()>& task) {
-    return try_dequeue_local(worker_id, task) || try_steal_from_others(worker_id, task);
+    // Compensating workers (id beyond the base pool) own no local queue; they
+    // only steal from the base workers' queues.
+    if (worker_id < worker_states_.size() && try_dequeue_local(worker_id, task)) {
+        return true;
+    }
+
+    return try_steal_from_others(worker_id, task);
 }
 
 void ThreadPool::execute_task(std::function<void()>& task) {
@@ -256,6 +330,8 @@ void ThreadPool::execute_task(std::function<void()>& task) {
 }
 
 void ThreadPool::worker_loop(std::size_t worker_id) {
+    tls_worker_pool = this;
+
     while (true) {
         std::function<void()> task;
 

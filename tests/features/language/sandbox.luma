@@ -173,7 +173,7 @@ function void test_sandbox_blocks_process_execute() {
     mutable string error_message = ""
 
     try {
-        result<ProcessResult> _ = Process.run("echo hello")
+        result<Process.ProcessResult> _ = Process.run("echo hello")
     } catch(err) {
         error_message = err
     }
@@ -259,7 +259,7 @@ function void test_sandbox_blocks_http_get() {
     mutable string error_message = ""
 
     try {
-        result<HttpResponse> _ = Http.get("http://example.com")
+        result<Http.Response> _ = Http.get("http://example.com")
     } catch(err) {
         error_message = err
     }
@@ -298,6 +298,26 @@ function void test_sandbox_blocks_compression_gzip_file() {
     }
 
     assert(error_message == "'Compression.gzip_file' is not available in sandbox mode (--box)")
+}
+
+@test
+function void test_sandbox_blocks_terminal_console_input() {
+    # Terminal stays available for output, but reading the interactive console
+    # (keys, mouse, line editing) is withheld like a blocked module.
+    mutable string error_message = ""
+
+    try {
+        result<string> _ = Terminal.read_key()
+    } catch(err) {
+        error_message = err
+    }
+
+    assert(error_message == "'Terminal.read_key' is not available in sandbox mode (--box)")
+}
+
+@test
+function void test_sandbox_keeps_terminal_output() {
+    assert(String.length(Terminal.bold("x")) > 1, "Terminal styling stays available in sandbox")
 }
 
 @test

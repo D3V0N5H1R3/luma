@@ -65,7 +65,7 @@ enum class Op : std::uint8_t {
     // ─── Collections ───
     MakeArray,    // Create array: MakeArray <u16 element_count>
     MakeDict,     // Create dict: MakeDict <u16 entry_count>
-    MakeTuple,    // Create tuple: MakeTuple <u8 element_count>
+    MakeTuple,    // Create tuple: MakeTuple <u16 element_count>
     MakeRange,    // Create range (exclusive): [start, end)
     MakeRangeInc, // Create range (inclusive): [start, end]
     IndexGet,     // a[b]

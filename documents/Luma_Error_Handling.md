@@ -53,7 +53,7 @@ function result<number> safe_divide(number a, number b) {
 }
 ```
 
-The inner type of `failure` defaults to `string`. Use a second type parameter when you need a structured error value:
+The error type of `failure` defaults to `string`: `result<T>` means `result<T, string>`. Use a second type parameter when you need a structured error value:
 
 ```luma
 choice MathError { DivisionByZero Overflow }
@@ -106,9 +106,9 @@ function result<number> parse_and_double(string s) {
 }
 ```
 
-`?` can also be used inside `@main`. If it propagates a failure there, the program terminates with a RuntimeError whose message includes the failure value.
+`?` can also be used inside `@main`, which has no caller to return to. There, a propagated failure raises a RuntimeError whose message is the failure text (or `unwrap failed: value is none` for `none`). Like any runtime error, it can be caught by a surrounding `try`/`catch`; if nothing catches it, the program exits with code 1.
 
-`?` is a type error if the enclosing function does not return `result<T>` or `optional<T>`.
+`?` is a type error if the enclosing function does not return `result<T>` or `optional<T>`. When propagating a failure, the error type must also fit the enclosing function's error type: a `string` failure cannot propagate out of a function that returns `result<T, MathError>`. Convert the error with `match` first.
 
 ### Chaining Results with `!>`
 
@@ -124,10 +124,10 @@ A plain (non-`result`) value on the left is treated as `success(value)`, so you 
 
 ### Never Silently Discard a Result
 
-The type checker emits a warning when a `result<T>` return value is discarded. Assign to `_` to explicitly acknowledge and suppress it:
+Discarding a `result<T>` return value is a type error. Assign to `_` to explicitly acknowledge and discard it:
 
 ```luma
-_ = parse(input)  # explicitly discarded — warning suppressed
+_ = parse(input)  # explicitly discarded
 ```
 
 ---
@@ -172,7 +172,7 @@ Use `?.` to safely access a field on an optional record and `?[` to safely index
 
 ```luma
 record Address { string city }
-record User    { string name  optional<Address> address }
+record User    { string name, optional<Address> address }
 
 optional<User> user = find_user(id)
 
@@ -196,13 +196,13 @@ Common sources:
 
 | Source                           | Example                                                      |
 | -------------------------------- | ------------------------------------------------------------ |
-| Division by zero                 | `integer x = 0; integer r = 10 / x`                          |
+| Division by zero                 | `10 // x` when `x` is `0`                                    |
 | Out-of-bounds array access       | `names[99]` when the array has fewer elements                |
-| `assert` failure                 | `assert value >= 0, "must be non-negative"`                  |
+| `assert` failure                 | `assert(value >= 0, "must be non-negative")`                 |
 | `Result.unwrap` on `failure`     | Calling `Result.unwrap` without checking first               |
 | `trusted_downcast` type mismatch | `trusted_downcast<Dog>` on a `Cat` value                     |
 | Maximum recursion depth          | Call stack exceeds the maximum depth                         |
-| Integer overflow                 | `integer i = 9223372036854775807; i++`                       |
+| Integer overflow                 | `i++` when `i` holds the maximum `integer`                   |
 | Unbounded channel at capacity    | `Channel.send(ch, v)` once `ch` holds the maximum queue size |
 
 Closed, empty, and full channels are **not** runtime errors: channel functions report them through their return value — `false` from `send`/`try_send`, a `failure` from `receive`, `try_receive`, `receive_timeout`, `send_timeout`, and `select`. See the [Channel section of the Standard Library Reference](Luma_Standard_Library_Reference.md#5--channel).
@@ -426,7 +426,7 @@ function result<string> find_user(integer id) {
 ### Silently Discarding Results
 
 ```luma
-# Bad — failure is silently ignored; the type checker will warn
+# Bad — the failure would be silently ignored, so the type checker rejects this
 FileSystem.write_file("output.txt", data)
 ```
 

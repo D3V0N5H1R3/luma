@@ -13,7 +13,8 @@
 // express) and parameter-level type information.
 // ─────────────────────────────────────────────────────────────────────────────
 
-#pragma once
+#ifndef LUMA_TYPES_STDLIB_TYPE_HANDLER_HPP
+#define LUMA_TYPES_STDLIB_TYPE_HANDLER_HPP
 
 #include <optional>
 #include <string>
@@ -78,3 +79,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_STDLIB_TYPE_HANDLER_HPP

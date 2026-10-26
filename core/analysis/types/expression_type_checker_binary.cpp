@@ -351,6 +351,7 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
             // Chaining: optional<T> ?? optional<T>  →  optional<T>
             if (right.kind == TypeInfo::Kind::Optional && !right.inner_types.empty() &&
                 tc_.is_assignable(*inner, right.element_type())) {
+                type_check_helpers::mark_numeric_widening(tc_, *expr.right, left, right);
                 return left;
             }
 
@@ -378,6 +379,7 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
         // Chaining: result<T> ?? result<T>  →  result<T>
         if (right.kind == TypeInfo::Kind::Result && !right.inner_types.empty() &&
             tc_.is_assignable(inner, right.result_value_type())) {
+            type_check_helpers::mark_numeric_widening(tc_, *expr.right, left, right);
             return left;
         }
 
@@ -401,6 +403,13 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
     }
 
     if (left.kind != TypeInfo::Kind::StdlibAny && left.kind != TypeInfo::Kind::Unknown) {
+        // A value that is neither optional nor a result is never missing, so
+        // the default could never be used — almost certainly a mistake.
+        tc_.error(std::format("'?\?' requires an optional or result value on the left, got '{}'",
+                              left.to_string()),
+                  expr.left->location,
+                  "remove the '?\?' default, or make the value optional<T> or result<T>",
+                  DiagnosticCode::InvalidOperand);
         return left;
     }
 

@@ -82,6 +82,8 @@ namespace {
     copy->compiled = func.compiled;
     copy->function_table = func.function_table;
     copy->upvalues = deep_copy_values(func.upvalues);
+    // A copy is the same function for equality purposes.
+    copy->identity = func.identity;
 
     // Deep-copy mutable upvalue cells — spawned tasks get
     // independent copies so they don't share mutable state.

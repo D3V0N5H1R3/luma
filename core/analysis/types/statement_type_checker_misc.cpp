@@ -307,6 +307,19 @@ void StatementTypeChecker::check_compound_operand_types(const CompoundAssignment
         return;
     }
 
+    // Mixed integer/number arithmetic yields a number, which an integer
+    // variable cannot hold (Manual §2) — `x += 0.5` would store a float.
+    if (target_type.kind == TypeInfo::Kind::Integer && value_type.kind == TypeInfo::Kind::Number) {
+        tc_.error(std::format("compound assignment '{}' with a 'number' value produces a number "
+                              "and cannot be applied to an integer variable",
+                              token_type_to_string(stmt.op)),
+                  stmt.location,
+                  "declare the variable as 'number', or convert the value with "
+                  "Converter.to_integer()",
+                  DiagnosticCode::TypeMismatch);
+        return;
+    }
+
     // Arithmetic compound assignment requires numeric types.
     (void)type_check_helpers::require_numeric_operand(
         tc_, target_type, std::format("compound assignment '{}'", token_type_to_string(stmt.op)),
@@ -334,6 +347,8 @@ void StatementTypeChecker::visit_return(const ReturnStatement& stmt) {
     }
 
     if (stmt.value) {
+        tc_.context().has_value_return = true;
+
         const auto value_type = tc_.infer_expression_type(*stmt.value);
 
         if (is_rigid_type_parameter(tc_, *ctx.current_return_type) &&
@@ -351,9 +366,21 @@ void StatementTypeChecker::visit_return(const ReturnStatement& stmt) {
             return;
         }
 
-        if (ctx.current_return_type->kind != TypeInfo::Kind::Void &&
-            type_check_helpers::check_type_assignable(tc_, *ctx.current_return_type, value_type,
-                                                      "return type mismatch", stmt.location)) {
+        if (ctx.current_return_type->kind == TypeInfo::Kind::Void) {
+            // A void function has no value to return; a void-typed expression
+            // (`return log(x)`) and permissive types are let through.
+            if (value_type.kind != TypeInfo::Kind::Void &&
+                value_type.kind != TypeInfo::Kind::StdlibAny &&
+                value_type.kind != TypeInfo::Kind::Unknown) {
+                tc_.error(std::format("cannot return a value of type '{}' from a void function",
+                                      value_type.to_string()),
+                          stmt.location,
+                          "remove the value from the return statement, or declare a return type",
+                          DiagnosticCode::TypeMismatch);
+            }
+        } else if (type_check_helpers::check_type_assignable(tc_, *ctx.current_return_type,
+                                                             value_type, "return type mismatch",
+                                                             stmt.location)) {
             type_check_helpers::mark_numeric_widening(tc_, *stmt.value, *ctx.current_return_type,
                                                       value_type);
         }

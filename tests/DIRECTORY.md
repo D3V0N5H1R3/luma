@@ -17,7 +17,7 @@ Luma has two testing layers: **C++ tests** that exercise interpreter internals, 
 
 | Location | Layer | Covers |
 | --- | --- | --- |
-| `tests/analysis/` | C++ | Front-end: lexer, parser, type checker, resolver, linter, diagnostics. |
+| `tests/analysis/` | C++ | Front-end: lexer, parser, type checker, linter, diagnostics, include resolver, pipeline. |
 | `tests/runtime/` | C++ | Back-end: compiler, VM, stdlib modules, concurrency, CLI, REPL. |
 | `tests/integration/` | C++ | Full pipeline, from source to execution. |
 | `tests/platform/` | C++ | Platform-specific behaviour (`safe_getenv`, Win32 UTF-8). |
@@ -73,7 +73,7 @@ ctest --preset default -L "lsp|dap"        # language server and debugger
 
 | Label | Scope |
 | --- | --- |
-| `analysis` | Front-end unit tests; sub-labels `lexer`, `parser`, `types`, `resolver`, `linter`. |
+| `analysis` | Front-end unit tests; sub-labels `lexer`, `parser`, `types`, `linter`. |
 | `runtime` | Back-end unit tests; sub-labels `stdlib`, `compiler`, `vm`, `concurrency`. |
 | `platform` | Platform-specific tests. |
 | `integration` | Full-pipeline and DAP end-to-end tests. |

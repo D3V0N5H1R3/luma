@@ -33,7 +33,7 @@ Run these prompts in sequence on the full project:
 
 1. **Code review** — Run the [code-review](code-review.prompt.md) prompt on each major subsystem:
     - `core/runtime/` (VM, compiler, stdlib)
-    - `core/analysis/` (lexer, parser, type checker, resolver, linter)
+    - `core/analysis/` (lexer, parser, type checker, linter)
     - `core/common/` (shared utilities: resource limits, result types, caches, UTF-8)
     - `shared/` (JSON, protocol transport, stdlib metadata, symbols)
     - `language-server/source/`

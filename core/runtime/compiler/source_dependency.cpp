@@ -10,6 +10,7 @@
 
 #include "analysis/source/source_manager.hpp"
 #include "common/hash.hpp"
+#include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "common/string_utils.hpp"
 
@@ -24,14 +25,22 @@ namespace {
 // read (a FIFO would block and a device such as /dev/zero never ends), and
 // exactly the size that passed the limit check is read rather than the whole
 // stream.
-[[nodiscard]] std::optional<std::string> read_source_text(const std::string& path) {
-    std::error_code ec;
+[[nodiscard]] std::optional<std::string> read_source_text(const std::string& utf8_path) {
+    // Source paths are UTF-8 (as SourceManager stores them); a path that does
+    // not decode cannot name a current dependency.
+    const auto path = try_path_from_utf8(utf8_path);
 
-    if (!std::filesystem::is_regular_file(path, ec)) {
+    if (!path) {
         return std::nullopt;
     }
 
-    std::ifstream stream{path, std::ios::binary | std::ios::ate};
+    std::error_code ec;
+
+    if (!std::filesystem::is_regular_file(*path, ec)) {
+        return std::nullopt;
+    }
+
+    std::ifstream stream{*path, std::ios::binary | std::ios::ate};
 
     if (!stream) {
         return std::nullopt;

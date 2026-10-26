@@ -153,6 +153,51 @@ static void test_jump_target_rendered() {
 
 // ─── Whole-chunk disassembly ───
 
+// Regression: a chunk ending mid-instruction (e.g. a corrupt, unverified .lumc
+// handed to a debugger) made the disassembler read operand bytes past the end
+// of the code buffer.
+static void test_truncated_instruction_renders_truncated() {
+    Chunk chunk;
+    chunk.code.push_back(static_cast<std::uint8_t>(Op::Constant));
+    chunk.code.push_back(0); // u16 operand missing its second byte
+
+    std::ostringstream out;
+    const std::size_t variable_size = chunk.disassemble_instruction(0, out);
+
+    ASSERT_EQ(variable_size, 0u);
+    ASSERT_TRUE(out.str().find("Constant") != std::string::npos);
+    ASSERT_TRUE(out.str().find("TRUNCATED") != std::string::npos);
+
+    // A variable-size instruction whose trailing field bytes are missing.
+    Chunk record;
+    record.code.push_back(static_cast<std::uint8_t>(Op::MakeRecord));
+    record.code.push_back(0);
+    record.code.push_back(0);
+    record.code.push_back(3); // claims 3 fields, but no field bytes follow
+
+    std::ostringstream record_out;
+    (void)record.disassemble_instruction(0, record_out);
+    ASSERT_TRUE(record_out.str().find("TRUNCATED") != std::string::npos);
+
+    // An offset past the end is reported, not read.
+    std::ostringstream past_end;
+    (void)chunk.disassemble_instruction(chunk.code.size(), past_end);
+    ASSERT_TRUE(past_end.str().find("TRUNCATED") != std::string::npos);
+}
+
+static void test_disassemble_full_chunk_stops_at_truncated_tail() {
+    Chunk chunk;
+    chunk.code.push_back(static_cast<std::uint8_t>(Op::None));
+    chunk.code.push_back(static_cast<std::uint8_t>(Op::Jump));
+    chunk.code.push_back(0); // u32 operand cut short
+
+    const std::string listing = chunk.disassemble("cut");
+
+    ASSERT_TRUE(listing.find("None") != std::string::npos);
+    ASSERT_TRUE(listing.find("Jump") != std::string::npos);
+    ASSERT_TRUE(listing.find("TRUNCATED") != std::string::npos);
+}
+
 static void test_disassemble_full_chunk_has_banner() {
     Chunk chunk;
     chunk.code.push_back(static_cast<std::uint8_t>(Op::None));
@@ -177,6 +222,8 @@ int main() {
     RUN(test_global_operand_name_rendered);
     RUN(test_jump_target_rendered);
 
+    RUN(test_truncated_instruction_renders_truncated);
+    RUN(test_disassemble_full_chunk_stops_at_truncated_tail);
     RUN(test_disassemble_full_chunk_has_banner);
 
     return SUMMARY();

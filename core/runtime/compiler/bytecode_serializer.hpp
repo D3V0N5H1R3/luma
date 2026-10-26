@@ -86,7 +86,20 @@ namespace luma {
 //   6 → 7: no layout change; invalidates v6 caches whose code was wrong — a
 //          record literal before its declaration lost the field defaults, and
 //          `((x) -> x)(1)` compiled the call's arguments as a separate tuple.
-static constexpr std::uint32_t k_bytecode_format_version = 7;
+//   7 → 8: no layout change; invalidates v7 caches whose code was wrong — a
+//          function whose last statement ended in `return` on one branch fell
+//          off the end of its code, `return`/`?` inside try/finally and
+//          `break`/`continue` through a finally ran the finally body against
+//          the wrong local slots, `?` in @main returned silently instead of
+//          raising, `"${""}"` pushed no value, and -O2 inlined a lambda's
+//          early Return into its caller.  Also: overflowing constant integer
+//          arithmetic is no longer folded into a `number` (the VM now raises),
+//          integer/number `==` folds with the exact runtime rule, and `x + 1`
+//          is no longer fused into Increment.
+//   8 → 9: each source-map entry also stores the start line and column of the
+//          token it came from (two more u32s, 24 bytes per entry), so runtime
+//          errors put the caret on the offending token instead of one past it.
+static constexpr std::uint32_t k_bytecode_format_version = 9;
 
 // Magic bytes at the start of a .lumc file.
 static constexpr char k_bytecode_magic[4] = {'L', 'U', 'M', 'C'};

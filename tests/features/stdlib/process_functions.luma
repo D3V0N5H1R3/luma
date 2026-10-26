@@ -496,6 +496,22 @@ function void test_process_signal_missing_process_fails() {
     assert(Result.is_failure(signal_result), "an absent process fails")
 }
 
+@test
+function void test_process_signal_rejects_out_of_range_pid() {
+    # A pid wider than 32 bits is rejected up front instead of being truncated
+    # to the platform pid type (where 4294967295 would become kill(-1, ...)).
+    # 6442450942 truncates to an absent pid, so the check is harmless either way;
+    # the message proves the range check fired.
+    result<boolean> signal_result = Process.signal(6442450942, Process.Signal.Terminate)
+
+    string message = match signal_result {
+        success(_sent) { "" }
+        failure(e) { e }
+    }
+
+    assert(String.contains(message, "out of range"), "an out-of-range pid is rejected")
+}
+
 # ─── Process.find_executable ──────────────────────────────
 
 @test

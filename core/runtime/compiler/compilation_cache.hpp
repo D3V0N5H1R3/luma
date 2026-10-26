@@ -11,6 +11,7 @@
 
 #include "common/lru_cache.hpp"
 #include "runtime/compiler/compile_result.hpp"
+#include "runtime/compiler/compiler_config.hpp"
 #include "runtime/compiler/source_dependency.hpp"
 
 namespace luma {
@@ -32,12 +33,12 @@ class CompilationCache {
 public:
     static constexpr std::size_t default_max_entries{128};
 
-    // Options that affect compilation output.
+    // Options that affect compilation output.  An aggregate keyed by the full
+    // optimization level: -O1 and -O2 produce different bytecode, so a flag
+    // would serve one level's artifact for the other.
     struct Options {
-        bool optimized;
-        bool debug_info;
-
-        constexpr Options(bool opt = true, bool dbg = false) : optimized{opt}, debug_info{dbg} {}
+        OptimizationLevel optimization_level{OptimizationLevel::Full};
+        bool debug_info{false};
 
         [[nodiscard]] bool operator==(const Options&) const = default;
     };
@@ -91,7 +92,8 @@ private:
     struct CacheKeyHash {
         [[nodiscard]] std::size_t operator()(const CacheKey& k) const noexcept {
             std::size_t h = std::hash<std::string>{}(k.path);
-            h ^= std::hash<bool>{}(k.options.optimized) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<int>{}(static_cast<int>(k.options.optimization_level)) + 0x9e3779b9 +
+                 (h << 6) + (h >> 2);
             h ^= std::hash<bool>{}(k.options.debug_info) + 0x9e3779b9 + (h << 6) + (h >> 2);
             return h;
         }

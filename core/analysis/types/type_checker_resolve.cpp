@@ -44,34 +44,44 @@ namespace luma {
 // Type resolution
 // ═══════════════════════════════════════════════════════════
 
-bool TypeChecker::reject_internal_access(const std::string& qualified_name) {
+bool TypeChecker::is_internal_access_denied(std::string_view qualified_name) const {
     if (!internal_members_.contains(qualified_name)) {
         return false;
     }
 
-    const auto split = split_module(qualified_name);
+    const auto ns = type_check_helpers::owning_namespace(qualified_name);
 
-    if (!split) {
+    // Access from inside the owning namespace (or one nested in it) is always
+    // permitted.  current_namespace is the fully qualified path.
+    return !ns.empty() && !type_check_helpers::is_within_namespace(ctx_.current_namespace, ns);
+}
+
+bool TypeChecker::report_internal_type_access(const TypeAnnotation& ann,
+                                              const SourceLocation& loc) {
+    if (!is_internal_access_denied(ann.name())) {
         return false;
     }
 
-    const auto ns = split->first;
-
-    // Access from inside the owning namespace is always permitted.
-    if (ctx_.current_namespace == ns) {
-        return false;
+    if (internal_access_reported_.insert(&ann).second) {
+        error(std::format("'{}' is internal to namespace '{}' and cannot "
+                          "be accessed from outside",
+                          qualified_member(ann.name()),
+                          type_check_helpers::owning_namespace(ann.name())),
+              loc,
+              "internal members are private to their namespace — use a public API "
+              "instead");
     }
-
-    const auto short_name = split->second;
-
-    error(std::format("'{}' is internal to namespace '{}' and cannot "
-                      "be accessed from outside",
-                      short_name, ns),
-          SourceLocation{},
-          "internal members are private to their namespace — use a public API "
-          "instead");
 
     return true;
+}
+
+bool TypeChecker::reject_internal_access(const TypeAnnotation& ann) {
+    if (deferred_internal_access_reports_ > 0) {
+        return is_internal_access_denied(ann.name());
+    }
+
+    // No location is known here; callers that know one report first.
+    return report_internal_type_access(ann, SourceLocation{});
 }
 
 TypeInfo TypeChecker::resolve_type(const TypeAnnotation& ann) {
@@ -111,7 +121,24 @@ TypeInfo TypeChecker::resolve_type(const TypeAnnotation& ann) {
         return *aliased;
     }
 
-    return resolve_named_type(ann, cacheable);
+    auto resolved = resolve_named_type(ann, cacheable);
+
+    // Inside a namespace, a bare name may refer to a sibling member, which is
+    // registered only under its qualified name ("Util.Shape").  The bare
+    // lookup above found nothing (it never caches Unknown), so retry with the
+    // qualified name; that result is cached under the qualified key only.
+    if (resolved.kind == TypeInfo::Kind::Unknown && resolved.name == ann.name() &&
+        !ctx_.current_namespace.empty() && !is_qualified_name(ann.name()) &&
+        !generics_.bindings().contains(ann.name())) {
+        auto qualified = ann;
+        qualified.name() = make_qualified(ctx_.current_namespace, ann.name());
+
+        if (auto member = resolve_type(qualified); member.kind != TypeInfo::Kind::Unknown) {
+            return member;
+        }
+    }
+
+    return resolved;
 }
 
 // ── Tuple / function / alias resolution ──────────────────────
@@ -148,7 +175,7 @@ std::optional<TypeInfo> TypeChecker::resolve_alias_type(const TypeAnnotation& an
 
     // An `internal` type alias is private to its namespace: reject qualified
     // access from outside before resolving the underlying target type.
-    if (reject_internal_access(ann.name())) {
+    if (reject_internal_access(ann)) {
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
@@ -189,7 +216,7 @@ std::optional<TypeInfo> TypeChecker::resolve_user_named(const StringMap<const T*
         return std::nullopt;
     }
 
-    if (reject_internal_access(ann.name())) {
+    if (reject_internal_access(ann)) {
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
@@ -277,7 +304,9 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
         }
 
         if (!ann.type_params().empty()) {
-            return TypeInfo::make_result(resolve_type(ann.type_params()[0]));
+            // The default error type of `result<T>` is `string` (Manual §14).
+            return TypeInfo::make_result(resolve_type(ann.type_params()[0]),
+                                         TypeInfo::make(TypeInfo::Kind::String));
         }
 
         return cache_result(TypeInfo::make_result(TypeInfo::make(TypeInfo::Kind::StdlibAny)));
@@ -333,6 +362,19 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
     });
 
     if (std::ranges::find(named_record_types, ann.name()) != named_record_types.end()) {
+        // Keep the element type of queue<T>, stack<T>, set<T> and
+        // key_value_store<T> so that differently-typed instances stay distinct.
+        if (!ann.type_params().empty()) {
+            std::vector<TypeInfo> type_args;
+            type_args.reserve(ann.type_params().size());
+
+            for (const auto& type_param : ann.type_params()) {
+                type_args.push_back(resolve_type(type_param));
+            }
+
+            return TypeInfo::make_generic(TypeInfo::Kind::Record, ann.name(), std::move(type_args));
+        }
+
         return cache_result(TypeInfo::make_named(TypeInfo::Kind::Record, ann.name()));
     }
 
@@ -597,6 +639,16 @@ bool TypeChecker::is_function_assignable(const TypeInfo& target, const TypeInfo&
     }
 
     if (!target.return_type) {
+        return true;
+    }
+
+    // `void` and `none` both spell "returns no value" (a block-bodied lambda
+    // without a value return is `void`; a callback type may say `none`).
+    const auto is_no_value = [](const TypeInfo& type) {
+        return type.kind == TypeInfo::Kind::Void || type.kind == TypeInfo::Kind::None;
+    };
+
+    if (is_no_value(*target.return_type) && is_no_value(*source.return_type)) {
         return true;
     }
 
@@ -923,6 +975,101 @@ void mark_widening_at(TypeCheckingServices& tc, const Expression& expr, const Ty
 void mark_numeric_widening(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
                            const TypeInfo& source) {
     mark_widening_at(tc, expr, target, source, 0);
+}
+
+namespace {
+
+// Reports every annotation node in `ann` that names an internal type from
+// outside its namespace, at `loc`.  Runs before any resolution of the tree,
+// because resolving an annotation resolves its type arguments too, and the
+// first report of a node is the one that counts.
+void report_internal_types(TypeCheckingServices& tc, const TypeAnnotation& ann,
+                           const SourceLocation& loc) {
+    const auto report_all = [&](const std::vector<TypeAnnotation>& annotations) {
+        for (const auto& inner : annotations) {
+            report_internal_types(tc, inner, loc);
+        }
+    };
+
+    if (ann.kind() == TypeAnnotationKind::Tuple) {
+        report_all(ann.tuple_elements());
+        return;
+    }
+
+    if (ann.kind() == TypeAnnotationKind::Function) {
+        report_all(ann.function_params());
+
+        if (const auto* return_type = ann.return_type_ptr()) {
+            report_internal_types(tc, *return_type, loc);
+        }
+
+        return;
+    }
+
+    if (!ann.name().empty()) {
+        (void)tc.report_internal_type_access(ann, loc);
+    }
+
+    report_all(ann.type_params());
+}
+
+bool report_unknown_names(TypeCheckingServices& tc, const TypeAnnotation& ann,
+                          std::string_view context, const SourceLocation& loc) {
+    bool reported = false;
+
+    const auto report_all = [&](const std::vector<TypeAnnotation>& annotations) {
+        for (const auto& inner : annotations) {
+            reported = report_unknown_names(tc, inner, context, loc) || reported;
+        }
+    };
+
+    if (ann.kind() == TypeAnnotationKind::Tuple) {
+        report_all(ann.tuple_elements());
+        return reported;
+    }
+
+    if (ann.kind() == TypeAnnotationKind::Function) {
+        report_all(ann.function_params());
+
+        if (const auto* return_type = ann.return_type_ptr()) {
+            reported = report_unknown_names(tc, *return_type, context, loc) || reported;
+        }
+
+        return reported;
+    }
+
+    if (ann.name().empty()) {
+        return false;
+    }
+
+    // An unresolvable name yields an Unknown carrying that very name; other
+    // Unknown results (rejected internal access, a recursive alias, an alias to
+    // an unknown name) were either already reported or name a different type.
+    // A bound type parameter also resolves to a named Unknown, so skip those.
+    // Internal-access violations in the tree were reported up front, so
+    // resolving here does not report them again.
+    const auto resolved = tc.resolve_type(ann);
+
+    if (resolved.kind == TypeInfo::Kind::Unknown && resolved.name == ann.name() &&
+        !tc.generics().bindings().contains(ann.name())) {
+        const auto hint = tc.suggest_type_name(ann.name());
+        tc.error(std::format("unknown type '{}'{}", ann.name(), context), loc,
+                 hint.empty() ? "check the spelling or make sure the type is declared" : hint);
+        reported = true;
+    }
+
+    report_all(ann.type_params());
+
+    return reported;
+}
+
+} // namespace
+
+bool report_unknown_types(TypeCheckingServices& tc, const TypeAnnotation& ann,
+                          std::string_view context, const SourceLocation& loc) {
+    report_internal_types(tc, ann, loc);
+
+    return report_unknown_names(tc, ann, context, loc);
 }
 
 } // namespace type_check_helpers

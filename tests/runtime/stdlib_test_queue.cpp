@@ -215,7 +215,17 @@ static void test_queue_concat_wrong_type_throws() {
     ASSERT_THROWS(eval("Queue.concat(Queue.new(), 42)"));
 }
 
+static void test_queue_contains_uses_value_equality() {
+    // Queue.contains shares ContainerOps' contains_value helper with Stack and
+    // Set: membership is by value equality, including nested containers.
+    ASSERT_TRUE(eval("Queue.from_array([1, 2, 3]) |> Queue.contains(2)").as_bool());
+    ASSERT_FALSE(eval("Queue.from_array([1, 2, 3]) |> Queue.contains(9)").as_bool());
+    ASSERT_FALSE(eval("Queue.new() |> Queue.contains(1)").as_bool());
+    ASSERT_TRUE(eval("Queue.from_array([[1, 2], [3]]) |> Queue.contains([3])").as_bool());
+}
+
 int main() {
+    RUN(test_queue_contains_uses_value_equality);
     RUN(test_queue_concat);
     RUN(test_queue_enqueue_dequeue);
     RUN(test_queue_from_array);

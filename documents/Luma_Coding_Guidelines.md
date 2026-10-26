@@ -271,7 +271,7 @@ function Score lookup(UserId id) {
 
 ### Integer Versus Number
 
-`integer` and `number` are distinct types. Division with `/` always yields a `number`, even for two `integer` operands; use `//` for integer (floor) division. Mixed arithmetic promotes the integer to a number.
+`integer` and `number` are distinct types. Division with `/` always yields a `number`, even for two `integer` operands; use `//` for integer (floor) division. Mixed arithmetic promotes the integer to a number. Arithmetic on two `integer` values stays an `integer`: an overflow raises a runtime error instead of widening to `number`, so use `number` for values that may exceed the 64-bit range.
 
 ```luma
 7 / 2   # 3.5 (true division — always a number)
@@ -1293,7 +1293,7 @@ task_scope {
 }
 ```
 
-Tasks receive a deep copy of their environment. They do not share mutable state with the spawning scope. Communicate between tasks using channels.
+Tasks see a read-only, deep-copied snapshot of the program's global variables, and assigning a global from a spawned task is a runtime error. They do not share mutable state with the spawning scope: pass values in as arguments, return results, and communicate between tasks using channels.
 
 ### Structured Concurrency
 
@@ -1311,21 +1311,21 @@ Using `spawn` outside a `task_scope` is a compile error, so no task can outlive 
 
 ### Cooperative Cancellation
 
-Use `Task.cancel(t)` to request cancellation and `Task.is_cancelled(t)` to check the status. Tasks check cancellation cooperatively at function calls, loop iterations, and `await` points.
+Use `Task.cancel(t)` to request cancellation of one task and `Task.is_cancelled(t)` to check the status. Cancelling a task does not affect its siblings or its `task_scope`. Tasks check cancellation cooperatively at loop iterations, function calls, tail calls, and `await` points, and a blocking `Channel` wait (`send`, `receive`, `send_all`, `consume`, `select`) gives up when its task is cancelled. A cancelled task ends with a cancellation error, which `await` raises as `task cancelled`.
 
 ```luma
 task_scope {
     task<integer> long_task = spawn expensive_search(1000000)
 
     # Request cancellation — the task will stop at its next check point
-    Task.cancel(long_task)
+    _ = Task.cancel(long_task)
 
     boolean cancelled = Task.is_cancelled(long_task)
     print("Cancelled: ${cancelled}")  # true
 }
 ```
 
-**Cancel-on-first-failure:** When any child task in a `task_scope` throws, all remaining sibling tasks are automatically cancelled and the error propagates to the scope.
+**Cancel-on-first-failure:** When any child task in a `task_scope` fails with an error, the remaining sibling tasks are cancelled straight away and the error propagates out of the scope once they have stopped. A task cancelled on its own with `Task.cancel` is not a failure — it contributes `none` to the scope's results.
 
 **Race cancellation:** `Task.race` cancels all losing tasks once the first task completes.
 
@@ -1539,7 +1539,7 @@ include "models.luma"
 include "utils.luma"
 ```
 
-Each file is included at most once automatically. Circular includes are a compile-time error.
+Each file is included at most once automatically, so circular includes are safe: a file that is already included is skipped.
 
 ---
 

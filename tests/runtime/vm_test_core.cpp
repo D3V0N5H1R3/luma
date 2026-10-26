@@ -3,19 +3,49 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "analysis/errors/error.hpp"
+#include "common/resource_limits.hpp"
 #include "runtime/compiler/compiled_function.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_introspection.hpp"
+#include "runtime/vm/vm_stack.hpp"
 #include "stdlib_test_helpers.hpp"
 
 // ─── Tests ───
+
+// Code review (function identity): a value-semantics copy of a function — a
+// `mutable` binding or a mutable array element, both deep-copied — compared
+// unequal to the original while an immutable alias compared equal, so
+// Array.contains depended on the container's mutability.  A copy is now the
+// same function; a separately created closure of the same code is not.
+LUMA_TEST(vm_function_copy_equals_original) {
+    const auto result =
+        eval("function integer twice(integer x) { return x * 2 }\n"
+             "function string compare() {\n"
+             "    mutable function(integer) -> integer copied = twice\n"
+             "    function(integer) -> integer aliased = twice\n"
+             "    mutable array<function(integer) -> integer> mutable_list = [twice]\n"
+             "    array<function(integer) -> integer> immutable_list = [twice]\n"
+             "    mutable integer base = 1\n"
+             "    function(integer) -> integer adder = (integer x) -> x + base\n"
+             "    mutable function(integer) -> integer adder_copy = adder\n"
+             "    function(integer) -> integer other_adder = (integer x) -> x + base\n"
+             "    return \"${copied == twice} ${aliased == twice} "
+             "${Array.contains(mutable_list, twice)} ${Array.contains(immutable_list, twice)} "
+             "${adder_copy == adder} ${other_adder == adder}\"\n"
+             "}\n"
+             "compare()");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_EQ(result.as_string(), "true true true true true false");
+}
 
 LUMA_TEST(vm_integer_arithmetic) {
     const auto result = eval("2 + 3");
@@ -1320,12 +1350,49 @@ LUMA_TEST(vm_binary_literal) {
     ASSERT_EQ(result.as_integer(), 10);
 }
 
-LUMA_TEST(vm_integer_overflow_promotes_to_number) {
-    // Overflowing integer arithmetic widens to number instead of wrapping.
-    const auto result = eval("integer x = 9223372036854775807\nx + 1");
+// Regression (review #5): integer overflow used to widen silently to `number`,
+// so an `integer` variable could hold a `number` at runtime.  Every integer
+// operation that overflows int64 now raises the documented runtime error.
+static bool raises_with_message(const std::string& source, const std::string& expected) {
+    try {
+        (void)eval(source);
+    } catch (const std::exception& error) {
+        return std::string{error.what()}.find(expected) != std::string::npos;
+    }
 
-    ASSERT_TRUE(result.is_number());
-    ASSERT_EQ(result.as_number(), 9223372036854775808.0);
+    return false;
+}
+
+LUMA_TEST(vm_integer_overflow_raises_instead_of_promoting) {
+    // `mutable` keeps the operands out of compile-time constant folding, so the
+    // VM's own overflow checks are exercised.
+    ASSERT_TRUE(raises_with_message("mutable integer x = 9223372036854775807\nx + 1",
+                                    "integer overflow in addition"));
+    ASSERT_TRUE(raises_with_message("mutable integer x = -9223372036854775807\nx - 2",
+                                    "integer overflow in subtraction"));
+    ASSERT_TRUE(raises_with_message("mutable integer x = 9223372036854775807\nx * 2",
+                                    "integer overflow in multiplication"));
+    ASSERT_TRUE(raises_with_message("mutable integer x = 9223372036854775807\nx++\nx",
+                                    "integer overflow in increment"));
+    ASSERT_TRUE(raises_with_message("mutable integer x = -9223372036854775807 - 1\nx--\nx",
+                                    "integer overflow in decrement"));
+    ASSERT_TRUE(raises_with_message("mutable integer x = -9223372036854775807 - 1\n"
+                                    "integer y = -x\n"
+                                    "y",
+                                    "integer overflow in negation"));
+    ASSERT_TRUE(raises_with_message("function integer f() {\n"
+                                    "    mutable integer x = 9223372036854775807\n"
+                                    "    x++\n"
+                                    "    return x\n"
+                                    "}\n"
+                                    "f()",
+                                    "integer overflow in increment"));
+
+    // In-range results are unaffected and stay integers.
+    const auto result = eval("mutable integer x = 9223372036854775806\nx + 1");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 9223372036854775807LL);
 }
 
 LUMA_TEST(vm_number_division_by_zero) {
@@ -1334,6 +1401,86 @@ LUMA_TEST(vm_number_division_by_zero) {
 
 LUMA_TEST(vm_number_overflow_throws) {
     ASSERT_TRUE(throws_runtime("number x = 1.0e308\nx * 10.0"));
+    ASSERT_TRUE(raises_with_message("number x = 1.0e308\nx + x", "number overflow in addition"));
+}
+
+// Regression (review #19): `/` had no overflow check, so finite operands could
+// silently produce Infinity.
+LUMA_TEST(vm_number_division_overflow_throws) {
+    ASSERT_TRUE(raises_with_message("number x = 1.0e308\nnumber y = 1.0e-308\nx / y",
+                                    "number overflow in division"));
+
+    const auto result = eval("7 / 2");
+
+    ASSERT_TRUE(result.is_number());
+    ASSERT_EQ(result.as_number(), 3.5);
+}
+
+// Regression (review #12/#15): Value::equals for identity types and exact
+// integer/number equality, exercised end to end through `==`.
+LUMA_TEST(vm_equality_integer_number_exact_above_2_pow_53) {
+    // `mutable` operands keep the comparison out of compile-time folding, so
+    // the VM's runtime equality (Value::equals) is what is exercised.
+    // 2^53 + 1 is not representable as a double; it must not equal 2^53.0.
+    ASSERT_FALSE(eval("mutable integer a = 9007199254740993\n"
+                      "mutable number b = 9007199254740992.0\n"
+                      "a == b")
+                     .as_bool());
+    ASSERT_TRUE(eval("mutable integer a = 9007199254740992\n"
+                     "mutable number b = 9007199254740992.0\n"
+                     "a == b")
+                    .as_bool());
+    ASSERT_TRUE(eval("mutable integer a = 3\nmutable number b = 3.0\na == b").as_bool());
+    ASSERT_FALSE(eval("mutable integer a = 3\nmutable number b = 3.5\na == b").as_bool());
+}
+
+// Regression (review #20): the default assert message matches the manual.
+LUMA_TEST(vm_assert_default_message_is_lowercase) {
+    ASSERT_TRUE(raises_with_message("assert(false)", "assertion failed"));
+}
+
+// Regression (review #17): LUMA_LIMIT_MAX_CALL_DEPTH above the VM's 256-frame
+// capacity must not lift the cap — every call path enforces the smaller limit.
+LUMA_TEST(vm_call_depth_override_cannot_exceed_frame_limit) {
+    const LimitGuard guard{ResourceLimits::max_call_depth, 100000};
+
+    ASSERT_TRUE(raises_with_message("function integer down(integer n) {\n"
+                                    "    if n == 0 { return 0 }\n"
+                                    "    return 1 + down(n - 1)\n"
+                                    "}\n"
+                                    "down(1000)",
+                                    "call stack overflow"));
+}
+
+// Regression (review #10): lowering the stack top must destroy the values
+// above it, not leave them alive until overwritten.
+LUMA_TEST(vm_stack_truncate_releases_values) {
+    VMStack stack;
+    auto array = std::make_shared<ArrayValue>();
+    stack.push(Value{array});
+    stack.push(Value{array});
+
+    ASSERT_EQ(array.use_count(), 3L);
+
+    stack.truncate_to(stack.base);
+
+    ASSERT_EQ(array.use_count(), 1L);
+    ASSERT_EQ(stack.size(), static_cast<std::size_t>(0));
+}
+
+// Regression (review #14): task VMs recycle their stack storage per thread
+// instead of allocating and initialising a full 65,536-slot stack per spawn.
+LUMA_TEST(vm_stack_storage_is_recycled) {
+    const Value* first_base = nullptr;
+
+    {
+        const VMStack stack;
+        first_base = stack.base;
+    }
+
+    const VMStack again;
+
+    ASSERT_TRUE(again.base == first_base);
 }
 
 LUMA_TEST(vm_typeof_number) {

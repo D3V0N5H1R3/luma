@@ -92,7 +92,7 @@ suite("Grammar Structure", () => {
 
         // Valid Luma numerics still tokenise (canonical grammar: no separators,
         // digits required on both sides of the decimal point).
-        for (const valid of ["1000", "1.0", "3.14e10", "0xFF", "0b1010"]) {
+        for (const valid of ["1000", "1.0", "3.14e10", "0xFF", "0o755", "0O17", "0b1010"]) {
             assert.ok(
                 tokenisesAsNumber(valid),
                 `expected "${valid}" to tokenise as a numeric literal`,
@@ -100,7 +100,7 @@ suite("Grammar Structure", () => {
         }
 
         // Invalid forms must not tokenise as a whole numeric literal.
-        for (const invalid of ["1_000", "0xFF_FF", "0b10_10", "1."]) {
+        for (const invalid of ["1_000", "0xFF_FF", "0o7_55", "0o8", "0b10_10", "1."]) {
             assert.ok(
                 !tokenisesAsNumber(invalid),
                 `"${invalid}" must not tokenise as a numeric literal`,

@@ -6,6 +6,7 @@
 #include <fstream>
 
 #include "common/hash.hpp"
+#include "common/path_utils.hpp"
 #include "runtime/compiler/compiler_limits.hpp"
 #include "runtime/compiler/verifier.hpp"
 
@@ -144,6 +145,8 @@ void BytecodeSerializer::serialize_chunk(Writer& w, const Chunk& chunk) {
         w.write_u32(static_cast<std::uint32_t>(loc.file_id));
         w.write_u32(static_cast<std::uint32_t>(loc.line));
         w.write_u32(static_cast<std::uint32_t>(loc.column));
+        w.write_u32(static_cast<std::uint32_t>(loc.start_line));
+        w.write_u32(static_cast<std::uint32_t>(loc.start_column));
     }
 
     // Names.
@@ -227,11 +230,16 @@ bool BytecodeSerializer::deserialize_chunk(Reader& r, Chunk& chunk) {
                 auto file_id = static_cast<int>(r.read_u32());
                 auto line = static_cast<int>(r.read_u32());
                 auto column = static_cast<int>(r.read_u32());
+                auto start_line = static_cast<int>(r.read_u32());
+                auto start_column = static_cast<int>(r.read_u32());
                 if (r.error()) {
                     return false;
                 }
-                chunk.source_map.append(
-                    offset, SourceLocation{.file_id = file_id, .line = line, .column = column});
+                chunk.source_map.append(offset, SourceLocation{.file_id = file_id,
+                                                               .line = line,
+                                                               .column = column,
+                                                               .start_line = start_line,
+                                                               .start_column = start_column});
                 return true;
             })) {
         return false;
@@ -645,7 +653,7 @@ DeserializeResult BytecodeSerializer::read_file(const std::filesystem::path& pat
     if (!file) {
         return {.bytecode = {},
                 .error = DeserializeError::FileNotFound,
-                .detail = "bytecode_serializer: file not found: " + path.string()};
+                .detail = "bytecode_serializer: file not found: " + path_to_utf8(path)};
     }
 
     auto size = file.tellg();
@@ -663,7 +671,7 @@ DeserializeResult BytecodeSerializer::read_file(const std::filesystem::path& pat
     if (!file.good()) {
         return {.bytecode = {},
                 .error = DeserializeError::FileReadFailed,
-                .detail = "bytecode_serializer: file read failed: " + path.string()};
+                .detail = "bytecode_serializer: file read failed: " + path_to_utf8(path)};
     }
 
     auto result = deserialize(data);

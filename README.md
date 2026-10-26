@@ -250,11 +250,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit conventions, an
 | Problem                                 | Cause                                                      | Fix                                                |
 | --------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------- |
 | `'break' is only allowed inside a loop` | `break` or `continue` used outside a `for` or `while` loop | Move the statement inside a loop                   |
-| `'X' is not available in sandbox mode`  | Function belongs to a module disabled by `--box`           | Remove `--box` or avoid OS-accessing modules       |
+| `'X' is not available in sandbox mode`  | Function or module disabled by `--box`                     | Remove `--box` or avoid OS-accessing modules       |
 | `bitwise '&' is not an operator`        | Luma has no bitwise operators                              | Use the `Bits` module, e.g. `Bits.and(a, b)`       |
 | `cannot assign to immutable variable`   | Variable declared without `mutable`                        | Use `mutable` for variables that need reassignment |
 | `division by zero`                      | Dividing by zero with `/` or `%`                           | Guard against zero before dividing                 |
 | `index N out of bounds`                 | Array or string index outside valid range                  | Check length before indexing                       |
+| `integer overflow in addition`          | An `integer` result does not fit in 64 bits                | Use `number` for values that may grow that large   |
 | `no @main function found`               | Source file has no `@main`-annotated function              | Add `@main` above your entry-point function        |
 | `task queue is full`                    | Too many pending `spawn` tasks (>100,000)                  | `await` existing tasks before spawning more        |
 | `too many open sockets`                 | More than 1,000 open sockets                               | Close unused sockets with `Socket.close`           |

@@ -57,18 +57,35 @@ void Channel::notify_senders_if_needed() {
     }
 }
 
+template <typename Predicate>
+void Channel::wait_cancellable(std::unique_lock<std::mutex>& lock, std::condition_variable& cv,
+                               const CancellationToken* cancel, Predicate predicate) {
+    if (cancel == nullptr) {
+        cv.wait(lock, predicate);
+        return;
+    }
+
+    // Nothing notifies the condition variable when the token is cancelled, so
+    // wake periodically to re-check it.
+    while (!cv.wait_for(lock, k_cancel_poll_interval, predicate)) {
+        if (cancel->is_cancelled()) {
+            throw CancelledException{"task cancelled"};
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-void Channel::send(Value value) {
+void Channel::send(Value value, const CancellationToken* cancel) {
     {
         std::unique_lock lock{mutex_};
 
         throw_if_closed();
 
         if (buffer_->is_bounded()) {
-            not_full_cv_.wait(lock, [this] { return has_room_or_closed(); });
+            wait_cancellable(lock, not_full_cv_, cancel, [this] { return has_room_or_closed(); });
 
             throw_if_closed();
         } else {
@@ -85,10 +102,10 @@ void Channel::send(Value value) {
     not_empty_cv_.notify_one();
 }
 
-Value Channel::receive() {
+Value Channel::receive(const CancellationToken* cancel) {
     std::unique_lock lock{mutex_};
 
-    not_empty_cv_.wait(lock, [this] { return has_value_or_closed(); });
+    wait_cancellable(lock, not_empty_cv_, cancel, [this] { return has_value_or_closed(); });
 
     if (buffer_->is_empty()) {
         throw ChannelClosedError{channel_drained_message};

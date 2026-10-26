@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 
 #include "common/resource_limits.hpp"
@@ -491,25 +492,122 @@ static void test_keyvaluestore_get_missing_fails() {
 // ─── Negative: an oversize store file is not slurped into memory ──────────────
 
 static void test_keyvaluestore_open_rejects_oversized_file() {
-    // read_store slurps the whole file into memory before parse_store applies
-    // its size caps, so a store file larger than the maximum string size must be
-    // rejected up front.  An oversize file is treated as unreadable — the store
-    // opens empty — instead of being fully materialised.  The file is a valid
-    // single entry created under the default cap; lowering the cap afterwards
-    // avoids materialising a 256 MB file.
+    // A store file larger than the maximum string size is rejected without
+    // being materialised — and open FAILS rather than yielding an empty store:
+    // an empty stand-in would be saved over the real file later (data loss).
+    // The file is a valid single entry created under the default cap; lowering
+    // the cap afterwards avoids materialising a 256 MB file.
     const std::string kv_content = "key\t" + std::string(64, 'v') + "\n";
     const LumaTempFile file{"_test_kv_oversize.kv", kv_content};
     const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(16)};
 
-    // The oversize file yields an empty store, so a lookup of the key that is
-    // physically present in the file fails.
-    const auto v = eval(R"(
-        KeyValueStore.open("_test_kv_oversize.kv")
-        |> Result.unwrap()
-        |> KeyValueStore.get("key")
-    )");
+    for (const char* const call : {R"(KeyValueStore.open("_test_kv_oversize.kv"))",
+                                   R"(KeyValueStore.open_read_only("_test_kv_oversize.kv"))"}) {
+        const auto v = eval(call);
+
+        ASSERT_RESULT_FAILURE(v);
+        ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("exceeds the maximum size") !=
+                    std::string::npos);
+    }
+}
+
+// Read a file's raw bytes (to prove a failed open left it untouched).
+[[nodiscard]] static std::string read_raw(const std::string& path) {
+    std::ifstream in{path, std::ios::binary};
+
+    return std::string{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
+}
+
+static void test_keyvaluestore_unreadable_file_is_never_overwritten() {
+    // Regression for the data-loss path: open of an oversize file used to
+    // succeed with an EMPTY store, and a following set + save replaced the
+    // real file with that one entry.  Now open fails, so nothing can be saved
+    // over the file, and it is left byte-for-byte intact.
+    const std::string store_name{"test_kv_cpp_no_overwrite.kv"};
+    const std::string original = "keep\t" + std::string(64, 'v') + "\n";
+    { std::ofstream{store_name, std::ios::binary} << original; }
+
+    Value v;
+    {
+        const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(16)};
+        v = eval(R"(
+            result<key_value_store> opened = KeyValueStore.open("test_kv_cpp_no_overwrite.kv")
+            if Result.is_success(opened) {
+                result<string> _saved = Result.unwrap(opened)
+                    |> KeyValueStore.set("new", "x")
+                    |> Result.unwrap()
+                    |> KeyValueStore.save()
+            }
+            opened
+        )");
+    }
+
+    const auto after = read_raw(store_name);
+    std::error_code ignored;
+    std::filesystem::remove(store_name, ignored);
 
     ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(after, original);
+}
+
+static void test_keyvaluestore_open_rejects_corrupt_file() {
+    // A non-empty line without the key/value tab is corruption (the encoder
+    // never writes one).  It used to be dropped silently — and lost for good on
+    // the next save — so open, open_read_only and reload now fail instead.
+    const std::string store_name{"test_kv_cpp_corrupt.kv"};
+    { std::ofstream{store_name, std::ios::binary} << "good\tvalue\nno separator here\n"; }
+
+    const auto opened = eval(R"(KeyValueStore.open("test_kv_cpp_corrupt.kv"))");
+    const auto read_only = eval(R"(KeyValueStore.open_read_only("test_kv_cpp_corrupt.kv"))");
+
+    std::error_code ignored;
+    std::filesystem::remove(store_name, ignored);
+
+    ASSERT_RESULT_FAILURE(opened);
+    ASSERT_TRUE(opened.as_result()->owned_inner->as_string().find("line 2") != std::string::npos);
+    ASSERT_RESULT_FAILURE(read_only);
+}
+
+static void test_keyvaluestore_open_rejects_over_limit_entries_as_failure() {
+    // parse_store's entry-count limit used to escape open as a thrown runtime
+    // error; it is now an ordinary failure result.
+    const std::string store_name{"test_kv_cpp_too_many.kv"};
+    { std::ofstream{store_name, std::ios::binary} << "a\t1\nb\t2\nc\t3\n"; }
+
+    Value v;
+    {
+        const LimitGuard guard{ResourceLimits::max_dictionary_size, static_cast<std::size_t>(2)};
+        v = eval(R"(KeyValueStore.open("test_kv_cpp_too_many.kv"))");
+    }
+
+    std::error_code ignored;
+    std::filesystem::remove(store_name, ignored);
+
+    ASSERT_RESULT_FAILURE(v);
+}
+
+static void test_keyvaluestore_reload_fails_when_file_becomes_unreadable() {
+    // reload follows the same rule as open: a missing file reloads empty, but
+    // a file that cannot be read completely is a failure, not an empty store.
+    const std::string store_name{"test_kv_cpp_reload_corrupt.kv"};
+    std::error_code ignored;
+    std::filesystem::remove(store_name, ignored);
+
+    const auto v = eval(R"(
+        key_value_store s = Result.unwrap(KeyValueStore.open("test_kv_cpp_reload_corrupt.kv"))
+        result<boolean> _w = FileSystem.write_file("test_kv_cpp_reload_corrupt.kv", "corrupt\n")
+        KeyValueStore.reload(s)
+    )");
+
+    const auto missing = eval(R"(
+        key_value_store s = Result.unwrap(KeyValueStore.open("test_kv_cpp_reload_missing.kv"))
+        KeyValueStore.reload(s)
+    )");
+
+    std::filesystem::remove(store_name, ignored);
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_RESULT_SUCCESS(missing);
 }
 
 // ─── Negative: writes on a read-only store fail (no throw, failure result) ────
@@ -725,6 +823,66 @@ static void test_keyvaluestore_transaction_commit_persists() {
         |> Result.unwrap() |> KeyValueStore.destroy())");
 }
 
+// Count leftover temp files of a store write ("<store>.<nonce>....tmp") in the
+// working directory.
+[[nodiscard]] static std::size_t count_store_temp_files(const std::string& store_name) {
+    std::size_t count{0};
+
+    for (const auto& entry : std::filesystem::directory_iterator{"."}) {
+        const auto name = entry.path().filename().string();
+
+        if (name.starts_with(store_name + ".") && name.ends_with(".tmp")) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
+static void test_keyvaluestore_save_leaves_no_temp_file() {
+    (void)eval(R"(
+        KeyValueStore.open("test_kv_cpp_tmp_clean.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("k", "v")
+        |> Result.unwrap()
+        |> KeyValueStore.save()
+    )");
+
+    ASSERT_TRUE(std::filesystem::exists("test_kv_cpp_tmp_clean.kv"));
+    ASSERT_EQ(count_store_temp_files("test_kv_cpp_tmp_clean.kv"), std::size_t{0});
+
+    (void)eval(R"(KeyValueStore.open("test_kv_cpp_tmp_clean.kv")
+        |> Result.unwrap() |> KeyValueStore.destroy())");
+}
+
+static void test_keyvaluestore_failed_save_reports_failure_and_cleans_up() {
+    // Regression: when the final rename failed, write_store fell back to a
+    // NON-atomic copy_file over the target and, if that failed too, left the
+    // shared "<path>.tmp" file behind.  A directory squatting on the store path
+    // makes the rename fail deterministically on every platform.
+    // The directory is created after the open (an existing unreadable path
+    // would now make open itself fail), so it is the rename that fails.
+    const std::string store_name{"test_kv_cpp_dir_target.kv"};
+    std::error_code pre_ignored;
+    std::filesystem::remove_all(store_name, pre_ignored);
+
+    const auto v = eval(R"(
+        key_value_store s = Result.unwrap(KeyValueStore.open("test_kv_cpp_dir_target.kv"))
+        result<boolean> _d = FileSystem.create_directory("test_kv_cpp_dir_target.kv")
+        KeyValueStore.set(s, "k", "v") |> Result.unwrap() |> KeyValueStore.save()
+    )");
+
+    const auto leftovers = count_store_temp_files(store_name);
+    const bool still_directory = std::filesystem::is_directory(store_name);
+
+    std::error_code ignored;
+    std::filesystem::remove_all(store_name, ignored);
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(leftovers, std::size_t{0});
+    ASSERT_TRUE(still_directory);
+}
+
 int main() {
     // Codec layer.
     RUN(test_keyvaluestore_codec_escape_roundtrip);
@@ -769,6 +927,12 @@ int main() {
     RUN(test_keyvaluestore_transaction_commit);
     RUN(test_keyvaluestore_transaction_rollback);
     RUN(test_keyvaluestore_transaction_commit_persists);
+    RUN(test_keyvaluestore_save_leaves_no_temp_file);
+    RUN(test_keyvaluestore_unreadable_file_is_never_overwritten);
+    RUN(test_keyvaluestore_open_rejects_corrupt_file);
+    RUN(test_keyvaluestore_open_rejects_over_limit_entries_as_failure);
+    RUN(test_keyvaluestore_reload_fails_when_file_becomes_unreadable);
+    RUN(test_keyvaluestore_failed_save_reports_failure_and_cleans_up);
 
     // Negative: failure results.
     RUN(test_keyvaluestore_get_missing_fails);

@@ -26,7 +26,7 @@ Luma provides structured concurrency through three core primitives:
 
 ### Tasks (`spawn` / `await`)
 
-Use `spawn` inside a `task_scope` to run a function call concurrently. Each spawned task executes on the internal thread pool in its own VM instance. Use `await` to block until a task completes and retrieve its result:
+Use `spawn` inside a `task_scope` to run a function call concurrently. Each spawned task executes on the internal thread pool in its own VM instance. A task sees a read-only, deep-copied snapshot of the program's global variables; assigning a global from a task raises `cannot assign to global variable 'x' from a spawned task`. Use `await` to block until a task completes and retrieve its result:
 
 ```luma
 task_scope {
@@ -35,7 +35,7 @@ task_scope {
 }
 ```
 
-Each task may be awaited only once. A second `await` on the same task produces a runtime error.
+A task can be awaited any number of times: every `await` on the same task returns the same result.
 
 ### Task Scopes (`task_scope`)
 
@@ -50,7 +50,7 @@ array<integer> results = task_scope {
 # results == [1, 4, 9]
 ```
 
-If any child task fails, the remaining siblings are cancelled cooperatively and the error propagates out of the scope. Scopes can be nested.
+If any child task fails with an error, the remaining siblings are cancelled straight away and the error propagates out of the scope once they have stopped. A child cancelled on its own with `Task.cancel` is not a failure — it contributes `none` to the results. Scopes can be nested. When every pool worker is blocked waiting (on `await`, a scope, or a channel) and work is queued, the pool starts an extra worker, so nested scopes and channel hand-offs inside tasks do not deadlock the pool.
 
 ### Channels
 
@@ -78,13 +78,16 @@ Key `Channel` functions:
 
 ### Cancellation
 
-Cancellation is cooperative. `Task.cancel(t)` sets a cancellation token on the task. The task must check `Task.is_cancelled(t)` and exit gracefully — there is no forced termination:
+Cancellation is cooperative. `Task.cancel(t)` sets the cancellation token of `t` alone — its siblings and the enclosing `task_scope` keep running. There is no forced termination: the task stops at its next check, which happens at every loop iteration, function call, tail call, and `await`. A blocking `Channel` wait (`send`, `receive`, `send_all`, `consume`, `select`) also gives up when its task is cancelled. The cancelled task ends with a cancellation error, and awaiting it raises `task cancelled`:
 
 ```luma
-task<integer> t = spawn long_running_work()
-Task.cancel(t)
-# The task should check Task.is_cancelled(t) in its loop
+task_scope {
+    task<integer> t = spawn long_running_work()
+    _ = Task.cancel(t) # t stops at its next loop iteration, call, or await
+}
 ```
+
+`Task.is_cancelled(t)` reports `true` once `t` or an enclosing scope has been cancelled.
 
 ---
 
@@ -220,15 +223,17 @@ This converts a silent deadlock into a visible failure after 5 seconds.
 
 ## 6 — Common Pitfalls
 
-### Awaiting a Task Twice
+### Assigning a Global from a Task
 
-Each `task` value can be awaited only once. A second `await` throws a runtime error:
+A spawned task sees a read-only snapshot of the global variables, so a task that assigns one fails:
 
 ```text
-Error: await called on an already-consumed task
+Error: cannot assign to global variable 'x' from a spawned task
 ```
 
-**Fix:** Store the result of `await` in a variable and reuse the variable.
+Type-checked programs cannot reach this error, because functions cannot read or write top-level variables; it appears only in code that skips the type checker.
+
+**Fix:** Pass values into the task as arguments and return results, or send them through a channel.
 
 ### Forgetting to Close Channels
 
@@ -267,11 +272,12 @@ This example demonstrates debugging a producer-consumer pattern with channels.
 ### The Program
 
 ```luma
-function none producer(channel<integer> ch, integer count) {
-    for integer i in 0..count {
-        Channel.send(ch, i * i)
+function integer producer(channel<integer> ch, integer count) {
+    for i in 0..count {
+        _ = Channel.send(ch, i * i)
     }
     Channel.close(ch)
+    return count
 }
 
 function integer consumer(channel<integer> ch) {

@@ -11,9 +11,11 @@
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "mbedtls/md.h"
 #include "runtime/interpreter/value.hpp"
+#include "runtime/stdlib/common/file_helpers.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/common/path_validator.hpp"
@@ -88,20 +90,6 @@ constexpr std::array<HashAlgorithmSpec, 4> k_file_hash_algorithms{{
     return MBEDTLS_MD_NONE;
 }
 
-[[nodiscard]] std::string hash_file(const std::filesystem::path& path, mbedtls_md_type_t type,
-                                    const SourceLocation& loc) {
-    std::ifstream file{path, std::ios::binary};
-
-    if (!file.is_open()) {
-        return {}; // Caller wraps in result<Value> failure.
-    }
-
-    // Read directly into a string, avoiding the ostringstream double-buffer.
-    std::string contents{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
-
-    return compute_digest_hex(type, contents, loc);
-}
-
 // Validates `user_path`, guards against oversized files, and returns the hex
 // digest under `type` as a result<string>.  Shared by the per-algorithm file
 // functions and Hash.digest_file so the size guard and path validation live in
@@ -119,21 +107,32 @@ constexpr std::array<HashAlgorithmSpec, 4> k_file_hash_algorithms{{
     const auto file_bytes = std::filesystem::file_size(safe, size_ec);
     if (size_ec) {
         return make_failure_value(std::format("{}: cannot determine the size of '{}': {}",
-                                              qualified, safe.string(), size_ec.message()));
+                                              qualified, path_to_utf8(safe), size_ec.message()));
     }
     if (file_bytes > ResourceLimits::max_string_size) {
         return make_failure_value(std::format("{}: file '{}' exceeds the maximum size of {} bytes",
-                                              qualified, safe.string(),
+                                              qualified, path_to_utf8(safe),
                                               ResourceLimits::max_string_size));
     }
 
-    const auto hex = hash_file(safe, type, loc);
+    // The size check above is a fast path; the bounded read enforces the limit
+    // even if the file grows between the check and the read.
+    const auto read =
+        file_helpers::read_file_bounded(safe, ResourceLimits::max_string_size, std::ios::binary);
 
-    if (hex.empty()) {
-        return make_failure_value(std::format("{}: cannot open '{}'", qualified, safe.string()));
+    switch (read.status) {
+        case file_helpers::BoundedReadStatus::Ok:
+            return make_success_value(Value{compute_digest_hex(type, read.data, loc)});
+        case file_helpers::BoundedReadStatus::TooLarge:
+            return make_failure_value(
+                std::format("{}: file '{}' exceeds the maximum size of {} bytes", qualified,
+                            path_to_utf8(safe), ResourceLimits::max_string_size));
+        case file_helpers::BoundedReadStatus::OpenFailed:
+        case file_helpers::BoundedReadStatus::ReadError:
+            break;
     }
 
-    return make_success_value(Value{hex});
+    return make_failure_value(std::format("{}: cannot open '{}'", qualified, path_to_utf8(safe)));
 }
 
 } // anonymous namespace

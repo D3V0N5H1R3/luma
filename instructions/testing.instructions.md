@@ -341,7 +341,6 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 | ---------------------------- | -------------------------------------------- |
 | `fuzz_lexer`                 | Tokenisation of arbitrary input              |
 | `fuzz_parser`                | AST construction from token stream           |
-| `fuzz_resolver`              | Name resolution and slot assignment          |
 | `fuzz_type_checker`          | Static type checking                         |
 | `fuzz_linter`                | Post-type-check lint pass                    |
 | `fuzz_compiler`              | Bytecode compilation from valid ASTs         |
@@ -355,6 +354,7 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 | `fuzz_csv`                   | RFC 4180 CSV parse with round-trip oracle    |
 | `fuzz_xml`                   | `Xml.deserialize` with round-trip oracle     |
 | `fuzz_datetime`              | ISO-8601 parse with round-trip oracle        |
+| `fuzz_decimal`               | `Decimal` parse with canonical-text oracle   |
 | `fuzz_protocol`              | Content-Length message framing               |
 | `fuzz_compression`           | deflate/gzip/RLE decode round-trip oracle    |
 | `fuzz_encoder`               | Base64/URL decode round-trip oracle          |

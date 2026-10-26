@@ -801,6 +801,69 @@ static void test_compiled_program_verifies() {
     }
 }
 
+// Regression: a jump to exactly code.size() was accepted, although the VM has
+// no instruction to run there.
+static void test_jump_to_code_end_is_rejected() {
+    // clang-format off
+    auto func = make_func({
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::JumpIfFalse),
+        0x00, 0x00, 0x00, 0x01,                // → offset 7 == code size
+        static_cast<std::uint8_t>(Op::Return), // offset 6
+    });
+    // clang-format on
+
+    BytecodeVerifier verifier;
+    const auto errors = verifier.verify(func);
+
+    ASSERT_TRUE(has_error_containing(errors, "at or beyond code size"));
+}
+
+// Regression: control falling through the last instruction was never reported.
+static void test_fall_off_end_is_rejected() {
+    auto func = make_func({
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::Pop),
+    });
+
+    BytecodeVerifier verifier;
+    const auto errors = verifier.verify(func);
+
+    ASSERT_TRUE(has_error_containing(errors, "falls off the end"));
+}
+
+// The shape that used to fall off the end (an if/else whose last branch ends
+// in `return`, in a zero-parameter function) now verifies cleanly, so
+// --verify would have caught the old miscompile.
+static void test_compiled_branch_ending_in_return_verifies() {
+    const auto program = luma::test::lex_and_parse("function boolean ready() { return true }\n"
+                                                   "function void go() {\n"
+                                                   "    if ready() {\n"
+                                                   "        print(\"work\")\n"
+                                                   "    } else {\n"
+                                                   "        return\n"
+                                                   "    }\n"
+                                                   "}\n"
+                                                   "function integer pick() {\n"
+                                                   "    while true {\n"
+                                                   "        if ready() { break }\n"
+                                                   "        return 1\n"
+                                                   "    }\n"
+                                                   "}\n");
+
+    Compiler compiler;
+    const auto result = compiler.compile(program, /*repl_mode=*/false);
+
+    ASSERT_TRUE(result.success);
+
+    BytecodeVerifier verifier;
+    ASSERT_TRUE(verifier.verify(result.top_level).empty());
+
+    for (const auto& function : result.functions) {
+        ASSERT_TRUE(verifier.verify(function).empty());
+    }
+}
+
 // ─── main ───
 
 int main() {
@@ -853,5 +916,8 @@ int main() {
     RUN(test_make_record_pops_its_fields);
     RUN(test_stack_effects_match_fixed_opcode_metadata);
     RUN(test_compiled_program_verifies);
+    RUN(test_jump_to_code_end_is_rejected);
+    RUN(test_fall_off_end_is_rejected);
+    RUN(test_compiled_branch_ending_in_return_verifies);
     return SUMMARY();
 }

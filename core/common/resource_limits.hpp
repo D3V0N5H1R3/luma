@@ -12,7 +12,9 @@ namespace luma {
 // block pathological inputs from exhausting system resources.
 //
 // All limits can be overridden via environment variables prefixed with
-// LUMA_LIMIT_, e.g. LUMA_LIMIT_MAX_CALL_DEPTH=512.
+// LUMA_LIMIT_, e.g. LUMA_LIMIT_MAX_CALL_DEPTH=512.  Each override must lie in
+// [1, ceiling] (see LUMA_RESOURCE_LIMITS_X): a non-numeric or zero value is
+// ignored and a value above the ceiling is clamped to it, both with a warning.
 // Call ResourceLimits::init_from_env() at startup to apply overrides.
 //
 // Thread safety: The static members are read-only after init_from_env()
@@ -64,10 +66,6 @@ constexpr std::size_t max_repl_program_snapshots = 500;
 // ─── Mutable runtime limits ───
 // All limits are static inline — shared across all VM instances.
 // Per-instance limits would require passing ResourceLimits by reference to each VM.
-//
-// Future: Replace global ResourceLimits with a per-environment RuntimeConstraints
-// object passed to the VM and stdlib modules at construction time.  This would
-// enable per-sandbox limits without global state mutation.
 struct ResourceLimits {
     // ── Recursion and parsing ──
 
@@ -213,126 +211,68 @@ struct ResourceLimits {
 
 // ─── X-macro field table ───────────────────────────────────────────────────
 //
-// Lists every mutable limit shared between ResourceLimits and RuntimeConstraints.
-// Format: X(type, field_name)
+// Lists every mutable limit together with the largest value an environment
+// override may set.  Format: X(type, field_name, ceiling)
 //
-// WHY THIS EXISTS
-// ───────────────
-// RuntimeConstraints must mirror every field of ResourceLimits so that the VM
-// can switch from global static limits to per-instance limits in a single step.
-// Without the macro, every new limit field requires edits in two places; an
-// omission silently leaves RuntimeConstraints with a stale default.
+// init_from_env() expands this table to read LUMA_LIMIT_<FIELD_NAME> for every
+// field, so a new limit only needs a field above plus an entry here.  Every
+// override must lie in [1, ceiling]: 0 would disable the feature it guards
+// (LUMA_LIMIT_MAX_PARSE_DEPTH=0 rejects every program), and the ceilings keep
+// the stack-sensitive recursion limits (parse, expression, interpolation,
+// JSON nesting, call depth) safely below the depth at which recursion would
+// exhaust the native stack — the guard these limits exist to provide.  The
+// size ceilings are sanity bounds well above any realistic program.
 //
 // HOW TO ADD A NEW LIMIT
 // ──────────────────────
 //   1. Add a documented `static inline` field to ResourceLimits above.
-//   2. Add a matching X(...) entry to this macro.
-//   RuntimeConstraints will gain the field automatically.
+//   2. Add a matching X(...) entry, with a ceiling, to this macro.
 //
 // Note: `k_max_exception_handler_depth` is a compile-time constant (constexpr)
 // and is not included here because it cannot be changed at runtime.
 
 // clang-format off
-#define LUMA_RESOURCE_LIMITS_X(X)                             \
-    /* Recursion and parsing */                               \
-    X(int,           max_call_depth)                          \
-    X(int,           max_parse_depth)                         \
-    X(int,           max_expression_depth)                    \
-    X(int,           max_interpolation_depth)                 \
-    X(std::size_t,   max_source_size)                         \
-    /* Container sizes */                                     \
-    X(std::size_t,   max_array_size)                          \
-    X(std::size_t,   max_dictionary_size)                     \
-    X(std::size_t,   max_queue_size)                          \
-    X(std::size_t,   max_stack_size)                          \
-    X(std::size_t,   max_set_size)                            \
-    /* String limits */                                       \
-    X(std::size_t,   max_string_size)                         \
-    X(std::int64_t,  max_string_repeat)                       \
-    X(std::size_t,   max_pad_width)                           \
-    X(std::int64_t,  max_levenshtein_input)                   \
-    /* Regex limits */                                        \
-    X(std::size_t,   max_regex_pattern_size)                  \
-    X(std::size_t,   max_regex_input_size)                    \
-    /* JSON limits */                                         \
-    X(std::size_t,   max_json_nesting_depth)                  \
-    X(std::size_t,   max_json_elements)                       \
-    /* Concurrency and I/O */                                 \
-    X(std::size_t,   max_channel_queue_size)                  \
-    X(std::size_t,   max_task_queue_size)                     \
-    X(int,           max_open_sockets)                        \
-    X(std::size_t,   max_hostname_length)                     \
-    /* Process and environment */                             \
-    X(std::size_t,   max_process_output_size)                 \
-    X(std::size_t,   max_env_size)                            \
-    /* HTTP limits */                                         \
-    X(std::size_t,   max_http_header_size)                    \
-    X(std::size_t,   max_http_body_size)                      \
-    X(std::size_t,   max_http_header_count)                   \
-    X(std::size_t,   max_http_header_value_size)              \
-    X(std::size_t,   max_http_response_size)                  \
-    /* Loop limits */                                         \
-    X(std::int64_t,  max_while_iterations)
+#define LUMA_RESOURCE_LIMITS_X(X)                                             \
+    /* Recursion and parsing (stack-sensitive) */                             \
+    X(int,           max_call_depth,             4'096)                       \
+    X(int,           max_parse_depth,            512)                         \
+    X(int,           max_expression_depth,       4'000)                       \
+    X(int,           max_interpolation_depth,    256)                         \
+    X(std::size_t,   max_source_size,            1ULL << 30)  /* 1 GiB */    \
+    /* Container sizes */                                                     \
+    X(std::size_t,   max_array_size,             1'000'000'000)               \
+    X(std::size_t,   max_dictionary_size,        1'000'000'000)               \
+    X(std::size_t,   max_queue_size,             1'000'000'000)               \
+    X(std::size_t,   max_stack_size,             1'000'000'000)               \
+    X(std::size_t,   max_set_size,               1'000'000'000)               \
+    /* String limits */                                                       \
+    X(std::size_t,   max_string_size,            1ULL << 32)  /* 4 GiB */    \
+    X(std::int64_t,  max_string_repeat,          1'000'000'000)               \
+    X(std::size_t,   max_pad_width,              1'000'000'000)               \
+    X(std::int64_t,  max_levenshtein_input,      100'000)                     \
+    /* Regex limits */                                                        \
+    X(std::size_t,   max_regex_pattern_size,     1'000'000)                   \
+    X(std::size_t,   max_regex_input_size,       1ULL << 30)  /* 1 GiB */    \
+    /* JSON limits */                                                         \
+    X(std::size_t,   max_json_nesting_depth,     512)                         \
+    X(std::size_t,   max_json_elements,          1'000'000'000)               \
+    /* Concurrency and I/O */                                                 \
+    X(std::size_t,   max_channel_queue_size,     1'000'000'000)               \
+    X(std::size_t,   max_task_queue_size,        100'000'000)                 \
+    X(int,           max_open_sockets,           65'536)                      \
+    X(std::size_t,   max_hostname_length,        1'024)                       \
+    /* Process and environment */                                             \
+    X(std::size_t,   max_process_output_size,    1ULL << 32)  /* 4 GiB */    \
+    X(std::size_t,   max_env_size,               1ULL << 20)  /* 1 MiB */    \
+    /* HTTP limits */                                                         \
+    X(std::size_t,   max_http_header_size,       1ULL << 24)  /* 16 MiB */   \
+    X(std::size_t,   max_http_body_size,         1ULL << 32)  /* 4 GiB */    \
+    X(std::size_t,   max_http_header_count,      100'000)                     \
+    X(std::size_t,   max_http_header_value_size, 1ULL << 24)  /* 16 MiB */   \
+    X(std::size_t,   max_http_response_size,     1ULL << 32)  /* 4 GiB */    \
+    /* Loop limits */                                                         \
+    X(std::int64_t,  max_while_iterations,       1'000'000'000'000)
 // clang-format on
-
-// ─── Per-execution resource constraints ───────────────────────────────────
-//
-// Constructed from ResourceLimits defaults but can be customised per-VM
-// to enable sandboxed execution with reduced limits.  The VM currently
-// uses global ResourceLimits directly; this struct provides a migration
-// path toward per-instance limits without global state mutation.
-//
-// RuntimeConstraints fields are generated from LUMA_RESOURCE_LIMITS_X above.
-// Each field is initialised from the corresponding ResourceLimits static value.
-// To add a new limit, follow the instructions in the macro comment above.
-
-/// Per-execution resource constraints.
-/// Constructed from ResourceLimits defaults but can be customized per-VM.
-struct RuntimeConstraints {
-#define RC_MEMBER(type, name) type name{ResourceLimits::name};
-    LUMA_RESOURCE_LIMITS_X(RC_MEMBER)
-#undef RC_MEMBER
-
-    /// Creates constraints from the current global ResourceLimits.
-    [[nodiscard]] static RuntimeConstraints from_defaults() {
-        return RuntimeConstraints{};
-    }
-
-    /// Creates sandbox-safe constraints with lower limits.
-    ///
-    /// Fields intentionally NOT reduced (kept at default):
-    ///   - max_parse_depth, max_expression_depth, max_interpolation_depth:
-    ///     Parsing/analysis depth limits are compile-time safety rails, not
-    ///     runtime resource concerns.
-    ///   - max_source_size: Source code is loaded before sandbox is applied.
-    ///   - max_hostname_length: Capped by DNS spec (253); already minimal.
-    ///   - max_env_size: Environment reads are cheap and bounded by OS.
-    ///   - max_http_header_size: Already conservative (16 KB).
-    [[nodiscard]] static RuntimeConstraints sandboxed() {
-        RuntimeConstraints c{};
-        c.max_call_depth = 64;
-        c.max_array_size = 100'000;
-        c.max_dictionary_size = 100'000;
-        c.max_queue_size = 100'000;
-        c.max_stack_size = 100'000;
-        c.max_set_size = 100'000;
-        c.max_string_size = std::size_t{1024} * 1024; // 1 MB
-        c.max_string_repeat = 100'000;
-        c.max_pad_width = 100'000;
-        c.max_levenshtein_input = 1'000;
-        c.max_while_iterations = 1'000'000;
-        c.max_process_output_size = std::size_t{1024} * 1024; // 1 MB
-        c.max_open_sockets = 10;
-        c.max_channel_queue_size = 10'000;
-        c.max_task_queue_size = 1'000;
-        c.max_regex_pattern_size = 1'000; // 1 KB (vs 10 KB default)
-        c.max_regex_input_size = 64'000;  // 64 KB (vs 1 MB default)
-        c.max_json_nesting_depth = 32;
-        c.max_json_elements = 10'000;
-        c.max_http_body_size = std::size_t{1024} * 1024; // 1 MB
-        return c;
-    }
-};
 
 } // namespace luma
 

@@ -69,7 +69,7 @@ void VM::handle_interpolate() {
         }
     }
 
-    stack_.top = stack_.base + base;
+    stack_.truncate_to(base);
     push(Value{std::move(result)});
 }
 

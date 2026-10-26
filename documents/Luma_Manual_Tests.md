@@ -319,17 +319,21 @@ function void main() {
 | #      | Test                    | Steps                                                                  | Expected                                                   |
 | ------ | ----------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------- |
 | 1.1.1  | Run a file              | `luma hello.luma`                                                      | Prints "Hello, world!", exits 0                            |
-| 1.1.2  | Run with arguments      | `luma hello.luma --arg1 value` (if program uses `Process.arguments()`) | Arguments passed to program                                |
+| 1.1.2  | Run with arguments      | `luma hello.luma --arg1 value`; read with `Process.get_arguments()`    | Arguments passed to program                                |
 | 1.1.3  | Test mode               | `luma --test tests.luma`                                               | Runs all `@test` functions, shows pass/fail summary        |
 | 1.1.4  | Strict mode             | `luma --strict hello.luma` (with an unused variable)                   | Lint warning promoted to error, non-zero exit              |
 | 1.1.5  | Sandbox mode            | `luma --box sandbox_test.luma`                                         | FileSystem call fails with "not available in sandbox mode" |
 | 1.1.6  | Type-check only         | `luma --check math.luma`                                               | Reports type errors without running; exits 0 if clean      |
 | 1.1.7 | Version                 | `luma --version` | Prints the version string (e.g. "Luma 0.15.0") |
 | 1.1.8  | Help                    | `luma --help`                                                          | Shows usage with all flags listed                          |
-| 1.1.9  | Invalid file            | `luma nonexistent.luma`                                                | Error message, exits with non-zero code                    |
+| 1.1.9  | Invalid file            | `luma nonexistent.luma`                                                | Prints `error: file not found: '…'`, exits 5               |
 | 1.1.10 | Syntax error exit code  | `luma` a file with syntax error                                        | Exits with code 3 (SyntaxError)                            |
 | 1.1.11 | Type error exit code    | `luma` a file with type error                                          | Exits with code 2 (TypeError)                              |
 | 1.1.12 | Runtime error exit code | `luma` a file that divides by zero                                     | Exits with code 1 (RuntimeError)                           |
+| 1.1.13 | Flags after the file    | `luma tests.luma --test`                                               | Runs the tests, same as `luma --test tests.luma`           |
+| 1.1.14 | Forward after `--`      | `luma hello.luma -- --test`                                            | Program receives `--test`; no tests run                    |
+| 1.1.15 | Bad optimization level  | `luma -O 3 hello.luma`                                                 | Usage error, exits 5                                       |
+| 1.1.16 | Check without a file    | `luma --check`                                                         | `error: --check requires a .luma file`, exits 5            |
 
 ### 1.2 REPL
 
@@ -347,6 +351,9 @@ function void main() {
 | 1.2.10 | History                | Type something, press Up arrow                                             | Previous input recalled                               |
 | 1.2.11 | Tab completion         | Type `Con` then Tab                                                        | Completes to `Console` (or shows options)             |
 | 1.2.12 | Runtime error recovery | Type `1 / 0`                                                               | Error message printed, REPL continues (doesn't crash) |
+| 1.2.13 | Unknown command        | Type `:foo`                                                                | Prints `Unknown command: :foo …`; REPL continues      |
+| 1.2.14 | `:file` reload         | `:file include_helper.luma`, edit `greet`, then `:file` again              | New definition of `greet` is used                     |
+| 1.2.15 | Include at prompt      | `include "include_helper.luma"` then call `greet("world")`                 | File resolved from the working directory              |
 
 ### 1.3 Language Basics
 
@@ -362,6 +369,9 @@ function void main() {
 | 1.3.8  | String concatenation | `"hello" + " " + "world"`                       | `"hello world"`                     |
 | 1.3.9  | Type promotion       | `integer` + `number` operation                  | Promotes to `number` result         |
 | 1.3.10 | None type            | Use `none` with `optional<T>`                   | Compiles; evaluates to absent value |
+| 1.3.11 | Integer overflow     | `i++` with `i` at the maximum `integer`         | `integer overflow in increment`     |
+| 1.3.12 | Negative remainder   | `-7 % 2`, `7 % -2`                              | `-1`, `1` (sign of the dividend)    |
+| 1.3.13 | Octal literal        | `0o17`                                          | `15`                                |
 
 ### 1.4 Control Flow
 
@@ -463,9 +473,10 @@ function void main() {
 | #      | Test             | Steps                           | Expected                                 |
 | ------ | ---------------- | ------------------------------- | ---------------------------------------- |
 | 1.11.1 | Basic include    | Run `include_main.luma`         | Uses function from `include_helper.luma` |
-| 1.11.2 | Circular include | File A includes B, B includes A | Compile error: circular include detected |
+| 1.11.2 | Circular include | File A includes B, B includes A | No error; each file included once        |
 | 1.11.3 | Missing include  | `include "nonexistent.luma"`    | Compile error with clear message         |
 | 1.11.4 | Path traversal   | `include "../../../etc/passwd"` | Security error: path traversal rejected  |
+| 1.11.5 | Dot component    | `include "./x.luma"`            | Rejected: contains directory traversal   |
 
 ### 1.12 Testing Framework
 

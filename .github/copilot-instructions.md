@@ -35,13 +35,13 @@ Each phase transforms a well-defined input into a well-defined output. Informati
 | Directory                    | Responsibility                                            |
 | ---------------------------- | --------------------------------------------------------- |
 | `core/analysis/ast/`         | AST node type definitions (data only)                     |
+| `core/analysis/common/`      | Helpers shared by analysis code only                      |
 | `core/analysis/diagnostics/` | Structured diagnostic messages with source spans          |
 | `core/analysis/errors/`      | Error types and diagnostic reporting                      |
 | `core/analysis/lexer/`       | Tokenisation of source text                               |
 | `core/analysis/linter/`      | Post-type-check code quality warnings                     |
 | `core/analysis/parser/`      | AST construction from token stream                        |
 | `core/analysis/pipeline/`    | Composable compilation pass pipeline                      |
-| `core/analysis/resolver/`    | Name resolution to stack-slot indices for the VM          |
 | `core/analysis/source/`      | Source file loading and location tracking                 |
 | `core/analysis/types/`       | Static type checking and stdlib type signatures           |
 | `core/runtime/cli/`          | Command-line argument parsing and dispatch                |
@@ -52,7 +52,7 @@ Each phase transforms a well-defined input into a well-defined output. Informati
 | `core/runtime/repl/`         | Interactive read-eval-print loop                          |
 | `core/runtime/stdlib/`       | Built-in standard library modules                         |
 | `core/runtime/vm/`           | Stack-based virtual machine                               |
-| `core/common/`               | Shared utilities (resource limits, result types, caches)  |
+| `core/common/`               | Shared utilities (limits, terminal, UTF-8, caches)        |
 | `shared/json/`               | JSON utilities shared by language server and debugger     |
 | `shared/protocol/`           | Protocol transport shared by language server and debugger |
 | `shared/stdlib/`             | Stdlib metadata shared by interpreter and language server |

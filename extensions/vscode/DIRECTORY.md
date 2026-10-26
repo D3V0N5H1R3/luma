@@ -39,7 +39,7 @@ TextMate grammar with semantic token support for all Luma constructs:
 | Function names       | `function void main()`, `my_func()`                                                                  |
 | Keywords             | `await` `choice` `else` `for` `function` `if` `match` `record` `return` `spawn` `task_scope` `while` |
 | Modifiers            | `borrow` `internal` `mutable` `unique`                                                               |
-| Numbers              | `42` `3.14` `0xFF` `0b1010`                                                                          |
+| Numbers              | `42` `3.14` `0xFF` `0o755` `0b1010`                                                                  |
 | Operators            | `+` `-` `*` `/` `==` `!=` `<` `>` `&&` `\|\|` `\|>` `!>` `..`                                        |
 | Properties           | `point.x`, `Person { name = "Alice" }`                                                               |
 | Standard library     | `Array.map` `Math.pi` `String.length`                                                                |

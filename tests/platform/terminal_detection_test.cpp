@@ -7,6 +7,8 @@
 // This target runs on every OS (see tests/CMakeLists.txt).
 
 #include "common/platform_utils.hpp"
+#include "common/terminal.hpp"
+#include "runtime/cli/terminal.hpp" // Deprecated forwarding header; must still compile.
 #include "test_framework.hpp"
 
 using namespace luma;
@@ -39,9 +41,32 @@ static void test_is_stderr_terminal_is_stable() {
     ASSERT_EQ(first, second);
 }
 
+// ═══════════════════════════════════════════════════════════
+// Colour helpers follow the TTY state of the stream they target
+// ═══════════════════════════════════════════════════════════
+//
+// The REPL wrote stderr messages with the stdout helpers (out_red), leaking
+// ANSI codes into a redirected stderr whenever stdout was a terminal.  Pin the
+// contract the call sites rely on: the plain helpers track stderr and the
+// out_* helpers track stdout.
+
+static void test_stderr_colour_helpers_follow_stderr() {
+    ASSERT_EQ(term::red().empty(), !is_stderr_terminal());
+    ASSERT_EQ(term::yellow().empty(), !is_stderr_terminal());
+    ASSERT_EQ(term::reset().empty(), !is_stderr_terminal());
+}
+
+static void test_stdout_colour_helpers_follow_stdout() {
+    ASSERT_EQ(term::out_red().empty(), !is_stdout_terminal());
+    ASSERT_EQ(term::out_cyan().empty(), !is_stdout_terminal());
+    ASSERT_EQ(term::out_reset().empty(), !is_stdout_terminal());
+}
+
 // ─── main ───
 
 int main() {
+    RUN(test_stderr_colour_helpers_follow_stderr);
+    RUN(test_stdout_colour_helpers_follow_stdout);
     RUN(test_is_stdin_terminal_is_stable);
     RUN(test_is_stdout_terminal_is_stable);
     RUN(test_is_stderr_terminal_is_stable);

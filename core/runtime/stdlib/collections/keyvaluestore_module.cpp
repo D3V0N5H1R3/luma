@@ -1,26 +1,33 @@
 ﻿#include "runtime/stdlib/collections/keyvaluestore_module.hpp"
 
+#include <atomic>
 #include <concepts>
+#include <cstdint>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iterator>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/escape.hpp"
+#include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
+#include "common/result.hpp"
 #include "common/string_utils.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/collections/keyvaluestore_codec.hpp"
 #include "runtime/stdlib/common/error_messages.hpp"
+#include "runtime/stdlib/common/file_helpers.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/common/native_function_containers.hpp"
@@ -181,40 +188,124 @@ namespace luma {
 
 namespace {
 
-// Read a .kv file into a map via the shared parser.  parse_store enforces the
-// dictionary-size and per-string limits, but only AFTER the whole file has been
-// slurped into memory, so without an up-front bound a multi-gigabyte store file
-// would be fully materialised first.  Cap the on-disk size before reading a
-// single byte (the same guard FileSystem.read_file and Hash.*_file use) and
-// treat an oversize or size-indeterminate file as unreadable — returning an
-// empty map, exactly like a file that cannot be opened.
-[[nodiscard]] kvs::StoreEntries read_store(const std::filesystem::path& path) {
-    std::error_code size_ec;
-    const auto file_bytes = std::filesystem::file_size(path, size_ec);
+// Read an EXISTING .kv file into a map, or explain why it cannot be read
+// completely.  Every failure is reported — never mapped to an empty store:
+// open/reload used to treat an oversize, unreadable or over-limit file as
+// empty, and the next save/commit then silently overwrote the real data.
+//
+//   * The read is bounded at read time (read_file_bounded), so an oversize
+//     file is rejected without being materialised.
+//   * A non-empty line without the key/value tab separator is corruption (the
+//     encoder never writes one), so the file is rejected rather than having
+//     that line silently dropped on the next save.  Blank lines carry no data
+//     and are ignored, exactly as parse_store does.
+//   * parse_store's entry-count / string-size limit errors become failures.
+[[nodiscard]] Result<kvs::StoreEntries, std::string> read_store(const std::filesystem::path& path) {
+    using ReadResult = Result<kvs::StoreEntries, std::string>;
 
-    if (size_ec || file_bytes > ResourceLimits::max_string_size) {
-        return {};
+    const auto display = path_to_utf8(path);
+    auto read = file_helpers::read_file_bounded(path, ResourceLimits::max_string_size);
+
+    switch (read.status) {
+        case file_helpers::BoundedReadStatus::Ok:
+            break;
+        case file_helpers::BoundedReadStatus::TooLarge:
+            return ReadResult::err(
+                std::format("store file '{}' exceeds the maximum size of {} bytes", display,
+                            ResourceLimits::max_string_size));
+        case file_helpers::BoundedReadStatus::OpenFailed:
+            return ReadResult::err(std::format("cannot open store file '{}'", display));
+        case file_helpers::BoundedReadStatus::ReadError:
+            return ReadResult::err(std::format("error reading store file '{}'", display));
     }
 
-    std::ifstream file{path};
+    const std::string_view text{read.data};
+    std::size_t line_number{1};
 
-    if (!file.is_open()) {
-        return {};
+    for (std::size_t start{0}; start < text.size(); ++line_number) {
+        const auto newline = text.find('\n', start);
+        const auto stop = (newline == std::string_view::npos) ? text.size() : newline;
+        const auto line = text.substr(start, stop - start);
+
+        if (!line.empty() && line.find('\t') == std::string_view::npos) {
+            return ReadResult::err(
+                std::format("store file '{}' is corrupt: line {} has no key/value separator",
+                            display, line_number));
+        }
+
+        start = stop + 1;
     }
 
-    const std::string text{std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{}};
-
-    return kvs::parse_store(text);
+    try {
+        return ReadResult::ok(kvs::parse_store(read.data));
+    } catch (const RuntimeError& e) {
+        return ReadResult::err(std::format("store file '{}' is invalid: {}", display, e.what()));
+    }
 }
 
-// Write a map to a .kv file (atomic: write to temp, then rename)
+// Load the backing file of a store being opened / reloaded.  A missing file is
+// the only case that yields an empty store; every other problem is a failure
+// result naming `function`, so the caller never gets (and later saves over) an
+// empty stand-in for data it could not read.
+[[nodiscard]] Result<kvs::StoreEntries, Value>
+load_existing_store(const std::filesystem::path& path, std::string_view function) {
+    using LoadResult = Result<kvs::StoreEntries, Value>;
+
+    std::error_code ec;
+
+    if (!std::filesystem::exists(path, ec) && !ec) {
+        return LoadResult::ok(kvs::StoreEntries{});
+    }
+
+    auto read = read_store(path);
+
+    if (!read.is_ok()) {
+        return LoadResult::err(
+            make_failure_value(error_msg("KeyValueStore", function, std::move(read).error())));
+    }
+
+    return LoadResult::ok(std::move(read).value());
+}
+
+// A temp-file path next to `path` that no other writer — another task in this
+// interpreter or another process — will pick: the shared "<path>.tmp" name let
+// two concurrent saves of the same store write into (and rename) one file.  A
+// per-process random nonce, the writing thread, and a process-wide counter make
+// the name unique.  Being in the same directory keeps the final rename atomic
+// and needs no extra path validation (the store path is already validated).
+[[nodiscard]] std::filesystem::path unique_temp_path(const std::filesystem::path& path) {
+    static const std::uint64_t process_nonce = [] {
+        std::random_device device;
+
+        return (static_cast<std::uint64_t>(device()) << 32) ^ device();
+    }();
+    static std::atomic<std::uint64_t> counter{0};
+
+    const auto thread_tag = std::hash<std::thread::id>{}(std::this_thread::get_id());
+
+    auto temp = path;
+    temp += path_from_utf8(std::format(".{:x}.{:x}.{}.tmp", process_nonce, thread_tag,
+                                       counter.fetch_add(1, std::memory_order_relaxed)));
+
+    return temp;
+}
+
+// Write a map to a .kv file atomically: write and flush a uniquely named temp
+// file, then rename it over the target.  A failure at any step removes the temp
+// file and reports false, leaving the previous store untouched.  There is
+// deliberately NO copy fallback when the rename fails: copy_file overwrites the
+// target in place, so a crash mid-copy would leave a truncated store — exactly
+// what the temp-and-rename dance exists to prevent.
 [[nodiscard]] bool write_store(const std::filesystem::path& path,
                                const kvs::StoreEntries& entries) {
     namespace fs = std::filesystem;
 
-    // Temp path is derived from the already-validated path by appending ".tmp",
-    // which keeps it in the same directory — no additional path validation needed.
-    const auto temp_path = path.string() + ".tmp";
+    const auto temp_path = unique_temp_path(path);
+
+    const auto discard_temp = [&temp_path]() {
+        std::error_code cleanup_ec{};
+        fs::remove(temp_path, cleanup_ec);
+    };
 
     {
         std::ofstream file{temp_path};
@@ -224,8 +315,20 @@ namespace {
         }
 
         file << kvs::serialize_store(entries);
+        file.flush();
+
+        if (!file) {
+            file.close();
+            discard_temp();
+
+            return false;
+        }
+
+        file.close();
 
         if (file.fail()) {
+            discard_temp();
+
             return false;
         }
     }
@@ -235,20 +338,9 @@ namespace {
     fs::rename(temp_path, path, ec);
 
     if (ec) {
-        // Fallback: try direct copy
-        try {
-            fs::copy_file(temp_path, path, fs::copy_options::overwrite_existing, ec);
+        discard_temp();
 
-            if (ec) {
-                return false;
-            }
-
-            // Clean up temp file (best effort)
-            std::error_code cleanup_ec{};
-            fs::remove(temp_path, cleanup_ec);
-        } catch (const std::exception&) {
-            return false;
-        }
+        return false;
     }
 
     return true;
@@ -306,12 +398,17 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
 
             const auto safe = validate_path(args[0].as_string(), loc);
 
-            auto store = std::make_shared<KeyValueStoreValue>();
-            store->file_path = safe.string();
+            // A missing file starts an empty store; an existing file that cannot
+            // be read completely is a failure (see load_existing_store).
+            auto loaded = load_existing_store(safe, "open");
 
-            if (std::filesystem::exists(safe)) {
-                store->entries = read_store(safe);
+            if (!loaded.is_ok()) {
+                return std::move(loaded).error();
             }
+
+            auto store = std::make_shared<KeyValueStoreValue>();
+            store->file_path = path_to_utf8(safe);
+            store->entries = std::move(loaded).value();
 
             return make_success_value(Value{std::move(store)});
         })
@@ -331,10 +428,17 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
                               std::format("store file not found: {}", args[0].as_string())));
             }
 
+            auto loaded = read_store(safe);
+
+            if (!loaded.is_ok()) {
+                return make_failure_value(
+                    error_msg("KeyValueStore", "open_read_only", std::move(loaded).error()));
+            }
+
             auto store = std::make_shared<KeyValueStoreValue>();
-            store->file_path = safe.string();
+            store->file_path = path_to_utf8(safe);
             store->read_only = true;
-            store->entries = read_store(safe);
+            store->entries = std::move(loaded).value();
 
             return make_success_value(Value{std::move(store)});
         })
@@ -568,7 +672,7 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
                 return no_path_failure("save");
             }
 
-            if (!write_store(store->file_path, store->entries)) {
+            if (!write_store(path_from_utf8(store->file_path), store->entries)) {
                 return make_failure_value(error_msg(
                     "KeyValueStore", "save", std::format("cannot write '{}'", store->file_path)));
             }
@@ -584,10 +688,18 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
                 return no_path_failure("reload");
             }
 
+            // Same rule as open: a missing file reloads as empty, an unreadable
+            // one is a failure (the caller keeps its current store).
+            auto loaded = load_existing_store(path_from_utf8(old->file_path), "reload");
+
+            if (!loaded.is_ok()) {
+                return std::move(loaded).error();
+            }
+
             auto store = std::make_shared<KeyValueStoreValue>();
             store->file_path = old->file_path;
             store->read_only = old->read_only;
-            store->entries = read_store(old->file_path);
+            store->entries = std::move(loaded).value();
 
             return make_success_value(Value{std::move(store)});
         })
@@ -614,7 +726,7 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
 
             std::error_code ec{};
 
-            std::filesystem::remove(store->file_path, ec);
+            std::filesystem::remove(path_from_utf8(store->file_path), ec);
 
             if (ec) {
                 return make_failure_value(error_msg(
@@ -686,7 +798,7 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
             if (!committed->read_only && !committed->file_path.empty()) {
                 const std::scoped_lock lock{committed->mutex};
 
-                if (!write_store(committed->file_path, committed->entries)) {
+                if (!write_store(path_from_utf8(committed->file_path), committed->entries)) {
                     return make_failure_value(
                         error_msg("KeyValueStore", "transaction",
                                   std::format("cannot write '{}'", committed->file_path)));

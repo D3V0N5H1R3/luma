@@ -34,6 +34,31 @@ function void test_tuple_destructuring() {
 }
 
 @test
+function void test_nested_tuple_member_access() {
+    # `nested.1.0` is two member accesses, not the decimal number `1.0`.
+    ((integer, integer), (integer, string)) nested = ((1, 2), (3, "four"))
+
+    assert(nested.0.1 == 2)
+    assert(nested.1.0 == 3)
+    assert(nested.1.1 == "four")
+}
+
+@test
+function void test_paren_on_new_line_starts_new_statement() {
+    # A '(' that starts a line never continues the previous expression as a
+    # call, so a tuple destructuring can follow a field access or a call.
+    (integer, integer) pair = (5, 6)
+    integer total = pair.0
+    (integer left, integer right) = pair
+    string label = String.trim(" ok ")
+    (integer again_left, integer again_right) = pair
+
+    assert(total + left + right == 16)
+    assert(label == "ok")
+    assert(again_left + again_right == 11)
+}
+
+@test
 function void test_tuple_four_elements() {
     (integer, string, number, boolean) quad = (1, "two", 3.0, true)
 

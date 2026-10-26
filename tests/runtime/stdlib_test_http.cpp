@@ -1,9 +1,53 @@
 // Standard library tests: Http.
 
+#include <algorithm>
+#include <cstddef>
+#include <cstring>
 #include <string>
+#include <string_view>
+#include <utility>
 
+#include "common/resource_limits.hpp"
 #include "runtime/stdlib/io/http_module_response.hpp"
 #include "stdlib_test_helpers.hpp"
+
+namespace {
+
+// A Connection that replays a canned server byte stream in small pieces (so
+// framing is exercised across recv boundaries) and then reports EOF, letting
+// read_http_response be tested without any network I/O.
+class ScriptedConnection final : public luma::Connection {
+public:
+    explicit ScriptedConnection(std::string data, std::size_t piece = 7)
+        : data_{std::move(data)}, piece_{piece} {}
+
+    [[nodiscard]] bool send_data(const std::string& /*data*/) override {
+        return true;
+    }
+
+    [[nodiscard]] int recv_data(char* buf, std::size_t len) override {
+        const auto n = std::min({len, piece_, data_.size() - pos_});
+
+        std::memcpy(buf, data_.data() + pos_, n);
+        pos_ += n;
+
+        return static_cast<int>(n);
+    }
+
+private:
+    std::string data_;
+    std::size_t piece_;
+    std::size_t pos_{0};
+};
+
+[[nodiscard]] luma::HttpReadResult read_scripted(std::string data,
+                                                 std::string_view request_method = "GET") {
+    ScriptedConnection conn{std::move(data)};
+
+    return luma::read_http_response(conn, request_method);
+}
+
+} // namespace
 
 static void test_http_build_query() {
     const auto v = eval(R"(Http.build_query({"key": "val"}))");
@@ -587,6 +631,175 @@ static void test_http_parse_response_malformed_status_code() {
     ASSERT_EQ(resp.reason, "");
 }
 
+// ─── Http: response framing (read_http_response over a scripted connection) ───
+
+static void test_http_read_chunked_body_decodes_across_reads() {
+    const auto r = read_scripted("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+                                 "5\r\nhello\r\n6;ext=1\r\n world\r\n0\r\n\r\n");
+
+    ASSERT_TRUE(r.ok());
+    ASSERT_EQ(parse_response(r.raw).body, "hello world");
+}
+
+static void test_http_read_chunked_size_overflow_fails_fast() {
+    // Regression: a 64-bit chunk size of 2^64-20 wrapped the scan position back
+    // onto itself, spinning forever at 100% CPU with no recv to time out.
+    const auto wraps = read_scripted(
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nFFFFFFFFFFFFFFEC\r\nabc");
+
+    ASSERT_FALSE(wraps.ok());
+
+    // A size that does not even fit in 64 bits is malformed, not wrapped.
+    const auto too_wide = read_scripted(
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1FFFFFFFFFFFFFFFFF\r\nabc");
+
+    ASSERT_FALSE(too_wide.ok());
+}
+
+static void test_http_read_truncated_bodies_fail() {
+    // Regression: a short Content-Length body or an unterminated chunked body
+    // used to be returned as a successful, silently truncated response.
+    const auto short_body = read_scripted("HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nshort");
+
+    ASSERT_FALSE(short_body.ok());
+
+    const auto open_chunked =
+        read_scripted("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n");
+
+    ASSERT_FALSE(open_chunked.ok());
+
+    const auto bad_terminator =
+        read_scripted("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhelloXX0\r\n\r\n");
+
+    ASSERT_FALSE(bad_terminator.ok());
+}
+
+static void test_http_read_chunked_takes_precedence_over_content_length() {
+    // RFC 9112 §6.3: Transfer-Encoding overrides Content-Length.
+    const auto r = read_scripted("HTTP/1.1 200 OK\r\nContent-Length: 3\r\n"
+                                 "Transfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n");
+
+    ASSERT_TRUE(r.ok());
+    ASSERT_EQ(parse_response(r.raw).body, "hello");
+}
+
+static void test_http_read_content_length_ignores_excess_bytes() {
+    const auto r = read_scripted("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhelloEXTRA");
+
+    ASSERT_TRUE(r.ok());
+    ASSERT_EQ(parse_response(r.raw).body, "hello");
+}
+
+static void test_http_read_oversized_response_fails() {
+    const LimitGuard guard{ResourceLimits::max_http_response_size, static_cast<std::size_t>(64)};
+
+    const auto declared =
+        read_scripted("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n" + std::string(1000, 'x'));
+
+    ASSERT_FALSE(declared.ok());
+
+    const auto until_close = read_scripted("HTTP/1.1 200 OK\r\n\r\n" + std::string(1000, 'x'));
+
+    ASSERT_FALSE(until_close.ok());
+}
+
+// Regression (RFC 9112 §6.3 rule 1): the reader expected a body per
+// Content-Length / chunked framing on every response, so every Http.head — and
+// every 204 / 304 — failed as "connection closed after 0 of N body bytes".
+static void test_http_read_head_response_has_no_body() {
+    const auto r = read_scripted("HTTP/1.1 200 OK\r\nContent-Length: 1234\r\n\r\n", "HEAD");
+
+    ASSERT_TRUE(r.ok());
+
+    const auto resp = parse_response(r.raw);
+
+    ASSERT_EQ(resp.status_code, 200);
+    ASSERT_EQ(resp.body, "");
+}
+
+static void test_http_read_head_response_ignores_chunked_header() {
+    const auto r = read_scripted("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n", "HEAD");
+
+    ASSERT_TRUE(r.ok());
+    ASSERT_EQ(parse_response(r.raw).body, "");
+}
+
+static void test_http_read_not_modified_has_no_body() {
+    const auto r =
+        read_scripted("HTTP/1.1 304 Not Modified\r\nContent-Length: 1234\r\n\r\n", "GET");
+
+    ASSERT_TRUE(r.ok());
+
+    const auto resp = parse_response(r.raw);
+
+    ASSERT_EQ(resp.status_code, 304);
+    ASSERT_EQ(resp.body, "");
+}
+
+static void test_http_read_no_content_ignores_chunked_header() {
+    const auto r =
+        read_scripted("HTTP/1.1 204 No Content\r\nTransfer-Encoding: chunked\r\n\r\n", "DELETE");
+
+    ASSERT_TRUE(r.ok());
+
+    const auto resp = parse_response(r.raw);
+
+    ASSERT_EQ(resp.status_code, 204);
+    ASSERT_EQ(resp.body, "");
+}
+
+static void test_http_read_skips_interim_responses() {
+    // 100 Continue / 103 Early Hints precede the final response and carry no
+    // body; the final response is the one returned.
+    const auto r = read_scripted("HTTP/1.1 100 Continue\r\n\r\n"
+                                 "HTTP/1.1 103 Early Hints\r\nLink: </a.css>\r\n\r\n"
+                                 "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello");
+
+    ASSERT_TRUE(r.ok());
+
+    const auto resp = parse_response(r.raw);
+
+    ASSERT_EQ(resp.status_code, 200);
+    ASSERT_EQ(resp.body, "hello");
+}
+
+static void test_http_read_endless_interim_responses_fail() {
+    std::string stream{};
+
+    for (int i = 0; i < 100; ++i) {
+        stream += "HTTP/1.1 103 Early Hints\r\n\r\n";
+    }
+
+    ASSERT_FALSE(read_scripted(stream).ok());
+}
+
+static void test_http_read_get_with_content_length_still_reads_body() {
+    const auto r = read_scripted("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", "GET");
+
+    ASSERT_TRUE(r.ok());
+    ASSERT_EQ(parse_response(r.raw).body, "hello");
+}
+
+static void test_http_chunked_decoder_resumes_incrementally() {
+    // The decoder keeps its position between feeds instead of re-parsing every
+    // chunk from the start after each recv (which was O(n^2)).
+    const std::string raw = "1\r\na\r\n2\r\nbc\r\n0\r\n\r\n";
+    ChunkedBodyDecoder decoder{0, 1024};
+
+    for (std::size_t len = 0; len < raw.size(); ++len) {
+        const auto status = decoder.feed(std::string_view{raw}.substr(0, len));
+
+        if (status == ChunkedBodyDecoder::Status::Complete) {
+            break;
+        }
+
+        ASSERT_TRUE(status == ChunkedBodyDecoder::Status::NeedMore);
+    }
+
+    ASSERT_TRUE(decoder.feed(raw) == ChunkedBodyDecoder::Status::Complete);
+    ASSERT_EQ(decoder.body(), "abc");
+}
+
 // ─── Http: Http.Request record + Http.send (typed request) ────────────────────
 
 static void test_http_request_of_builds_typed_record() {
@@ -658,11 +871,22 @@ static void test_http_request_with_builds_full_record() {
 }
 
 static void test_http_request_with_clamps_negative_timeout() {
-    // A negative timeout is clamped to 0.
+    // A non-positive timeout is clamped to 1 ms: 0 used to make every request
+    // fail immediately with a timeout.
     const auto v = eval(R"(Http.request_with(Http.Method.Get, "http://x", {}, "", -1).timeout_ms)");
 
     ASSERT_TRUE(v.is_integer());
-    ASSERT_EQ(v.as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_EQ(v.as_integer(), static_cast<std::int64_t>(1));
+}
+
+static void test_http_request_with_clamps_oversized_timeout() {
+    // Regression: a timeout above INT_MAX wrapped to a negative int when
+    // narrowed for select()/setsockopt; it is now clamped to INT_MAX.
+    const auto v = eval(
+        R"(Http.request_with(Http.Method.Get, "http://x", {}, "", 9223372036854775807).timeout_ms)");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_EQ(v.as_integer(), static_cast<std::int64_t>(2147483647));
 }
 
 static void test_http_request_of_rejects_non_choice_method() {
@@ -878,6 +1102,21 @@ int main() {
     RUN(test_http_request_of_builds_typed_record);
     RUN(test_http_request_with_builds_full_record);
     RUN(test_http_request_with_clamps_negative_timeout);
+    RUN(test_http_read_chunked_body_decodes_across_reads);
+    RUN(test_http_read_chunked_size_overflow_fails_fast);
+    RUN(test_http_read_truncated_bodies_fail);
+    RUN(test_http_read_chunked_takes_precedence_over_content_length);
+    RUN(test_http_read_content_length_ignores_excess_bytes);
+    RUN(test_http_read_oversized_response_fails);
+    RUN(test_http_chunked_decoder_resumes_incrementally);
+    RUN(test_http_read_head_response_has_no_body);
+    RUN(test_http_read_head_response_ignores_chunked_header);
+    RUN(test_http_read_not_modified_has_no_body);
+    RUN(test_http_read_no_content_ignores_chunked_header);
+    RUN(test_http_read_skips_interim_responses);
+    RUN(test_http_read_endless_interim_responses_fail);
+    RUN(test_http_read_get_with_content_length_still_reads_body);
+    RUN(test_http_request_with_clamps_oversized_timeout);
     RUN(test_http_request_of_rejects_non_choice_method);
     RUN(test_http_send_rejects_non_request);
     RUN(test_http_send_reaches_request_pipeline);

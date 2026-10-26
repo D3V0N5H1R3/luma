@@ -735,7 +735,69 @@ static void test_regex_count() {
     ASSERT_RESULT_FAILURE(eval("RegularExpression.count(\"aaaa\", \"(a+)+\")"));
 }
 
+static void test_regex_redos_guard_bypasses_closed() {
+    // Regression: the guard ran on the raw pattern, so a named group hid the
+    // ambiguous alternation the engine actually compiles ((?<n>a|aa)+ →
+    // (a|aa)+); \x escapes were recorded as the literal 'x'; and under icase
+    // (a|A)+ looked disjoint.
+    ASSERT_RESULT_FAILURE(eval(R"(RegularExpression.matches("aaaa", "(?<n>a|aa)+"))"));
+    ASSERT_RESULT_FAILURE(eval(R"(RegularExpression.matches("aaaa", "(?P<n>a|aa)+"))"));
+    ASSERT_RESULT_FAILURE(eval(R"(RegularExpression.matches("aaaa", "(\\x61|a)+"))"));
+    ASSERT_FALSE(eval(R"(RegularExpression.is_valid("(?<n>a|aa)+"))").as_bool());
+    ASSERT_RESULT_FAILURE(eval(R"(RegularExpression.matches_with("aAaA", "(a|A)+", )"
+                               R"([RegularExpression.Flags.CaseInsensitive]))"));
+    // Case-sensitively, (a|A)+ is disjoint and still accepted.
+    ASSERT_RESULT_SUCCESS(eval(R"(RegularExpression.matches_with("aAaA", "(a|A)+", []))"));
+    // Disjoint named groups are still accepted.
+    ASSERT_RESULT_SUCCESS(eval(R"(RegularExpression.matches("ab", "(?<n>a|b)+"))"));
+
+    // Direct heuristic coverage.
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(?<n>a|aa)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(?P<n>a|aa)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(\\x61|a)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(\\u0061|a)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(\\cJ|\\n)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(\\n|\n)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(a|A)+", /*case_insensitive=*/true));
+    ASSERT_FALSE(has_dangerous_quantifier_nesting("(a|A)+", /*case_insensitive=*/false));
+    ASSERT_FALSE(has_dangerous_quantifier_nesting("(?<=a)b+"));
+}
+
+static void test_regex_replace_caps_output_size() {
+    // Regression: replace/replace_all (and *_with) used std::regex_replace with
+    // no output limit; an empty-matching pattern matches at every position, so
+    // the output could be input_length × replacement_length.
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(64)};
+
+    ASSERT_THROWS(eval(R"(RegularExpression.replace_all("aaaaaaaaaa", "x*", "0123456789"))"));
+    ASSERT_THROWS(
+        eval(R"(RegularExpression.replace_all_with("aaaaaaaaaa", "x*", "0123456789", []))"));
+    // $& expansion is bounded too.
+    ASSERT_THROWS(eval(R"(RegularExpression.replace("0123456789", ".+", "$&$&$&$&$&$&$&"))"));
+    ASSERT_THROWS(
+        eval(R"(RegularExpression.replace_with("0123456789", ".+", "$&$&$&$&$&$&$&", []))"));
+}
+
+static void test_regex_replace_matches_std_semantics() {
+    // The bounded rewrite must keep std::regex_replace semantics, including
+    // empty matches, format_first_only, and $-substitutions.
+    const auto unwrap = [](const std::string& code) {
+        return eval(code).as_result()->owned_inner->as_string();
+    };
+
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace_all("abc", "x*", "-"))"), "-a-b-c-");
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace("abc", "x*", "-"))"), "-abc");
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace_all("a1b22c", "[0-9]+", "<$&>"))"), "a<1>b<22>c");
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace("a1b22c", "[0-9]+", "#"))"), "a#b22c");
+    ASSERT_EQ(unwrap(R"lm(RegularExpression.replace_all("2024-01", "(\\d+)-(\\d+)", "$2/$1"))lm"),
+              "01/2024");
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace_all("none", "[0-9]", "#"))"), "none");
+}
+
 int main() {
+    RUN(test_regex_redos_guard_bypasses_closed);
+    RUN(test_regex_replace_caps_output_size);
+    RUN(test_regex_replace_matches_std_semantics);
     RUN(test_regex_find);
     RUN(test_regex_find_all);
     RUN(test_regex_find_all_capture_groups);

@@ -70,8 +70,15 @@ namespace {
                                                   std::size_t code_size) {
     return {.offset = offset,
             .message = std::format("jump at offset {} targets offset {} "
-                                   "which is beyond code size {}",
+                                   "which is at or beyond code size {}",
                                    offset, target, code_size)};
+}
+
+[[nodiscard]] VerifyError falls_off_end_error(std::size_t offset, std::size_t code_size) {
+    return {.offset = offset,
+            .message = std::format("control flow from offset {} falls off the end of the code "
+                                   "(size {}) without a Return",
+                                   offset, code_size)};
 }
 
 [[nodiscard]] VerifyError loop_underflow(std::size_t offset, std::size_t loop_offset) {
@@ -231,7 +238,10 @@ static void collect_jumps(Op op, std::size_t offset, const std::vector<std::uint
         const auto jump_offset = static_cast<std::size_t>(read_u32_be(&code[offset + 1]));
         const auto target = Chunk::resolve_forward_jump_target(offset, jump_offset);
 
-        if (target > code.size()) {
+        // A target equal to code.size() is not an instruction: the VM would
+        // fall past the last instruction, so it is as invalid as a target
+        // beyond the end.
+        if (target >= code.size()) {
             errors.push_back(jump_target_beyond_code(offset, target, code.size()));
         } else {
             jumps.push_back({.offset = offset, .target = target, .is_loop = false});
@@ -523,6 +533,18 @@ void check_stack_depths(const CompiledFunction& func, const std::vector<std::siz
         }
 
         const auto next = offset + instruction_size(code, offset);
+
+        // Every opcode other than an unconditional transfer continues at
+        // `next` on at least one path.  Past the last instruction there is no
+        // code to run, so the VM would read beyond the chunk.
+        const bool always_transfers = op == Op::Return || op == Op::GetLocalReturn ||
+                                      op == Op::Rethrow || op == Op::EndModule || op == Op::Jump ||
+                                      op == Op::Loop;
+
+        if (!always_transfers && next >= code.size()) {
+            errors.push_back(falls_off_end_error(offset, code.size()));
+            return;
+        }
 
         switch (op) {
             case Op::Return:

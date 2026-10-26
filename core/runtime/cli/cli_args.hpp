@@ -89,7 +89,7 @@ inline const std::array k_flag_descriptors = std::to_array<FlagDescriptor>({
      .apply = [](ParsedArgs& a) { a.command = Command::Check; }},
     {.long_form = "--strict",
      .short_form = "-s",
-     .description = "Treat warnings as errors (use with --check)",
+     .description = "Treat warnings as errors",
      .apply = [](ParsedArgs& a) { a.strict = true; }},
     {.long_form = "--box",
      .short_form = "-b",
@@ -117,7 +117,22 @@ inline const std::array k_flag_descriptors = std::to_array<FlagDescriptor>({
 
 // Parse command-line arguments into a ParsedArgs struct.
 // Returns a ParsedArgs on success, or prints an error and returns std::nullopt.
+//
+// Luma's own flags are recognised anywhere — before or after the .luma file.
+// After the file, any other argument is forwarded to the program
+// (Process.get_arguments()); a literal `--` forwards everything after it
+// verbatim, including arguments that look like Luma flags.  Before the file,
+// an unknown `-x` option or a bad optimisation level is a usage error (an
+// unknown option with a "did you mean" suggestion).  After the file only a
+// valid level (-O0/-O1/-O2, or -O/--optimize followed by 0, 1, or 2) is Luma's;
+// any other `-O...` argument, such as `-O3` or `-Output`, is the program's.
 [[nodiscard]] std::optional<ParsedArgs> parse_args(int argc, char* argv[]);
+
+// Validate the source-file argument of a parsed command line before dispatch:
+// --test and --check require a file, and a file to run, test, or check must
+// have the .luma extension and exist as a regular file.  Returns the error
+// message for a usage error (exit code 5), or std::nullopt when valid.
+[[nodiscard]] std::optional<std::string> validate_file_argument(const ParsedArgs& args);
 
 } // namespace luma
 

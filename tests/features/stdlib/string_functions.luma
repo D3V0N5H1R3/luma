@@ -210,6 +210,15 @@ function void test_string_dedent() {
 }
 
 @test
+function void test_string_dedent_keeps_trailing_newline_and_strips_tabs() {
+    # Line terminators are preserved, including a trailing newline.
+    assert(String.dedent("  a\n  b\n") == "a\nb\n")
+
+    # Tabs count as indentation too.
+    assert(String.dedent("\ta\n\t\tb") == "a\n\tb")
+}
+
+@test
 function void test_string_matches() {
     assert(Result.unwrap(String.matches("file.luma", "*.luma")))
     assert(!Result.unwrap(String.matches("file.txt", "*.luma")))
@@ -247,16 +256,36 @@ function void test_string_template_repeated_occurrences() {
 }
 
 @test
-function void test_string_template_sequential_keys() {
-    # Keys are applied in insertion order, so an earlier key's replacement can
-    # introduce a later key's placeholder, which the later pass then resolves.
+function void test_string_template_long_run_of_open_braces() {
+    # A long run of '{' before a single '}' used to take quadratic time; only
+    # the innermost "{a}" is a placeholder, every other '{' is kept as written.
+    dictionary<string> variables = {
+        "a": "1", "b": "2", "c": "3", "d": "4", "e": "5",
+        "f": "6", "g": "7", "h": "8", "i": "9"
+    }
+    string braces = Result.unwrap(String.repeat("{", 100000))
+    string output = String.template(braces + "a}", variables)
+
+    assert(String.length(output) == 100000)
+    assert(String.ends_with(output, "{1"))
+}
+
+@test
+function void test_string_template_substituted_values_are_not_expanded() {
+    # Substitution is a single pass over the template: a value that contains
+    # another key's placeholder is inserted literally, never re-expanded, so
+    # the result does not depend on dictionary insertion order.
     dictionary<string> variables = {
         "first": "<{second}>",
         "second": "done"
     }
     string output = String.template("[{first}]", variables)
 
-    assert(output == "[<done>]")
+    assert(output == "[<{second}>]")
+
+    dictionary<string> secrets = {"a": "{b}", "b": "SECRET"}
+
+    assert(String.template("{a}", secrets) == "{b}")
 }
 
 @test
@@ -712,6 +741,14 @@ function void test_string_pad_left_width_exceeds_max() {
 @test
 function void test_string_pad_right_width_exceeds_max() {
     assert(Result.is_failure(String.pad_right("x", 20000000, " ")))
+}
+
+@test
+function void test_string_pad_negative_width_fails() {
+    # A negative width is reported as such (like String.center), not as
+    # "width exceeds maximum".
+    assert(String.pad_left("x", -1, " ") == failure("String.pad_left: width must not be negative"))
+    assert(String.pad_right("x", -1, " ") == failure("String.pad_right: width must not be negative"))
 }
 
 @test

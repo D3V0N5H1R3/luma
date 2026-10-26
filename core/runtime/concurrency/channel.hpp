@@ -9,6 +9,7 @@
 #include <mutex>
 #include <optional>
 
+#include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/channel_buffer.hpp"
 #include "runtime/interpreter/value.hpp"
 
@@ -30,12 +31,15 @@ public:
     Channel& operator=(Channel&&) = delete;
 
     // Send a value into the channel.  Blocks if buffered and full.
-    // Throws ChannelClosedError if the channel is closed.
-    void send(Value value);
+    // Throws ChannelClosedError if the channel is closed.  When `cancel` is
+    // non-null the wait is cooperative: it throws CancelledException once the
+    // token is cancelled instead of blocking forever.
+    void send(Value value, const CancellationToken* cancel = nullptr);
 
     // Receive a value.  Blocks until a value is available.
-    // Throws ChannelClosedError if the channel is closed and drained.
-    [[nodiscard]] Value receive();
+    // Throws ChannelClosedError if the channel is closed and drained, or
+    // CancelledException if `cancel` is non-null and becomes cancelled.
+    [[nodiscard]] Value receive(const CancellationToken* cancel = nullptr);
 
     // Receive with timeout.  Blocks for at most timeout_ms milliseconds.
     // Returns the value on success, std::nullopt on timeout.
@@ -116,6 +120,16 @@ private:
     // only).  Call after releasing mutex_, mirroring the send path, so a woken
     // sender does not immediately block on the lock the consumer still holds.
     void notify_senders_if_needed();
+
+    // How often a cancellable blocking wait re-checks its token.
+    static constexpr std::chrono::milliseconds k_cancel_poll_interval{10};
+
+    // Block on `cv` until `predicate` holds.  With a non-null `cancel` the wait
+    // polls the token and throws CancelledException once it is cancelled.
+    // Precondition: `lock` holds mutex_.
+    template <typename Predicate>
+    static void wait_cancellable(std::unique_lock<std::mutex>& lock, std::condition_variable& cv,
+                                 const CancellationToken* cancel, Predicate predicate);
 };
 
 } // namespace luma

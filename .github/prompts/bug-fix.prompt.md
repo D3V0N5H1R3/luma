@@ -19,7 +19,7 @@ Diagnose and fix a bug in the Luma interpreter. Follow a structured approach:
     - Include Resolver (`core/runtime/include/`) — wrong file resolution or missing deduplication?
     - Type Checker (`core/analysis/types/`) — wrong type error or missed validation?
     - Linter (`core/analysis/linter/`) — false positive/negative warning?
-    - Compiler (`core/runtime/compiler/`) — incorrect bytecode generation, or wrong variable/slot resolution? (Live variable→slot resolution is done here by `VariableResolver`; the standalone `core/analysis/resolver/` `NameResolver` is not wired into the run path.)
+    - Compiler (`core/runtime/compiler/`) — incorrect bytecode generation, or wrong variable/slot resolution? (Variable→slot resolution is done here by `VariableResolver`.)
     - Optimizer (`core/runtime/compiler/optimizer.*`) — unsound transformation or value-block stack-slot corruption?
     - VM (`core/runtime/vm/`) — incorrect execution, stack corruption, or wrong dispatch?
     - Standard Library (`core/runtime/stdlib/`, a runtime concern — not a pipeline phase) — wrong built-in function behaviour?

@@ -158,6 +158,8 @@ using detail::ParamShorthands;
          .cap = Capability::None,
          .register_fn = detail::register_log_functions},
         {.module_name = "Terminal",
+         // Sandbox-aware: the console-input members stay None but are withheld
+         // at registration under --box (see register_terminal_functions).
          .cap = Capability::None,
          .register_fn = detail::register_terminal_functions},
         {.module_name = "Result",

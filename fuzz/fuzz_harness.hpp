@@ -68,13 +68,12 @@ template <typename T> inline void do_not_optimize(const T& value) {
 //     exceeded resource limits, …).  Expected for malformed input.
 //   * std::bad_alloc — pathological-but-reachable input can request very
 //     large allocations.  Running out of memory is not a logic bug.
-//   * other std::exception — tolerated, because a few front-end stages throw
-//     on pathological input that is nonetheless reachable: NameResolver raises
-//     std::runtime_error when a scope exceeds the local-variable slot limit,
-//     and the include path's SourceManager raises std::runtime_error on a
-//     file-load failure.  (The lexer and type checker guard their own
-//     std::stoll / std::stoi conversions, so those never escape.)  Trapping
-//     on the generic type would therefore produce false positives.
+//   * other std::exception — tolerated, because a few stages throw on
+//     pathological input that is nonetheless reachable: the include path's
+//     SourceManager raises std::runtime_error on a file-load failure.  (The
+//     lexer and type checker guard their own std::stoll / std::stoi
+//     conversions, so those never escape.)  Trapping on the generic type
+//     would therefore produce false positives.
 //   * anything else — a foreign, non-standard exception escaped, which
 //     indicates memory corruption or a genuine bug; trap so the fuzzer
 //     reports it.

@@ -190,9 +190,12 @@ static void test_sandbox_environment_enforces_access() {
     ASSERT_THROWS_WITH_MESSAGE(env->get("Hash.sha256_file", loc), "sandbox mode");
     ASSERT_THROWS_WITH_MESSAGE(env->get("Compression.gzip_file", loc), "sandbox mode");
     ASSERT_THROWS_WITH_MESSAGE(env->get("Log.set_output", loc), "sandbox mode");
+    ASSERT_THROWS_WITH_MESSAGE(env->get("Terminal.read_key", loc), "sandbox mode");
+    ASSERT_THROWS_WITH_MESSAGE(env->get("Terminal.enable_raw_mode", loc), "sandbox mode");
     (void)env->get("Hash.sha256", loc);
     (void)env->get("Compression.deflate", loc);
     (void)env->get("Log.information", loc);
+    (void)env->get("Terminal.bold", loc);
 }
 
 // The same blocked modules resolve normally when sandbox mode is off, proving

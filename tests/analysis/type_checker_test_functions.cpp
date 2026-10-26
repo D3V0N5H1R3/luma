@@ -816,6 +816,269 @@ static void test_pipe_stdlib_typed_arg_mismatch_reports_first_argument() {
     }));
 }
 
+// ─── Regression: types declared after a function resolve in its signature ───
+
+static void test_forward_referenced_record_in_signature_is_checked() {
+    ASSERT_TRUE(fails_with("function Point make() {\n"
+                           "    return Point { x = 1, y = 2 }\n"
+                           "}\n"
+                           "record Point {\n"
+                           "    integer x,\n"
+                           "    integer y\n"
+                           "}\n"
+                           "integer n = make()\n",
+                           DiagnosticCode::TypeMismatch));
+}
+
+static void test_forward_referenced_record_in_signature_valid() {
+    ASSERT_TRUE(passes("function Point make() {\n"
+                       "    return Point { x = 1, y = 2 }\n"
+                       "}\n"
+                       "record Point {\n"
+                       "    integer x,\n"
+                       "    integer y\n"
+                       "}\n"
+                       "Point p = make()\n"));
+}
+
+// ─── Regression: misspelled type names are reported everywhere ───
+
+static void test_misspelled_parameter_type_fails() {
+    ASSERT_TRUE(
+        fails_with_message("function integer f(Strng s) { return 1 }\n", "unknown type 'Strng'"));
+}
+
+static void test_misspelled_return_type_fails() {
+    ASSERT_TRUE(
+        fails_with_message("function Strng f() { return \"x\" }\n", "unknown type 'Strng'"));
+}
+
+static void test_misspelled_nested_type_argument_fails() {
+    ASSERT_TRUE(fails_with_message("array<Strng> names = []\n", "unknown type 'Strng'"));
+}
+
+static void test_misspelled_record_field_type_fails() {
+    ASSERT_TRUE(fails_with_message("record User { Strng name }\n", "unknown type 'Strng'"));
+}
+
+static void test_misspelled_interface_field_type_fails() {
+    ASSERT_TRUE(fails_with_message("interface Named { Strng name }\n", "unknown type 'Strng'"));
+}
+
+static void test_misspelled_lambda_parameter_type_fails() {
+    ASSERT_TRUE(fails_with_message("function(integer) -> integer f = (Integr x) -> 1\n",
+                                   "unknown type 'Integr'"));
+}
+
+static void test_misspelled_tuple_binding_type_fails() {
+    ASSERT_TRUE(fails_with_message("(Integr a, integer b) = (1, 2)\n", "unknown type 'Integr'"));
+}
+
+static void test_generic_type_parameter_is_not_unknown_type() {
+    ASSERT_TRUE(passes("function<T> T keep(T value) {\n"
+                       "    T copy = value\n"
+                       "    return copy\n"
+                       "}\n"
+                       "record Box<T> { T value }\n"
+                       "type Pair<A> = (A, A)\n"));
+}
+
+static void test_namespace_signature_resolves_sibling_types() {
+    // Inside a namespace a bare name refers to its own members; the parameter
+    // used to resolve to a permissive unknown type and accept anything.
+    ASSERT_TRUE(fails("namespace Geo {\n"
+                      "    record Point { integer x }\n"
+                      "    function integer get_x(Point p) { return p.x }\n"
+                      "}\n"
+                      "integer n = Geo.get_x(5)\n"));
+}
+
+// ─── Regression: void returns and missing returns ───
+
+static void test_return_value_from_void_function_fails() {
+    ASSERT_TRUE(fails_with_message("function void f() {\n"
+                                   "    return 5\n"
+                                   "}\n",
+                                   "cannot return a value"));
+}
+
+static void test_return_void_call_from_void_function_ok() {
+    ASSERT_TRUE(passes("function void log_it() { }\n"
+                       "function void f() {\n"
+                       "    return log_it()\n"
+                       "}\n"));
+}
+
+static void test_empty_body_non_void_function_fails() {
+    ASSERT_TRUE(fails_with_message("function integer g() {\n"
+                                   "}\n",
+                                   "may fall through"));
+}
+
+static void test_block_lambda_without_value_return_is_void() {
+    // A block-bodied lambda that never returns a value yields none at runtime,
+    // so it cannot stand in for a function that returns an integer.
+    ASSERT_TRUE(fails("function(integer) -> integer f = (integer x) -> {\n"
+                      "    print(x)\n"
+                      "}\n"));
+    ASSERT_TRUE(passes("function(integer) -> integer f = (integer x) -> {\n"
+                       "    return x\n"
+                       "}\n"));
+    ASSERT_TRUE(passes("function(integer) -> void g = (integer x) -> {\n"
+                       "    print(x)\n"
+                       "}\n"));
+}
+
+// ─── Regression: named arguments map onto parameters ───
+
+static void test_named_argument_unknown_name_fails() {
+    ASSERT_TRUE(fails_with_message(
+        "function string create_user(string name, integer age, boolean active) {\n"
+        "    return name\n"
+        "}\n"
+        "string s = create_user(nme: \"A\", age: 3, active: true)\n",
+        "no parameter named 'nme'"));
+}
+
+static void test_named_argument_duplicates_positional_fails() {
+    ASSERT_TRUE(fails_with_message(
+        "function string create_user(string name, integer age, boolean active = true) {\n"
+        "    return name\n"
+        "}\n"
+        "string s = create_user(\"A\", name: \"B\", age: 3)\n",
+        "given more than once"));
+}
+
+static void test_named_argument_skipping_required_parameter_fails() {
+    ASSERT_TRUE(fails_with_message("function integer f(integer a, integer b, integer c = 0) {\n"
+                                   "    return a\n"
+                                   "}\n"
+                                   "integer x = f(1, c: 3)\n",
+                                   "missing argument for parameter 'b'"));
+}
+
+static void test_named_arguments_reordered_valid() {
+    ASSERT_TRUE(passes("function integer f(integer a, integer b, integer c = 0) {\n"
+                       "    return a - b\n"
+                       "}\n"
+                       "integer x = f(b: 2, a: 1)\n"
+                       "integer y = f(1, c: 3, b: 2)\n"));
+}
+
+static void test_named_argument_on_namespace_function_checked() {
+    ASSERT_TRUE(fails_with_message("namespace M {\n"
+                                   "    function integer f(integer a) { return a }\n"
+                                   "}\n"
+                                   "integer x = M.f(b: 1)\n",
+                                   "no parameter named 'b'"));
+}
+
+// ─── Regression: assert arity and piped condition ───
+
+static void test_assert_piped_condition_must_be_boolean() {
+    ASSERT_TRUE(fails_with_message("integer r = 5\n"
+                                   "r |> assert()\n",
+                                   "assert condition must be boolean"));
+    ASSERT_TRUE(passes("boolean ok = true\n"
+                       "ok |> assert(\"must hold\")\n"));
+}
+
+static void test_assert_without_arguments_fails() {
+    ASSERT_TRUE(fails_with("assert()\n", DiagnosticCode::WrongArgCount));
+    ASSERT_TRUE(fails_with("assert(true, \"a\", \"b\")\n", DiagnosticCode::WrongArgCount));
+}
+
+// ─── Regression: a local shadowing a top-level function is a function value ───
+
+static void test_parameter_shadowing_function_checked_by_its_type() {
+    // The parameter `f` shadows the two-parameter top-level `f`; calling it
+    // with one argument used to be checked against the top-level declaration.
+    ASSERT_TRUE(passes("function integer f(integer a, integer b) { return a + b }\n"
+                       "function integer g(function(integer) -> integer f) {\n"
+                       "    return f(1)\n"
+                       "}\n"
+                       "integer x = g((integer x) -> x * 2)\n"
+                       "integer y = f(1, 2)\n"));
+}
+
+static void test_parameter_shadowing_function_arity_uses_parameter_type() {
+    ASSERT_TRUE(fails_with("function integer f(integer a) { return a }\n"
+                           "function integer g(function(integer, integer) -> integer f) {\n"
+                           "    return f(1)\n"
+                           "}\n",
+                           DiagnosticCode::WrongArgCount));
+}
+
+static void test_local_shadowing_function_ownership_uses_local_type() {
+    // The top-level `f` takes a unique parameter, so passing a borrow to it is
+    // an error; the shadowing local function value takes a plain string.
+    ASSERT_TRUE(passes("function integer f(unique string s) { return 1 }\n"
+                       "function integer g(borrow string b) {\n"
+                       "    function(string) -> integer f = (string x) -> String.length(x)\n"
+                       "    return f(b)\n"
+                       "}\n"));
+}
+
+// ─── Regression: the piped value is checked against parameter 0 ───
+
+static void test_pipe_result_into_stdlib_array_parameter_fails() {
+    // Array.sort returns result<array<T>>, which Array.reverse cannot take.
+    ASSERT_TRUE(fails_with_message("array<integer> nums = [3, 1, 4]\n"
+                                   "array<integer> out = nums |> Array.sort((integer a, integer b) "
+                                   "-> a - b) |> Array.reverse()\n",
+                                   "argument 1 type mismatch"));
+}
+
+static void test_pipe_result_mismatch_hints_how_to_unwrap() {
+    const auto diagnostics = check("array<integer> nums = [3, 1, 4]\n"
+                                   "array<integer> out = nums |> Array.sort((integer a, integer b) "
+                                   "-> a - b) |> Array.reverse()\n");
+    ASSERT_TRUE(std::ranges::any_of(diagnostics, [](const Diagnostic& d) {
+        const auto hint = d.hint.value_or("");
+        return hint.find("'?'") != std::string::npos && hint.find("'!>'") != std::string::npos &&
+               hint.find("Result.unwrap_or") != std::string::npos;
+    }));
+}
+
+static void test_pipe_unwrapped_result_into_stdlib_passes() {
+    ASSERT_TRUE(passes("function result<array<integer>> sorted_desc(array<integer> nums) {\n"
+                       "    array<integer> out = Array.sort(nums, (integer a, integer b) -> a - "
+                       "b)? |> Array.reverse()\n"
+                       "    return success(out)\n"
+                       "}\n"));
+    ASSERT_TRUE(passes("array<integer> nums = [3, 1, 4]\n"
+                       "result<array<integer>> r = nums |> Array.sort((integer a, integer b) -> "
+                       "a - b) !> Array.reverse()\n"));
+    ASSERT_TRUE(passes("array<integer> nums = [3, 1, 4]\n"
+                       "array<integer> out = nums |> Array.sort((integer a, integer b) -> a - b) "
+                       "|> Result.unwrap_or(nums) |> Array.reverse()\n"));
+}
+
+static void test_pipe_optional_into_stdlib_and_wrapper_functions() {
+    ASSERT_TRUE(fails_with_message("array<string> names = [\"a\"]\n"
+                                   "string s = names |> Array.first() |> String.uppercase()\n",
+                                   "argument 1 type mismatch"));
+    ASSERT_TRUE(passes("array<string> names = [\"a\"]\n"
+                       "string s = names |> Array.first() |> Optional.unwrap_or(\"\") |> "
+                       "String.uppercase()\n"));
+}
+
+static void test_pipe_optional_into_user_function_fails() {
+    ASSERT_TRUE(fails_with_message("function integer twice(integer x) { return x * 2 }\n"
+                                   "optional<integer> maybe = Array.first([4])\n"
+                                   "integer y = maybe |> twice()\n",
+                                   "argument 1 type mismatch"));
+}
+
+static void test_pipe_into_function_value_checks_first_parameter() {
+    ASSERT_TRUE(fails_with_message("function(integer) -> integer twice = (integer x) -> x * 2\n"
+                                   "result<integer> r = success(4)\n"
+                                   "integer y = r |> twice()\n",
+                                   "argument 1 type mismatch"));
+    ASSERT_TRUE(passes("function(integer) -> integer twice = (integer x) -> x * 2\n"
+                       "integer y = 4 |> twice()\n"));
+}
+
 int main() {
     // ─── Call-site argument checking ───
 
@@ -957,5 +1220,39 @@ int main() {
     RUN(test_pipe_user_function_typed_extra_args);
     RUN(test_pipe_user_function_typed_extra_arg_mismatch);
     RUN(test_pipe_stdlib_typed_arg_mismatch_reports_first_argument);
+
+    // ─── Regression: signatures, unknown types, returns, named arguments, assert ───
+
+    RUN(test_forward_referenced_record_in_signature_is_checked);
+    RUN(test_forward_referenced_record_in_signature_valid);
+    RUN(test_misspelled_parameter_type_fails);
+    RUN(test_misspelled_return_type_fails);
+    RUN(test_misspelled_nested_type_argument_fails);
+    RUN(test_misspelled_record_field_type_fails);
+    RUN(test_misspelled_interface_field_type_fails);
+    RUN(test_misspelled_lambda_parameter_type_fails);
+    RUN(test_misspelled_tuple_binding_type_fails);
+    RUN(test_generic_type_parameter_is_not_unknown_type);
+    RUN(test_namespace_signature_resolves_sibling_types);
+    RUN(test_return_value_from_void_function_fails);
+    RUN(test_return_void_call_from_void_function_ok);
+    RUN(test_empty_body_non_void_function_fails);
+    RUN(test_block_lambda_without_value_return_is_void);
+    RUN(test_named_argument_unknown_name_fails);
+    RUN(test_named_argument_duplicates_positional_fails);
+    RUN(test_named_argument_skipping_required_parameter_fails);
+    RUN(test_named_arguments_reordered_valid);
+    RUN(test_named_argument_on_namespace_function_checked);
+    RUN(test_assert_piped_condition_must_be_boolean);
+    RUN(test_assert_without_arguments_fails);
+    RUN(test_parameter_shadowing_function_checked_by_its_type);
+    RUN(test_parameter_shadowing_function_arity_uses_parameter_type);
+    RUN(test_local_shadowing_function_ownership_uses_local_type);
+    RUN(test_pipe_result_into_stdlib_array_parameter_fails);
+    RUN(test_pipe_result_mismatch_hints_how_to_unwrap);
+    RUN(test_pipe_unwrapped_result_into_stdlib_passes);
+    RUN(test_pipe_optional_into_stdlib_and_wrapper_functions);
+    RUN(test_pipe_optional_into_user_function_fails);
+    RUN(test_pipe_into_function_value_checks_first_parameter);
     return SUMMARY();
 }

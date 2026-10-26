@@ -60,9 +60,9 @@ Type any Luma expression at the prompt. If the expression produces a value, the 
 luma> 2 + 3
 => 5
 luma> "hello" + " " + "world"
-=> "hello world"
-luma> Math.square_root(144.0)
-=> 12
+=> hello world
+luma> Math.square_root(144.0) ?? 0.0
+=> 12.0
 luma> true && !false
 => true
 ```
@@ -83,7 +83,7 @@ Variables and functions defined in one line persist for the entire session:
 ```text
 luma> number x = 10
 luma> x * x
-=> 100
+=> 100.0
 luma> number pi = 3.14159
 luma> pi * x * x
 => 314.159
@@ -110,9 +110,9 @@ Records can be defined and instantiated:
 
 ```text
 luma> record Point { number x, number y }
-luma> Point p = Point { x: 3.0, y: 4.0 }
+luma> Point p = Point { x = 3.0, y = 4.0 }
 luma> p.x
-=> 3
+=> 3.0
 ```
 
 ---
@@ -142,33 +142,33 @@ The pipe operator `|>` works in the REPL just as it does in source files. It pas
 
 ```text
 luma> "Hello, World!" |> String.lowercase()
-=> "hello, world!"
+=> hello, world!
 luma> "  padded  " |> String.trim() |> String.uppercase()
-=> "PADDED"
+=> PADDED
 luma> array<integer> nums = [3, 1, 4, 1, 5]
-luma> nums |> Array.sort() |> Array.reverse()
+luma> Array.sort(nums, (integer a, integer b) -> a - b) ?? [] |> Array.reverse()
 => [5, 4, 3, 1, 1]
 ```
 
-Pipes are especially useful for chaining standard library calls interactively.
+Pipes are especially useful for chaining standard library calls interactively. A function that returns a `result` (such as `Array.sort`) needs a fallback before its value can be piped on; `??` binds more tightly than `|>`, so `Array.sort(...) ?? []` is piped as a whole.
 
 ---
 
 ## 6 — Using Standard Library Modules
 
-All standard library modules are available in the REPL. Call module functions directly:
+All standard library modules are available in the REPL. Call module functions directly; a function that returns a `result` needs a fallback with `??` (or `match`), because the REPL, like a program, rejects a discarded `result`:
 
 ```text
-luma> Math.absolute(-42.0)
-=> 42
+luma> Math.absolute(-42.0) ?? 0.0
+=> 42.0
 luma> String.split("a,b,c", ",")
 => ["a", "b", "c"]
 luma> Array.length([10, 20, 30])
 => 3
-luma> Random.generate_integer(1, 100)
+luma> Random.generate_integer(1, 100) ?? 0
 => 47
-luma> DateTime.now_iso_string()
-=> "2025-01-15T10:30:00Z"
+luma> DateTime.now_iso_string() ?? ""
+=> 2025-01-15T10:30:00Z
 ```
 
 Collections can be built and manipulated across multiple lines:
@@ -176,7 +176,7 @@ Collections can be built and manipulated across multiple lines:
 ```text
 luma> mutable array<string> names = ["Alice", "Bob"]
 luma> names = Array.append(names, "Charlie")
-luma> names |> Array.map(function(string s) -> string { return String.uppercase(s) })
+luma> Array.map(names, (string s) -> String.uppercase(s)) ?? []
 => ["ALICE", "BOB", "CHARLIE"]
 ```
 
@@ -186,7 +186,7 @@ luma> names |> Array.map(function(string s) -> string { return String.uppercase(
 
 ## 7 — REPL Commands
 
-Commands start with `:` and are not Luma code. The following commands are available:
+Commands start with `:` and are not Luma code — a line that starts with `:` is never passed to the parser. The following commands are available:
 
 | Command        | Short Form | Description                                            |
 | -------------- | ---------- | ------------------------------------------------------ |
@@ -194,6 +194,17 @@ Commands start with `:` and are not Luma code. The following commands are availa
 | `:help`        | `:h`       | Print the list of REPL commands                        |
 | `:clear`       | `:c`       | Reset the environment — clears all variables/functions |
 | `:file <path>` | `:f`       | Load and execute a `.luma` file in the current session |
+
+The command word must match exactly, and an argument is trimmed of surrounding spaces. A mistyped command or a missing or unexpected argument prints a message instead of running anything:
+
+```text
+luma> :foo
+Unknown command: :foo (type ':help' for a list of commands)
+luma> :file
+Usage: :file <path>
+luma> :quit now
+Usage: :quit (takes no arguments)
+```
 
 ### Loading Files
 
@@ -204,11 +215,25 @@ luma> :file examples/language-features/hello.luma
 Loaded: examples/language-features/hello.luma
 ```
 
+Running `:file` again on the same path re-reads the file from disk, so you can edit it and reload it without restarting the REPL. The files it includes are re-read as well, so edits to them take effect too. Warnings from resolving the file's includes are printed.
+
 Restrictions on `:file`:
 
 - Only `.luma` files are accepted.
 - Directory traversal (`..`) in paths is rejected for security.
 - Symbolic links are rejected.
+
+### Including Files
+
+`include` works at the prompt, too. With no including file, the path is resolved against the current working directory first and then the `LUMA_PATH` directories, and it must be relative:
+
+```text
+luma> include "helpers.luma"
+```
+
+The same rules apply to programs run with `luma --eval`; a failed include there exits with code 4. See [User Manual — §25 Including Files](Luma_User_Manual.md#25--including-files) for the full resolution and security rules.
+
+A file is included at most once per input, and once an input that includes it is accepted, a later `include` of the same file adds nothing. An input that is rejected (for example, with a type error in the included file) does not count: after you fix the file, including it again reads it from disk.
 
 ### Resetting the Environment
 
@@ -289,16 +314,22 @@ The REPL runs type checking before execution, against everything the earlier lin
 
 ```text
 luma> integer x = "hello"
-type: cannot assign 'string' to variable of type 'integer'
+type: cannot assign to variable: expected 'integer', got 'string'
 luma>
 ```
 
 ### Runtime Errors
 
+A runtime error points at the line that raised it. Each input is named `<repl:N>`, where N counts the inputs since the session started (or since `:clear`):
+
 ```text
 luma> array<integer> a = [1, 2, 3]
 luma> a[10]
-Error: index 10 out of bounds (array length: 3)
+RuntimeError in <repl:2>:1:2
+     |
+   1 | a[10]
+     |  ^
+Index 10 out of bounds (size 3)
 luma>
 ```
 
@@ -308,14 +339,14 @@ Using `break` or `continue` outside a loop produces a clear error:
 
 ```text
 luma> break
-Error: 'break' used outside of a loop
+type: 'break' is only allowed inside a loop
 ```
 
 ---
 
 ## 10 — Tips and Tricks
 
-- **Quick arithmetic:** Use the REPL as a calculator — `2 ** 10`, `Math.pi`, `0xFF`.
+- **Quick arithmetic:** Use the REPL as a calculator — `2 * 1024`, `Math.power(2, 10) ?? 0.0`, `Math.pi`, `0xFF`.
 - **Explore modules:** Tab-complete a module name and browse its functions.
 - **Test functions:** Define a function and call it with different arguments to verify behaviour before committing it to a file.
 - **Load and extend:** Use `:file` to load utility functions from a file, then experiment with them interactively.

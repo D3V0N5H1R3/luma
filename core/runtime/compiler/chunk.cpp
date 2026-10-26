@@ -26,6 +26,11 @@ namespace {
 // Disassemble a single instruction at the given offset.
 // Returns the number of variable-size trailing bytes beyond the fixed prefix.
 std::size_t Chunk::disassemble_instruction(std::size_t offset, std::ostringstream& out) const {
+    if (offset >= code.size()) {
+        out << "TRUNCATED\n";
+        return 0;
+    }
+
     const auto op = static_cast<Op>(code[offset]);
     const auto base_size = opcode_base_size(op);
     std::size_t variable_size = 0;
@@ -33,6 +38,14 @@ std::size_t Chunk::disassemble_instruction(std::size_t offset, std::ostringstrea
     const auto* info = find_opcode_info(op);
     if (info == nullptr) {
         out << std::format("UNKNOWN({})\n", static_cast<int>(op));
+        return 0;
+    }
+
+    // An unverified chunk (e.g. a corrupt .lumc handed to a debugger) can end
+    // in the middle of an instruction; decoding its operands would read past
+    // the code buffer.
+    if (!in_bounds(code, offset, instruction_size(code, offset))) {
+        out << std::format("{:<20s} TRUNCATED\n", opcode_name(op));
         return 0;
     }
 
@@ -142,6 +155,13 @@ std::string Chunk::disassemble(const std::string& name) const {
         const auto op = static_cast<Op>(code[offset]);
         const auto base_size = opcode_base_size(op);
         const auto variable_size = disassemble_instruction(offset, out);
+
+        // A truncated final instruction was printed as TRUNCATED; there is
+        // nothing decodable after it.
+        if (find_opcode_info(op) != nullptr &&
+            !in_bounds(code, offset, instruction_size(code, offset))) {
+            break;
+        }
 
         offset += base_size + variable_size;
     }

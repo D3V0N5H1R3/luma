@@ -315,7 +315,6 @@ Available fuzz targets:
 | ---------------------------- | ------------------------------- |
 | `fuzz_lexer`                 | Lexer                           |
 | `fuzz_parser`                | Parser                          |
-| `fuzz_resolver`              | Name Resolver                   |
 | `fuzz_type_checker`          | Type Checker                    |
 | `fuzz_linter`                | Linter                          |
 | `fuzz_compiler`              | Compiler                        |

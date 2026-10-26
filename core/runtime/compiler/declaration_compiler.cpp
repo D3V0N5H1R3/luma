@@ -122,6 +122,9 @@ void DeclarationCompiler::emit_function_definition(const std::string& name,
                                                    const FunctionDeclaration& func) {
     api_.begin_function(name, static_cast<int>(func.parameters.size()));
 
+    // Set before the body is compiled: `?` compiles differently inside @main
+    // (a propagated failure raises a RuntimeError instead of returning).
+    api_.current_scope().function.is_main = func.is_main;
     {
         const ICompilationBackend::ScopeGuard scope(api_);
 

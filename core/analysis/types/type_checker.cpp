@@ -176,6 +176,10 @@ bool TypeChecker::definitely_returns(const std::vector<StatementPtr>& stmts) con
     return stmt_checker_->definitely_returns(stmts);
 }
 
+bool TypeChecker::never_falls_through(const std::vector<StatementPtr>& stmts) const {
+    return stmt_checker_->never_falls_through(stmts);
+}
+
 TypeInfo TypeChecker::infer_expression_type(const Expression& expr) {
     return expr_checker_->infer_expression_type(expr);
 }
@@ -231,9 +235,11 @@ void TypeChecker::reset_state() {
     symbols_.clear();
     resolving_aliases_.clear();
     internal_members_.clear();
+    internal_access_reported_.clear();
     called_functions_.clear();
     resolved_type_cache_.clear();
     ctx_.reset();
+    expr_checker_->reset_pass_state();
     generics_.reset();
     registry_.reset();
 }
@@ -297,6 +303,8 @@ std::vector<Diagnostic> TypeChecker::check_incremental(const Program& program) {
     resolving_aliases_.clear();
     called_functions_.clear();
     resolved_type_cache_.clear();
+    internal_access_reported_.clear();
+    expr_checker_->reset_pass_state();
     symbols_ = incremental_.committed_symbols;
     internal_members_ = incremental_.committed_internal_members;
     generics_.alias_params() = incremental_.committed_alias_params;

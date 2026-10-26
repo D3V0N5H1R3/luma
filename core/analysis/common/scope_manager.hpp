@@ -8,18 +8,17 @@ namespace luma {
 // ─────────────────────────────────────────────────────────────────────────────
 // ScopeManager — the IScopeManager seam from TODO(refactor/A10).
 // ─────────────────────────────────────────────────────────────────────────────
-// Standardises ONLY the push_scope() / pop_scope() RAII lifecycle shared by the
-// analysis passes (NameResolver, Linter), without dictating how scopes are
+// Standardises ONLY the push_scope() / pop_scope() RAII lifecycle of an
+// analysis pass (currently the Linter), without dictating how scopes are
 // stored.  A derived pass supplies push_scope() / pop_scope() backed by whatever
-// structure fits its semantics — NameResolver a shared_ptr-linked parent chain,
-// the Linter a flat ScopeStack<ScopeData> — and inherits a single
-// make_scope_guard() that brackets a block with a fresh lexical scope and closes
-// it on exit (including on exception).
+// structure fits its semantics — the Linter uses a flat ScopeStack<ScopeData> —
+// and inherits a single make_scope_guard() that brackets a block with a fresh
+// lexical scope and closes it on exit (including on exception).
 //
-// The element type, parent-chain architecture, and frame-depth accounting stay
-// specialised per pass; this seam deliberately unifies the guard lifecycle only.
-// See common/scope_stack.hpp §Component Usage for the full rationale on why the
-// scopes are not unified into a shared storage layout.
+// The element type and storage layout stay specialised per pass; this seam
+// deliberately unifies the guard lifecycle only.  See common/scope_stack.hpp
+// §Component Usage for the rationale on why scopes are not unified into a
+// shared storage layout.
 //
 // A CRTP template — rather than a virtual interface — keeps the hot analysis
 // path free of vtable dispatch and heap allocation.  The mixin reaches the

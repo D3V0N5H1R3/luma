@@ -94,11 +94,19 @@ struct VMStack {
 
     // ─── Construction ────────────────────────────────────────────────────────
 
-    VMStack() {
-        storage = std::make_unique<Value[]>(k_max);
+    // The k_max-slot storage (several MiB) is recycled through a small
+    // per-thread pool: every spawned task constructs a fresh VM, and
+    // allocating + value-initialising a full stack per spawn dominated the
+    // cost of `spawn`.  A recycled block holds only empty / moved-from Values
+    // (see release_storage), so it is ready for reuse without re-initialising.
+    VMStack() : storage{acquire_storage()} {
         base = storage.get();
         top = base;
         limit = base + k_max;
+    }
+
+    ~VMStack() {
+        release_storage();
     }
 
     VMStack(const VMStack&) = delete;
@@ -113,6 +121,7 @@ struct VMStack {
 
     VMStack& operator=(VMStack&& other) noexcept {
         if (this != &other) {
+            release_storage();
             storage = std::move(other.storage);
             base = std::exchange(other.base, nullptr);
             top = std::exchange(other.top, nullptr);
@@ -127,6 +136,33 @@ struct VMStack {
     [[nodiscard]] std::size_t size() const noexcept {
         assert(top >= base && "stack corruption: top below base");
         return static_cast<std::size_t>(top - base);
+    }
+
+    // Move the stack top to `new_top`, destroying every value above it so the
+    // resources those values hold (locals of a returned function, temporaries
+    // abandoned by exception unwinding, …) are released deterministically
+    // instead of lingering until the slot is overwritten — a lingering copy
+    // would also keep reference counts high and force copy-on-write copies.
+    // Every path that lowers the top other than pop() must use this.
+    //
+    // Defensive: if crafted bytecode left the top *below* `new_top` (it popped
+    // past its own frame), the slots in between are reset to `none` rather
+    // than exposing stale values.  Precondition: base <= new_top <= limit.
+    void truncate_to(Value* new_top) noexcept {
+        assert(new_top >= base && new_top <= limit && "truncate_to: target outside the stack");
+
+        while (top > new_top) {
+            *--top = Value{};
+        }
+
+        while (top < new_top) {
+            *top++ = Value{};
+        }
+    }
+
+    // Convenience overload taking a slot count from the stack base.
+    void truncate_to(std::size_t new_size) noexcept {
+        truncate_to(base + new_size);
     }
 
     static_assert(sizeof(Value) * k_max < std::numeric_limits<std::size_t>::max() / 2,
@@ -217,7 +253,7 @@ struct VMStack {
 
         ~ResetGuard() {
             if (!dismissed) {
-                stack.top = stack.base;
+                stack.truncate_to(stack.base);
                 stack.frames.clear();
             }
         }
@@ -225,6 +261,82 @@ struct VMStack {
         ResetGuard(const ResetGuard&) = delete;
         ResetGuard& operator=(const ResetGuard&) = delete;
     };
+
+private:
+    // Per-thread free list of stack blocks; see the constructor comment.
+    struct StoragePool {
+        // At most this many idle blocks are kept per thread — enough for the
+        // one task VM a worker runs at a time plus a nested VM.
+        static constexpr std::size_t k_capacity{2};
+
+        std::vector<std::unique_ptr<Value[]>> blocks;
+
+        StoragePool() = default;
+        StoragePool(const StoragePool&) = delete;
+        StoragePool& operator=(const StoragePool&) = delete;
+        StoragePool(StoragePool&&) = delete;
+        StoragePool& operator=(StoragePool&&) = delete;
+
+        ~StoragePool() {
+            destroyed() = true;
+        }
+
+        // Set once this thread's pool has been destroyed (thread exit), so a
+        // VMStack destroyed later on the same thread frees its block instead
+        // of touching the dead pool.  Trivially destructible, so it stays
+        // readable for the rest of the thread's lifetime.
+        [[nodiscard]] static bool& destroyed() noexcept {
+            thread_local bool flag = false;
+            return flag;
+        }
+
+        [[nodiscard]] static StoragePool& instance() {
+            thread_local StoragePool pool;
+            return pool;
+        }
+    };
+
+    [[nodiscard]] static std::unique_ptr<Value[]> acquire_storage() {
+        if (!StoragePool::destroyed()) {
+            auto& blocks = StoragePool::instance().blocks;
+
+            if (!blocks.empty()) {
+                auto block = std::move(blocks.back());
+                blocks.pop_back();
+                return block;
+            }
+        }
+
+        return std::make_unique<Value[]>(k_max);
+    }
+
+    // Destroy the live values and hand the block back to this thread's pool.
+    // Slots above the top are empty or moved-from (truncate_to and pop() leave
+    // nothing alive there), so the block can be reused as-is.
+    void release_storage() noexcept {
+        if (!storage) {
+            return;
+        }
+
+        truncate_to(base);
+
+        if (!StoragePool::destroyed()) {
+            try {
+                auto& blocks = StoragePool::instance().blocks;
+
+                if (blocks.size() < StoragePool::k_capacity) {
+                    blocks.push_back(std::move(storage));
+                }
+            } catch (...) { // NOLINT(bugprone-empty-catch)
+                // Pool bookkeeping failed (allocation); just free the block.
+            }
+        }
+
+        storage.reset();
+        base = nullptr;
+        top = nullptr;
+        limit = nullptr;
+    }
 };
 
 } // namespace luma

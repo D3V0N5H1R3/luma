@@ -85,4 +85,13 @@ check_warnings_with_lint(const std::string& source) {
     return has_code(check(source), code);
 }
 
+// True if type-checking `source` fails with a diagnostic whose message
+// contains `fragment` — pins the rule for diagnostics that carry no code.
+[[maybe_unused]] static bool fails_with_message(const std::string& source,
+                                                const std::string& fragment) {
+    return std::ranges::any_of(check(source), [&fragment](const Diagnostic& d) {
+        return d.message.find(fragment) != std::string::npos;
+    });
+}
+
 #endif // LUMA_TYPE_CHECKER_TEST_HELPERS_HPP

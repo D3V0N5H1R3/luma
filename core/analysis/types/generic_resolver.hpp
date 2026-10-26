@@ -12,12 +12,14 @@
 // state.
 // ─────────────────────────────────────────────────────────────────────────────
 
-#pragma once
+#ifndef LUMA_TYPES_GENERIC_RESOLVER_HPP
+#define LUMA_TYPES_GENERIC_RESOLVER_HPP
 
 #include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -32,7 +34,12 @@ namespace luma {
 class TypeCheckingServices;
 struct TypeParam;
 struct Expression;
+struct CallExpression;
 struct FunctionDeclaration;
+
+namespace type_check_helpers {
+struct CallArgumentMapping;
+} // namespace type_check_helpers
 
 // ─────────────────────── Generic Resolver ───────────────────────
 
@@ -84,11 +91,19 @@ public:
     // Infer type parameter bindings from argument types.
     void infer_param_from_arg(const TypeAnnotation& param_ann, const TypeInfo& arg_type);
 
-    // Infer and return the concrete return type for a generic function call.
-    [[nodiscard]] TypeInfo infer_call(const FunctionDeclaration& func,
-                                      const std::vector<std::unique_ptr<Expression>>& args,
-                                      const std::vector<TypeAnnotation>& explicit_type_args = {},
-                                      const SourceLocation& call_location = {});
+    // A named argument's name paired with its inferred type.
+    using NamedArgumentType = std::pair<std::string, TypeInfo>;
+
+    // Infer and return the concrete return type for a call to the generic
+    // function `func` (named `fn_name` at the call site).  `arg_types` and
+    // `named_arg_types` are the types of `expr`'s positional and named
+    // arguments, already inferred by the caller; a value piped into the call
+    // (context().pipe_left_type) also takes part in the inference.  Reports
+    // arity, argument type, ownership, and type-parameter bound errors.
+    [[nodiscard]] TypeInfo infer_call(const FunctionDeclaration& func, std::string_view fn_name,
+                                      const CallExpression& expr,
+                                      const std::vector<TypeInfo>& arg_types,
+                                      const std::vector<NamedArgumentType>& named_arg_types);
 
     // Validate that inferred type parameter bindings satisfy their bounds.
     void validate_bounds(const std::vector<TypeParam>& params, const SourceLocation& location);
@@ -175,26 +190,21 @@ public:
 
 private:
     // ── infer_call phases ───────────────────────────────────────────────
-    // Report an arity mismatch when the effective argument count (including the
-    // implicit piped value) falls outside the function's required/maximum range.
-    void check_call_arity(const FunctionDeclaration& func, std::size_t arg_count,
-                          const SourceLocation& call_location);
+    // Bind explicit turbofish type arguments, then infer the remaining type
+    // parameters from the piped value and from every positional and named
+    // argument mapped to a parameter.
+    void infer_from_arguments(const FunctionDeclaration& func, const CallExpression& expr,
+                              const type_check_helpers::CallArgumentMapping& mapping,
+                              const std::vector<TypeInfo>& arg_types,
+                              const std::vector<NamedArgumentType>& named_arg_types);
 
-    // Bind explicit turbofish type arguments, infer the remaining type
-    // parameters from each argument, and apply call-site borrow/unique
-    // ownership checks.  Returns the inferred argument types, cached so they are
-    // not re-inferred (which could duplicate side effects).
-    [[nodiscard]] std::vector<TypeInfo>
-    bind_or_infer_params(const FunctionDeclaration& func,
-                         const std::vector<std::unique_ptr<Expression>>& args,
-                         const std::vector<TypeAnnotation>& explicit_type_args);
-
-    // Emit a detailed diagnostic for each argument whose type is not assignable
-    // to its resolved parameter type, listing the inferred type-parameter
-    // bindings for context.
-    void report_argument_mismatches(const FunctionDeclaration& func,
-                                    const std::vector<std::unique_ptr<Expression>>& args,
-                                    const std::vector<TypeInfo>& cached_arg_types);
+    // Check one argument against the resolved type of parameter `param_index`
+    // (reporting a mismatch together with the inferred type-parameter
+    // bindings) and check its unique/borrow ownership.  `arg_label` names the
+    // argument in the diagnostic, e.g. "argument 2" or "named argument 'x'".
+    void check_argument(const FunctionDeclaration& func, std::string_view fn_name,
+                        std::size_t param_index, const Expression& arg, const TypeInfo& arg_type,
+                        std::string_view arg_label);
 
     TypeCheckingServices* services_;
     StringMap<TypeInfo> bindings_;
@@ -203,3 +213,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_GENERIC_RESOLVER_HPP

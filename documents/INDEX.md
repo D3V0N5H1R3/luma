@@ -48,14 +48,14 @@ Section-level table of contents for the reference documents in this directory. U
 | Section                               | Lines   |
 | ------------------------------------- | ------- |
 | Table of Contents                     | 9–19    |
-| 1 — Concurrency Model Overview        | 23–87   |
-| 2 — How DAP Presents Concurrent Tasks | 91–109  |
-| 3 — Breakpoints in Concurrent Code    | 113–148 |
-| 4 — Inspecting Channel State          | 152–173 |
-| 5 — Debugging Deadlocks and Races     | 177–217 |
-| 6 — Common Pitfalls                   | 221–259 |
-| 7 — Step-by-Step Example              | 263–326 |
-| See Also                              | 330–336 |
+| 1 — Concurrency Model Overview        | 23–90   |
+| 2 — How DAP Presents Concurrent Tasks | 94–112  |
+| 3 — Breakpoints in Concurrent Code    | 116–151 |
+| 4 — Inspecting Channel State          | 155–176 |
+| 5 — Debugging Deadlocks and Races     | 180–220 |
+| 6 — Common Pitfalls                   | 224–264 |
+| 7 — Step-by-Step Example              | 268–332 |
+| See Also                              | 336–342 |
 
 ## Luma_Debugger.md
 
@@ -167,15 +167,15 @@ Section-level table of contents for the reference documents in this directory. U
 | ------------------------------------ | ------- |
 | Table of Contents                    | 5–18    |
 | Prerequisites                        | 22–175  |
-| 1 — Interpreter                      | 179–477 |
-| 2 — Language Server (VS Code)        | 481–564 |
-| 3 — Debugger (VS Code)               | 568–645 |
-| 4 — VS Code Extension Features       | 649–690 |
-| 5 — Zed Extension                    | 694–743 |
-| 6 — Cross-Cutting & Regression Tests | 747–774 |
-| 7 — Execution Checklist              | 778–790 |
-| 8 — Reporting Issues                 | 792–800 |
-| See Also                             | 804–810 |
+| 1 — Interpreter                      | 179–488 |
+| 2 — Language Server (VS Code)        | 492–575 |
+| 3 — Debugger (VS Code)               | 579–656 |
+| 4 — VS Code Extension Features       | 660–701 |
+| 5 — Zed Extension                    | 705–754 |
+| 6 — Cross-Cutting & Regression Tests | 758–785 |
+| 7 — Execution Checklist              | 789–801 |
+| 8 — Reporting Issues                 | 803–811 |
+| See Also                             | 815–821 |
 
 ## Luma_Performance_Guide.md
 
@@ -187,9 +187,9 @@ Section-level table of contents for the reference documents in this directory. U
 | 3 — String Building                   | 51–70   |
 | 4 — Recursion Limits                  | 72–74   |
 | 5 — Loop Iteration Limits             | 76–78   |
-| 6 — Resource Limits                   | 80–93   |
-| 7 — Interpreter Optimisations         | 95–103  |
-| See Also                              | 107–112 |
+| 6 — Resource Limits                   | 80–99   |
+| 7 — Interpreter Optimisations         | 101–109 |
+| See Also                              | 113–118 |
 
 ## Luma_REPL_Guide.md
 
@@ -202,11 +202,11 @@ Section-level table of contents for the reference documents in this directory. U
 | 4 — Multi-Line Input                | 120–135 |
 | 5 — Pipe Operator                   | 139–153 |
 | 6 — Using Standard Library Modules  | 157–183 |
-| 7 — REPL Commands                   | 187–225 |
-| 8 — Line Editing and Tab Completion | 229–269 |
-| 9 — Error Handling                  | 273–312 |
-| 10 — Tips and Tricks                | 316–325 |
-| See Also                            | 329–335 |
+| 7 — REPL Commands                   | 187–250 |
+| 8 — Line Editing and Tab Completion | 254–294 |
+| 9 — Error Handling                  | 298–343 |
+| 10 — Tips and Tricks                | 347–356 |
+| See Also                            | 360–366 |
 
 ## Luma_Sandbox.md
 
@@ -216,13 +216,13 @@ Section-level table of contents for the reference documents in this directory. U
 | 1 — Overview                  | 23–27   |
 | 2 — Threat Model              | 31–53   |
 | 3 — Capability Model          | 57–73   |
-| 4 — Guarantees                | 77–87   |
-| 5 — Non-Goals and Limitations | 91–100  |
-| 6 — Enforcement               | 104–112 |
-| 7 — Validation                | 116–122 |
-| 8 — Adding a Module Safely    | 126–133 |
-| 9 — Recommended Deployment    | 137–143 |
-| See Also                      | 147–153 |
+| 4 — Guarantees                | 77–101  |
+| 5 — Non-Goals and Limitations | 105–114 |
+| 6 — Enforcement               | 118–126 |
+| 7 — Validation                | 130–136 |
+| 8 — Adding a Module Safely    | 140–147 |
+| 9 — Recommended Deployment    | 151–157 |
+| See Also                      | 161–167 |
 
 ## Luma_Software_Architecture.md
 
@@ -232,68 +232,68 @@ Section-level table of contents for the reference documents in this directory. U
 | 1 — Introduction                                    | 33–52     |
 | 2 — Design Goals and Constraints                    | 56–75     |
 | 3 — High-Level Architecture                         | 79–111    |
-| 4 — Module Decomposition                            | 115–843   |
-| 5 — Data Structures                                 | 847–1010  |
-| 6 — Processing Pipeline                             | 1014–1113 |
-| 7 — Bytecode Compiler and Virtual Machine Internals | 1117–1765 |
-| 8 — Type System Design                              | 1769–1811 |
-| 9 — Memory Management Strategy                      | 1815–1843 |
-| 10 — Error Handling Strategy                        | 1847–1887 |
-| 11 — Standard Library Architecture                  | 1891–2004 |
-| 12 — Concurrency Architecture                       | 2008–2104 |
-| 13 — REPL Architecture                              | 2108–2132 |
-| 14 — Testing Architecture                           | 2136–2160 |
-| 15 — File Inclusion and Source Management           | 2164–2191 |
-| 16 — Project File Structure                         | 2195–2265 |
-| 17 — Cross-Platform Considerations                  | 2269–2295 |
-| 18 — Debugger Architecture                          | 2299–2318 |
-| 19 — Design Decisions and Rationale                 | 2322–2414 |
-| See Also                                            | 2418–2427 |
+| 4 — Module Decomposition                            | 115–865   |
+| 5 — Data Structures                                 | 869–1046  |
+| 6 — Processing Pipeline                             | 1050–1150 |
+| 7 — Bytecode Compiler and Virtual Machine Internals | 1154–1879 |
+| 8 — Type System Design                              | 1883–1929 |
+| 9 — Memory Management Strategy                      | 1933–1963 |
+| 10 — Error Handling Strategy                        | 1967–2014 |
+| 11 — Standard Library Architecture                  | 2018–2152 |
+| 12 — Concurrency Architecture                       | 2156–2263 |
+| 13 — REPL Architecture                              | 2267–2292 |
+| 14 — Testing Architecture                           | 2296–2320 |
+| 15 — File Inclusion and Source Management           | 2324–2351 |
+| 16 — Project File Structure                         | 2355–2425 |
+| 17 — Cross-Platform Considerations                  | 2429–2455 |
+| 18 — Debugger Architecture                          | 2459–2478 |
+| 19 — Design Decisions and Rationale                 | 2482–2575 |
+| See Also                                            | 2579–2588 |
 
 ## Luma_Standard_Library_Reference.md
 
 | Section                | Lines     |
 | ---------------------- | --------- |
-| Table of Contents      | 9–50      |
-| 1 — Core Built-Ins     | 54–65     |
-| 2 — Array              | 67–136    |
-| 3 — Bits               | 138–160   |
-| 4 — Calculus           | 164–192   |
-| 5 — Channel            | 194–243   |
-| 6 — Compression        | 245–292   |
-| 7 — Console            | 294–314   |
-| 8 — Converter          | 316–339   |
-| 9 — Csv                | 341–373   |
-| 10 — DateTime          | 375–516   |
-| 11 — Decimal           | 518–605   |
-| 12 — Dictionary        | 607–648   |
-| 13 — Encoder           | 650–679   |
-| 14 — FileSystem        | 681–767   |
-| 15 — Hash              | 769–809   |
-| 16 — Http              | 811–916   |
-| 17 — Json              | 918–1013  |
-| 18 — KeyValueStore     | 1015–1065 |
-| 19 — LinearAlgebra     | 1067–1124 |
-| 20 — Log               | 1126–1152 |
-| 21 — Math              | 1154–1287 |
-| 22 — Optional          | 1289–1344 |
-| 23 — Order             | 1346–1397 |
-| 24 — Process           | 1399–1496 |
-| 25 — Queue             | 1498–1523 |
-| 26 — Random            | 1525–1579 |
-| 27 — Reference         | 1581–1642 |
-| 28 — RegularExpression | 1644–1745 |
-| 29 — Resource          | 1747–1798 |
-| 30 — Result            | 1800–1831 |
-| 31 — Set               | 1833–1866 |
-| 32 — Socket            | 1868–1932 |
-| 33 — Stack             | 1936–1962 |
-| 34 — Statistics        | 1964–1974 |
-| 35 — String            | 1976–2080 |
-| 36 — Task              | 2082–2150 |
-| 37 — Terminal          | 2152–2367 |
-| 38 — Xml               | 2369–2444 |
-| See Also               | 2448–2455 |
+| Table of Contents      | 11–52     |
+| 1 — Core Built-Ins     | 56–67     |
+| 2 — Array              | 69–138    |
+| 3 — Bits               | 140–162   |
+| 4 — Calculus           | 166–194   |
+| 5 — Channel            | 196–247   |
+| 6 — Compression        | 249–296   |
+| 7 — Console            | 298–318   |
+| 8 — Converter          | 320–343   |
+| 9 — Csv                | 345–377   |
+| 10 — DateTime          | 379–520   |
+| 11 — Decimal           | 522–609   |
+| 12 — Dictionary        | 611–652   |
+| 13 — Encoder           | 654–683   |
+| 14 — FileSystem        | 685–777   |
+| 15 — Hash              | 779–821   |
+| 16 — Http              | 823–930   |
+| 17 — Json              | 932–1027  |
+| 18 — KeyValueStore     | 1029–1083 |
+| 19 — LinearAlgebra     | 1085–1142 |
+| 20 — Log               | 1144–1170 |
+| 21 — Math              | 1172–1305 |
+| 22 — Optional          | 1307–1362 |
+| 23 — Order             | 1364–1415 |
+| 24 — Process           | 1417–1518 |
+| 25 — Queue             | 1520–1545 |
+| 26 — Random            | 1547–1601 |
+| 27 — Reference         | 1603–1664 |
+| 28 — RegularExpression | 1666–1769 |
+| 29 — Resource          | 1771–1822 |
+| 30 — Result            | 1824–1855 |
+| 31 — Set               | 1857–1890 |
+| 32 — Socket            | 1892–1958 |
+| 33 — Stack             | 1962–1988 |
+| 34 — Statistics        | 1990–2002 |
+| 35 — String            | 2004–2116 |
+| 36 — Task              | 2118–2188 |
+| 37 — Terminal          | 2190–2409 |
+| 38 — Xml               | 2411–2486 |
+| See Also               | 2490–2497 |
 
 ## Luma_Syntax_Highlighting.md
 
@@ -344,36 +344,36 @@ Section-level table of contents for the reference documents in this directory. U
 | Section                                          | Lines     |
 | ------------------------------------------------ | --------- |
 | Table of Contents                                | 7–42      |
-| 1 — Getting Started                              | 46–144    |
-| 2 — Types                                        | 148–251   |
-| 3 — Variables and Mutability                     | 255–368   |
-| 4 — Operators                                    | 372–576   |
-| 5 — Control Flow                                 | 580–773   |
-| 6 — Functions                                    | 777–884   |
-| 7 — Lambdas                                      | 888–967   |
-| 8 — Records                                      | 971–1125  |
-| 9 — Arrays                                       | 1129–1224 |
-| 10 — Dictionaries                                | 1228–1288 |
-| 11 — Tuples                                      | 1292–1360 |
-| 12 — Choice Types — Unit Variants                | 1364–1414 |
-| 13 — Choice Types (ADTs)                         | 1418–1529 |
-| 14 — Result and Optional                         | 1533–1767 |
-| 15 — Match                                       | 1771–2019 |
-| 16 — String Interpolation and Multi-Line Strings | 2023–2078 |
-| 17 — Pipe Operator                               | 2082–2127 |
-| 18 — Named Arguments                             | 2131–2154 |
-| 19 — Type Aliases                                | 2158–2180 |
-| 20 — Interfaces                                  | 2184–2260 |
-| 21 — Generics, `downcast`, and `is`              | 2264–2494 |
-| 22 — Namespaces and `use`                        | 2498–2693 |
-| 23 — Ownership (`unique` and `borrow`)           | 2697–2729 |
-| 24 — Testing with `@test`                        | 2733–2790 |
-| 25 — Including Files                             | 2794–2845 |
-| 26 — Standard Library Reference                  | 2849–2853 |
-| 27 — Linter and `--strict` Mode                  | 2857–2909 |
-| 28 — Reserved Keywords                           | 2913–2932 |
-| 29 — Error Reference                             | 2936–3253 |
-| 30 — Complete Programs                           | 3257–3463 |
-| 31 — Debugging                                   | 3467–3488 |
-| 32 — Formal Grammar (EBNF)                       | 3492–3843 |
-| See Also                                         | 3847–3859 |
+| 1 — Getting Started                              | 46–177    |
+| 2 — Types                                        | 181–287   |
+| 3 — Variables and Mutability                     | 291–404   |
+| 4 — Operators                                    | 408–618   |
+| 5 — Control Flow                                 | 622–815   |
+| 6 — Functions                                    | 819–930   |
+| 7 — Lambdas                                      | 934–1022  |
+| 8 — Records                                      | 1026–1180 |
+| 9 — Arrays                                       | 1184–1279 |
+| 10 — Dictionaries                                | 1283–1343 |
+| 11 — Tuples                                      | 1347–1415 |
+| 12 — Choice Types — Unit Variants                | 1419–1469 |
+| 13 — Choice Types (ADTs)                         | 1473–1584 |
+| 14 — Result and Optional                         | 1588–1826 |
+| 15 — Match                                       | 1830–2078 |
+| 16 — String Interpolation and Multi-Line Strings | 2082–2144 |
+| 17 — Pipe Operator                               | 2148–2193 |
+| 18 — Named Arguments                             | 2197–2227 |
+| 19 — Type Aliases                                | 2231–2253 |
+| 20 — Interfaces                                  | 2257–2333 |
+| 21 — Generics, `downcast`, and `is`              | 2337–2567 |
+| 22 — Namespaces and `use`                        | 2571–2766 |
+| 23 — Ownership (`unique` and `borrow`)           | 2770–2814 |
+| 24 — Testing with `@test`                        | 2818–2875 |
+| 25 — Including Files                             | 2879–2944 |
+| 26 — Standard Library Reference                  | 2948–2952 |
+| 27 — Linter and `--strict` Mode                  | 2956–3008 |
+| 28 — Reserved Keywords                           | 3012–3031 |
+| 29 — Error Reference                             | 3035–3395 |
+| 30 — Complete Programs                           | 3399–3605 |
+| 31 — Debugging                                   | 3609–3630 |
+| 32 — Formal Grammar (EBNF)                       | 3634–3988 |
+| See Also                                         | 3992–4004 |

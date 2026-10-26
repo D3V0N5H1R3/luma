@@ -2,6 +2,12 @@
 // interface fields, interpolation, dictionary, unary, tuple index, bitwise,
 // record defaults, match string, unused result, trusted_downcast, internal, error-pipe, ADTs.
 
+#include <algorithm>
+#include <cstddef>
+#include <string>
+
+#include "analysis/ast/expression.hpp"
+#include "analysis/ast/statement.hpp"
 #include "type_checker_test_helpers.hpp"
 
 // ─── Statistics return-type signatures ───
@@ -465,6 +471,78 @@ static void test_non_internal_members_still_accessible() {
                        "string r = Util.process(\"hello\")\n"));
 }
 
+// ─── Regression: nested namespaces resolve their own members ───
+
+static void test_nested_namespace_member_types_resolve() {
+    // Members of a nested namespace are registered under the full path
+    // (Outer.Inner.Item); a bare sibling name used to be retried as
+    // Inner.Item and reported as an unknown type.
+    ASSERT_TRUE(passes("namespace Outer {\n"
+                       "    namespace Inner {\n"
+                       "        record Item { integer n }\n"
+                       "        function integer get(Item it) { return it.n }\n"
+                       "    }\n"
+                       "}\n"));
+}
+
+static void test_nested_namespace_internal_type_usable_inside() {
+    ASSERT_TRUE(passes("namespace Outer {\n"
+                       "    namespace Inner {\n"
+                       "        internal record Secret { integer n }\n"
+                       "        function integer reveal(Secret s) { return s.n }\n"
+                       "        function integer reveal_all(array<Outer.Inner.Secret> s) {\n"
+                       "            return Array.length(s)\n"
+                       "        }\n"
+                       "    }\n"
+                       "}\n"));
+}
+
+static void test_nested_namespace_internal_type_blocked_outside() {
+    ASSERT_TRUE(fails_with_message("namespace Outer {\n"
+                                   "    namespace Inner {\n"
+                                   "        internal record Secret { integer n }\n"
+                                   "    }\n"
+                                   "}\n"
+                                   "array<Outer.Inner.Secret> s = []\n",
+                                   "is internal to namespace 'Outer.Inner'"));
+}
+
+// ─── Regression: an internal-access error is reported once, where it occurs ───
+
+static void test_internal_type_in_annotation_reported_once_with_location() {
+    const auto diagnostics = check("namespace Geo {\n"
+                                   "    internal record Secret { integer n }\n"
+                                   "}\n"
+                                   "array<Geo.Secret> s = []\n");
+
+    const auto is_internal = [](const Diagnostic& d) {
+        return d.message.find("is internal to namespace 'Geo'") != std::string::npos;
+    };
+
+    ASSERT_EQ(std::ranges::count_if(diagnostics, is_internal), std::ptrdiff_t{1});
+
+    const auto it = std::ranges::find_if(diagnostics, is_internal);
+    ASSERT_TRUE(it != diagnostics.end());
+    ASSERT_EQ(it->primary_location().line, 4);
+}
+
+static void test_internal_type_in_signature_reported_once_with_location() {
+    const auto diagnostics = check("namespace Geo {\n"
+                                   "    internal record Secret { integer n }\n"
+                                   "}\n"
+                                   "function integer peek(Geo.Secret s) { return 0 }\n");
+
+    const auto is_internal = [](const Diagnostic& d) {
+        return d.message.find("is internal to namespace 'Geo'") != std::string::npos;
+    };
+
+    ASSERT_EQ(std::ranges::count_if(diagnostics, is_internal), std::ptrdiff_t{1});
+
+    const auto it = std::ranges::find_if(diagnostics, is_internal);
+    ASSERT_TRUE(it != diagnostics.end());
+    ASSERT_EQ(it->primary_location().line, 4);
+}
+
 // ─── !> error-pipe operator type checking ───
 
 static void test_error_pipe_infers_result_type() {
@@ -645,6 +723,134 @@ static void test_record_match_pattern_generic_valid() {
                        "print(got)\n"));
 }
 
+// ─── Regression: integer compound assignment with a number value ───
+
+static void test_integer_compound_assignment_with_number_fails() {
+    ASSERT_TRUE(fails_with("mutable integer x = 1\n"
+                           "x += 0.5\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(fails("mutable integer y = 4\n"
+                      "y *= 1.5\n"));
+    ASSERT_TRUE(passes("mutable integer z = 1\n"
+                       "z += 2\n"
+                       "mutable number w = 1.0\n"
+                       "w += 1\n"));
+}
+
+// ─── Regression: element type of queue/stack/set/key_value_store ───
+
+static void test_builtin_container_type_argument_is_kept() {
+    ASSERT_TRUE(fails("queue<integer> q = Queue.new()\n"
+                      "queue<string> r = q\n"));
+    ASSERT_TRUE(fails("set<integer> s = Set.new()\n"
+                      "set<string> t = s\n"));
+    ASSERT_TRUE(passes("stack<integer> s = Stack.new()\n"
+                       "stack<integer> t = s\n"));
+}
+
+// ─── Regression: match expression arm patterns are checked ───
+
+static void test_match_expression_integer_case_on_string_subject_fails() {
+    ASSERT_TRUE(fails_with_message("string name = \"a\"\n"
+                                   "string r = match name {\n"
+                                   "    case 5 { \"five\" }\n"
+                                   "    else { \"other\" }\n"
+                                   "}\n",
+                                   "integer case but subject is 'string'"));
+}
+
+static void test_match_expression_range_on_number_subject_fails() {
+    ASSERT_TRUE(fails_with_message("number v = 1.5\n"
+                                   "string r = match v {\n"
+                                   "    case 0..=9 { \"low\" }\n"
+                                   "    else { \"high\" }\n"
+                                   "}\n",
+                                   "range case but subject is 'number'"));
+}
+
+// ─── Regression: '?' checks the propagated error type ───
+
+static void test_question_mark_propagates_incompatible_error_type_fails() {
+    ASSERT_TRUE(fails_with("record MathError { string reason }\n"
+                           "function result<integer, string> parse() { return success(1) }\n"
+                           "function result<integer, MathError> compute() {\n"
+                           "    integer n = parse()?\n"
+                           "    return success(n)\n"
+                           "}\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("record MathError { string reason }\n"
+                       "function result<integer, MathError> parse() { return success(1) }\n"
+                       "function result<integer, MathError> compute() {\n"
+                       "    integer n = parse()?\n"
+                       "    return success(n)\n"
+                       "}\n"));
+}
+
+// ─── Regression: the default error type of result<T> is string ───
+
+static void test_result_default_error_type_is_string() {
+    ASSERT_TRUE(fails("result<integer> r = failure(42)\n"));
+    ASSERT_TRUE(passes("result<integer> r = failure(\"bad input\")\n"
+                       "result<integer, string> same = r\n"));
+    ASSERT_TRUE(fails("result<integer> r = failure(\"bad input\")\n"
+                      "match r {\n"
+                      "    case success(v) { print(v) }\n"
+                      "    case failure(e) { integer n = e }\n"
+                      "}\n"));
+}
+
+// ─── Regression: plain '.' and '[ ]' on an optional ───
+
+static void test_plain_field_access_on_optional_fails() {
+    ASSERT_TRUE(fails_with_message("record User { string name }\n"
+                                   "optional<User> u = none\n"
+                                   "string n = u.name\n",
+                                   "may be none"));
+    ASSERT_TRUE(passes("record User { string name }\n"
+                       "optional<User> u = none\n"
+                       "string n = u?.name ?? \"nobody\"\n"));
+}
+
+static void test_plain_index_access_on_optional_fails() {
+    ASSERT_TRUE(fails_with_message("optional<array<integer>> xs = none\n"
+                                   "integer first = xs[0]\n",
+                                   "may be none"));
+    ASSERT_TRUE(passes("optional<array<integer>> xs = none\n"
+                       "integer first = xs?[0] ?? 0\n"));
+}
+
+// ─── Regression: destructuring a value that is not a tuple ───
+
+static void test_tuple_destructuring_non_tuple_fails() {
+    ASSERT_TRUE(fails_with_message("(integer a, integer b) = 5\n", "cannot destructure"));
+}
+
+static void test_for_destructuring_non_tuple_elements_fails() {
+    ASSERT_TRUE(fails_with_message("for (a, b) in [1, 2] {\n"
+                                   "    print(a)\n"
+                                   "}\n",
+                                   "cannot destructure"));
+}
+
+// ─── Regression: '??' needs an optional or result on the left ───
+
+static void test_null_coalescing_on_plain_value_fails() {
+    ASSERT_TRUE(fails_with("integer x = 5 ?? 0\n", DiagnosticCode::InvalidOperand));
+}
+
+static void test_null_coalescing_chain_widens_right_side() {
+    // The right optional's integer is widened when it lands in optional<number>.
+    const auto program = parse("optional<number> a = none\n"
+                               "optional<integer> b = some(1)\n"
+                               "optional<number> c = a ?? b\n");
+    TypeChecker checker;
+    ASSERT_TRUE(checker.check(program, false).empty());
+
+    const auto& decl = static_cast<const VariableDeclStatement&>(*program.statements[2]);
+    const auto& coalesce = static_cast<const BinaryExpression&>(*decl.initializer);
+    ASSERT_TRUE(coalesce.right->numeric_widening != nullptr);
+}
+
 int main() {
     // ─── Statistics return-type signatures ───
 
@@ -748,6 +954,11 @@ int main() {
     RUN(test_internal_type_alias_usable_within_namespace);
     RUN(test_internal_not_imported_by_use);
     RUN(test_internal_at_top_level_is_syntax_error);
+    RUN(test_nested_namespace_member_types_resolve);
+    RUN(test_nested_namespace_internal_type_usable_inside);
+    RUN(test_nested_namespace_internal_type_blocked_outside);
+    RUN(test_internal_type_in_annotation_reported_once_with_location);
+    RUN(test_internal_type_in_signature_reported_once_with_location);
     RUN(test_non_internal_members_still_accessible);
 
     // ─── !> error-pipe operator type checking ───
@@ -780,5 +991,20 @@ int main() {
     RUN(test_record_match_pattern_wrong_type_fails);
     RUN(test_record_match_pattern_on_non_record_fails);
     RUN(test_record_match_pattern_generic_valid);
+
+    // ─── Regression: compound assignment, containers, match, results, optionals, destructuring ───
+
+    RUN(test_integer_compound_assignment_with_number_fails);
+    RUN(test_builtin_container_type_argument_is_kept);
+    RUN(test_match_expression_integer_case_on_string_subject_fails);
+    RUN(test_match_expression_range_on_number_subject_fails);
+    RUN(test_question_mark_propagates_incompatible_error_type_fails);
+    RUN(test_result_default_error_type_is_string);
+    RUN(test_plain_field_access_on_optional_fails);
+    RUN(test_plain_index_access_on_optional_fails);
+    RUN(test_tuple_destructuring_non_tuple_fails);
+    RUN(test_for_destructuring_non_tuple_elements_fails);
+    RUN(test_null_coalescing_on_plain_value_fails);
+    RUN(test_null_coalescing_chain_widens_right_side);
     return SUMMARY();
 }

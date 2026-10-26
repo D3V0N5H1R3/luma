@@ -674,12 +674,9 @@ private:
         track_return(op);
     }
 
-    [[nodiscard]] std::uint16_t emit_constant(Value value, SourceLocation loc) {
-        auto em = emitter();
-        auto index = em.add_constant(std::move(value));
-        emit_u16(Op::Constant, index, loc);
-        return index;
-    }
+    // Adds `value` to the constant pool and emits a Constant instruction.
+    // A full pool is reported as a located compile error (see compiler.cpp).
+    [[nodiscard]] std::uint16_t emit_constant(Value value, SourceLocation loc);
 
     [[nodiscard]] std::size_t emit_jump(Op op, SourceLocation loc) {
         ctx_.last_was_return = false;
@@ -688,6 +685,11 @@ private:
     }
 
     void patch_jump(std::size_t offset) {
+        // A patched forward jump lands on the current offset, so whatever is
+        // emitted next is reachable even if the previous opcode was a Return.
+        // Clearing the flag keeps emit_implicit_return from skipping the
+        // trailing None/Return that this jump may now target.
+        ctx_.last_was_return = false;
         auto em = emitter();
         em.patch_jump(offset);
     }
@@ -713,10 +715,8 @@ private:
     void emit_number_widening_if_needed(bool is_number_type, SourceLocation loc);
 
     // Add a name to the current chunk's name table and return its index.
-    [[nodiscard]] std::uint16_t add_name(std::string_view name) {
-        auto em = emitter();
-        return em.add_name(name);
-    }
+    // A full table is reported as a compile error (see compiler.cpp).
+    [[nodiscard]] std::uint16_t add_name(std::string_view name);
 
     // Emit a raw byte into the bytecode stream (no opcode, no source map entry).
     void emit_raw_byte(std::uint8_t byte) {

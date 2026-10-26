@@ -322,9 +322,12 @@ static void test_no_division_by_zero_warning_for_variable_divisor() {
 // ─── Bug regression tests: expression-level scope and block handling ───
 
 static void test_unreachable_code_in_lambda_body() {
-    // Lambda bodies should detect unreachable code after return.
+    // Lambda bodies should detect unreachable code after return.  (This test
+    // used to spell the type `(integer) -> integer`, which is not a Luma type;
+    // it only passed because the syntax error cascaded to top-level recovery,
+    // which then parsed the lambda body as loose statements.)
     ASSERT_TRUE(has_warning_containing("function void example() {\n"
-                                       "    mutable (integer) -> integer fn = (integer x) -> {\n"
+                                       "    function(integer) -> integer fn = (integer x) -> {\n"
                                        "        return x\n"
                                        "        integer y = 2\n"
                                        "    }\n"
@@ -336,7 +339,7 @@ static void test_shadowed_variable_in_lambda() {
     // Variables declared inside a lambda body should detect shadowing
     // against variables in outer scopes.
     ASSERT_TRUE(has_warning_containing("integer x = 1\n"
-                                       "mutable (integer) -> integer fn = (integer a) -> {\n"
+                                       "function(integer) -> integer fn = (integer a) -> {\n"
                                        "    integer x = a\n"
                                        "    return x\n"
                                        "}\n",
@@ -448,6 +451,47 @@ static void test_mutable_field_decrement_not_never_mutated() {
 
 // ─── main ───
 
+static void test_shadowing_initializer_reads_outer_variable() {
+    // Regression: `integer count = count + 1` reads the OUTER `count`; linting the
+    // initializer after declaring the inner name marked the wrong variable used,
+    // giving a false "never used" warning for the outer one.
+    ASSERT_FALSE(has_warning_containing("function integer f() {\n"
+                                        "    integer count = 1\n"
+                                        "    if count > 0 {\n"
+                                        "        integer count = count + 1\n"
+                                        "        return count\n"
+                                        "    }\n"
+                                        "    return 0\n"
+                                        "}\n",
+                                        "never used"));
+}
+
+static void test_shadowing_initializer_unused_inner_variable_warns() {
+    // The inner, shadowing variable is genuinely unused and must be reported.
+    ASSERT_TRUE(has_warning_containing("function integer f() {\n"
+                                       "    integer total = 1\n"
+                                       "    if true {\n"
+                                       "        integer total = total + 1\n"
+                                       "    }\n"
+                                       "    return 0\n"
+                                       "}\n",
+                                       "Variable 'total' is never used"));
+}
+
+static void test_boolean_literal_comparison_has_own_code() {
+    // Regression: `x == true` was reported as W0008 "always true/false".
+    const auto warnings = lint("function boolean f(boolean ready) {\n"
+                               "    return ready == true\n"
+                               "}\n");
+
+    const auto match = std::ranges::find_if(
+        warnings, [](const Diagnostic& d) { return d.message == "Comparison to boolean literal"; });
+
+    ASSERT_TRUE(match != warnings.end());
+    ASSERT_EQ(match->code, DiagnosticCode::BooleanLiteralComparison);
+    ASSERT_EQ(match->code_string(), std::string{"W0017"});
+}
+
 int main() {
     RUN(test_clean_code_no_warnings);
     RUN(test_empty_function_body);
@@ -504,6 +548,11 @@ int main() {
     RUN(test_mutable_field_increment_not_never_mutated);
     RUN(test_mutable_element_increment_not_never_mutated);
     RUN(test_mutable_field_decrement_not_never_mutated);
+
+    // Shadowing initializer order and the dedicated boolean-comparison code.
+    RUN(test_shadowing_initializer_reads_outer_variable);
+    RUN(test_shadowing_initializer_unused_inner_variable_warns);
+    RUN(test_boolean_literal_comparison_has_own_code);
 
     return SUMMARY();
 }

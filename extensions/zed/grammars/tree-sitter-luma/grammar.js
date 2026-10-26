@@ -650,6 +650,7 @@ module.exports = grammar({
         number_literal: ($) =>
             choice(
                 $.hex_literal,
+                $.octal_literal,
                 $.binary_literal,
                 $.float_literal,
                 $.integer_literal,
@@ -657,6 +658,9 @@ module.exports = grammar({
 
         hex_literal: (_$) =>
             token(/0[xX][0-9a-fA-F]+/),
+
+        octal_literal: (_$) =>
+            token(/0[oO][0-7]+/),
 
         binary_literal: (_$) =>
             token(/0[bB][01]+/),

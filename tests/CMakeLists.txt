@@ -54,7 +54,6 @@ set(_analysis_label_map
     "lexer_=analysis|lexer"
     "parser_=analysis|parser"
     "type_checker_=analysis|types"
-    "resolver_=analysis|resolver"
     "linter_=analysis|linter"
     "error_recovery_=analysis|parser"
 )
@@ -98,7 +97,6 @@ set(LUMA_ANALYSIS_TESTS
     type_checker_test_lint
     type_checker_test_generics
     type_checker_test_symbols
-    resolver_test
     linter_test
     linter_registry_test
     diagnostic_test
@@ -165,7 +163,7 @@ luma_add_test(NAME decimal_test
 
 # ── Platform tests ──
 
-# safe_getenv is cross-platform (std::getenv / _dupenv_s), so it runs on every OS.
+# safe_getenv is cross-platform (std::getenv / _wdupenv_s), so it runs on every OS.
 luma_add_test(NAME safe_getenv_test
     SOURCES platform/safe_getenv_test.cpp
     LIBS    ""

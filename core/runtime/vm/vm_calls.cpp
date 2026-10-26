@@ -117,10 +117,12 @@ bool VM::execute_tests(const std::vector<CompiledFunction>& functions,
             std::cout << term::out_red() << "  FAIL" << term::out_reset() << "  " << test->name
                       << ": " << error.what() << "\n";
 
-            // Reset VM state so the next test starts cleanly.
-            stack_.top = stack_.base;
+            // Reset VM state so the next test starts cleanly.  run() has
+            // already retired any task_scope the failing test left open.
+            stack_.truncate_to(stack_.base);
             stack_.frames.clear();
             exception_handler_.clear();
+            base_depth_ = 0;
         }
     }
 
@@ -163,11 +165,13 @@ void VM::init_call_fn() {
             // Clean up frames pushed by call_value / the callback and
             // any stack values pushed during execution so that the caller
             // (e.g. map_with_error_handling) sees a consistent VM state.
+            // run() has already retired any task_scope the callback opened.
             while (stack_.frames.size() > base_depth_) {
                 stack_.frames.pop_back();
             }
 
-            stack_.top = stack_.base + saved_stack_size;
+            exception_handler_.discard_frames_from(stack_.frames.size());
+            stack_.truncate_to(saved_stack_size);
             base_depth_ = prev_base;
             throw;
         }
@@ -183,7 +187,7 @@ ThreadPool& VM::pool() {
 // ─────────── Task VM constructor ───────────
 
 VM::VM(EnvPtr global_env, ThreadPool& pool, const std::vector<CompiledFunction>* compiled_fns)
-    : global_env_{std::move(global_env)}, compiled_functions_{compiled_fns} {
+    : global_env_{std::move(global_env)}, compiled_functions_{compiled_fns}, is_task_vm_{true} {
     task_manager_.shared_pool = &pool;
     stack_.frames.reserve(
         std::max(VMStack::k_frame_max, static_cast<std::size_t>(ResourceLimits::max_call_depth)));

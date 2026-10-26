@@ -53,7 +53,11 @@ public:
 private:
     // ─── Peephole optimizations ───
 
-    // Replace sequences like Push(0) + Add → noop, Push(1) + Add → Increment, etc.
+    // Two-instruction rewrites that preserve semantics for every runtime value:
+    // True/False + Not → False/True, Equal/NotEqual + Not → inverse, Dup/Swap/None
+    // cancel pairs, IntToNumber collapsing, Constant(int) + IntToNumber →
+    // Constant(number), SetLocal + GetLocal → SetLocal + Dup, …  (see
+    // optimizer_peephole.cpp for the deliberately omitted identities).
     [[nodiscard]] std::size_t peephole_pass(Chunk& chunk) const;
 
     // ─── Constant folding ───

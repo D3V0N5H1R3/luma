@@ -16,6 +16,7 @@
 #include <functional>
 #include <list>
 #include <optional>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 
@@ -31,9 +32,10 @@ template <typename Key, typename Value, typename Hash = std::hash<Key>>
     requires std::equality_comparable<Key> && std::is_invocable_r_v<std::size_t, Hash, const Key&>
 class LruCache {
 public:
-    explicit LruCache(std::size_t max_size) : max_size_(max_size) {
-        assert(max_size > 0 && "LruCache: max_size must be > 0");
-    }
+    // Throws std::invalid_argument when `max_size` is 0: a zero-capacity cache
+    // would have nothing to evict on its first put() (undefined behaviour in
+    // a release build, where an assert would be compiled out).
+    explicit LruCache(std::size_t max_size) : max_size_(validated_capacity(max_size)) {}
 
     // Insert or update a key-value pair. Returns reference to stored value.
     [[nodiscard]] Value& put(const Key& key, Value value) {
@@ -129,6 +131,13 @@ public:
     }
 
 private:
+    [[nodiscard]] static std::size_t validated_capacity(std::size_t max_size) {
+        if (max_size == 0) {
+            throw std::invalid_argument{"LruCache: max_size must be greater than 0"};
+        }
+        return max_size;
+    }
+
     void check_invariant() const {
         assert(map_.size() == order_.size());
     }

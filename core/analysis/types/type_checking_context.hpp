@@ -31,12 +31,14 @@
 //     the TypeChecker).
 // ─────────────────────────────────────────────────────────────────────────────
 
-#pragma once
+#ifndef LUMA_TYPES_TYPE_CHECKING_CONTEXT_HPP
+#define LUMA_TYPES_TYPE_CHECKING_CONTEXT_HPP
 
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "analysis/types/type_checking_services_roles.hpp"
 #include "analysis/types/type_info.hpp"
@@ -56,6 +58,10 @@ struct TypeCheckingContext {
     std::optional<TypeInfo> current_return_type;
     int main_count{0};
     bool is_in_main{false};
+    // Set by a `return <value>` statement; a block-bodied lambda without a
+    // declared return type uses it to tell a value-returning body from one
+    // that only ever returns nothing (and so has type `void`).
+    bool has_value_return{false};
 
     // ─── Expression context ───
     bool is_in_pipe{false};
@@ -67,6 +73,23 @@ struct TypeCheckingContext {
     int loop_depth{0};
     int task_scope_depth{0};
     int type_resolve_depth{0};
+
+    // ─── Loop ownership flow ───
+    // Ownership states that leave a loop body other than by falling through
+    // its end: `continue` carries its state to the next iteration and `break`
+    // carries it past the loop.  An if/match branch ending in either does not
+    // feed the merge after that if/match, so its state is recorded here
+    // instead, as seen from the scope enclosing the loop (outer_scope), which
+    // keeps a variable shadowed inside the body from standing in for the
+    // outer one.  One entry per loop being checked, innermost last; a lambda
+    // body starts with none.
+    struct LoopOwnershipFlow {
+        std::shared_ptr<TypeScope> outer_scope;
+        std::vector<TypeScope::OwnershipSnapshot> break_states;
+        std::vector<TypeScope::OwnershipSnapshot> continue_states;
+    };
+
+    std::vector<LoopOwnershipFlow> loop_flows;
 
     // ─── Namespace context ───
     // Namespace currently being type-checked (set while visiting a namespace's
@@ -162,3 +185,5 @@ protected:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_TYPE_CHECKING_CONTEXT_HPP

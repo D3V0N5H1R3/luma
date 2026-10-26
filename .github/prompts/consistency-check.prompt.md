@@ -19,8 +19,8 @@ Verify that all project artefacts are mutually consistent. Work through each sec
 
 ## 2. Pipeline Consistency
 
-- The lexer, parser, include resolver, name resolver, type checker, linter, compiler, and VM agree on the set of language constructs they support.
-- Every AST node produced by the parser is handled by every full-AST consumer — the name resolver (`core/analysis/resolver/`), type checker, linter, and compiler — and its runtime semantics are implemented in the VM. The centralized dispatch in `core/analysis/ast/ast_dispatch.hpp` (the `ExpressionHandler` / `StatementHandler` / `DeclarationHandler` concepts) is the enforcement point — a handler missing a node kind should fail to compile rather than silently skip it.
+- The lexer, parser, include resolver, type checker, linter, compiler, and VM agree on the set of language constructs they support.
+- Every AST node produced by the parser is handled by every full-AST consumer — the type checker, linter, and compiler — and its runtime semantics are implemented in the VM. The centralized dispatch in `core/analysis/ast/ast_dispatch.hpp` (the `ExpressionHandler` / `StatementHandler` / `DeclarationHandler` concepts) is the enforcement point — a handler missing a node kind should fail to compile rather than silently skip it.
 - New keywords or syntax added to the lexer/parser are reflected through the entire pipeline.
 - Opcodes emitted by the compiler are handled by the VM and understood by every other per-opcode consumer — the optimizer (`core/runtime/compiler/optimizer*`), the bytecode verifier (`core/runtime/compiler/verifier*`), and the disassembler (`Chunk::disassemble` in `core/runtime/compiler/chunk.cpp`) — with no stale or unhandled opcodes in any direction. Every opcode has an entry in the central opcode table (`core/runtime/compiler/opcode.hpp`, with operand sizes and categories in `opcode_metadata.hpp`), enforced by the table's `static_assert` position checks.
 
@@ -94,14 +94,14 @@ Also verify:
 
 ## 8. Tests vs Implementation
 
-- Front-end analysis components have C++ unit tests in `tests/analysis/` (lexer, parser, type checker, resolver, linter, diagnostics, include resolver, pipeline) covering the current behaviour.
+- Front-end analysis components have C++ unit tests in `tests/analysis/` (lexer, parser, type checker, linter, diagnostics, include resolver, pipeline) covering the current behaviour.
 - Runtime components have C++ unit tests in `tests/runtime/` — every stdlib function has at least one test in the `stdlib_test_*.cpp` suite, and the compiler, VM, optimizer, verifier, bytecode serializer, concurrency, REPL, and CLI have their own `*_test.cpp` files.
 - Test assertions match the current function signatures and error handling behaviour.
 - Every language feature has a Luma test in `tests/features/language/` or `tests/features/stdlib/`.
 - Integration tests in `tests/integration/` cover the current pipeline behaviour; platform-specific tests in `tests/platform/` cover OS-dependent behaviour (e.g. Win32 UTF-8).
 - The LSP and DAP suites (`language-server/tests/`, `debugger/tests/`) cover the current language-server and debugger behaviour.
 - Snapshot baselines in `tests/analysis/snapshots/*.expected` match the current diagnostic output (regenerate with `UPDATE_SNAPSHOTS=1` only when the change is intentional).
-- Fuzz targets in `fuzz/` (authoritative list in `fuzz/CMakeLists.txt`) cover the current pipeline stages (lexer, parser, resolver, type checker, linter, compiler, optimizer, include resolver, VM), the trust-boundary stdlib parsers (JSON, CSV, XML, regex, compression, encoder, datetime, KeyValueStore, …), the protocol transport, and the bytecode deserializer (with round-trip oracles) — and use current APIs.
+- Fuzz targets in `fuzz/` (authoritative list in `fuzz/CMakeLists.txt`) cover the current pipeline stages (lexer, parser, type checker, linter, compiler, optimizer, include resolver, VM), the trust-boundary stdlib parsers (JSON, CSV, XML, regex, compression, encoder, datetime, KeyValueStore, …), the protocol transport, and the bytecode deserializer (with round-trip oracles) — and use current APIs.
 - No tests reference removed or renamed functions/modules.
 
 ## 9. Benchmarks and Examples

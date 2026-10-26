@@ -143,7 +143,9 @@ protected:
 };
 
 // Composes multiple passes into a sequential pipeline.
-// Stops on the first pass that produces errors.
+// Once a pass reports errors, later passes are skipped unless they opt in via
+// Pass::run_after_failure() (the advisory LintPass does, so lint warnings are
+// still reported for a program that failed type-checking).
 //
 // ── Dependency Validation ──────────────────────────────────────────────────
 // The pipeline enforces pass ordering through two complementary mechanisms:

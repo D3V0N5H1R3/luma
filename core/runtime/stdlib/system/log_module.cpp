@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "analysis/errors/error.hpp"
@@ -459,18 +460,21 @@ void register_log_ns(const EnvPtr& env, bool sandbox) {
                 return make_failure_value("Log.set_output: path rejected by security policy");
             }
 
-            // Path is valid — now close old stream and open new one.
-            if (state.file_stream.is_open()) {
-                state.file_stream.close();
-            }
+            // Path is valid — open the new file BEFORE touching the current sink,
+            // so a failed open leaves logging exactly as it was instead of
+            // closing the old file and silently dropping every later line.
+            std::ofstream new_stream{safe, std::ios::app};
 
-            state.file_stream.open(safe, std::ios::app);
-
-            if (!state.file_stream.is_open()) {
+            if (!new_stream.is_open()) {
                 return make_failure_value(
                     error_msg("Log", "set_output", std::format("cannot open '{}'", file_path)));
             }
 
+            if (state.file_stream.is_open()) {
+                state.file_stream.close();
+            }
+
+            state.file_stream = std::move(new_stream);
             state.output = OutputTarget::File;
 
             return make_success_value(Value{NullValue{}});

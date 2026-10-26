@@ -20,23 +20,20 @@ public:
         : text_{text}, byte_offset_{0}, codepoint_index_{0} {}
 
     // Decode and return the codepoint at the current position, then advance.
-    // Returns U+FFFD (replacement character) if the byte sequence is invalid.
-    // Behaviour is undefined when at_end() is true.
+    // An ill-formed or truncated sequence yields U+FFFD and advances by one
+    // byte (see utf8_decode), so the value returned and the distance moved
+    // always agree.  At the end of the text this returns U+FFFD and does not
+    // move, so the byte offset never passes the end of the text.
     [[nodiscard]] char32_t next() noexcept {
-        const auto len = static_cast<std::size_t>(
-            utf8_codepoint_len(static_cast<std::uint8_t>(text_[byte_offset_])));
-        std::uint32_t cp = utf8_decode_at(text_, byte_offset_);
-        byte_offset_ += len;
-        ++codepoint_index_;
-        return static_cast<char32_t>(cp);
+        const auto decoded = utf8_decode(text_, byte_offset_);
+        step(decoded.length);
+        return static_cast<char32_t>(decoded.codepoint);
     }
 
-    // Advance past the current codepoint without decoding it.
-    // Cheaper than next() when the codepoint value is not needed.
+    // Advance past the current codepoint without returning it.  Moves by the
+    // same distance as next(); a no-op at the end of the text.
     void advance() noexcept {
-        byte_offset_ += static_cast<std::size_t>(
-            utf8_codepoint_len(static_cast<std::uint8_t>(text_[byte_offset_])));
-        ++codepoint_index_;
+        step(utf8_decode(text_, byte_offset_).length);
     }
 
     // Current byte offset into the source string.
@@ -55,6 +52,16 @@ public:
     }
 
 private:
+    // utf8_decode never reports a length that runs past the end of the text
+    // and reports 0 at the end, so the offset stays within [0, size()].
+    void step(std::size_t length) noexcept {
+        if (length == 0) {
+            return;
+        }
+        byte_offset_ += length;
+        ++codepoint_index_;
+    }
+
     std::string_view text_;
     std::size_t byte_offset_;
     std::size_t codepoint_index_;
@@ -82,7 +89,8 @@ private:
 // Return the byte offset of the `n`-th codepoint in `s`.
 // Iterates until the codepoint index reaches `n`; distinct from utf8_count
 // (which iterates to at_end) and utf8_codepoint_index (which iterates to
-// a byte position).
+// a byte position).  The result never exceeds s.size(): an `n` past the last
+// codepoint (or a truncated trailing sequence) yields s.size().
 [[nodiscard]] inline std::size_t utf8_byte_offset(const std::string& s, std::int64_t n) noexcept {
     UTF8Iterator it{s};
     while (!it.at_end() && static_cast<std::int64_t>(it.codepoint_index()) < n) {

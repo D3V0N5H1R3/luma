@@ -3,9 +3,15 @@
 // Exercises basic type hashing, consistency, cross-type normalization,
 // array/dictionary/tuple hashing, and order-independence for dictionaries.
 
+#include <cmath>
+#include <cstdint>
+#include <future>
+#include <limits>
 #include <memory>
 #include <vector>
 
+#include "runtime/concurrency/channel.hpp"
+#include "runtime/concurrency/task_completion.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
@@ -278,6 +284,112 @@ static void test_hash_empty_array_vs_empty_dict() {
     ASSERT_NE(hasher(Value{std::move(arr)}), hasher(Value{std::move(dict)}));
 }
 
+// ─── Review regressions: equality must be an equivalence relation ───
+
+// Review #15: integer/number equality promoted the integer to double, so
+// int(2^53) and int(2^53 + 1) both equalled 2^53.0 while differing from each
+// other — equality was not transitive.  Comparison is now exact.
+static void test_equals_integer_number_exact_beyond_2_pow_53() {
+    const std::int64_t big = std::int64_t{1} << 53;
+    const Value exact_int{big};
+    const Value next_int{big + 1};
+    const Value as_number{static_cast<double>(big)};
+
+    ASSERT_TRUE(exact_int.equals(as_number));
+    ASSERT_TRUE(as_number.equals(exact_int));
+    ASSERT_FALSE(next_int.equals(as_number));
+    ASSERT_FALSE(as_number.equals(next_int));
+    ASSERT_FALSE(exact_int.equals(next_int));
+
+    // Equal values still hash identically.
+    ValueHash hasher;
+    ASSERT_EQ(hasher(exact_int), hasher(as_number));
+
+    // Non-integral, non-finite, and out-of-range numbers never equal an integer.
+    ASSERT_FALSE(Value{std::int64_t{3}}.equals(Value{3.5}));
+    ASSERT_FALSE(Value{std::int64_t{0}}.equals(Value{std::nan("")}));
+    ASSERT_FALSE(
+        Value{std::numeric_limits<std::int64_t>::max()}.equals(Value{9223372036854775808.0}));
+    ASSERT_TRUE(
+        Value{std::numeric_limits<std::int64_t>::min()}.equals(Value{-9223372036854775808.0}));
+    ASSERT_TRUE(Value{std::int64_t{0}}.equals(Value{-0.0}));
+}
+
+// Review #12: functions, tasks, channels and by-reference collections compared
+// unequal even to themselves, so a Set could never find them and duplicates
+// piled up.  They now use identity equality, consistent with ValueHash.
+static void test_equals_identity_types_are_reflexive() {
+    const Value function{std::make_shared<FunctionValue>()};
+    const Value other_function{std::make_shared<FunctionValue>()};
+    ASSERT_TRUE(function.equals(function));
+    ASSERT_FALSE(function.equals(other_function));
+
+    const Value native{std::make_shared<NativeFunctionValue>()};
+    ASSERT_TRUE(native.equals(native));
+    ASSERT_FALSE(native.equals(function));
+
+    // Channels: a deep copy shares the channel, so it is the same channel.
+    const Value channel{std::make_shared<ChannelValue>(std::make_shared<Channel>())};
+    const Value other_channel{std::make_shared<ChannelValue>(std::make_shared<Channel>())};
+    ASSERT_TRUE(channel.equals(channel));
+    ASSERT_TRUE(channel.equals(channel.deep_copy()));
+    ASSERT_FALSE(channel.equals(other_channel));
+
+    // Tasks: a deep copy clones the handle but is still the same task.
+    std::promise<Value> promise;
+    const Value task{std::make_shared<TaskValue>(promise.get_future().share(), nullptr,
+                                                 std::make_shared<TaskCompletion>())};
+    ASSERT_TRUE(task.equals(task));
+    ASSERT_TRUE(task.equals(task.deep_copy()));
+    promise.set_value(Value{1});
+
+    // By-reference collections: identity, never structural.
+    const Value store{std::make_shared<KeyValueStoreValue>()};
+    const Value other_store{std::make_shared<KeyValueStoreValue>()};
+    ASSERT_TRUE(store.equals(store));
+    ASSERT_FALSE(store.equals(other_store));
+
+    // Usable as set elements: inserting the same value twice keeps one entry.
+    ValueSet set;
+    set.insert(function);
+    set.insert(function);
+    set.insert(channel);
+    set.insert(channel);
+    set.insert(other_function);
+    ASSERT_EQ(set.size(), static_cast<std::size_t>(3));
+    ASSERT_TRUE(set.contains(function));
+}
+
+// Code review (function identity): deep_copy builds a new FunctionValue, so a
+// value-semantics copy (a `mutable` binding, a spawned task's argument)
+// compared unequal to the function it was copied from, while an immutable
+// alias compared equal.  The identity now survives deep_copy — including a
+// copy of a closure whose mutable upvalue cell is cloned — and stays
+// consistent with ValueHash.
+static void test_function_equals_its_deep_copy() {
+    auto closure = std::make_shared<FunctionValue>();
+    closure->upvalue_cells.push_back(std::make_shared<Value>(std::int64_t{7}));
+    const Value function{closure};
+    const Value copy = function.deep_copy();
+
+    ASSERT_TRUE(copy.as_function().get() != function.as_function().get());
+    ASSERT_TRUE(function.equals(copy));
+    ASSERT_TRUE(copy.equals(function));
+    ASSERT_TRUE(copy.equals(copy.deep_copy()));
+    ASSERT_EQ(ValueHash{}(function), ValueHash{}(copy));
+
+    // A separately created closure — even of the same code — is a different
+    // function, and so is a copy of it.
+    const Value other{std::make_shared<FunctionValue>()};
+    ASSERT_FALSE(function.equals(other));
+    ASSERT_FALSE(copy.equals(other.deep_copy()));
+
+    ValueSet set;
+    set.insert(function);
+    set.insert(copy);
+    ASSERT_EQ(set.size(), static_cast<std::size_t>(1));
+}
+
 // ─── Main ───
 
 int main() {
@@ -325,6 +437,11 @@ int main() {
 
     // Cross-type container distinction.
     RUN(test_hash_empty_array_vs_empty_dict);
+
+    // Equality as an equivalence relation (review regressions).
+    RUN(test_equals_integer_number_exact_beyond_2_pow_53);
+    RUN(test_equals_identity_types_are_reflexive);
+    RUN(test_function_equals_its_deep_copy);
 
     return SUMMARY();
 }

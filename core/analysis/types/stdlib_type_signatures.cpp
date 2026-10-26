@@ -288,6 +288,13 @@ struct Refiner {
         return first_arg.inner_types[0];
     }
 
+    // The record-modelled element containers keep their element type as the
+    // sole type argument (set<T>, queue<T>, stack<T>).
+    if (first_arg.kind == K::Record && !first_arg.inner_types.empty() &&
+        (first_arg.name == "set" || first_arg.name == "queue" || first_arg.name == "stack")) {
+        return first_arg.inner_types[0];
+    }
+
     return TypeInfo::make(K::StdlibAny);
 }
 
@@ -735,13 +742,14 @@ struct Refiner {
     });
 
     // ── Set / Reference / Resource ──
-    add({"Set.to_array"}, true, [](const RefineContext& c) -> TypeInfo {
-        if (c.elem.kind != K::StdlibAny) {
-            return TypeInfo::make_array(c.elem);
-        }
+    add({"Set.to_array", "Queue.to_array", "Stack.to_array"}, true,
+        [](const RefineContext& c) -> TypeInfo {
+            if (c.elem.kind != K::StdlibAny) {
+                return TypeInfo::make_array(c.elem);
+            }
 
-        return c.static_type;
-    });
+            return c.static_type;
+        });
 
     add({"Reference.get"}, true, [](const RefineContext& c) -> TypeInfo {
         if (!c.arg_types.empty() && c.arg_types[0].kind == K::Reference &&

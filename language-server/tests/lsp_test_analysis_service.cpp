@@ -61,9 +61,7 @@ struct ServiceFixture {
     ServiceFixture()
         : service(config, cancel_flag,
                   AnalysisCallbacks{.log = [](const std::string&) {},
-                                    .notify =
-                                        [](std::string_view, const JsonValue&) {
-                                        }}) {}
+                                    .notify = [](std::string_view, const JsonValue&) {}}) {}
 
     [[nodiscard]] AnalysisResult analyze(const std::string& source,
                                          const std::string& uri = "file:///test/main.luma") {
@@ -339,6 +337,30 @@ void test_type_error_diagnostic_preserves_late_line_column() {
         if (diagnostic.severity == severity::error) {
             ASSERT_EQ(diagnostic.range.start.line, 6);
             ASSERT_GT(diagnostic.range.start.character, 0);
+            return;
+        }
+    }
+    ASSERT_TRUE(false);
+}
+
+void test_type_error_diagnostic_range_covers_token() {
+    // Regression: the type checker anchors on AST locations, which point one
+    // past their first token, so the squiggle started just after `x` and ran
+    // over the following word.  It must cover exactly the token `x`.
+    ServiceFixture fx;
+    const auto result = fx.analyze("@main\n"
+                                   "function void main() {\n"
+                                   "    mutable integer x = 1\n"
+                                   "    x += 0.5\n"
+                                   "    print(x)\n"
+                                   "}\n");
+
+    for (const auto& diagnostic : result.semantic.diagnostics) {
+        if (diagnostic.severity == severity::error) {
+            ASSERT_EQ(diagnostic.range.start.line, 3);
+            ASSERT_EQ(diagnostic.range.start.character, 4);
+            ASSERT_EQ(diagnostic.range.end.line, 3);
+            ASSERT_EQ(diagnostic.range.end.character, 5);
             return;
         }
     }
@@ -773,6 +795,7 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_find_definition_accessor);
     RUN(test_type_error_produces_error_diagnostic);
     RUN(test_type_error_diagnostic_preserves_late_line_column);
+    RUN(test_type_error_diagnostic_range_covers_token);
     RUN(test_clean_program_has_no_error_diagnostics);
     RUN(test_symbols_survive_parse_errors);
     RUN(test_lexer_error_recovery);

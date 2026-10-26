@@ -95,6 +95,13 @@ void InterpolationHandler::compile(const StringInterpolationExpression& expr) {
         return;
     }
 
+    // Every part was an empty string literal (e.g. "${""}"), so nothing was
+    // pushed; the expression still has to produce a value.
+    if (part_count == 0) {
+        api_.emit_constant(Value{std::string{}}, expr.location);
+        return;
+    }
+
     // Special case: if all parts merged into a single string constant,
     // we don't need Interpolate at all — the constant is already on the stack.
     if (merged.size() == 1 && merged[0].is_literal) {

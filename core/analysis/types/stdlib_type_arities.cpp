@@ -997,7 +997,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // The single, mutually-exclusive answer to "what kind of thing is this
         // path?", complementing the FileSystem.FileInfo is_directory / is_file /
         // is_symlink booleans with an exhaustive, match-able choice.  Classified
-        // symlink-first (like lstat): a symbolic link is reported as Symlink even
+        // symlink-first (like lstat): a symbolic link is reported as SymbolicLink even
         // when its target is a directory or file.
         {
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "FileKind");

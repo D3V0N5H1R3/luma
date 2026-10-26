@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -22,8 +23,9 @@
 #include "analysis/types/type_checker.hpp"
 #include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
+#include "common/string_utils.hpp"
+#include "common/terminal.hpp"
 #include "common/version.hpp"
-#include "runtime/cli/terminal.hpp"
 #include "runtime/compiler/compiler.hpp"
 #include "runtime/compiler/compiler_config.hpp"
 #include "runtime/include/include_resolver.hpp"
@@ -49,12 +51,7 @@ constexpr std::array<std::string_view, 3> k_repl_builtin_extras = {
 
 // Identifies which REPL command a descriptor stands for; drives the dispatch
 // action in dispatch_command().
-enum class CommandKind {
-    Quit,
-    Help,
-    Clear,
-    File,
-};
+using CommandKind = repl_detail::ReplCommandKind;
 
 // A REPL command descriptor.  This is the single source of truth for the
 // command's spellings, argument, and help text: completion, dispatch, and the
@@ -85,6 +82,18 @@ void print_errors(const std::vector<Diagnostic>& diagnostics) {
     }
 }
 
+// Print error and warning diagnostics (e.g. from include resolution) to stderr,
+// prefixing warnings so they are distinguishable from errors.
+void print_errors_and_warnings(const std::vector<Diagnostic>& diagnostics) {
+    for (const auto& d : diagnostics) {
+        if (d.severity == Severity::Error) {
+            std::cerr << d.message << "\n";
+        } else if (d.severity == Severity::Warning) {
+            std::cerr << term::yellow() << "warning: " << term::reset() << d.message << "\n";
+        }
+    }
+}
+
 // Render a RuntimeError as a diagnostic with source location and hint.
 void render_runtime_error(const DiagnosticRenderer& renderer, const RuntimeError& error) {
     auto diag = DiagnosticBuilder{Severity::Error, std::string{error.what()}}
@@ -110,8 +119,8 @@ void append_program(std::vector<Program>& programs, Program program) {
     programs.push_back(std::move(program));
 
     if (programs.size() == k_programs_warning_threshold) {
-        std::cerr << term::out_red() << "warning: " << term::out_reset()
-                  << "the REPL has accumulated " << k_programs_warning_threshold
+        std::cerr << term::red() << "warning: " << term::reset() << "the REPL has accumulated "
+                  << k_programs_warning_threshold
                   << " program snapshots. Use ':clear' to reset the environment "
                      "and free memory.\n";
     }
@@ -158,8 +167,17 @@ void append_program(std::vector<Program>& programs, Program program) {
 // resolve (e.g. a malformed device path) is rejected cleanly rather than
 // throwing a std::filesystem_error out of the REPL command loop.
 [[nodiscard]] bool check_symlink(const std::string& file_path) {
+    // REPL input is UTF-8; never round-trip it through the ANSI code page.
+    const auto fs_path = try_path_from_utf8(file_path);
     std::error_code ec;
-    const auto canonical = std::filesystem::weakly_canonical(file_path, ec).string();
+
+    if (!fs_path) {
+        std::cerr << "Path rejected: path is not valid UTF-8\n";
+
+        return false;
+    }
+
+    const auto canonical = std::filesystem::weakly_canonical(*fs_path, ec);
 
     if (ec) {
         std::cerr << "Path rejected: unable to resolve path\n";
@@ -179,24 +197,17 @@ void append_program(std::vector<Program>& programs, Program program) {
 
 void load_and_execute_file(const std::string& file_path, SourceManager& source_manager,
                            const DiagnosticRenderer& renderer, TypeChecker& checker, VM& vm,
-                           std::vector<Program>& programs) {
+                           std::vector<Program>& programs,
+                           repl_detail::ReplIncludeRegistry& includes) {
     try {
-        const auto& source_file = source_manager.load(file_path);
-
-        auto file_program = repl_detail::lex_and_parse(source_file.text, source_file.file_id);
+        auto file_program = repl_detail::load_file_input(file_path, source_manager, includes);
 
         if (!file_program) {
             return;
         }
 
-        IncludeResolver include_resolver{source_manager};
-
-        if (!include_resolver.resolve(*file_program)) {
-            print_errors(include_resolver.get_diagnostics());
-            return;
-        }
-
-        auto value = repl_detail::run_and_keep(std::move(*file_program), checker, vm, programs);
+        auto value =
+            repl_detail::run_and_keep(std::move(*file_program), checker, vm, programs, includes);
 
         if (!value) {
             return;
@@ -244,7 +255,8 @@ void handle_help_command() {
 }
 
 void handle_clear_command(EnvPtr& global_env, bool sandbox, VM& vm, std::vector<Program>& programs,
-                          SourceManager& source_manager, TypeChecker& checker) {
+                          SourceManager& source_manager, TypeChecker& checker,
+                          repl_detail::ReplIncludeRegistry& includes) {
     global_env = Environment::create();
 
     register_all(global_env, sandbox);
@@ -258,43 +270,52 @@ void handle_clear_command(EnvPtr& global_env, bool sandbox, VM& vm, std::vector<
 
     source_manager = SourceManager{};
 
+    includes.clear();
+
     std::cout << "Environment cleared.\n";
 }
 
-void handle_expression(const std::string& input, SourceManager& source_manager,
-                       const DiagnosticRenderer& renderer, TypeChecker& checker, VM& vm,
-                       std::vector<Program>& programs) {
-    try {
-        auto program = repl_detail::lex_and_parse(input);
+// Canonical UTF-8 form of a `:file` path — the form the include resolver uses
+// for an included file — or the path itself if it cannot be canonicalised.
+[[nodiscard]] std::string canonical_file_path(const std::string& file_path) {
+    const auto fs_path = try_path_from_utf8(file_path);
 
-        if (!program) {
-            return;
-        }
-
-        auto value = repl_detail::run_and_keep(std::move(*program), checker, vm, programs);
-
-        if (!value) {
-            return;
-        }
-
-        if (!value->is_null()) {
-            std::cout << term::out_cyan() << "=> " << term::out_reset() << value->to_string()
-                      << "\n";
-        }
-    } catch (const RuntimeError& error) {
-        render_runtime_error(renderer, error);
-    } catch (const std::exception& error) {
-        std::cerr << "Internal error: " << error.what() << "\n";
+    if (!fs_path) {
+        return file_path;
     }
+
+    std::error_code ec;
+    const auto canonical = std::filesystem::weakly_canonical(*fs_path, ec);
+
+    return ec ? file_path : path_to_utf8(canonical);
+}
+
+// Resolves `program`'s includes in session mode (see
+// IncludeResolver::set_session_included), printing the diagnostics.  Returns
+// the canonical paths of the files read, or std::nullopt on error.
+[[nodiscard]] std::optional<std::vector<std::string>>
+resolve_session_includes(Program& program, SourceManager& source_manager,
+                         StringSet already_included) {
+    IncludeResolver include_resolver{source_manager};
+    include_resolver.set_session_included(std::move(already_included));
+
+    const bool ok = include_resolver.resolve(program);
+
+    print_errors_and_warnings(include_resolver.get_diagnostics());
+
+    if (!ok) {
+        return std::nullopt;
+    }
+
+    return include_resolver.included_files();
 }
 
 // ─── Command dispatch ───────────────────────────────────────────────────────
 
 // Result of dispatching a REPL command.
 enum class CommandResult {
-    Continue, // Handled; read next input.
+    Continue, // Handled (or rejected with a message); read next input.
     Quit,     // Exit the REPL.
-    NotFound, // Not a known command; treat as expression.
 };
 
 // REPL session state passed to command handlers.
@@ -307,55 +328,42 @@ struct ReplState {
     const DiagnosticRenderer& renderer;
     TypeChecker& checker;
     LineEditor& editor;
+    repl_detail::ReplIncludeRegistry& includes;
 };
 
+// Dispatch a `:`-prefixed input line.  Every such line is a REPL command — no
+// Luma statement starts with ':' — so a malformed or unknown command is
+// reported here instead of falling through to a confusing parse error.
 CommandResult dispatch_command(const std::string& line, ReplState& state) {
-    for (const auto& command : k_repl_commands) {
-        bool matched{false};
-        std::string argument{};
+    const auto parsed = repl_detail::parse_repl_command(line);
 
-        if (command.arg.empty()) {
-            // No-argument commands match the exact spelling or alias.
-            matched = line == command.name || line == command.alias;
-        } else {
-            // Argument-taking commands match "<name> " / "<alias> " and consume
-            // the remainder of the line as the argument.
-            const auto name_prefix = std::string{command.name} + ' ';
-            const auto alias_prefix = std::string{command.alias} + ' ';
-
-            if (line.starts_with(name_prefix) || line.starts_with(alias_prefix)) {
-                matched = true;
-                argument = line.substr(line.find(' ') + 1);
-            }
-        }
-
-        if (!matched) {
-            continue;
-        }
-
-        switch (command.kind) {
-            case CommandKind::Quit:
-                return CommandResult::Quit;
-
-            case CommandKind::Help:
-                handle_help_command();
-                return CommandResult::Continue;
-
-            case CommandKind::Clear:
-                handle_clear_command(state.global_env, state.sandbox, state.vm, state.programs,
-                                     state.source_manager, state.checker);
-                return CommandResult::Continue;
-
-            case CommandKind::File:
-                if (repl_detail::validate_file_path(argument)) {
-                    load_and_execute_file(argument, state.source_manager, state.renderer,
-                                          state.checker, state.vm, state.programs);
-                }
-                return CommandResult::Continue;
-        }
+    if (!parsed.kind) {
+        std::cerr << parsed.error << "\n";
+        return CommandResult::Continue;
     }
 
-    return CommandResult::NotFound;
+    switch (*parsed.kind) {
+        case CommandKind::Quit:
+            return CommandResult::Quit;
+
+        case CommandKind::Help:
+            handle_help_command();
+            return CommandResult::Continue;
+
+        case CommandKind::Clear:
+            handle_clear_command(state.global_env, state.sandbox, state.vm, state.programs,
+                                 state.source_manager, state.checker, state.includes);
+            return CommandResult::Continue;
+
+        case CommandKind::File:
+            if (repl_detail::validate_file_path(parsed.argument)) {
+                load_and_execute_file(parsed.argument, state.source_manager, state.renderer,
+                                      state.checker, state.vm, state.programs, state.includes);
+            }
+            return CommandResult::Continue;
+    }
+
+    return CommandResult::Continue;
 }
 
 } // namespace
@@ -394,26 +402,32 @@ std::optional<Program> lex_and_parse(const std::string& source, FileId file_id) 
 
 std::optional<Value> compile_and_run(Program& program, TypeChecker& checker, VM& vm,
                                      std::span<const Program> earlier_programs) {
-    // Type check
-    {
-        auto diagnostics = checker.check_incremental(program);
+    if (!type_check_input(program, checker)) {
+        return std::nullopt;
+    }
 
-        bool has_errors = false;
+    return compile_and_execute(program, vm, earlier_programs);
+}
 
-        for (const auto& diag : diagnostics) {
-            std::cerr << term::out_red() << "type: " << term::out_reset() << diag.message << "\n";
+bool type_check_input(Program& program, TypeChecker& checker) {
+    const auto diagnostics = checker.check_incremental(program);
 
-            if (diag.severity == Severity::Error) {
-                has_errors = true;
-            }
-        }
+    bool has_errors = false;
 
-        if (has_errors) {
-            return std::nullopt;
+    for (const auto& diag : diagnostics) {
+        // Diagnostics go to stderr, so colour them by stderr's TTY state.
+        std::cerr << term::red() << "type: " << term::reset() << diag.message << "\n";
+
+        if (diag.severity == Severity::Error) {
+            has_errors = true;
         }
     }
 
-    // Compile
+    return !has_errors;
+}
+
+std::optional<Value> compile_and_execute(Program& program, VM& vm,
+                                         std::span<const Program> earlier_programs) {
     Compiler compiler;
 
     auto result = compiler.compile(program, /*repl_mode=*/true, earlier_programs);
@@ -433,24 +447,184 @@ std::optional<Value> compile_and_run(Program& program, TypeChecker& checker, VM&
     return vm.execute_function(result.top_level, functions);
 }
 
-void keep_program(std::vector<Program>& programs, Program program, TypeChecker& checker) {
+bool resolve_input_includes(Program& program, SourceManager& source_manager,
+                            ReplIncludeRegistry& includes) {
+    includes.discard();
+
+    const bool has_includes = std::ranges::any_of(program.declarations, [](const auto& decl) {
+        return decl->kind == DeclarationKind::Include;
+    });
+
+    if (!has_includes) {
+        return true;
+    }
+
+    // The input has no file on disk (FileId 0, or a bracketed "<repl:N>"
+    // virtual source), so the resolver treats it as unanchored and resolves
+    // relative paths against the current working directory (Manual §25).
+    auto files = resolve_session_includes(program, source_manager, includes.committed());
+
+    if (!files) {
+        return false;
+    }
+
+    includes.stage(std::move(*files));
+    return true;
+}
+
+std::optional<Program> load_file_input(const std::string& file_path, SourceManager& source_manager,
+                                       ReplIncludeRegistry& includes) {
+    includes.discard();
+
+    const auto& source_file = load_repl_file_source(source_manager, file_path);
+
+    auto program = lex_and_parse(source_file.text, source_file.file_id);
+
+    if (!program) {
+        return std::nullopt;
+    }
+
+    // Only the file itself counts as already included, so a loop back to it is
+    // skipped while every file it includes is re-read — like the file itself.
+    auto entry = canonical_file_path(file_path);
+    auto files = resolve_session_includes(*program, source_manager, StringSet{entry});
+
+    if (!files) {
+        return std::nullopt;
+    }
+
+    files->insert(files->begin(), std::move(entry));
+    includes.stage(std::move(*files));
+
+    return program;
+}
+
+const SourceFile& register_input(SourceManager& source_manager, std::string text) {
+    const auto earlier_inputs = std::ranges::count_if(source_manager.files(), [](const auto& file) {
+        return file.is_virtual && file.path.starts_with("<repl:");
+    });
+
+    return source_manager.load_virtual(std::format("<repl:{}>", earlier_inputs + 1),
+                                       std::move(text));
+}
+
+void evaluate_input(const std::string& input, SourceManager& source_manager,
+                    const DiagnosticRenderer& renderer, TypeChecker& checker, VM& vm,
+                    std::vector<Program>& programs, ReplIncludeRegistry& includes) {
+    try {
+        // Registering the input gives its locations a file the renderer can
+        // show, so a runtime error points at the offending line.
+        const auto& source_file = register_input(source_manager, input);
+
+        auto program = lex_and_parse(source_file.text, source_file.file_id);
+
+        if (!program) {
+            return;
+        }
+
+        if (!resolve_input_includes(*program, source_manager, includes)) {
+            return;
+        }
+
+        auto value = run_and_keep(std::move(*program), checker, vm, programs, includes);
+
+        if (!value) {
+            return;
+        }
+
+        if (!value->is_null()) {
+            std::cout << term::out_cyan() << "=> " << term::out_reset() << value->to_string()
+                      << "\n";
+        }
+    } catch (const RuntimeError& error) {
+        render_runtime_error(renderer, error);
+    } catch (const std::exception& error) {
+        std::cerr << "Internal error: " << error.what() << "\n";
+    }
+}
+
+const SourceFile& load_repl_file_source(SourceManager& source_manager,
+                                        const std::string& file_path) {
+    // A repeated `:file` must not run the text registered by the previous one:
+    // load_fresh_source re-reads the file and registers it under a new file id
+    // (in the session manager, so runtime errors raised later from its
+    // functions still render with the right source).
+    const LoadResult loaded = load_fresh_source(source_manager, file_path);
+
+    if (!loaded) {
+        throw std::runtime_error{loaded.error.value_or("failed to load source file")};
+    }
+
+    return *loaded.file;
+}
+
+ParsedReplCommand parse_repl_command(std::string_view line) {
+    const auto trimmed = trim_view(line);
+    const auto word_end = trimmed.find_first_of(" \t");
+    const auto word = trimmed.substr(0, word_end);
+    const auto argument = word_end == std::string_view::npos ? std::string_view{}
+                                                             : trim_view(trimmed.substr(word_end));
+
+    const auto command =
+        std::ranges::find_if(k_repl_commands, [word](const ReplCommand& candidate) {
+            return word == candidate.name || word == candidate.alias;
+        });
+
+    ParsedReplCommand parsed;
+
+    if (command == k_repl_commands.end()) {
+        parsed.error =
+            std::format("Unknown command: {} (type ':help' for a list of commands)", word);
+        return parsed;
+    }
+
+    const bool takes_argument = !command->arg.empty();
+
+    if (takes_argument == argument.empty()) {
+        parsed.error = takes_argument
+                           ? std::format("Usage: {} {}", command->name, command->arg)
+                           : std::format("Usage: {} (takes no arguments)", command->name);
+        return parsed;
+    }
+
+    parsed.kind = command->kind;
+    parsed.argument = std::string{argument};
+    return parsed;
+}
+
+void ReplIncludeRegistry::commit() {
+    for (auto& file : staged_) {
+        committed_.insert(std::move(file));
+    }
+
+    staged_.clear();
+}
+
+void keep_program(std::vector<Program>& programs, Program program, TypeChecker& checker,
+                  ReplIncludeRegistry& includes) {
     append_program(programs, std::move(program));
     checker.commit_incremental();
+    includes.commit();
 }
 
 std::optional<Value> run_and_keep(Program program, TypeChecker& checker, VM& vm,
-                                  std::vector<Program>& programs) {
+                                  std::vector<Program>& programs, ReplIncludeRegistry& includes) {
     std::optional<Value> value;
 
     try {
         value = compile_and_run(program, checker, vm, programs);
     } catch (const RuntimeError&) {
-        keep_program(programs, std::move(program), checker);
+        keep_program(programs, std::move(program), checker, includes);
+        throw;
+    } catch (...) {
+        includes.discard();
         throw;
     }
 
     if (value) {
-        keep_program(programs, std::move(program), checker);
+        keep_program(programs, std::move(program), checker, includes);
+    } else {
+        includes.discard();
     }
 
     return value;
@@ -520,7 +694,8 @@ bool validate_file_path(const std::string& file_path) {
 
     std::error_code ec;
 
-    if (!std::filesystem::exists(file_path, ec)) {
+    // validate_path() above already rejected text that is not valid UTF-8.
+    if (!std::filesystem::exists(path_from_utf8(file_path), ec)) {
         std::cerr << "File not found: " << file_path << "\n";
 
         return false;
@@ -554,6 +729,9 @@ void run_repl(bool sandbox) {
     // Persistent type checker so definitions from prior inputs are visible.
     TypeChecker repl_checker;
 
+    // Include-once registry: the files included by kept inputs.
+    repl_detail::ReplIncludeRegistry includes;
+
     // Set up line editor with tab completion.
     LineEditor editor;
     editor.set_completions(repl_detail::build_repl_completions());
@@ -565,7 +743,8 @@ void run_repl(bool sandbox) {
                     .source_manager = source_manager,
                     .renderer = renderer,
                     .checker = repl_checker,
-                    .editor = editor};
+                    .editor = editor,
+                    .includes = includes};
 
     const std::string prompt =
         std::string{term::out_bold()} + "luma> " + std::string{term::out_reset()};
@@ -585,17 +764,14 @@ void run_repl(bool sandbox) {
             continue;
         }
 
-        // Dispatch REPL commands (prefixed with ':').
+        // Dispatch REPL commands (prefixed with ':').  Every such line is a
+        // command, handled (or rejected with a message) by dispatch_command.
         if (line.starts_with(":")) {
-            const auto result = dispatch_command(line, state);
-
-            if (result == CommandResult::Quit) {
+            if (dispatch_command(line, state) == CommandResult::Quit) {
                 break;
             }
 
-            if (result == CommandResult::Continue) {
-                continue;
-            }
+            continue;
         }
 
         // Add non-command lines to history.
@@ -611,7 +787,8 @@ void run_repl(bool sandbox) {
             }
         }
 
-        handle_expression(line, source_manager, renderer, repl_checker, vm, programs);
+        repl_detail::evaluate_input(line, source_manager, renderer, repl_checker, vm, programs,
+                                    includes);
     }
 }
 
@@ -633,6 +810,13 @@ int run_eval(bool sandbox) {
     // function — exactly the scratch-pad semantics stdin evaluation expects.
     TypeChecker checker;
 
+    // Owns the text of any included files for as long as the program's AST
+    // (which points into it) is alive.
+    SourceManager source_manager;
+
+    // A single input: nothing is committed for a later one.
+    repl_detail::ReplIncludeRegistry includes;
+
     try {
         auto program = repl_detail::lex_and_parse(source);
 
@@ -640,8 +824,20 @@ int run_eval(bool sandbox) {
             return exit_code::syntax_error;
         }
 
-        if (!repl_detail::compile_and_run(*program, checker, vm)) {
+        // Include resolution failures are compile errors (exit 4), exactly as
+        // when running a file.
+        if (!repl_detail::resolve_input_includes(*program, source_manager, includes)) {
+            return exit_code::compile_error;
+        }
+
+        // Map each rejecting stage to its own exit code: a type error exits 2,
+        // a bytecode compile error exits 4 (see the Manual's exit-code table).
+        if (!repl_detail::type_check_input(*program, checker)) {
             return exit_code::type_error;
+        }
+
+        if (!repl_detail::compile_and_execute(*program, vm, {})) {
+            return exit_code::compile_error;
         }
 
         return exit_code::success;

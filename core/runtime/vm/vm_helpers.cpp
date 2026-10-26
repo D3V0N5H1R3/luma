@@ -33,10 +33,8 @@ void VM::call_value(const Value& callee, int arg_count) {
 
 void VM::call_function(const FunctionValue& func, int arg_count) {
     if (func.compiled != nullptr) {
-        if (stack_.frames.size() >= static_cast<std::size_t>(ResourceLimits::max_call_depth))
-            [[unlikely]] {
-            runtime_error(vm_errors::call_stack_overflow(ResourceLimits::max_call_depth));
-        }
+        validate_call_depth();
+        check_cancellation();
 
         // The type checker rejects a call with too few required arguments at
         // the source level, but the REPL skips type checking and a crafted
@@ -123,6 +121,15 @@ void VM::call_native(const NativeFunctionValue& func, int arg_count) {
 
 // ─────────── Error handling ───────────
 
+void VM::validate_call_depth() const {
+    const auto limit = effective_max_call_depth();
+
+    if (stack_.frames.size() >= limit) [[unlikely]] {
+        runtime_error(vm_errors::call_stack_overflow_recursion(static_cast<int>(limit)),
+                      vm_errors::hint_check_recursion);
+    }
+}
+
 void VM::runtime_error(std::string_view message, std::string_view hint) const {
     if (hint.empty()) {
         throw RuntimeError{message, current_location()};
@@ -152,8 +159,24 @@ bool VM::handle_exception(const RuntimeError& e) {
     return handle_exception(e.what(), e.get_error_payload<Value>());
 }
 
+bool VM::handle_exception(const CancelledException& e) {
+    return handle_cancellation(e.what());
+}
+
 bool VM::handle_exception(const std::runtime_error& e) {
     return handle_exception(e.what(), std::nullopt);
+}
+
+void VM::notify_exception_hook(const std::string& message, bool is_caught) {
+    // THREAD_SAFETY: snapshots captured under shared_lock; safe to use across threads.
+    auto exc_hook_copy = debug_.copy_hook(&DebugCallbacks::exception_hook);
+    auto pause_copy = debug_.copy_hook(&DebugCallbacks::pause_callback);
+
+    if (exc_hook_copy && exc_hook_copy(message, is_caught)) {
+        if (pause_copy) {
+            pause_copy();
+        }
+    }
 }
 
 // Dispatches the active C++ exception to the nearest Luma `catch` handler.
@@ -164,19 +187,11 @@ bool VM::handle_exception(const std::runtime_error& e) {
 // cross-function rethrow from a nested call, which the clang-cl MSVC-EH funclet
 // codegen also mishandles.
 bool VM::handle_exception(const std::string& message, const std::optional<Value>& error_value) {
-    // First determine if the exception will be caught.
+    // First determine if the exception will be caught, then report it to the
+    // debugger with that status.
     const bool has_handler = exception_handler_.has_handler_for(base_depth_);
 
-    // Then call the hook with the is_caught status.
-    // THREAD_SAFETY: snapshots captured under shared_lock; safe to use across threads.
-    auto exc_hook_copy = debug_.copy_hook(&DebugCallbacks::exception_hook);
-    auto pause_copy = debug_.copy_hook(&DebugCallbacks::pause_callback);
-
-    if (exc_hook_copy && exc_hook_copy(message, has_handler)) {
-        if (pause_copy) {
-            pause_copy();
-        }
-    }
+    notify_exception_hook(message, has_handler);
 
     // Then handle, or signal the caller to re-raise.
     if (!has_handler) {
@@ -185,6 +200,88 @@ bool VM::handle_exception(const std::string& message, const std::optional<Value>
 
     auto handler = exception_handler_.pop();
 
+    // Validate the handler before trusting it.  complete_return() drops a
+    // returning frame's handlers, so a well-formed handler always belongs to a
+    // live frame, records a stack depth at or below the current top, and
+    // targets that frame's own code.  Anything else comes from crafted
+    // bytecode; installing its catch_ip into an unrelated frame would let the
+    // fetch loop read outside that frame's chunk.  Treat it as "no handler".
+    if (!is_valid_handler(handler)) [[unlikely]] {
+        return false;
+    }
+
+    // `catch(err)` binds a string — the type checker types `err` as one — so a
+    // non-string payload (a typed error from `Result.unwrap` on
+    // `result<T, E>`) binds its text instead of the value.
+    if (error_value.has_value()) {
+        resume_at_handler(handler, error_value->is_string() ? *error_value
+                                                            : Value{error_value->to_string()});
+    } else {
+        resume_at_handler(handler, Value{std::string{message}});
+    }
+
+    // A `finally` entered while its task is being cancelled runs to completion
+    // whatever error unwound into it (see handle_cancellation()).
+    if (is_self_cancelled() && is_cleanup(handler)) [[unlikely]] {
+        exception_handler_.push_cancel_shield(handler.frame_index, handler.stack_depth);
+    }
+
+    return true;
+}
+
+bool VM::handle_cancellation(const std::string& message) {
+    // A task that is itself being cancelled must stop: its `catch` blocks are
+    // skipped (and dropped, as their frames are being abandoned) so they
+    // cannot swallow the cancellation, but every `finally` on the way out
+    // still runs.  Without this, a `finally` caught the cancellation and its
+    // Rethrow re-raised it as an ordinary RuntimeError, failing the whole
+    // task_scope with "task cancelled".
+    const bool self_cancelled = is_self_cancelled();
+    std::optional<ExceptionHandler> target;
+    bool cleanup = false;
+
+    while (exception_handler_.has_handler_for(base_depth_)) {
+        const auto handler = exception_handler_.pop();
+
+        if (!is_valid_handler(handler)) [[unlikely]] {
+            break; // Crafted bytecode — treat as "no handler" (see above).
+        }
+
+        cleanup = is_cleanup(handler);
+
+        if (cleanup || !self_cancelled) {
+            target = handler;
+            break;
+        }
+    }
+
+    notify_exception_hook(message, target.has_value());
+
+    if (!target.has_value()) {
+        return false;
+    }
+
+    // A cleanup handler gets the marker so its Rethrow re-raises the
+    // cancellation; a `catch` block (another task's cancellation, observed via
+    // await) binds the message like any other error.
+    resume_at_handler(*target, cleanup ? cancellation_marker() : Value{std::string{message}});
+
+    // Let the cleanup code of a cancelled task run to completion instead of
+    // stopping again at its first call or loop iteration.
+    if (cleanup && self_cancelled) {
+        exception_handler_.push_cancel_shield(target->frame_index, target->stack_depth);
+    }
+
+    return true;
+}
+
+bool VM::is_cleanup(const ExceptionHandler& handler) const {
+    const auto& code = stack_.frames[handler.frame_index].function->chunk().code;
+
+    return is_cleanup_handler(code, static_cast<std::size_t>(handler.catch_ip - code.data()));
+}
+
+void VM::resume_at_handler(const ExceptionHandler& handler, Value error_value) {
     // Unwind any task_scope blocks entered after this handler was installed.
     // The frame/stack unwind below cannot see them, so without this their
     // children would be orphaned — neither cancelled nor joined — and leak on
@@ -197,19 +294,29 @@ bool VM::handle_exception(const std::string& message, const std::optional<Value>
         stack_.frames.pop_back();
     }
 
-    stack_.top = stack_.base + handler.stack_depth;
+    // A shielded cleanup handler the error unwinds out of is over.
+    exception_handler_.end_cancel_shields_from(handler.frame_index, handler.stack_depth);
 
-    // Push error value for catch block.  `catch(err)` binds a string — the type
-    // checker types `err` as one — so a non-string payload (a typed error from
-    // `Result.unwrap` on `result<T, E>`) binds its text instead of the value.
-    if (error_value.has_value()) {
-        push(error_value->is_string() ? *error_value : Value{error_value->to_string()});
-    } else {
-        push(Value{std::string{message}});
-    }
+    // Destroy the values the unwound code left on the stack (see
+    // VMStack::truncate_to) rather than merely moving the top down.
+    stack_.truncate_to(handler.stack_depth);
+
+    // Push the error value for the handler code.
+    push(std::move(error_value));
 
     stack_.frames.back().ip = handler.catch_ip;
-    return true;
+}
+
+bool VM::is_valid_handler(const ExceptionHandler& handler) const noexcept {
+    if (handler.frame_index >= stack_.frames.size() || handler.stack_depth > stack_size() ||
+        handler.task_scope_depth > task_manager_.task_scopes.size()) {
+        return false;
+    }
+
+    const auto& frame = stack_.frames[handler.frame_index];
+    const auto* code_start = frame.function->chunk().code.data();
+
+    return handler.catch_ip >= code_start && handler.catch_ip <= frame.code_end;
 }
 
 } // namespace luma

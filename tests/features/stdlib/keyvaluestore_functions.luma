@@ -425,7 +425,7 @@ function void test_keyvaluestore_open_read_only_missing_file_fails() {
     result<key_value_store> opened = KeyValueStore.open_read_only("_kv_test_missing_store.kv")
 
     assert(Result.is_failure(opened))
-    assert(String.contains(Result.error(opened) ?? "", "store file not found"))
+    assert(String.contains(Result.error(opened), "store file not found"))
 }
 
 @test

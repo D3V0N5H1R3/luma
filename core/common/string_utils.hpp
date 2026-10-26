@@ -1,10 +1,10 @@
 #ifndef LUMA_COMMON_STRING_UTILS_HPP
 #define LUMA_COMMON_STRING_UTILS_HPP
 
-// Prevent Windows min/max macros from interfering with std::min/std::max.
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
+// Portable header: no platform macros here.  Translation units that include
+// <windows.h> define NOMINMAX themselves (or get it from
+// common/platform_utils.hpp) so the Windows min/max macros stay out of
+// std::min/std::max.
 
 #include <algorithm>
 #include <cctype>

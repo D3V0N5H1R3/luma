@@ -65,8 +65,7 @@ void register_stack_ns(const EnvPtr& env) {
         .func("contains", 2)
         .extract_body(expect_stack,
                       [](const auto& src, const Args& args, SourceLocation) -> Value {
-                          return Value{std::ranges::any_of(
-                              src->elements, [&](const Value& v) { return v.equals(args[1]); })};
+                          return Value{contains_value(src->elements, args[1])};
                       })
         .func("find", 2)
         .extract_body(expect_stack,

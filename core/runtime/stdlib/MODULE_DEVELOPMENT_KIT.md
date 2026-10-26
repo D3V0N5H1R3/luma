@@ -1,6 +1,6 @@
 # Module Development Kit
 
-Step-by-step guide for adding a new standard library module to Luma.  By the end you will have a fully working module that is lazily loaded, type-checked, and tested.
+Step-by-step guide for adding a new standard library module to Luma.  By the end you will have a fully working module that is registered with the stdlib, type-checked, and tested.
 
 > **See also:** [Stdlib Module Registration Guide](STDLIB_MODULE_REGISTRATION_GUIDE.md) — when to use each registration pattern (`ModuleBuilder`, `ContainerModuleBuilder`, or `define_native`), the `register_<module_lower>_ns` naming convention, and the error-handling patterns.  This kit links to those references rather than repeating them.
 
