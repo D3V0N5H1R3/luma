@@ -109,9 +109,11 @@ def find_visual_studio_llvm_tool(tool: str) -> str | None:
 
     Visual Studio's "C++ Clang tools for Windows" component installs the LLVM
     tools under ``VC\\Tools\\Llvm\\<arch>\\bin`` but puts them on ``PATH`` only
-    inside a Developer prompt. ``vswhere`` locates the newest installation, and
-    the host architecture selects the binary that can run here (an ARM64 build
-    does not start on x64). Returns ``None`` off Windows or when not installed.
+    inside a Developer prompt. ``vswhere -sort`` lists every installation newest
+    first — ``-latest`` would search only the newest, which may lack the
+    component — and the host architecture selects the binary that can run here
+    (an ARM64 build does not start on x64). Returns ``None`` off Windows or when
+    not installed.
     """
     if sys.platform != "win32":
         return None
@@ -126,7 +128,7 @@ def find_visual_studio_llvm_tool(tool: str) -> str | None:
         result = subprocess.run(
             [
                 str(vswhere),
-                "-latest",
+                "-sort",
                 "-prerelease",
                 "-products",
                 "*",

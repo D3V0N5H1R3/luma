@@ -12,7 +12,7 @@
 # KeepEmptyLines, BinPackParameters, and
 # ReflowComments spellings below are 20+).
 # CI pins 20; the tree formats identically
-# with 20 through 22 (Visual Studio's copy).
+# with 20 and 22 (Visual Studio's copy).
 # ─────────────────────────────────────────────
 
 Language: Cpp
@@ -78,7 +78,7 @@ AllowShortEnumsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
-# All, not Inline: clang-format 21+ also treats a lambda inside a braced
+# All, not Inline: clang-format 22 also treats a lambda inside a braced
 # initializer (ScopeGuard guard{[this] { ... }}) as "inline", while 20 does
 # not, so Inline formats the same code differently in CI (20) and in newer
 # local copies such as Visual Studio's bundled clang-format. All gives the same

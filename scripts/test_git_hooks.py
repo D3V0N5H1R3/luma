@@ -275,7 +275,11 @@ class PreCommitTest(GitHookTestCase):
         installer.mkdir(parents=True)
         # vswhere prints Windows paths with CRLF line endings.
         (installer / "vswhere.exe").write_bytes(
-            f"#!/bin/sh\nprintf '%s\\r\\n' '{bundled}'\n".encode()
+            (
+                "#!/bin/sh\n"
+                'for arg; do printf \'%s\\n\' "$arg" >> "$STUB_LOG_DIR/vswhere.log"; done\n'
+                f"printf '%s\\r\\n' '{bundled}'\n"
+            ).encode()
         )
         self.env["PROGRAMFILES(X86)"] = str(program_files)
         self.env["PROCESSOR_ARCHITECTURE"] = "AMD64"
@@ -284,6 +288,12 @@ class PreCommitTest(GitHookTestCase):
         result = self.run_hook(PRE_COMMIT)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("--assume-filename=core/a.cpp", self.log("clang-format"))
+        # Every installation is searched (-latest would check only the newest),
+        # and the fix-it hint names the binary by its Windows path.
+        self.assertIn("-sort", self.log("vswhere"))
+        self.assertNotIn("-latest", self.log("vswhere"))
+        self.assertIn(r"VC\Tools\Llvm\x64\bin\clang-format.exe", self.log("vswhere"))
+        self.assertIn(f'"{bundled}" -i', result.stderr)
 
     def test_clang_tidy_uses_preset_compile_database_and_ci_scope(self) -> None:
         self.write_compile_db("build-debug", ["core/a.cpp", "core/a_posix.cpp", "tests/t.cpp"])

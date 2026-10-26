@@ -63,8 +63,9 @@ def find_visual_studio_clang_format() -> str | None:
 
     Visual Studio's "C++ Clang tools for Windows" component installs it under
     ``VC\\Tools\\Llvm\\<arch>\\bin`` but puts it on ``PATH`` only inside a
-    Developer prompt. Mirrors ``find_visual_studio_llvm_tool`` in
-    ``scripts/_common.py``; the hooks import only the standard library.
+    Developer prompt; ``vswhere -sort`` searches every installation, newest
+    first. Mirrors ``find_visual_studio_llvm_tool`` in ``scripts/_common.py``;
+    the hooks import only the standard library.
     """
     if sys.platform != "win32":
         return None
@@ -80,7 +81,7 @@ def find_visual_studio_clang_format() -> str | None:
         result = subprocess.run(
             [
                 str(vswhere),
-                "-latest",
+                "-sort",
                 "-prerelease",
                 "-products",
                 "*",

@@ -57,9 +57,11 @@ CLANG_FORMAT="$(command -v clang-format 2>/dev/null || true)"
 
 # Visual Studio's "C++ Clang tools for Windows" component ships clang-format but
 # puts it on PATH only inside a Developer prompt, so on Windows fall back to the
-# newest installation's copy, located with vswhere. (The variable holding the
-# installer directory, ProgramFiles(x86), is not a valid shell name, hence
-# printenv.) The tree formats identically with clang-format 20 (CI) and 22.
+# copy from the newest installation that has the component. vswhere -sort lists
+# every installation newest first; -latest would search only the newest, which
+# may lack the component. The installer directory comes from ProgramFiles(x86),
+# which is not a valid shell name, hence printenv. The tree formats identically
+# with clang-format 20 (CI) and 22.
 find_visual_studio_clang_format() {
     case "$(uname -s)" in
         MINGW* | MSYS* | CYGWIN*) ;;
@@ -77,7 +79,7 @@ find_visual_studio_clang_format() {
         ARM64) arch=ARM64 ;;
         *) arch=x64 ;;
     esac
-    found="$("$vswhere" -latest -prerelease -products '*' -utf8 \
+    found="$("$vswhere" -sort -prerelease -products '*' -utf8 \
         -find "VC\\Tools\\Llvm\\$arch\\bin\\clang-format.exe" 2>/dev/null | head -n 1 | tr -d '\r')"
     [ -n "$found" ] || return 0
     found="$(cygpath -u "$found")"
@@ -119,9 +121,15 @@ if [ -n "$CLANG_FORMAT" ]; then
         done
         exit "$status"
     ' sh "$CLANG_FORMAT"; then
+        # Under Git for Windows the path is an MSYS one (/c/...); show the
+        # Windows form, which also works when pasted into PowerShell or cmd.
+        display_path="$CLANG_FORMAT"
+        if command -v cygpath >/dev/null 2>&1; then
+            display_path="$(cygpath -w "$CLANG_FORMAT")"
+        fi
         echo "" >&2
         echo "Commit blocked: clang-format found formatting issues (listed above)." >&2
-        echo "Run '$CLANG_FORMAT -i <file>' on the affected files to fix them," >&2
+        echo "Run \"$display_path\" -i <file> on the affected files to fix them," >&2
         echo "then stage the changes and try again." >&2
         exit 1
     fi
