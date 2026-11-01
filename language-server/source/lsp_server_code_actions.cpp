@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "analysis/lexer/token_type.hpp"
 #include "json/json.hpp"
 #include "lsp_analysis_result.hpp"
 #include "lsp_code_action_builder.hpp"
@@ -13,6 +14,7 @@
 #include "lsp_identifier_collector.hpp"
 #include "lsp_param_extraction.hpp"
 #include "lsp_params.hpp"
+#include "lsp_path_utils.hpp"
 #include "lsp_quickfix_handler.hpp"
 #include "lsp_response_helpers.hpp"
 #include "lsp_server_state_lock.hpp"
@@ -86,6 +88,73 @@ void apply_prefix_underscore_fix(const std::string& name, const std::vector<Toke
     }
 }
 
+// Whether `type` can appear inside a type annotation
+// (`integer`, `array<T>`, `Ns.Type`, `(A, B)`, `function(A) -> R`, `T?`).
+[[nodiscard]] bool is_type_annotation_token(TokenType type) {
+    return type == TokenType::Identifier || is_type_keyword(type) || type == TokenType::Dot ||
+           type == TokenType::Less || type == TokenType::Greater ||
+           type == TokenType::GreaterGreater || type == TokenType::LeftParen ||
+           type == TokenType::RightParen || type == TokenType::Comma || type == TokenType::Arrow ||
+           type == TokenType::QuestionMark;
+}
+
+// For a variable declaration `[mutable] <type> name = value` whose name is the
+// token at `name_idx`, the index of the first token of `<type>`. Returns
+// nullopt when no type annotation precedes the name on its line — e.g. for an
+// assignment `name = value` or a named argument `f(name: value)`.
+[[nodiscard]] std::optional<std::size_t> declaration_type_start(const std::vector<Token>& tokens,
+                                                                std::size_t name_idx) {
+    if (name_idx + 1 >= tokens.size() || tokens[name_idx + 1].type != TokenType::Equals ||
+        tokens[name_idx].preceded_by_newline) {
+        return std::nullopt;
+    }
+
+    const auto is_atom = [](TokenType type) {
+        return type == TokenType::Identifier || is_type_keyword(type);
+    };
+
+    std::optional<std::size_t> start;
+    int depth = 0;
+    bool next_is_atom = false; // whether the token after the current one is an atom
+    for (std::size_t i = name_idx; i > 0; --i) {
+        const auto& tok = tokens[i - 1];
+        const auto type = tok.type;
+        if (!is_type_annotation_token(type)) {
+            break;
+        }
+        // Two adjacent atoms at depth 0 (`y integer x`) mean the type ended.
+        const bool atom = is_atom(type);
+        if (depth == 0 && ((atom && next_is_atom) || type == TokenType::Comma)) {
+            break;
+        }
+        if (type == TokenType::Greater || type == TokenType::RightParen) {
+            ++depth;
+        } else if (type == TokenType::GreaterGreater) {
+            depth += 2;
+        } else if (type == TokenType::Less || type == TokenType::LeftParen) {
+            if (depth == 0) {
+                break;
+            }
+            --depth;
+        }
+        start = i - 1;
+        next_is_atom = atom;
+        if (tok.preceded_by_newline) {
+            break;
+        }
+    }
+
+    // A type annotation ends with a type name, a closing `>`/`)`, or `?`.
+    const auto last = tokens[name_idx - 1].type;
+    const bool ends_like_type = is_atom(last) || last == TokenType::Greater ||
+                                last == TokenType::GreaterGreater ||
+                                last == TokenType::RightParen || last == TokenType::QuestionMark;
+    if (!start.has_value() || depth != 0 || !ends_like_type) {
+        return std::nullopt;
+    }
+    return start;
+}
+
 // ═══════════════════════════════════════════════════════════
 // QuickFixHandler implementations
 //
@@ -112,37 +181,21 @@ public:
             return actions;
         }
 
-        const auto& tokens = ctx.analysis.semantic.tokens;
-        const auto [scope_start, scope_end] =
-            enclosing_scope_range(ctx.analysis, diag.range.start.line + 1);
-
-        for (const auto i : find_matching_tokens(tokens, var_name)) {
-            if (tokens[i].location.line >= scope_start && tokens[i].location.line <= scope_end &&
-                i + 1 < tokens.size() && tokens[i + 1].type == TokenType::Colon) {
-                const bool already_mutable{i > 0 && tokens[i - 1].type == TokenType::Mutable};
-
-                if (!already_mutable) {
-                    const int decl_line = token_line_0based(tokens[i]);
-                    const int decl_col =
-                        token_col_end_0based(tokens[i]) - lexeme_column_width(var_name);
-
-                    actions.push_back(
-                        CodeActionBuilder()
-                            .set_title(std::format("Add 'mutable' to '{}'", var_name))
-                            .set_kind(code_action_kind::k_quickfix)
-                            .set_diagnostics({diag})
-                            .add_edit(
-                                ctx.uri,
-                                ctx.analysis.to_wire(Range{
-                                    .start = Position{.line = decl_line, .character = decl_col},
-                                    .end = Position{.line = decl_line, .character = decl_col}}),
-                                "mutable ")
-                            .build());
-                }
-
-                break;
-            }
+        const auto insert_at =
+            mutable_insertion_position(ctx.analysis, var_name, diag.range.start.line + 1);
+        if (!insert_at.has_value()) {
+            return actions;
         }
+
+        actions.push_back(
+            CodeActionBuilder()
+                .set_title(std::format("Add 'mutable' to '{}'", var_name))
+                .set_kind(code_action_kind::k_quickfix)
+                .set_diagnostics({diag})
+                .add_edit(ctx.uri,
+                          ctx.analysis.to_wire(Range{.start = *insert_at, .end = *insert_at}),
+                          "mutable ")
+                .build());
 
         return actions;
     }
@@ -482,10 +535,18 @@ public:
                     return;
                 }
 
-                auto current_dir = std::filesystem::path(*current_path_opt).parent_path();
-                auto rel = std::filesystem::relative(std::filesystem::path(*include_path_opt),
-                                                     current_dir);
-                auto rel_str = rel.generic_string();
+                const auto current_dir = utf8_path(*current_path_opt).parent_path();
+                std::error_code ec;
+                const auto rel =
+                    std::filesystem::relative(utf8_path(*include_path_opt), current_dir, ec);
+                // Includes may not be absolute or climb out of the including
+                // directory (E4004), so only offer a path the include would accept.
+                if (ec || rel.empty() || rel.is_absolute() ||
+                    *rel.begin() == std::filesystem::path("..")) {
+                    return;
+                }
+                const auto rel_u8 = rel.generic_u8string();
+                const std::string rel_str{rel_u8.begin(), rel_u8.end()};
 
                 actions.push_back(CodeActionBuilder()
                                       .set_title(std::format("Add include \"{}\"", rel_str))
@@ -620,6 +681,35 @@ void collect_fix_all_unused_variables(const std::string& uri, const AnalysisResu
 }
 
 } // anonymous namespace
+
+std::optional<Position> mutable_insertion_position(const AnalysisResult& analysis,
+                                                   std::string_view var_name,
+                                                   int diag_line_1based) {
+    const auto& tokens = analysis.semantic.tokens;
+    const auto [scope_start, scope_end] = enclosing_scope_range(analysis, diag_line_1based);
+
+    // The binding is the nearest `<type> name = …` declaration at or before
+    // the offending assignment within its scope. Luma declares variables
+    // type-first, so `mutable` goes before the type, not before the name.
+    std::optional<std::size_t> type_start;
+    for (const auto i : find_matching_tokens(tokens, var_name)) {
+        const int line = tokens[i].location.line;
+        if (line < scope_start || line > scope_end || line > diag_line_1based) {
+            continue;
+        }
+        if (auto start = declaration_type_start(tokens, i)) {
+            type_start = start;
+        }
+    }
+
+    if (!type_start.has_value() ||
+        (*type_start > 0 && tokens[*type_start - 1].type == TokenType::Mutable)) {
+        return std::nullopt;
+    }
+
+    const auto& first = tokens[*type_start];
+    return Position{.line = token_line_0based(first), .character = token_col_start_0based(first)};
+}
 
 // ═══════════════════════════════════════════════════════════
 // Code actions (quick fixes)

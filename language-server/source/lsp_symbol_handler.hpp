@@ -35,9 +35,10 @@ public:
     // Shared helpers used by other handlers (e.g., navigation).
     [[nodiscard]] Range find_block_range(const std::vector<Token>& tokens,
                                          const SourceLocation& decl_loc) const;
-    [[nodiscard]] std::vector<DocumentSymbol>
+    // Outline of `decls`; uses only the declarations and their tokens.
+    [[nodiscard]] static std::vector<DocumentSymbol>
     build_document_symbols(const std::vector<DeclarationPtr>& decls,
-                           const std::vector<Token>& tokens) const;
+                           const std::vector<Token>& tokens);
 
 private:
     LspHandlerContext& ctx_;

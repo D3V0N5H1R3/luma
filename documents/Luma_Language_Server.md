@@ -164,6 +164,7 @@ When the user hovers over a token, the server identifies the token at the cursor
 
 - **Standard library module names** (e.g., `Math`): the hover shows `namespace Math` and the number of available functions.
 - **Standard library function calls** (e.g., `Math.floor`): the hover shows the return type from the stdlib signature registry.
+- **User code** — functions, parameters, variables, records, choices, interfaces, namespaces, and record fields: the hover shows the declaration in Luma syntax (e.g. `function integer add(integer a, integer b)`, `mutable integer total`, `record Point { number x, number y }`), followed by the doc comment when there is one.
 - **Type keywords and literals:** the hover shows the type (e.g., `integer`, `string`, `boolean`).
 
 The hover response uses Markdown formatting for readability.
@@ -179,6 +180,8 @@ Completion is triggered when the user types `.` after a standard library module 
 3. Returns a `CompletionItem` for each function with the function name and return type.
 
 Completion items use `CompletionItemKind.Function` and include the return type as detail text.
+
+At a position where only a type can be written — a function's return type (`function |`), a parameter's type, after `mutable`, inside a generic type's `<…>` (a built-in generic such as `array<`, a cast, or a PascalCase type — so a comparison typed as `i<n` is not mistaken for one), or after a generic bound's `:` — completion offers only type names: the built-in types and the document's records and choices.
 
 ---
 
@@ -632,6 +635,7 @@ constexpr int kSemanticKeyword   = 5;
 constexpr int kSemanticString    = 6;
 constexpr int kSemanticNumber    = 7;
 constexpr int kSemanticOperator  = 8;
+constexpr int kSemanticDecorator = 9; // @main, @test annotations
 
 // Serialisation helpers.
 [[nodiscard]] JsonValue serialise_position(const Position& pos);
@@ -649,7 +653,7 @@ constexpr int kSemanticOperator  = 8;
 
 Luma `SourceLocation` uses 1-based lines and columns. LSP uses 0-based lines and 0-based character offsets. The conversion subtracts 1 from both during diagnostic serialisation.
 
-Important: the lexer stores the column **one past the last character** of each token (the column at the time `add_token` is called). Token hit-testing in `find_token_at` computes the start column as `location.column - lexeme.size()`.
+Important: the lexer stores the column **one past the last character** of each token (the column at the time `add_token` is called) and records the first character separately (`Token::start_location`). Token extents (`token_extents`) use that recorded start, falling back to `location.column - lexeme_column_width(lexeme)` — a width in codepoints, never bytes. Columns are codepoints internally and are converted to UTF-16 only at the protocol boundary (`PositionEncoder`).
 
 ### `lsp_server.hpp` / `lsp_server.cpp` — Server Logic
 
@@ -660,9 +664,9 @@ namespace luma::lsp {
 
 // Information about a user-defined function extracted from the AST.
 struct UserFunctionInfo {
-    std::string signature;        // e.g. "function greet(name: string) -> string"
+    std::string signature;        // e.g. "function string greet(string name)"
     std::string return_type;      // e.g. "string" — empty if void
-    std::string params_signature; // e.g. "(name: string)" — for signature help
+    std::string params_signature; // e.g. "(string name)" — for signature help
     SourceLocation location;
 };
 
@@ -889,12 +893,22 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 1. Editor sends textDocument/hover with position
 2. LspServer looks up analysis_cache_[uri].tokens
 3. find_token_at() locates the token at the cursor position
-4. Token resolution order:
-   a. Stdlib module name → "namespace Math" + function count
-   b. Stdlib function call (Module.fn pattern) → return type + signature
-   c. User-defined function call → signature from user_functions
-   d. Symbol in definitions → type_string
-   e. Type keyword or literal → built-in type description
+4. Token resolution order (the first resolver that produces text wins):
+   - The member after a dot (`p.x`, `Math.sqrt`, `Geo.area`): stdlib
+     function, namespace function, record field, or choice variant — only
+     these, never an unrelated symbol that shares the member's name
+   - Any other identifier, innermost scope first:
+     a. Stdlib module name → "namespace Math" + function count
+     b. Parameter of the enclosing function → "(parameter) integer x"
+     c. Local variable of the enclosing function → "integer total"
+        ("mutable …" when mutable) — skipped at a call `name(…)` of a user
+        function, so a local declared later does not hide the function
+     d. User-defined function → its signature in Luma syntax
+        ("function integer add(integer a, integer b)") and doc comment
+     e. Record / choice / interface → its declaration with fields or variants
+     f. User namespace → member count
+     g. Module-level variable
+   - Type keyword or literal → built-in type description
 5. Return MarkupContent (markdown) or null if nothing found
 ```
 
@@ -932,7 +946,18 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 ```text
 1. Editor sends textDocument/definition with position
 2. find_token_at() locates the token at cursor
-3. Look up token text in definitions (top-level declarations).
+3. Resolution order (DefinitionResolver):
+   a. `obj.field` → the field in the record declaration of obj's type
+   b. A local variable or parameter in scope at the cursor (ScopeStack) → its
+      declaration: the last binding of the name (`<type> name =`, a
+      parameter, a `for`/`catch`/`case` binding) between the start of the
+      enclosing function and the cursor whose block is still open. A local
+      shadows every top-level symbol of that name; with no binding before the
+      cursor (a call made before a same-named local is declared) the name
+      falls through to the top-level lookup.
+   c. Top-level declaration in this file (definitions / user_functions),
+      following symbol_origins into included files
+   d. Top-level declaration in any other cached file
 4. Return Location{uri, range} or null
 ```
 
@@ -941,16 +966,29 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 ```text
 1. Editor sends textDocument/references with position
 2. find_token_at() locates the token at cursor
-3. Scan all tokens for identifiers matching the same name.
-4. Return Location[] for each match.
+3. Determine the target's namespace: the explicit `Ns.` receiver, or — for a
+   bare name — the namespace of the member whose declaration it is, or from
+   which `use` imports it.
+4. Collect occurrences from the identifier index (collect_scoped_occurrences):
+   - a local variable: only inside its enclosing function's body range
+     (declaration line to closing brace)
+   - a namespace member: `Ns.name` anywhere, its own declaration name, and
+     bare uses of a name imported with `use Ns` / `use Ns.name`. A bare
+     `name` inside `namespace Ns { … }` is not the member — as in the type
+     checker, members are reached only qualified or through `use`.
+   - a top-level symbol: bare uses not shadowed by a local and not bound to
+     a namespace member, in every cached document
+   - includeDeclaration=false drops the declaration's name token
+5. Return Location[] for each match.
 ```
 
 ### Rename Request
 
 ```text
 1. Editor sends textDocument/rename with position and newName
-2. find_token_at() locates the token at cursor
-3. Scan all tokens for identifiers matching the same name.
+2. find_token_at() locates the token at cursor; newName must be a valid,
+   non-reserved identifier and must not collide with an existing name
+3. Collect occurrences exactly as for Find References.
 4. Build TextEdit[] (one per occurrence) replacing the name.
 5. Return WorkspaceEdit{uri → TextEdit[]}.
 ```
@@ -961,10 +999,14 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 1. Editor sends textDocument/codeAction with range and context.diagnostics
 2. For each diagnostic in the request (falling back to all cached diagnostics
    when the request carries none), the server checks for known fixable patterns:
-   - `"cannot assign to immutable variable 'X'"` — inserts `mutable ` before the variable's declaration token.
-   - `"unused variable 'X'"` — renames all occurrences to `_X`.
+   - `"cannot assign to immutable variable 'X'"` — finds the nearest
+     `<type> X = …` declaration before the assignment in the same function
+     and inserts `mutable ` before its type (`mutable integer X = …`).
+   - `"unused variable 'X'"` — renames the occurrences in the enclosing function to `_X`.
    - `"function 'X' is declared but never called"` — renames all occurrences to `_X`.
    - `"variable 'X' is declared mutable but is never mutated"` — removes the `mutable` keyword and the space that follows it.
+   - `"undefined function 'X'"` / `"unknown type 'X'"` — offers `include "<path>"` for a cached
+     file that declares X, when that path is relative and stays inside the directory.
 3. Return CodeAction[] with WorkspaceEdit fixes.
 ```
 
@@ -972,20 +1014,41 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 
 ```text
 1. Editor sends textDocument/semanticTokens/full
-2. LspServer iterates analysis_cache_[uri].tokens.
-3. For each token, map TokenType → semantic token type index (0–8).
-4. Encode the token list in the LSP semantic tokens format (5 integers per token).
+2. A cached result whose content hash matches the analysed source is returned
+   as is (including an empty one); otherwise the tokens are recomputed.
+3. For each token, map TokenType → semantic token type index (0–9, see the
+   legend in §18); identifiers are classified from the analysis (function,
+   type, parameter, variable, namespace). Built-in type names that lex as
+   identifiers (`void`, `set`, `queue`, …) are types unless a user symbol
+   claims the name; the literal segments of an interpolated string are strings.
+4. Encode the token list in the LSP semantic tokens format (5 integers per
+   token, UTF-16 columns). A token spanning several lines (a triple-quoted
+   string) is emitted as one token per line.
 5. Return SemanticTokens{data: uint32[]}.
+```
+
+### Formatting Request
+
+```text
+1. Editor sends textDocument/formatting
+2. format_luma_source() rewrites the stored document text (indentation,
+   operator spacing outside strings, interpolations and comments).
+3. Return a single TextEdit replacing the whole document — from {0, 0} to the
+   end of its last line (UTF-16 length) — or [] when nothing changed.
 ```
 
 ---
 
 ## 17 — JSON-RPC Dispatch
 
-The message loop reads one message at a time, parses the JSON body, and dispatches based on the `method` field:
+The message loop reads one message at a time, parses the JSON body, and dispatches based on the `method` field (`dispatch_message`):
 
 - If the message has an `id` field, it is a **request** — the server must reply with a response.
 - If the message has no `id` field, it is a **notification** — no response is sent.
+- A message with `result` or `error` but no `method` is a **response** to a request the server sent (e.g. `workspace/configuration`); it gets no reply.
+- Any other message without a string `method` is answered with `InvalidRequest` (-32600), echoing its `id` when usable and `null` otherwise.
+
+Lifecycle rules (LSP 3.17): `initialize` must come first and may be sent only once — a second one gets `InvalidRequest`. Every other request, `shutdown` included, gets `ServerNotInitialized` (-32002) until `initialize` has succeeded, and `InvalidRequest` after `shutdown`. Lifecycle requests share the feature handlers' error handling, so a failing `initialize` (e.g. a client that offers no `utf-16` position encoding) receives an `InvalidParams` error response rather than none.
 
 ```text
 Method                                    Type           Handler
@@ -1157,6 +1220,7 @@ This handling belongs to the shared stdio transport (`shared/protocol/`) and app
 
 - Each binary sets `stdin` and `stdout` to binary mode at start-up using `_setmode(_fileno(stdin), _O_BINARY)` and `_setmode(_fileno(stdout), _O_BINARY)` to prevent `\r\n` translation that would corrupt `Content-Length` framing. The debugger additionally sets `stderr` to binary mode.
 - The shared transport reads `stdin` with `_read` on Windows and `read` on POSIX (retrying on `EINTR`), selected by a `_WIN32` branch.
+- File paths decoded from URIs and written in `include` declarations are UTF-8. The language server converts them with `utf8_path()` / `path_to_utf8()` (`lsp_path_utils.hpp`), because MSVC's `std::filesystem::path` reads a `std::string` in the ANSI code page — without this, workspaces in folders such as `C:\Users\José\` could not resolve their includes.
 
 ### Ubuntu and macOS
 

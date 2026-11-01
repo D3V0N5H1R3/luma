@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <format>
 #include <string>
 #include <vector>
@@ -29,9 +30,11 @@ using symbols::SymbolKind;
 // Free function — the actual implementation.
 // Stateless: only inspects the provided tokens and location.
 Range find_block_range(const std::vector<Token>& tokens, const SourceLocation& decl_loc) {
-    // 0-based start position.
-    const int start_line = decl_loc.line - 1;
-    const int start_col = decl_loc.column - 1;
+    // 0-based start position: the first character of the declaration keyword
+    // (decl_loc itself is one past its end).
+    const auto keyword_start = decl_loc.start();
+    const int start_line = keyword_start.line - 1;
+    const int start_col = std::max(0, keyword_start.column - 1);
 
     // Scan forward from the declaration location, matching both line and column
     // to avoid picking up a brace from a different declaration on the same line.
@@ -96,6 +99,44 @@ Range LspSymbolHandler::find_block_range(const std::vector<Token>& tokens,
 
 namespace {
 
+// The range of the member whose name occupies `selection`: the tokens on its
+// line inside the parent's braces (e.g. `number x` or `Circle(number)`), or
+// just the name when other members share the line.
+[[nodiscard]] Range member_range(const std::vector<Token>& tokens, const Range& selection,
+                                 const Range& parent_range, int members_on_line) {
+    if (members_on_line > 1) {
+        return selection;
+    }
+    const auto inside_parent = [&](const Position& p) {
+        return (p.line > parent_range.start.line ||
+                (p.line == parent_range.start.line &&
+                 p.character >= parent_range.start.character)) &&
+               (p.line < parent_range.end.line ||
+                (p.line == parent_range.end.line && p.character <= parent_range.end.character));
+    };
+    Range range = selection;
+    // Tokens are sorted by position, so only the member's own line is scanned.
+    const int line_1based = selection.start.line + 1;
+    for (auto it = std::ranges::lower_bound(tokens, line_1based, {},
+                                            [](const Token& t) { return t.location.line; });
+         it != tokens.end() && it->location.line == line_1based; ++it) {
+        const auto& tok = *it;
+        if (tok.type == TokenType::LeftBrace || tok.type == TokenType::RightBrace ||
+            tok.type == TokenType::Comma) {
+            continue;
+        }
+        const Range tok_range = token_range(tok);
+        if (tok_range.start.line != selection.start.line ||
+            tok_range.end.line != selection.start.line || !inside_parent(tok_range.start) ||
+            !inside_parent(tok_range.end)) {
+            continue;
+        }
+        range.start.character = std::min(range.start.character, tok_range.start.character);
+        range.end.character = std::max(range.end.character, tok_range.end.character);
+    }
+    return range;
+}
+
 // Builds child DocumentSymbol entries from a collection of named members.
 // Each Member must expose a `name` data member of string type.
 // Used for choice variant children (SymbolKind::Constant) and
@@ -112,10 +153,17 @@ build_named_member_children(const std::vector<Member>& members, SymbolKind kind,
         DocumentSymbol child;
         child.name = member.name;
         child.kind = kind;
-        child.range = parent_range;
         child.selection_range = find_identifier_range_bounded(
             tokens, member.name, parent_range.start.line, parent_range.end.line, parent_selection);
         children.push_back(std::move(child));
+    }
+
+    for (auto& child : children) {
+        const auto members_on_line = std::ranges::count_if(children, [&](const DocumentSymbol& c) {
+            return c.selection_range.start.line == child.selection_range.start.line;
+        });
+        child.range = member_range(tokens, child.selection_range, parent_range,
+                                   static_cast<int>(members_on_line));
     }
 
     return children;
@@ -125,7 +173,7 @@ build_named_member_children(const std::vector<Member>& members, SymbolKind kind,
 
 std::vector<DocumentSymbol>
 LspSymbolHandler::build_document_symbols(const std::vector<DeclarationPtr>& decls,
-                                         const std::vector<Token>& tokens) const {
+                                         const std::vector<Token>& tokens) {
     std::vector<DocumentSymbol> symbols;
 
     for (const auto& decl_ptr : decls) {
@@ -141,7 +189,7 @@ LspSymbolHandler::build_document_symbols(const std::vector<DeclarationPtr>& decl
 
                 sym.name = ch.name;
                 sym.kind = SymbolKind::Enum;
-                sym.range = find_block_range(tokens, ch.location);
+                sym.range = lsp::find_block_range(tokens, ch.location);
 
                 sym.selection_range = find_identifier_range(tokens, ch.location, ch.name);
 
@@ -158,7 +206,7 @@ LspSymbolHandler::build_document_symbols(const std::vector<DeclarationPtr>& decl
 
                 sym.name = func.name;
                 sym.kind = SymbolKind::Function;
-                sym.range = find_block_range(tokens, func.location);
+                sym.range = lsp::find_block_range(tokens, func.location);
 
                 // selectionRange: just the name token.
                 sym.selection_range = find_identifier_range(tokens, func.location, func.name);
@@ -172,7 +220,7 @@ LspSymbolHandler::build_document_symbols(const std::vector<DeclarationPtr>& decl
 
                 sym.name = iface.name;
                 sym.kind = SymbolKind::Interface;
-                sym.range = find_block_range(tokens, iface.location);
+                sym.range = lsp::find_block_range(tokens, iface.location);
 
                 sym.selection_range = find_identifier_range(tokens, iface.location, iface.name);
 
@@ -185,7 +233,7 @@ LspSymbolHandler::build_document_symbols(const std::vector<DeclarationPtr>& decl
 
                 sym.name = ns.name;
                 sym.kind = SymbolKind::Namespace;
-                sym.range = find_block_range(tokens, ns.location);
+                sym.range = lsp::find_block_range(tokens, ns.location);
 
                 sym.selection_range = find_identifier_range(tokens, ns.location, ns.name);
                 sym.children = build_document_symbols(ns.declarations, tokens);
@@ -199,7 +247,7 @@ LspSymbolHandler::build_document_symbols(const std::vector<DeclarationPtr>& decl
 
                 sym.name = rec.name;
                 sym.kind = SymbolKind::Struct;
-                sym.range = find_block_range(tokens, rec.location);
+                sym.range = lsp::find_block_range(tokens, rec.location);
 
                 sym.selection_range = find_identifier_range(tokens, rec.location, rec.name);
 

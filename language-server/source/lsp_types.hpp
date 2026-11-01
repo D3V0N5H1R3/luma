@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "json/json.hpp"
@@ -343,7 +344,9 @@ completion_item(std::string_view label, int kind, std::string_view detail = "",
 template <typename... Resolvers>
 [[nodiscard]] inline std::string try_resolve(Resolvers&&... resolvers) {
     std::string result;
-    (void)((result.empty() && ((void)(result = resolvers()), true)) || ...);
+    // Each operand runs one resolver and is true only when it produced text,
+    // so `||` stops at the first non-empty result.
+    (void)(((result = std::forward<Resolvers>(resolvers)()), !result.empty()) || ...);
     return result;
 }
 

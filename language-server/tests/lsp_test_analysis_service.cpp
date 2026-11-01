@@ -10,27 +10,43 @@
 // symbol collection, type errors, and parse-error recovery — can be asserted
 // unconditionally and deterministically here.
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/string_hash.hpp"
 #include "json/json.hpp"
 #include "lsp_analysis_cache.hpp"
 #include "lsp_analysis_result.hpp"
 #include "lsp_analysis_service_impl.hpp"
+#include "lsp_completion_strategy.hpp"
 #include "lsp_config.hpp"
 #include "lsp_constants.hpp"
+#include "lsp_definition_resolver.hpp"
 #include "lsp_diagnostic_builder.hpp"
+#include "lsp_hover_handler.hpp"
 #include "lsp_identifier_collector.hpp"
+#include "lsp_optional_ref.hpp"
+#include "lsp_path_utils.hpp"
+#include "lsp_quickfix_handler.hpp"
 #include "lsp_rename_handler.hpp"
+#include "lsp_semantic_tokens_handler.hpp"
+#include "lsp_stdlib_registry.hpp"
+#include "lsp_symbol_handler.hpp"
 #include "lsp_symbol_resolver.hpp"
 #include "lsp_token_utils.hpp"
 #include "lsp_types.hpp"
+#include "protocol/uri_utils.hpp"
 #include "test_framework.hpp"
 
 using luma::json::JsonValue;
@@ -156,6 +172,83 @@ void test_include_missing_file_reported() {
 
     ASSERT_TRUE(has_code(result, "E4005"));
     ASSERT_TRUE(any_message_contains(result, "not found"));
+}
+
+// ─── Include: resolved under a non-ASCII directory ────────────────
+
+// Creates a uniquely named temporary directory (UTF-8 `name` prefix) and
+// removes it again on destruction.
+struct TempDirectory {
+    std::filesystem::path path;
+
+    explicit TempDirectory(std::string_view name)
+        : path(std::filesystem::temp_directory_path() /
+               luma::lsp::utf8_path(std::format(
+                   "{}_{}", name, std::chrono::steady_clock::now().time_since_epoch().count()))) {
+        std::filesystem::create_directories(path);
+    }
+
+    TempDirectory(const TempDirectory&) = delete;
+    TempDirectory& operator=(const TempDirectory&) = delete;
+    TempDirectory(TempDirectory&&) = delete;
+    TempDirectory& operator=(TempDirectory&&) = delete;
+
+    ~TempDirectory() {
+        std::error_code ec;
+        std::filesystem::remove_all(path, ec);
+    }
+
+    void write(std::string_view relative, std::string_view content) const {
+        const auto file = path / luma::lsp::utf8_path(relative);
+        std::filesystem::create_directories(file.parent_path());
+        std::ofstream out(file, std::ios::binary);
+        out << content;
+    }
+};
+
+void test_include_resolves_under_non_ascii_directory() {
+    ServiceFixture fx;
+
+    // Regression: the document path decoded from its URI is UTF-8, but it was
+    // turned into a filesystem path with the ANSI code page on Windows, so
+    // every include under e.g. C:\Users\José\ was reported as not found.
+    const TempDirectory dir{"luma_lsp_caf\xC3\xA9_\xE5\x90\x8D"};
+    dir.write("lib.luma", "function integer helper() {\n    return 1\n}\n");
+    const std::string main_path = luma::lsp::path_to_utf8(dir.path / "main.luma");
+
+    const auto result = fx.analyze("include \"lib.luma\"\n"
+                                   "\n"
+                                   "@main\n"
+                                   "function void main() {\n"
+                                   "    integer x = helper()\n"
+                                   "}\n",
+                                   luma::protocol::path_to_uri(main_path));
+
+    ASSERT_FALSE(has_code(result, "E4005"));
+    ASSERT_TRUE(result.semantic.symbols.user_functions.contains("helper"));
+}
+
+void test_include_completion_accepts_backslash_and_unicode() {
+    const TempDirectory dir{"luma_lsp_compl\xC3\xA9"};
+    dir.write("sub/caf\xC3\xA9.luma", "");
+    dir.write("sub/other.txt", "");
+
+    const auto labels = [&](const std::string& partial) {
+        std::vector<std::string> out;
+        for (const auto& item : luma::lsp::collect_include_completions(dir.path, partial)) {
+            out.push_back(item["label"].as_string());
+        }
+        return out;
+    };
+
+    // Both separators descend into `sub`, and the UTF-8 file name survives.
+    const auto forward = labels("sub/ca");
+    ASSERT_EQ(forward.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(forward.front(), std::string("sub/caf\xC3\xA9.luma"));
+
+    const auto backward = labels("sub\\ca");
+    ASSERT_EQ(backward.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(backward.front(), std::string("sub\\caf\xC3\xA9.luma"));
 }
 
 // ─── B02/B05: include diagnostic range spans the quoted path in UTF-16 ──
@@ -782,12 +875,586 @@ void test_timeout_warns_and_is_not_flagged_cancelled() {
     ASSERT_TRUE(any_message_contains(result, "timed out"));
 }
 
+// ─── Helpers for the scope / namespace regression tests ───────────
+
+// Index of the `nth` (0-based) Identifier token `name` on 1-based `line`.
+[[nodiscard]] std::size_t token_index_of(const AnalysisResult& result, std::string_view name,
+                                         int line, int nth = 0) {
+    const auto& tokens = result.get_tokens();
+    for (std::size_t i{0}; i < tokens.size(); ++i) {
+        if (tokens[i].lexeme == name && tokens[i].location.line == line && nth-- == 0) {
+            return i;
+        }
+    }
+    luma::test::throw_assertion_error(std::format("no token '{}' on line {}", name, line));
+    return 0;
+}
+
+// Sorted 1-based lines of the given occurrence token indices, comma-joined.
+[[nodiscard]] std::string occurrence_lines(const AnalysisResult& result,
+                                           const std::vector<std::size_t>& indices) {
+    std::vector<int> lines;
+    for (const std::size_t idx : indices) {
+        lines.push_back(result.get_tokens()[idx].location.line);
+    }
+    std::ranges::sort(lines);
+    std::string joined;
+    for (const int line : lines) {
+        joined += (joined.empty() ? "" : ",") + std::to_string(line);
+    }
+    return joined;
+}
+
+[[nodiscard]] std::vector<std::size_t> occurrences(const AnalysisResult& result,
+                                                   const std::string& name, std::string_view ns,
+                                                   bool is_local,
+                                                   const std::optional<std::string>& enclosing,
+                                                   bool include_declaration = true) {
+    const std::string uri = "file:///test/main.luma";
+    return collect_scoped_occurrences(
+        result, name, uri,
+        ScopedOccurrenceFilter{.namespace_prefix = ns,
+                               .is_local = is_local,
+                               .enclosing_function = enclosing,
+                               .origin_uri = uri,
+                               .include_declaration = include_declaration});
+}
+
+// ─── Function and block scopes end at their closing brace ─────────
+
+void test_function_range_covers_trailing_multiline_block() {
+    ServiceFixture fx;
+
+    // Regression: the body range ended one line after the *start* of the last
+    // statement, so a trailing multi-line `if` cut `main` off at line 5. A
+    // local rename from line 3 then missed line 6, and one started on line 6
+    // found no enclosing function and renamed `total` in `other` too.
+    const auto result = fx.analyze("@main\n"
+                                   "function void main() {\n"        // 2
+                                   "    integer total = 1\n"         // 3
+                                   "    if total > 0 {\n"            // 4
+                                   "        integer inner = total\n" // 5
+                                   "        integer again = total\n" // 6
+                                   "    }\n"                         // 7
+                                   "}\n"                             // 8
+                                   "\n"
+                                   "function void other() {\n"  // 10
+                                   "    integer total = 2\n"    // 11
+                                   "    integer copy = total\n" // 12
+                                   "}\n");
+
+    const auto& ranges = result.semantic.functions.function_body_ranges;
+    ASSERT_TRUE(ranges.contains("main"));
+    ASSERT_EQ(ranges.at("main").first, 2);
+    ASSERT_EQ(ranges.at("main").second, 8);
+    ASSERT_EQ(ranges.at("other").second, 13);
+    ASSERT_EQ(luma::lsp::find_enclosing_function(result, 6).value_or(""), std::string("main"));
+
+    // The block-local `inner` is scoped to the `if` block, which closes on line 7.
+    const auto& inner = result.semantic.locals.scoped_locals.at("main").at("inner");
+    ASSERT_EQ(inner.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(inner.front().scope_end_line, 7);
+
+    const std::optional<std::string> main_fn{"main"};
+    ASSERT_EQ(occurrence_lines(result, occurrences(result, "total", "", true, main_fn)),
+              std::string("3,4,5,6"));
+}
+
+void test_unclosed_function_keeps_a_body_range() {
+    ServiceFixture fx;
+
+    // While the closing brace is still missing the range falls back to the
+    // statements, and must not borrow the next function's block.
+    const auto result = fx.analyze("function void first() {\n" // 1
+                                   "    integer a = 1\n"       // 2
+                                   "    integer b = a\n"       // 3
+                                   "function void second() {\n"
+                                   "}\n");
+
+    const auto& ranges = result.semantic.functions.function_body_ranges;
+    ASSERT_TRUE(ranges.contains("first"));
+    ASSERT_GE(ranges.at("first").second, 3);
+    ASSERT_LT(ranges.at("first").second, 5);
+}
+
+// ─── Namespaced rename / references ───────────────────────────────
+
+void test_namespace_member_occurrences() {
+    ServiceFixture fx;
+
+    // Regression: occurrences of `Geo.area` were only those textually written
+    // `Geo.area`, so renaming from a call skipped the declaration (line 2) and
+    // renaming from the declaration skipped every qualified call. A bare
+    // `area(r)` inside the namespace (line 6) is NOT the member: Luma requires
+    // `Geo.area` or `use` there too, so it binds to the top-level `area`.
+    const auto result = fx.analyze("namespace Geo {\n"
+                                   "    function number area(number r) {\n" // 2
+                                   "        return r * r\n"
+                                   "    }\n"
+                                   "    function number twice(number r) {\n"
+                                   "        return area(r) * 2.0\n" // 6
+                                   "    }\n"
+                                   "}\n"
+                                   "\n"
+                                   "function number area(number r) {\n" // 10
+                                   "    return r\n"
+                                   "}\n"
+                                   "\n"
+                                   "@main\n"
+                                   "function void main() {\n"
+                                   "    number a = Geo.area(1.0)\n" // 16
+                                   "    number b = area(2.0)\n"     // 17
+                                   "}\n");
+
+    using luma::lsp::target_namespace_prefix;
+    ASSERT_EQ(target_namespace_prefix(result, token_index_of(result, "area", 2)),
+              std::string("Geo"));
+    ASSERT_EQ(target_namespace_prefix(result, token_index_of(result, "area", 6)), std::string());
+    ASSERT_EQ(target_namespace_prefix(result, token_index_of(result, "area", 16)),
+              std::string("Geo"));
+    ASSERT_EQ(target_namespace_prefix(result, token_index_of(result, "area", 10)), std::string());
+
+    const std::optional<std::string> no_fn;
+    ASSERT_EQ(occurrence_lines(result, occurrences(result, "area", "Geo", false, no_fn)),
+              std::string("2,16"));
+    ASSERT_EQ(occurrence_lines(result, occurrences(result, "area", "", false, no_fn)),
+              std::string("6,10,17"));
+    ASSERT_EQ(occurrence_lines(result, occurrences(result, "area", "Geo", false, no_fn, false)),
+              std::string("16"));
+    ASSERT_EQ(occurrence_lines(result, occurrences(result, "area", "", false, no_fn, false)),
+              std::string("6,17"));
+}
+
+void test_use_imported_names_bind_to_the_namespace() {
+    ServiceFixture fx;
+
+    // `use Geo` makes the bare `area` (line 11) refer to `Geo.area`.
+    const auto result = fx.analyze("namespace Geo {\n"
+                                   "    function number area(number r) {\n" // 2
+                                   "        return r * r\n"
+                                   "    }\n"
+                                   "}\n"
+                                   "\n"
+                                   "use Geo\n"
+                                   "\n"
+                                   "@main\n"
+                                   "function void main() {\n"
+                                   "    number a = area(1.0)\n"     // 11
+                                   "    number b = Geo.area(2.0)\n" // 12
+                                   "}\n");
+
+    using luma::lsp::target_namespace_prefix;
+    ASSERT_EQ(target_namespace_prefix(result, token_index_of(result, "area", 11)),
+              std::string("Geo"));
+
+    const std::optional<std::string> no_fn;
+    ASSERT_EQ(occurrence_lines(result, occurrences(result, "area", "Geo", false, no_fn)),
+              std::string("2,11,12"));
+    ASSERT_EQ(occurrence_lines(result, occurrences(result, "area", "", false, no_fn)),
+              std::string());
+}
+
+// ─── "Add 'mutable'" quick fix ────────────────────────────────────
+
+void test_mutable_insertion_goes_before_the_type() {
+    ServiceFixture fx;
+
+    // Regression: the fix looked for `name :` (a named argument, not a Luma
+    // declaration) and inserted `mutable` there. It must insert before the
+    // type of the type-first declaration instead.
+    const auto result = fx.analyze("function void report(integer count) {\n"
+                                   "}\n"
+                                   "\n"
+                                   "@main\n"
+                                   "function void main() {\n"
+                                   "    array<integer> items = [1]\n"                        // 6
+                                   "    integer count = 0\n"                                 // 7
+                                   "    function(integer) -> integer f = (integer x) -> x\n" // 8
+                                   "    mutable integer done = 0\n"                          // 9
+                                   "    report(count: count)\n"                              // 10
+                                   "    count = count + 1\n"                                 // 11
+                                   "    items = [2]\n"                                       // 12
+                                   "    f = (integer y) -> y\n"                              // 13
+                                   "    done = 1\n"                                          // 14
+                                   "}\n");
+
+    using luma::lsp::mutable_insertion_position;
+    const auto count_pos = mutable_insertion_position(result, "count", 11);
+    ASSERT_TRUE(count_pos.has_value());
+    ASSERT_EQ(count_pos->line, 6);
+    ASSERT_EQ(count_pos->character, 4);
+
+    const auto items_pos = mutable_insertion_position(result, "items", 12);
+    ASSERT_TRUE(items_pos.has_value());
+    ASSERT_EQ(items_pos->line, 5);
+    ASSERT_EQ(items_pos->character, 4);
+
+    const auto f_pos = mutable_insertion_position(result, "f", 13);
+    ASSERT_TRUE(f_pos.has_value());
+    ASSERT_EQ(f_pos->line, 7);
+    ASSERT_EQ(f_pos->character, 4);
+
+    ASSERT_FALSE(mutable_insertion_position(result, "done", 14).has_value());
+}
+
+// ─── Semantic tokens ──────────────────────────────────────────────
+
+struct DecodedToken {
+    int line;
+    int column;
+    int length;
+    int type;
+};
+
+// Decode LSP delta-encoded semantic token data into absolute positions,
+// asserting the stream is well formed (sorted, non-overlapping, positive).
+[[nodiscard]] std::vector<DecodedToken> decode_semantic_tokens(const std::vector<int64_t>& data) {
+    ASSERT_EQ(data.size() % 5, static_cast<std::size_t>(0));
+    std::vector<DecodedToken> out;
+    int line = 0;
+    int column = 0;
+    int previous_end = 0;
+    for (std::size_t i{0}; i < data.size(); i += 5) {
+        ASSERT_GE(data[i], 0);
+        if (data[i] > 0) {
+            line += static_cast<int>(data[i]);
+            column = static_cast<int>(data[i + 1]);
+            previous_end = 0;
+        } else {
+            column += static_cast<int>(data[i + 1]);
+        }
+        ASSERT_GE(column, previous_end);
+        ASSERT_GT(data[i + 2], 0);
+        out.push_back({line, column, static_cast<int>(data[i + 2]), static_cast<int>(data[i + 3])});
+        previous_end = column + static_cast<int>(data[i + 2]);
+    }
+    return out;
+}
+
+[[nodiscard]] std::optional<DecodedToken> semantic_token_at(const std::vector<DecodedToken>& tokens,
+                                                            int line, int column) {
+    for (const auto& tok : tokens) {
+        if (tok.line == line && tok.column == column) {
+            return tok;
+        }
+    }
+    return std::nullopt;
+}
+
+void test_semantic_tokens_types_strings_and_multiline() {
+    ServiceFixture fx;
+    luma::lsp::StdlibRegistry registry;
+    registry.init();
+
+    const auto result = fx.analyze("@main\n"
+                                   "function void main() {\n"          // 1
+                                   "    string text = \"\"\"\n"        // 2
+                                   "        one\n"                     // 3
+                                   "        \"\"\"\n"                  // 4
+                                   "    string name = \"Ada\"\n"       // 5
+                                   "    string hi = \"Hi ${name}!\"\n" // 6
+                                   "    integer set = 1\n"             // 7
+                                   "    boolean ok = true\n"           // 8
+                                   "}\n");
+    const auto tokens =
+        decode_semantic_tokens(luma::lsp::encode_document_semantic_tokens(result, registry));
+    constexpr int k_type = static_cast<int>(luma::lsp::SemanticTokenType::Type);
+    constexpr int k_string = static_cast<int>(luma::lsp::SemanticTokenType::String);
+    constexpr int k_variable = static_cast<int>(luma::lsp::SemanticTokenType::Variable);
+
+    // Regression: `void` lexes as an identifier and was coloured as a variable.
+    const auto void_tok = semantic_token_at(tokens, 1, 9);
+    ASSERT_TRUE(void_tok.has_value());
+    ASSERT_EQ(void_tok->type, k_type);
+
+    // Regression: a triple-quoted string was dropped; now one segment per line.
+    const auto open = semantic_token_at(tokens, 2, 18);
+    ASSERT_TRUE(open.has_value());
+    ASSERT_EQ(open->type, k_string);
+    ASSERT_EQ(open->length, 3);
+    const auto body = semantic_token_at(tokens, 3, 0);
+    ASSERT_TRUE(body.has_value());
+    ASSERT_EQ(body->length, 11);
+    const auto close = semantic_token_at(tokens, 4, 0);
+    ASSERT_TRUE(close.has_value());
+    ASSERT_EQ(close->length, 11);
+
+    // Regression: the literal segments of an interpolated string were dropped.
+    const auto start_segment = semantic_token_at(tokens, 6, 16);
+    ASSERT_TRUE(start_segment.has_value());
+    ASSERT_EQ(start_segment->type, k_string);
+    ASSERT_EQ(start_segment->length, 4); // `"Hi `
+    const auto end_segment = semantic_token_at(tokens, 6, 27);
+    ASSERT_TRUE(end_segment.has_value());
+    ASSERT_EQ(end_segment->type, k_string);
+
+    // A demoted type name used as a variable stays a variable.
+    const auto set_tok = semantic_token_at(tokens, 7, 12);
+    ASSERT_TRUE(set_tok.has_value());
+    ASSERT_EQ(set_tok->type, k_variable);
+
+    // Word literals keep the grammar's constant.language colour.
+    ASSERT_FALSE(semantic_token_at(tokens, 8, 17).has_value());
+}
+
+void test_semantic_tokens_type_names_only_in_type_positions() {
+    ServiceFixture fx;
+    luma::lsp::StdlibRegistry registry;
+    registry.init();
+
+    // Regression (review): `task`, `set`, … are also valid field names, so a
+    // field `integer task` and the member in `job.task` must not be coloured
+    // as types, while `set<integer>` and `-> void` are.
+    const auto result = fx.analyze("record Job {\n"
+                                   "    integer task\n" // 1
+                                   "}\n"
+                                   "\n"
+                                   "@main\n"
+                                   "function void main() {\n"               // 5
+                                   "    Job job = Job { task = 1 }\n"       // 6
+                                   "    integer n = job.task\n"             // 7
+                                   "    set<integer> seen = Set.new()\n"    // 8
+                                   "    function() -> void f = () -> { }\n" // 9
+                                   "}\n");
+    const auto tokens =
+        decode_semantic_tokens(luma::lsp::encode_document_semantic_tokens(result, registry));
+    constexpr int k_type = static_cast<int>(luma::lsp::SemanticTokenType::Type);
+
+    const auto is_type_at = [&](int line, int column) {
+        const auto tok = semantic_token_at(tokens, line, column);
+        return tok.has_value() && tok->type == k_type;
+    };
+    ASSERT_FALSE(is_type_at(1, 12)); // field declaration `integer task`
+    ASSERT_FALSE(is_type_at(6, 20)); // record literal `{ task = 1 }`
+    ASSERT_FALSE(is_type_at(7, 20)); // member access `job.task`
+    ASSERT_TRUE(is_type_at(8, 4));   // `set<integer>`
+    ASSERT_TRUE(is_type_at(9, 18));  // `-> void`
+    ASSERT_TRUE(is_type_at(5, 9));   // `function void main`
+}
+
+// ─── Document symbols: member ranges ──────────────────────────────
+
+void test_document_symbol_members_have_own_ranges() {
+    ServiceFixture fx;
+
+    // Regression: every record field and choice variant claimed its parent's
+    // whole range, so outline "follow cursor" always picked the last member.
+    const auto result = fx.analyze("record Point {\n"
+                                   "    number x,\n" // 1
+                                   "    number y\n"  // 2
+                                   "}\n"
+                                   "choice Color { Red, Green }\n" // 4
+                                   "\n"
+                                   "@main\n"
+                                   "function void main() {\n"
+                                   "}\n");
+    ASSERT_TRUE(result.metadata.cached_program.has_value());
+    const auto symbols = luma::lsp::LspSymbolHandler::build_document_symbols(
+        result.metadata.cached_program->declarations, result.get_tokens());
+
+    const auto find = [&](std::string_view name) -> const luma::lsp::DocumentSymbol& {
+        for (const auto& sym : symbols) {
+            if (sym.name == name) {
+                return sym;
+            }
+        }
+        luma::test::throw_assertion_error(std::format("no symbol '{}'", name));
+        return symbols.front();
+    };
+
+    const auto& point = find("Point");
+    ASSERT_EQ(point.range.start.character, 0); // anchored at `record`, not after it
+    ASSERT_EQ(point.children.size(), static_cast<std::size_t>(2));
+    const auto& x = point.children[0];
+    ASSERT_EQ(x.range.start.line, 1);
+    ASSERT_EQ(x.range.start.character, 4); // `number x`
+    ASSERT_EQ(x.range.end.character, 12);
+    ASSERT_EQ(x.selection_range.start.character, 11);
+    ASSERT_EQ(point.children[1].range.start.line, 2);
+
+    // Members sharing a line each get just their name.
+    const auto& color = find("Color");
+    ASSERT_EQ(color.children.size(), static_cast<std::size_t>(2));
+    for (const auto& variant : color.children) {
+        ASSERT_EQ(variant.range.start.character, variant.selection_range.start.character);
+        ASSERT_EQ(variant.range.end.character, variant.selection_range.end.character);
+    }
+}
+
+// ─── Go-to-definition on a local that shadows a global ────────────
+
+[[nodiscard]] std::optional<luma::lsp::Location> definition_at(const AnalysisResult& result,
+                                                               std::size_t token_idx) {
+    const luma::StringMap<AnalysisResult> no_other_results;
+    const luma::lsp::DefinitionResolver resolver(
+        "file:///test/main.luma", result, result.get_tokens(),
+        [](const std::string&) { return luma::lsp::optional_ref<const AnalysisResult>{}; },
+        [](const std::vector<luma::Token>&, const luma::SourceLocation&) { return Range{}; },
+        no_other_results);
+    const auto& tok = result.get_tokens()[token_idx];
+    return resolver.resolve(tok.lexeme, tok, token_idx);
+}
+
+void test_definition_prefers_shadowing_local() {
+    ServiceFixture fx;
+
+    // Regression: locals and parameters were never consulted, so a local named
+    // like a top-level function jumped to the function.
+    const auto result = fx.analyze("function integer value() {\n"
+                                   "    return 42\n"
+                                   "}\n"
+                                   "\n"
+                                   "function integer twice(integer value) {\n" // 5
+                                   "    return value * 2\n"                    // 6
+                                   "}\n"
+                                   "\n"
+                                   "@main\n"
+                                   "function void main() {\n"
+                                   "    integer value = 5\n"    // 11
+                                   "    integer copy = value\n" // 12
+                                   "    integer other = twice(copy)\n"
+                                   "}\n");
+
+    const auto local = definition_at(result, token_index_of(result, "value", 12));
+    ASSERT_TRUE(local.has_value());
+    ASSERT_EQ(local->range.start.line, 10);
+    ASSERT_EQ(local->range.start.character, 12);
+
+    const auto param = definition_at(result, token_index_of(result, "value", 6));
+    ASSERT_TRUE(param.has_value());
+    ASSERT_EQ(param->range.start.line, 4);
+    ASSERT_EQ(param->range.start.character, 31);
+
+    // A call to the top-level function still resolves to its declaration.
+    const auto global = definition_at(result, token_index_of(result, "twice", 13));
+    ASSERT_TRUE(global.has_value());
+    ASSERT_EQ(global->range.start.line, 4);
+}
+
+void test_definition_picks_the_binding_before_the_cursor() {
+    ServiceFixture fx;
+
+    // Regression (review): the first occurrence in the function was taken as
+    // the declaration, so a call to the top-level `value()` made before a
+    // local `value` is declared resolved to the call itself, and later uses
+    // resolved to that call. A binding in a block that already closed (line 6)
+    // and a lambda parameter (line 8) are covered too.
+    const auto result =
+        fx.analyze("function integer value() {\n" // 1
+                   "    return 42\n"
+                   "}\n"
+                   "\n"
+                   "@main\n"
+                   "function void main() {\n"
+                   "    integer first = value()\n" // 7
+                   "    integer value = 5\n"       // 8
+                   "    if first > 0 {\n"
+                   "        integer shadow = value\n" // 10
+                   "    }\n"
+                   "    integer copy = value\n"                                          // 12
+                   "    function(integer) -> integer f = (integer value) -> value + 1\n" // 13
+                   "}\n");
+
+    const auto call = definition_at(result, token_index_of(result, "value", 7));
+    ASSERT_TRUE(call.has_value());
+    ASSERT_EQ(call->range.start.line, 0); // the top-level function
+
+    const auto later = definition_at(result, token_index_of(result, "value", 12));
+    ASSERT_TRUE(later.has_value());
+    ASSERT_EQ(later->range.start.line, 7);
+    ASSERT_EQ(later->range.start.character, 12);
+
+    const auto nested = definition_at(result, token_index_of(result, "value", 10));
+    ASSERT_TRUE(nested.has_value());
+    ASSERT_EQ(nested->range.start.line, 7);
+
+    // `(integer value) -> value + 1`: the body's `value` is the lambda parameter.
+    const auto lambda_body = definition_at(result, token_index_of(result, "value", 13, 1));
+    ASSERT_TRUE(lambda_body.has_value());
+    ASSERT_EQ(lambda_body->range.start.line, 12);
+    ASSERT_EQ(lambda_body->range.start.character, 46);
+}
+
+void test_binding_occurrence_forms() {
+    ServiceFixture fx;
+    const auto result = fx.analyze("@main\n"
+                                   "function void main() {\n"
+                                   "    array<integer> items = [1, 2]\n"  // 3
+                                   "    for index, item in items {\n"     // 4
+                                   "        print(\"${index}${item}\")\n" // 5
+                                   "    }\n"
+                                   "    result<integer> parsed = success(1)\n" // 7
+                                   "    match parsed {\n"
+                                   "        case success(value) { print(\"${value}\") }\n" // 9
+                                   "        case failure(error) { print(error) }\n"        // 10
+                                   "    }\n"
+                                   "}\n");
+    const auto& tokens = result.get_tokens();
+    using luma::lsp::is_binding_occurrence;
+    ASSERT_TRUE(is_binding_occurrence(tokens, token_index_of(result, "items", 3)));
+    ASSERT_FALSE(is_binding_occurrence(tokens, token_index_of(result, "items", 4)));
+    ASSERT_TRUE(is_binding_occurrence(tokens, token_index_of(result, "index", 4)));
+    ASSERT_TRUE(is_binding_occurrence(tokens, token_index_of(result, "item", 4)));
+    ASSERT_TRUE(is_binding_occurrence(tokens, token_index_of(result, "value", 9)));
+    ASSERT_TRUE(is_binding_occurrence(tokens, token_index_of(result, "error", 10)));
+    ASSERT_FALSE(is_binding_occurrence(tokens, token_index_of(result, "error", 10, 1)));
+    ASSERT_FALSE(is_binding_occurrence(tokens, token_index_of(result, "parsed", 8)));
+}
+
+// ─── Hover ────────────────────────────────────────────────────────
+
+[[nodiscard]] std::string hover_at(const AnalysisResult& result, std::string_view name, int line,
+                                   int nth = 0) {
+    luma::lsp::StdlibRegistry registry;
+    registry.init();
+    return luma::lsp::resolve_hover_text(result, token_index_of(result, name, line, nth), registry);
+}
+
+void test_hover_resolves_user_symbols() {
+    ServiceFixture fx;
+
+    // Regression: only the first hover resolver ever ran, so user symbols had
+    // no hover; and (review) once they ran, the member in `p.x` showed an
+    // unrelated local `x`, and a local shadowing a top-level function showed
+    // the function.
+    const auto result = fx.analyze("record Point {\n" // 1
+                                   "    number x,\n"
+                                   "    number y\n"
+                                   "}\n"
+                                   "\n"
+                                   "function integer value(integer seed) {\n" // 6
+                                   "    return seed\n"                        // 7
+                                   "}\n"
+                                   "\n"
+                                   "@main\n"
+                                   "function void main() {\n"
+                                   "    integer first = value(1)\n"             // 12
+                                   "    mutable integer value = 2\n"            // 13
+                                   "    string x = \"local\"\n"                 // 14
+                                   "    Point p = Point { x = 1.0, y = 2.0 }\n" // 15
+                                   "    number px = p.x\n"                      // 16
+                                   "    value = value + first\n"                // 17
+                                   "}\n");
+
+    const auto block = [](std::string_view code) { return std::format("```luma\n{}\n```", code); };
+    ASSERT_EQ(hover_at(result, "Point", 1),
+              block("record Point {\n    number x,\n    number y\n}"));
+    ASSERT_EQ(hover_at(result, "value", 6), block("function integer value(integer seed)"));
+    ASSERT_EQ(hover_at(result, "seed", 7), block("(parameter) integer seed"));
+    ASSERT_EQ(hover_at(result, "value", 12), block("function integer value(integer seed)"));
+    ASSERT_EQ(hover_at(result, "value", 17), block("mutable integer value"));
+    ASSERT_EQ(hover_at(result, "x", 16), block("(field) number x"));
+    ASSERT_EQ(hover_at(result, "x", 14), block("string x"));
+}
+
 } // namespace
 
 int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_include_absolute_path_rejected);
     RUN(test_include_directory_traversal_rejected);
     RUN(test_include_missing_file_reported);
+    RUN(test_include_resolves_under_non_ascii_directory);
+    RUN(test_include_completion_accepts_backslash_and_unicode);
     RUN(test_include_diagnostic_range_measures_utf16_width);
     RUN(test_include_not_validated_without_uri);
     RUN(test_user_functions_collected);
@@ -812,6 +1479,18 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_rename_to_distinct_existing_name_is_a_conflict);
     RUN(test_cancellation_is_quiet_and_flagged);
     RUN(test_timeout_warns_and_is_not_flagged_cancelled);
+    RUN(test_function_range_covers_trailing_multiline_block);
+    RUN(test_unclosed_function_keeps_a_body_range);
+    RUN(test_namespace_member_occurrences);
+    RUN(test_use_imported_names_bind_to_the_namespace);
+    RUN(test_mutable_insertion_goes_before_the_type);
+    RUN(test_definition_prefers_shadowing_local);
+    RUN(test_definition_picks_the_binding_before_the_cursor);
+    RUN(test_binding_occurrence_forms);
+    RUN(test_hover_resolves_user_symbols);
+    RUN(test_semantic_tokens_types_strings_and_multiline);
+    RUN(test_semantic_tokens_type_names_only_in_type_positions);
+    RUN(test_document_symbol_members_have_own_ranges);
 
     return SUMMARY();
 }

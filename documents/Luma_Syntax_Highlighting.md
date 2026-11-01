@@ -31,6 +31,7 @@ This document covers the token categories and scope strategy for syntax highligh
     - [`languages/luma/indents.scm` — Indentation](#languageslumaindentsscm--indentation)
     - [Build Process](#build-process-1)
     - [Theme Compatibility](#theme-compatibility-1)
+4. [Semantic Tokens from the Language Server](#4--semantic-tokens-from-the-language-server)
 
 - [See Also](#see-also)
 
@@ -704,8 +705,34 @@ Zed's built-in themes (One Dark, Solarized Light, Gruvbox, etc.) use the standar
 
 ---
 
+## 4 — Semantic Tokens from the Language Server
+
+The grammars above colour text by its shape. The language server (`luma_lsp`) adds `textDocument/semanticTokens/full`, which colours identifiers by what they *resolve to* — a function, a parameter, a record type. In VS Code, a semantic token overrides the TextMate scope of the text it covers; text the server leaves untokenised keeps its grammar scope. The token legend (indices are fixed by `SemanticTokenType` in `lsp_types.hpp`):
+
+| Index | Token type  | Assigned to                                                                                   |
+| ----- | ----------- | --------------------------------------------------------------------------------------------- |
+| 0     | `namespace` | Standard library module names (`Math`, `String`, …), with the `readonly` modifier            |
+| 1     | `type`      | Built-in type keywords, `void`, the container/handle type names, user records/choices/aliases |
+| 2     | `function`  | User-defined functions (`definition` modifier on the declaration's name)                      |
+| 3     | `variable`  | Other identifiers (`readonly` unless declared `mutable`)                                      |
+| 4     | `parameter` | Parameters of the enclosing function                                                          |
+| 5     | `keyword`   | Word keywords (`if`, `function`, `mutable`, …)                                                |
+| 6     | `string`    | String literals and the literal segments of interpolated strings                              |
+| 7     | `number`    | Integer and number literals                                                                   |
+| 8     | `operator`  | Operators                                                                                     |
+| 9     | `decorator` | Annotations (`@main`, `@test`)                                                                |
+
+To stay consistent with the grammar scopes in [§1](#token-categories):
+
+- `void` and the container/handle type names (`set`, `queue`, `stack`, `task`, `channel`, `reference`, `socket`, `xml`, `key_value_store`) lex as identifiers but are tokenised as `type`, matching `storage.type.luma`, where they stand in a type position — before `<` or a name (`set<integer>`, `socket s`, `function void main`), or after `<` or `->`. They are also valid field and variable names, so a field (`integer task`, `job.task`), a named argument, or a variable or parameter the document declares with that name is tokenised as a `variable`.
+- `true`, `false`, `none` (§5a) and `success`, `failure`, `some` (§5b) are not tokenised, so they keep `constant.language.luma` and `support.function.builtin.luma`. The LSP legend has no standard constant type, and a `keyword` token would override those scopes.
+- The `${` and `}` delimiters of an interpolation are not tokenised and keep their grammar scope; the text between them is tokenised like any other code.
+- A triple-quoted string is tokenised once per line it covers, because LSP semantic tokens cannot span lines.
+
+---
+
 ## See Also
 
 - [Contributing](../CONTRIBUTING.md) — installing the editor extensions
-- [Language Server](Luma_Language_Server.md) — semantic editor features (diagnostics, hover, completion)
+- [Language Server](Luma_Language_Server.md) — semantic editor features (diagnostics, hover, completion, semantic tokens)
 - [Manual Tests](Luma_Manual_Tests.md) — manual test plan covering the VS Code and Zed extensions

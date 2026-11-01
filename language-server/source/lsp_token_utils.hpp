@@ -226,6 +226,17 @@ extract_namespace_prefix(const std::vector<Token>& tokens, std::size_t identifie
            is_identifier(tokens[token_index - 2]) && tokens[token_index - 2].lexeme == expected_ns;
 }
 
+// Whether the Identifier at `token_index` introduces a name rather than uses
+// one. Recognised binding forms (all type-first, as Luma writes them):
+//   [mutable] <type> name = …        variable declaration
+//   (<type> name, <type> other)      function / lambda parameter, tuple binding
+//   for name in …, for i, name in …, for (a, b) in …
+//   catch (name)
+//   case Variant(name) / case success(name) / case some(name)  match patterns
+// Record-pattern bindings (`case Shape { width }`, `Point { x } = p`) are not
+// recognised.
+[[nodiscard]] bool is_binding_occurrence(const std::vector<Token>& tokens, std::size_t token_index);
+
 } // namespace luma::lsp
 
 #endif // LUMA_LSP_TOKEN_UTILS_HPP

@@ -27,15 +27,122 @@ using util::annotation_to_string;
 
 namespace {
 
-// Estimate the last source line of a block of statements (1-based).
-// Returns 0 when the vector is empty.
-[[nodiscard]] int estimate_block_end(const std::vector<std::unique_ptr<Statement>>& stmts) {
+using BlockSpan = FunctionStructure::BlockSpan;
+
+// Tokens of the analysed document carry file id 0; declarations merged in from
+// included files carry their own id and must never be mapped onto this file's
+// lines or braces.
+constexpr int k_current_file_id = 0;
+
+// (line, column) ordering of source positions.
+[[nodiscard]] constexpr bool position_less(int line_a, int col_a, int line_b, int col_b) {
+    return line_a < line_b || (line_a == line_b && col_a < col_b);
+}
+
+// Pair every `{` with its matching `}` in the current file's token stream.
+// Unmatched braces (incomplete code) produce no span. Sorted by opening brace.
+[[nodiscard]] std::vector<BlockSpan> collect_block_spans(const std::vector<Token>& tokens) {
+    std::vector<BlockSpan> spans;
+    std::vector<const Token*> open_braces;
+    for (const auto& tok : tokens) {
+        if (tok.location.file_id != k_current_file_id) {
+            continue;
+        }
+        if (tok.type == TokenType::LeftBrace) {
+            open_braces.push_back(&tok);
+        } else if (tok.type == TokenType::RightBrace && !open_braces.empty()) {
+            const Token* open = open_braces.back();
+            open_braces.pop_back();
+            spans.push_back(BlockSpan{.open_line = open->location.line,
+                                      .open_column = open->location.column,
+                                      .close_line = tok.location.line,
+                                      .close_column = tok.location.column});
+        }
+    }
+    std::ranges::sort(spans, [](const BlockSpan& a, const BlockSpan& b) {
+        return position_less(a.open_line, a.open_column, b.open_line, b.open_column);
+    });
+    return spans;
+}
+
+// The innermost block whose braces strictly enclose `loc`, if any.
+[[nodiscard]] const BlockSpan* innermost_enclosing_block(const std::vector<BlockSpan>& spans,
+                                                         const SourceLocation& loc) {
+    auto it = std::upper_bound(
+        spans.begin(), spans.end(), loc, [](const SourceLocation& l, const BlockSpan& s) {
+            return position_less(l.line, l.column, s.open_line, s.open_column);
+        });
+    // Spans before `it` open before `loc`; walking back reaches nested
+    // (innermost) blocks before the blocks that contain them.
+    while (it != spans.begin()) {
+        --it;
+        if (position_less(it->open_line, it->open_column, loc.line, loc.column) &&
+            position_less(loc.line, loc.column, it->close_line, it->close_column)) {
+            return &*it;
+        }
+    }
+    return nullptr;
+}
+
+// The first block opened after `loc` — the body of a declaration at `loc` —
+// provided its opening brace is the first `{` after `loc` outside parentheses
+// and brackets. Returns nullptr when that brace is unmatched (code still being
+// typed), so a declaration never borrows a later declaration's block.
+[[nodiscard]] const BlockSpan* declaration_body_block(const AnalysisResult& result,
+                                                      const SourceLocation& loc) {
+    const auto& tokens = result.semantic.tokens;
+    auto tok_it = std::upper_bound(
+        tokens.begin(), tokens.end(), loc, [](const SourceLocation& l, const Token& t) {
+            return position_less(l.line, l.column, t.location.line, t.location.column);
+        });
+    int nesting = 0;
+    for (; tok_it != tokens.end(); ++tok_it) {
+        const auto type = tok_it->type;
+        if (type == TokenType::LeftParen || type == TokenType::LeftBracket) {
+            ++nesting;
+        } else if ((type == TokenType::RightParen || type == TokenType::RightBracket) &&
+                   nesting > 0) {
+            --nesting;
+        } else if (type == TokenType::LeftBrace && nesting == 0) {
+            break;
+        }
+    }
+    if (tok_it == tokens.end()) {
+        return nullptr;
+    }
+    const auto& spans = result.semantic.functions.block_spans;
+    const auto& open = tok_it->location;
+    const auto span_it = std::lower_bound(
+        spans.begin(), spans.end(), open, [](const BlockSpan& s, const SourceLocation& l) {
+            return position_less(s.open_line, s.open_column, l.line, l.column);
+        });
+    if (span_it != spans.end() && span_it->open_line == open.line &&
+        span_it->open_column == open.column) {
+        return &*span_it;
+    }
+    return nullptr;
+}
+
+// Last source line (1-based) of the block holding `stmts`: the line of its
+// closing brace. Returns 0 when the vector is empty. Statements from an
+// included file, or code whose braces do not match, fall back to the last
+// statement's start line plus one (statement locations carry no end).
+[[nodiscard]] int block_end_line(const std::vector<std::unique_ptr<Statement>>& stmts,
+                                 const AnalysisResult& result) {
+    const auto first = std::ranges::find_if(stmts, [](const auto& s) { return s != nullptr; });
+    if (first == stmts.end()) {
+        return 0;
+    }
+    if ((*first)->location.file_id == k_current_file_id) {
+        if (const auto* span = innermost_enclosing_block(result.semantic.functions.block_spans,
+                                                         (*first)->location)) {
+            return span->close_line;
+        }
+    }
     const auto line_of = [](const std::unique_ptr<Statement>& s) {
         return s ? s->location.line : 0;
     };
-    const auto it = std::ranges::max_element(stmts, {}, line_of);
-    const int end_line = it != stmts.end() ? line_of(*it) : 0;
-    // Heuristic: add 1 line for the closing brace.
+    const int end_line = line_of(*std::ranges::max_element(stmts, {}, line_of));
     return end_line > 0 ? end_line + 1 : 0;
 }
 
@@ -105,11 +212,11 @@ namespace {
 }
 
 // ─── Scope range helper ───
-// Returns the estimated end line of a block, falling back to `fallback`
-// when the block is empty.
+// Returns the end line of the block holding `body`, falling back to
+// `fallback` when the block is empty.
 [[nodiscard]] int calculate_scope_range(const std::vector<std::unique_ptr<Statement>>& body,
-                                        int fallback) {
-    const int end = estimate_block_end(body);
+                                        const AnalysisResult& result, int fallback) {
+    const int end = block_end_line(body, result);
     return end > 0 ? end : fallback;
 }
 
@@ -166,14 +273,19 @@ void handle_choice_declaration(const ChoiceDeclaration& ch, AnalysisResult& resu
 }
 
 // Build the full function signature string and return type from a
-// FunctionDeclaration.  Populates the UserFunctionInfo entry in the
-// analysis result.
+// FunctionDeclaration, written the way Luma declares it
+// (`function integer Ns.add(integer a, integer b)`) so hover and signature help
+// show valid Luma.  Populates the UserFunctionInfo entry in the analysis result.
 [[nodiscard]] std::string build_function_signature(const FunctionDeclaration& func,
                                                    std::string_view prefix,
                                                    std::string& out_ret_type,
                                                    std::string& out_params_sig,
                                                    std::vector<ParamInfo>& out_param_list) {
+    std::string ret_type = annotation_to_string(func.return_type);
+
     std::string sig = "function ";
+    sig += ret_type.empty() ? "void" : ret_type;
+    sig += ' ';
     if (!prefix.empty()) {
         sig.append(prefix);
         sig += '.';
@@ -188,15 +300,12 @@ void handle_choice_declaration(const ChoiceDeclaration& ch, AnalysisResult& resu
         if (func.parameters[i].is_mutable) {
             params_sig += "mutable ";
         }
-        params_sig += func.parameters[i].name;
-        params_sig += ": ";
         params_sig += annotation_to_string(func.parameters[i].type);
+        params_sig += ' ';
+        params_sig += func.parameters[i].name;
     }
     params_sig += ")";
     sig += params_sig;
-
-    std::string ret_type = annotation_to_string(func.return_type);
-    sig += " -> " + ret_type;
 
     std::vector<ParamInfo> param_list;
     param_list.reserve(func.parameters.size());
@@ -232,23 +341,24 @@ void handle_function_declaration(const FunctionDeclaration& func, AnalysisResult
                          .parameters = std::move(param_list),
                          .location = func.location};
 
-    if (!func.body.empty()) {
-        const int start_line = func.location.line;
-        int end_line = start_line;
-        for (const auto& stmt : func.body) {
-            if (stmt && stmt->location.line > end_line) {
-                end_line = stmt->location.line;
-            }
+    // The body range runs from the declaration to its closing brace (or, while
+    // that brace is still missing, to just past the last statement). Only
+    // functions of the analysed document get one: an included function's
+    // lines belong to another file and would shadow this file's functions in
+    // the line-based enclosing-function lookup.
+    int fn_start = 0;
+    int fn_end = 0;
+    if (func.location.file_id == k_current_file_id) {
+        if (const auto* body = declaration_body_block(result, func.location)) {
+            fn_end = body->close_line;
+        } else {
+            fn_end = std::max(func.location.line + 1, block_end_line(func.body, result));
         }
-        result.semantic.functions.function_body_ranges[qname] = {start_line, end_line + 1};
+        fn_start = func.location.line;
+        result.semantic.functions.function_body_ranges[qname] = {fn_start, fn_end};
     }
 
-    if (!func.body.empty()) {
-        const auto& [fn_start, fn_end] = result.semantic.functions.function_body_ranges[qname];
-        collect_local_vars_fn(func.body, result, qname, fn_start, fn_end);
-    } else {
-        collect_local_vars_fn(func.body, result, qname, 0, 0);
-    }
+    collect_local_vars_fn(func.body, result, qname, fn_start, fn_end);
 
     for (const auto& p : func.parameters) {
         const auto type_str = annotation_to_string(p.type);
@@ -276,6 +386,78 @@ void handle_interface_declaration(const InterfaceDeclaration& iface, AnalysisRes
     result.semantic.symbols.definitions[ns.name] =
         SymbolDefinition{.location = ns.location, .type_string = "namespace", .is_mutable = false};
     return symbols::make_qualified(prefix, ns.name);
+}
+
+// Record where a member of namespace `prefix` declares its bare `name`, so
+// rename and references can bind that token to the qualified member.
+void record_namespace_member_name(AnalysisResult& result, std::string_view prefix,
+                                  const std::string& name, const SourceLocation& location) {
+    if (prefix.empty() || location.file_id != k_current_file_id) {
+        return;
+    }
+    const auto range = find_declaration_name_range(result.semantic.tokens, location, name);
+    result.semantic.symbols.namespace_member_names.push_back(
+        {.line = range.start.line,
+         .character = range.start.character,
+         .qualified_name = symbols::make_qualified(prefix, name)});
+}
+
+// Collect the bare names the analysed document's `use` declarations import.
+void collect_imported_names(const Program& program, AnalysisResult& result) {
+    auto& symbols = result.semantic.symbols;
+    // Whether `member` names a top-level symbol, as opposed to the bare-name
+    // alias register_qualified_definition adds for the namespaced `qualified`
+    // itself (same declaration location).
+    const auto is_top_level = [&](const std::string& member, const std::string& qualified) {
+        if (symbols.user_functions.contains(member)) {
+            return true;
+        }
+        const auto bare = symbols.definitions.find(member);
+        if (bare == symbols.definitions.end()) {
+            return false;
+        }
+        const auto own = symbols.definitions.find(qualified);
+        return own == symbols.definitions.end() ||
+               bare->second.location.file_id != own->second.location.file_id ||
+               bare->second.location.line != own->second.location.line ||
+               bare->second.location.column != own->second.location.column;
+    };
+    for (const auto& decl : program.declarations) {
+        if (!decl || decl->kind != DeclarationKind::Use ||
+            decl->location.file_id != k_current_file_id) {
+            continue;
+        }
+        const auto& path = static_cast<const UseDeclaration&>(*decl).namespace_path;
+        const auto member_of = [&](const std::string& qualified) -> std::optional<std::string> {
+            if (!qualified.starts_with(path) || qualified.size() <= path.size() + 1 ||
+                qualified[path.size()] != '.') {
+                return std::nullopt;
+            }
+            std::string member = qualified.substr(path.size() + 1);
+            if (symbols::is_qualified_name(member)) {
+                return std::nullopt;
+            }
+            return member;
+        };
+        bool is_namespace = false;
+        const auto import_from = [&](const auto& table) {
+            for (const auto& [qualified, info] : table) {
+                if (auto member = member_of(qualified)) {
+                    is_namespace = true;
+                    if (!is_top_level(*member, qualified)) {
+                        symbols.imported_names.try_emplace(*member, qualified);
+                    }
+                }
+            }
+        };
+        import_from(symbols.user_functions);
+        import_from(symbols.definitions);
+        if (!is_namespace && symbols::is_qualified_name(path)) {
+            // `use Ns.member`: a single member.
+            symbols.imported_names.insert_or_assign(std::string{symbols::qualified_member(path)},
+                                                    path);
+        }
+    }
 }
 
 void handle_record_declaration(const RecordDeclaration& rec, AnalysisResult& result,
@@ -346,7 +528,7 @@ void process_match_arms(const MatchStatement& ms, AnalysisResult& result,
     }
 
     for (const auto& arm : ms.arms) {
-        const int arm_end = estimate_block_end(arm.body);
+        const int arm_end = block_end_line(arm.body, result);
         const int arm_start = !arm.body.empty() && arm.body.front()
                                   ? arm.body.front()->location.line
                                   : ms.location.line;
@@ -401,7 +583,7 @@ void process_block_locals(const BlockStatement& bs, AnalysisResult& result,
                           CollectLocalVarsFn&& collect_local_vars_fn) {
     const int blk_start = bs.location.line;
     collect_local_vars_fn(bs.statements, result, enclosing_function, blk_start,
-                          calculate_scope_range(bs.statements, scope_end));
+                          calculate_scope_range(bs.statements, result, scope_end));
 }
 
 // Register the loop and index variables of a for statement and recurse into its body.
@@ -412,7 +594,7 @@ void process_for_locals(const ForStatement& fs, AnalysisResult& result,
     const std::string loop_type = resolve_loop_variable_type(fs, result, enclosing_function);
 
     const int for_start = fs.location.line;
-    const int for_scope_end = calculate_scope_range(fs.body, scope_end);
+    const int for_scope_end = calculate_scope_range(fs.body, result, scope_end);
 
     if (!fs.loop_variable.empty()) {
         register_local_variable(result, fs.loop_variable, loop_type, enclosing_function, for_start,
@@ -432,13 +614,13 @@ void process_if_locals(const IfStatement& ifs, AnalysisResult& result,
                        const std::string& enclosing_function, int scope_end,
                        CollectLocalVarsFn&& collect_local_vars_fn) {
     const int then_start = ifs.location.line;
-    const int then_end = estimate_block_end(ifs.then_body);
+    const int then_end = block_end_line(ifs.then_body, result);
     collect_local_vars_fn(ifs.then_body, result, enclosing_function, then_start,
                           then_end > 0 ? then_end : scope_end);
 
     const int else_start = then_end > 0 ? then_end : ifs.location.line;
     collect_local_vars_fn(ifs.else_body, result, enclosing_function, else_start,
-                          calculate_scope_range(ifs.else_body, scope_end));
+                          calculate_scope_range(ifs.else_body, result, scope_end));
 }
 
 // Register the catch variable of a try statement and recurse into its three bodies.
@@ -447,9 +629,9 @@ void process_try_locals(const TryStatement& ts, AnalysisResult& result,
                         const std::string& enclosing_function, int scope_end,
                         CollectLocalVarsFn&& collect_local_vars_fn) {
     const int try_start = ts.location.line;
-    const int try_end = estimate_block_end(ts.try_body);
+    const int try_end = block_end_line(ts.try_body, result);
     const int catch_start = try_end > 0 ? try_end : ts.location.line;
-    const int catch_end = estimate_block_end(ts.catch_body);
+    const int catch_end = block_end_line(ts.catch_body, result);
     const int finally_start = catch_end > 0 ? catch_end : catch_start;
 
     if (!ts.catch_var.empty()) {
@@ -463,7 +645,7 @@ void process_try_locals(const TryStatement& ts, AnalysisResult& result,
     collect_local_vars_fn(ts.catch_body, result, enclosing_function, catch_start,
                           catch_end > 0 ? catch_end : scope_end);
     collect_local_vars_fn(ts.finally_body, result, enclosing_function, finally_start,
-                          calculate_scope_range(ts.finally_body, scope_end));
+                          calculate_scope_range(ts.finally_body, result, scope_end));
 }
 
 // Register a variable declaration's binding in the enclosing scope.
@@ -516,7 +698,7 @@ void process_while_locals(const WhileStatement& ws, AnalysisResult& result,
                           CollectLocalVarsFn&& collect_local_vars_fn) {
     const int wh_start = ws.location.line;
     collect_local_vars_fn(ws.body, result, enclosing_function, wh_start,
-                          calculate_scope_range(ws.body, scope_end));
+                          calculate_scope_range(ws.body, result, scope_end));
 }
 
 } // anonymous namespace
@@ -540,16 +722,19 @@ void LspAnalysisService::collect_ast_symbols(const std::vector<std::unique_ptr<D
             case DeclarationKind::Choice: {
                 const auto& ch = static_cast<const ChoiceDeclaration&>(*decl_ptr);
                 handle_choice_declaration(ch, result, prefix);
+                record_namespace_member_name(result, prefix, ch.name, ch.location);
                 break;
             }
             case DeclarationKind::Function: {
                 const auto& func = static_cast<const FunctionDeclaration&>(*decl_ptr);
                 handle_function_declaration(func, result, prefix, local_vars_fn);
+                record_namespace_member_name(result, prefix, func.name, func.location);
                 break;
             }
             case DeclarationKind::Interface: {
                 const auto& iface = static_cast<const InterfaceDeclaration&>(*decl_ptr);
                 handle_interface_declaration(iface, result, prefix);
+                record_namespace_member_name(result, prefix, iface.name, iface.location);
                 break;
             }
             case DeclarationKind::Namespace: {
@@ -561,11 +746,13 @@ void LspAnalysisService::collect_ast_symbols(const std::vector<std::unique_ptr<D
             case DeclarationKind::Record: {
                 const auto& rec = static_cast<const RecordDeclaration&>(*decl_ptr);
                 handle_record_declaration(rec, result, prefix);
+                record_namespace_member_name(result, prefix, rec.name, rec.location);
                 break;
             }
             case DeclarationKind::TypeAlias: {
                 const auto& alias = static_cast<const TypeAliasDeclaration&>(*decl_ptr);
                 handle_type_alias_declaration(alias, result, prefix);
+                record_namespace_member_name(result, prefix, alias.name, alias.location);
                 break;
             }
             case DeclarationKind::Include: {
@@ -642,7 +829,9 @@ void LspAnalysisService::collect_local_vars(const std::vector<std::unique_ptr<St
 // ═══════════════════════════════════════════════════════════
 
 void LspAnalysisService::symbol_phase(const Program& program, AnalysisResult& result) {
+    result.semantic.functions.block_spans = collect_block_spans(result.semantic.tokens);
     collect_ast_symbols(program.declarations, result);
+    collect_imported_names(program, result);
     collect_local_vars(program.statements, result);
 
     // Build sorted function ranges for O(log n) enclosing-function lookup.

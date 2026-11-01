@@ -9,7 +9,9 @@
 #include "analysis/lexer/token_type.hpp"
 #include "analysis/source/source_location.hpp"
 #include "lsp_analysis_result.hpp"
+#include "lsp_folding_handler.hpp"
 #include "lsp_keyword_catalog.hpp"
+#include "lsp_lexical_context.hpp"
 #include "lsp_param_utils.hpp"
 #include "lsp_path_utils.hpp"
 #include "lsp_server.hpp"
@@ -212,7 +214,7 @@ void test_is_safe_include_path_rejects_absolute() {
 }
 
 void test_is_safe_resolved_path_accepts_regular_file() {
-    const TempFile file{"@main\nfunction main() {}\n"};
+    const TempFile file{"@main\nfunction void main() {}\n"};
     ASSERT_TRUE(is_safe_resolved_path(file.path()));
 }
 
@@ -221,7 +223,7 @@ void test_is_safe_resolved_path_rejects_symlink() {
     const auto target = dir.path() / "target.luma";
     const auto link = dir.path() / "link.luma";
     {
-        const TempFile keep{target, "@main\nfunction main() {}\n"};
+        const TempFile keep{target, "@main\nfunction void main() {}\n"};
 
         // Symlink creation needs elevated privileges / developer mode on some
         // platforms; skip the assertion when it is unavailable rather than fail.
@@ -361,6 +363,91 @@ void test_to_wire_supplementary_plane() {
     ASSERT_EQ(wire.end.character, 6);
 }
 
+// ─── Forward lexical scanner ──────────────────────────────────────
+
+// Feeds `line` through a LineContext and reports whether the position at the
+// end of the line is code, a string, or a comment.
+[[nodiscard]] std::string lexical_state_after(const std::string& line) {
+    luma::lsp::lexical::LineContext ctx;
+    std::string sink;
+    for (std::size_t i{0}; i < line.size(); ++i) {
+        bool append_rest{false};
+        (void)ctx.update(line, i, sink, append_rest);
+        if (append_rest) {
+            return "comment";
+        }
+    }
+    if (!ctx.is_code()) {
+        return "string";
+    }
+    return ctx.in_string() ? "interpolation" : "code";
+}
+
+void test_line_context_leaves_closed_interpolation() {
+    // Regression: `${` raised the depth twice, so the scanner never returned
+    // to code after `}` and the closing quote and `#` were misread.
+    ASSERT_EQ(lexical_state_after(R"(x = "${a}" )"), std::string("code"));
+    ASSERT_EQ(lexical_state_after(R"(x = "${a}" # note)"), std::string("comment"));
+    ASSERT_EQ(lexical_state_after(R"(x = "${a}" + "b)"), std::string("string"));
+    ASSERT_EQ(lexical_state_after(R"(x = "${f("}")} )"), std::string("string"));
+    ASSERT_EQ(lexical_state_after(R"(x = "${a.)"), std::string("interpolation"));
+    ASSERT_EQ(lexical_state_after(R"(x = "${ {a: 1} )"), std::string("interpolation"));
+    ASSERT_EQ(lexical_state_after(R"(x = "\${a} )"), std::string("string"));
+}
+
+void test_line_context_backslash_parity() {
+    // Regression: a quote after an escaped backslash closes the string.
+    ASSERT_EQ(lexical_state_after(R"(x = "\\" )"), std::string("code"));
+    ASSERT_EQ(lexical_state_after(R"(x = "\" )"), std::string("string"));
+    ASSERT_EQ(lexical_state_after(R"(x = "\\\" )"), std::string("string"));
+}
+
+// ─── Hover resolver chain ─────────────────────────────────────────
+
+void test_try_resolve_returns_first_non_empty() {
+    // Regression: the fold stopped after the FIRST resolver even when it
+    // returned nothing, so hover never reached the user-symbol resolvers.
+    int calls = 0;
+    const auto text = luma::lsp::lsp_builders::try_resolve(
+        [&] {
+            ++calls;
+            return std::string{};
+        },
+        [&] {
+            ++calls;
+            return std::string{"second"};
+        },
+        [&] {
+            ++calls;
+            return std::string{"third"};
+        });
+    ASSERT_EQ(text, std::string("second"));
+    ASSERT_EQ(calls, 2);
+    ASSERT_EQ(luma::lsp::lsp_builders::try_resolve([] { return std::string{}; }), std::string());
+}
+
+// ─── Fallback (pre-analysis) brace folding ────────────────────────
+
+void test_fallback_folding_ignores_braces_in_strings_and_comments() {
+    // Regression: the raw-text fallback paired braces inside strings and
+    // comments, producing spurious folds and mismatching the real blocks.
+    const std::string source = "function void main() {\n" // 0
+                               "    string a = \"{\"\n"   // 1
+                               "    # } comment brace\n"  // 2
+                               "    string b = \"\"\"\n"  // 3
+                               "      }\n"                // 4
+                               "    \"\"\"\n"             // 5
+                               "    string c = \"${ {x: 1} } \\\" }\"\n"
+                               "    string d = \"${f(\"}\")} {\"\n" // 7: string nested in ${...}
+                               "    string e = \"unterminated {\n"  // 8: ends at the line break
+                               "}\n";                               // 9
+    JsonValue::ArrayType ranges;
+    luma::lsp::collect_brace_folds_from_text(source, ranges);
+    ASSERT_EQ(ranges.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(ranges.front()["startLine"].as_integer(), 0);
+    ASSERT_EQ(ranges.front()["endLine"].as_integer(), 9);
+}
+
 } // namespace
 
 int main() { // NOLINT(bugprone-exception-escape)
@@ -388,6 +475,10 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_position_encoder_null_is_identity);
     RUN(test_find_token_at_supplementary_plane);
     RUN(test_to_wire_supplementary_plane);
+    RUN(test_line_context_leaves_closed_interpolation);
+    RUN(test_line_context_backslash_parity);
+    RUN(test_fallback_folding_ignores_braces_in_strings_and_comments);
+    RUN(test_try_resolve_returns_first_non_empty);
 
     return SUMMARY();
 }

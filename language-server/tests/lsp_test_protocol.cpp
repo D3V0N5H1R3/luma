@@ -136,9 +136,9 @@ void test_did_save_included_file_survives() {
         uri_b + R"("}}})";
 
     assert_server_survives({
-        make_did_open(uri_b, "function helper() -> integer {\n    return 1\n}\n"),
-        make_did_open(uri_a,
-                      "include \"b.luma\"\n\n@main\nfunction main() {\n    x = helper()\n}\n"),
+        make_did_open(uri_b, "function integer helper() {\n    return 1\n}\n"),
+        make_did_open(uri_a, "include \"b.luma\"\n\n@main\n"
+                             "function void main() {\n    integer x = helper()\n}\n"),
         did_save_b,
     });
 }
@@ -166,13 +166,80 @@ void test_unknown_method() {
     ASSERT_TRUE(resp->has("error"));
 }
 
+// Error code of the response to request `id`, or 0 when it succeeded.
+[[nodiscard]] int64_t error_code_of(const MockTransport& transport, int64_t id) {
+    const auto* resp = transport.find_response(id);
+    if (resp == nullptr) {
+        luma::test::throw_assertion_error("no response for request " + std::to_string(id));
+    }
+    return resp->has("error") ? (*resp)["error"]["code"].as_integer() : 0;
+}
+
+void test_lifecycle_request_order_enforced() {
+    // Regression: `shutdown` was answered before `initialize`, and a second
+    // `initialize` re-ran the handshake. Both must be rejected.
+    auto mock = std::make_unique<MockTransport>();
+    auto* transport = mock.get();
+    mock->enqueue(make_shutdown(5));
+    mock->enqueue(k_init);
+    mock->enqueue(k_initialized);
+    mock->enqueue(R"({"jsonrpc":"2.0","id":6,"method":"initialize","params":{}})");
+    mock->enqueue(make_shutdown(7));
+    mock->enqueue(k_exit);
+
+    auto server = LspServer::create(LspServerConfig{std::move(mock)});
+    ASSERT_EQ(server->run(), 0);
+
+    ASSERT_EQ(error_code_of(*transport, 5), static_cast<int64_t>(-32002));
+    ASSERT_EQ(error_code_of(*transport, 1), static_cast<int64_t>(0));
+    ASSERT_EQ(error_code_of(*transport, 6), static_cast<int64_t>(-32600));
+    ASSERT_EQ(error_code_of(*transport, 7), static_cast<int64_t>(0));
+}
+
+void test_failed_initialize_gets_error_response() {
+    // Regression: an exception from handle_initialize escaped the request
+    // error handling, so the client never received a response.
+    auto mock = std::make_unique<MockTransport>();
+    auto* transport = mock.get();
+    mock->enqueue(R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":)"
+                  R"({"capabilities":{"general":{"positionEncodings":["utf-8"]}}}})");
+    mock->enqueue(R"({"jsonrpc":"2.0","id":2,"method":"textDocument/hover","params":{}})");
+    mock->enqueue(k_exit);
+
+    auto server = LspServer::create(LspServerConfig{std::move(mock)});
+    (void)server->run();
+
+    ASSERT_EQ(error_code_of(*transport, 1), static_cast<int64_t>(-32602));
+    // A failed initialize leaves the server uninitialized.
+    ASSERT_EQ(error_code_of(*transport, 2), static_cast<int64_t>(-32002));
+}
+
+void test_invalid_envelopes_get_invalid_request() {
+    // Regression: messages without a usable `method` were silently dropped,
+    // leaving a client waiting for a response forever.
+    LspTestSession session;
+    session.notify(R"({"jsonrpc":"2.0","id":41})");
+    session.notify(R"({"jsonrpc":"2.0","id":42,"method":42})");
+    // A response to a server-initiated request needs no reply.
+    session.notify(R"({"jsonrpc":"2.0","id":43,"result":null})");
+    (void)session.run();
+
+    const auto* missing_method = session.find_response(41);
+    ASSERT_NE(missing_method, nullptr);
+    ASSERT_EQ((*missing_method)["error"]["code"].as_integer(), static_cast<int64_t>(-32600));
+    const auto* bad_method = session.find_response(42);
+    ASSERT_NE(bad_method, nullptr);
+    ASSERT_EQ((*bad_method)["error"]["code"].as_integer(), static_cast<int64_t>(-32600));
+    ASSERT_EQ(session.find_response(43), nullptr);
+}
+
 // ─── Document sync ─────────────────────────────────────────────────
 
 void test_did_open_publishes_diagnostics() {
     LspTestSession session;
 
     const std::string uri = "file:///test/hello.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    x = 42\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    integer x = 42\n}\n");
     (void)session.request("textDocument/documentSymbol", make_td_params(uri));
     (void)session.run();
 
@@ -183,16 +250,16 @@ void test_incremental_sync() {
     LspTestSession session;
 
     const std::string uri = "file:///test/incsync.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    x = 1\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    integer x = 1\n}\n");
 
     // Incremental change: replace "1" with "42" on line 2.
     session.notify(
         R"({"jsonrpc":"2.0","method":"textDocument/didChange","params":)"
         R"({"textDocument":{"uri":")" +
         uri +
-        R"(","version":2},"contentChanges":[{"range":{"start":{"line":2,"character":8},"end":{"line":2,"character":9}},"text":"42"}]}})");
+        R"(","version":2},"contentChanges":[{"range":{"start":{"line":2,"character":16},"end":{"line":2,"character":17}},"text":"42"}]}})");
 
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 2, 4));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 2, 12));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -250,8 +317,8 @@ void test_diagnostic_tags() {
     LspTestSession session;
 
     const std::string uri = "file:///test/tags.luma";
-    session.open_document(uri,
-                          "function foo() {\n    let unused_var: integer = 42\n    return 0\n}\n");
+    session.open_document(
+        uri, "function integer foo() {\n    integer unused_var = 42\n    return 0\n}\n");
     (void)session.run();
 
     ASSERT_GE(session.outbox().size(), static_cast<std::size_t>(2));
@@ -266,9 +333,9 @@ void test_cancel_request() {
 
     mock_for_raw->enqueue(k_init);
     mock_for_raw->enqueue(k_initialized);
-    mock_for_raw->enqueue(make_did_open(uri, "let x: integer = 1\n"));
+    mock_for_raw->enqueue(make_did_open(uri, "integer x = 1\n"));
     mock_for_raw->enqueue(R"({"jsonrpc":"2.0","method":"$/cancelRequest","params":{"id":10}})");
-    mock_for_raw->enqueue(make_request(10, "textDocument/hover", make_td_position(uri, 0, 4)));
+    mock_for_raw->enqueue(make_request(10, "textDocument/hover", make_td_position(uri, 0, 8)));
     mock_for_raw->enqueue(make_shutdown(11));
     mock_for_raw->enqueue(k_exit);
 
@@ -315,12 +382,12 @@ void test_diagnostic_severity_error() {
 
     const std::string uri = "file:///test/diag_err.luma";
     // Type error: passing string where integer is expected.
-    session.open_document(uri, "function add(a: integer, b: integer) -> integer {\n"
+    session.open_document(uri, "function integer add(integer a, integer b) {\n"
                                "    return a + b\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    add(1, \"hello\")\n"
                                "}\n");
     (void)session.run();
@@ -343,17 +410,17 @@ void test_diagnostic_clearing() {
 
     const std::string uri = "file:///test/diag_clear.luma";
     // First open with an error.
-    session.open_document(uri, "@main\nfunction main() {\n    unknown_fn()\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    unknown_fn()\n}\n");
 
     // Then fix it with a change.
     session.notify(
         R"({"jsonrpc":"2.0","method":"textDocument/didChange","params":)"
         R"({"textDocument":{"uri":")" +
         uri +
-        R"(","version":2},"contentChanges":[{"text":"@main\nfunction main() {\n    x = 42\n}\n"}]}})");
+        R"(","version":2},"contentChanges":[{"text":"@main\nfunction void main() {\n    integer x = 42\n}\n"}]}})");
 
     // Request something to trigger analysis.
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 2, 4));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 2, 12));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -379,8 +446,8 @@ void test_diagnostic_unused_tag() {
     LspTestSession session;
 
     const std::string uri = "file:///test/diag_unused.luma";
-    session.open_document(uri,
-                          "function foo() {\n    let unused_var: integer = 42\n    return 0\n}\n");
+    session.open_document(
+        uri, "function integer foo() {\n    integer unused_var = 42\n    return 0\n}\n");
     (void)session.run();
 
     // Look for diagnostics with unnecessary tag (tag value 1).
@@ -402,7 +469,7 @@ void test_out_of_range_position() {
     LspTestSession session;
 
     const std::string uri = "file:///test/oor.luma";
-    session.open_document(uri, "@main\nfunction main() {\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n}\n");
     // Request hover at a position far beyond the document.
     const auto id = session.request("textDocument/hover", make_td_position(uri, 999, 999));
     (void)session.run();
@@ -450,7 +517,7 @@ void test_did_close() {
     LspTestSession session;
 
     const std::string uri = "file:///test/close.luma";
-    session.open_document(uri, "@main\nfunction main() {\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n}\n");
     session.notify(R"({"jsonrpc":"2.0","method":"textDocument/didClose","params":)"
                    R"({"textDocument":{"uri":")" +
                    uri + R"("}}})");
@@ -527,6 +594,9 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_did_save_included_file_survives);
     RUN(test_exit_without_shutdown);
     RUN(test_unknown_method);
+    RUN(test_lifecycle_request_order_enforced);
+    RUN(test_failed_initialize_gets_error_response);
+    RUN(test_invalid_envelopes_get_invalid_request);
     RUN(test_did_open_publishes_diagnostics);
     RUN(test_incremental_sync);
     RUN(test_empty_document);

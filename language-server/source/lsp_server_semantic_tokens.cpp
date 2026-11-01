@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstddef>
 #include <span>
 #include <string>
 #include <vector>
@@ -59,6 +60,24 @@ encode_semantic_tokens(std::span<const Token> tokens, const PositionEncoder& enc
     int prev_line{0};
     int prev_col{0};
 
+    // Append one single-line token segment (UTF-16 columns) in delta form.
+    const auto emit = [&](int line, int col_utf16, int length, int type_idx, int mods) {
+        if (length <= 0) {
+            return;
+        }
+        const int delta_line = line - prev_line;
+        const int delta_col = (delta_line == 0) ? col_utf16 - prev_col : col_utf16;
+
+        raw_data.push_back(static_cast<int64_t>(delta_line));
+        raw_data.push_back(static_cast<int64_t>(delta_col));
+        raw_data.push_back(static_cast<int64_t>(length));
+        raw_data.push_back(static_cast<int64_t>(type_idx));
+        raw_data.push_back(static_cast<int64_t>(mods));
+
+        prev_line = line;
+        prev_col = col_utf16;
+    };
+
     for (const auto& tok : tokens) {
         if (!accept(tok)) {
             continue;
@@ -71,41 +90,32 @@ encode_semantic_tokens(std::span<const Token> tokens, const PositionEncoder& enc
         }
 
         const auto ext = token_extents(tok);
-        const int tok_line = ext.start_line_0based;
-
-        // Semantic tokens cannot span multiple lines.  A multi-line token (e.g.
-        // a triple-quoted string) must be skipped rather than encoded, or its
-        // oversized/negative length and deltaStart would corrupt every following
-        // token in the delta-encoded stream.
-        if (ext.start_line_0based != ext.end_line_0based) {
-            continue;
-        }
-
+        const int start_line = ext.start_line_0based;
+        const int end_line = ext.end_line_0based;
         const int start_cp = std::max(0, ext.start_col_0based);
         const int end_cp = ext.end_col_0based;
-        if (end_cp - start_cp <= 0) {
+
+        if (start_line == end_line) {
+            // Convert start column and length to UTF-16 code units for the wire.
+            const int tok_col_s = encoder.to_utf16(start_line, start_cp);
+            emit(start_line, tok_col_s, encoder.to_utf16(start_line, end_cp) - tok_col_s, type_idx,
+                 mods);
             continue;
         }
 
-        // Convert start column and length to UTF-16 code units for the wire.
-        const int tok_col_s = encoder.to_utf16(tok_line, start_cp);
-        const int length = encoder.to_utf16(tok_line, end_cp) - tok_col_s;
-
-        if (length <= 0) {
+        // Semantic tokens cannot span lines (the client does not negotiate
+        // multilineTokenSupport), so a multi-line token such as a triple-quoted
+        // string is emitted as one segment per line it covers. Without the
+        // source text the line lengths are unknown, so the token is skipped.
+        if (end_line < start_line || !encoder.valid()) {
             continue;
         }
-
-        const int delta_line = tok_line - prev_line;
-        const int delta_col = (delta_line == 0) ? tok_col_s - prev_col : tok_col_s;
-
-        raw_data.push_back(static_cast<int64_t>(delta_line));
-        raw_data.push_back(static_cast<int64_t>(delta_col));
-        raw_data.push_back(static_cast<int64_t>(length));
-        raw_data.push_back(static_cast<int64_t>(type_idx));
-        raw_data.push_back(static_cast<int64_t>(mods));
-
-        prev_line = tok_line;
-        prev_col = tok_col_s;
+        for (int line = start_line; line <= end_line; ++line) {
+            const int col_s = line == start_line ? encoder.to_utf16(line, start_cp) : 0;
+            const int col_e = line == end_line ? encoder.to_utf16(line, end_cp)
+                                               : encoder.utf16_line_length(line).value_or(0);
+            emit(line, col_s, col_e - col_s, type_idx, mods);
+        }
     }
 
     return raw_data;
@@ -138,12 +148,25 @@ std::pair<int, int> LspSemanticTokensHandler::classify_token(const Token& tok,
 // Token data encoding (shared between full, delta, and worker)
 // ═══════════════════════════════════════════════════════════
 
-std::vector<int64_t>
-LspSemanticTokensHandler::compute_semantic_token_data(const AnalysisResult& result) const {
+std::vector<int64_t> encode_document_semantic_tokens(const AnalysisResult& result,
+                                                     const StdlibRegistry& stdlib_registry) {
     const auto& tokens = result.semantic.tokens;
     return encode_semantic_tokens(
-        tokens, result.encoder(), [&](const Token& tok) { return classify_token(tok, result); },
+        tokens, result.encoder(),
+        [&](const Token& tok) {
+            // `tok` is an element of `tokens`, so its neighbours are adjacent.
+            const auto index = static_cast<std::size_t>(&tok - tokens.data());
+            const TokenNeighbours neighbours{.previous = index > 0 ? &tokens[index - 1] : nullptr,
+                                             .next = index + 1 < tokens.size() ? &tokens[index + 1]
+                                                                               : nullptr};
+            return lsp::classify_token(tok, result, stdlib_registry, neighbours);
+        },
         k_accept_all);
+}
+
+std::vector<int64_t>
+LspSemanticTokensHandler::compute_semantic_token_data(const AnalysisResult& result) const {
+    return encode_document_semantic_tokens(result, ctx_.stdlib_registry);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -163,7 +186,10 @@ JsonValue LspSemanticTokensHandler::handle_semantic_tokens_full(const JsonValue&
     {
         auto state = ctx_.acquire_read_lock();
         const auto entry = ctx_.semantic_token_cache.get(*uri);
-        if (entry && entry->source_hash != 0 && !entry->data.empty()) {
+        // An empty token list (empty or token-less document) is a valid hit
+        // too; requiring data made every such request recompute and hand out
+        // a new resultId.
+        if (entry && entry->source_hash != 0) {
             if (ctx_.doc_store.get_content_hash(state.token(), *uri) == entry->source_hash) {
                 return lsp_builders::semantic_tokens_response(to_json_array(entry->data),
                                                               entry->result_id);

@@ -12,6 +12,13 @@
 namespace luma::lsp {
 
 struct AnalysisResult;
+class StdlibRegistry;
+
+// The document's semantic tokens in LSP delta encoding (5 integers per token,
+// UTF-16 columns; a multi-line token is emitted once per line it covers).
+[[nodiscard]] std::vector<int64_t>
+encode_document_semantic_tokens(const AnalysisResult& result,
+                                const StdlibRegistry& stdlib_registry);
 
 class LspSemanticTokensHandler {
 public:

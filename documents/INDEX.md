@@ -142,24 +142,24 @@ Section-level table of contents for the reference documents in this directory. U
 | 4 — Architecture                | 63–83     |
 | 5 — Supported LSP Methods       | 87–136    |
 | 6 — Diagnostics                 | 140–157   |
-| 7 — Hover                       | 161–169   |
-| 8 — Completion                  | 173–181   |
-| 9 — Document Management         | 185–189   |
-| 10 — Standard Library Support   | 193–200   |
-| 11 — Platform Support           | 204–208   |
-| 12 — Usage                      | 212–264   |
-| 13 — Editor Integration         | 268–276   |
-| 14 — File Layout                | 280–435   |
-| 15 — Module Responsibilities    | 439–854   |
-| 16 — Data Flow                  | 858–979   |
-| 17 — JSON-RPC Dispatch          | 983–1022  |
-| 18 — Capability Negotiation     | 1026–1073 |
-| 19 — Stdlib Signature Access    | 1077–1086 |
-| 20 — Build Integration          | 1090–1124 |
-| 21 — Error Handling             | 1128–1135 |
-| 22 — Logging                    | 1139–1148 |
-| 23 — Platform-Specific Handling | 1152–1163 |
-| See Also                        | 1167–1173 |
+| 7 — Hover                       | 161–170   |
+| 8 — Completion                  | 174–184   |
+| 9 — Document Management         | 188–192   |
+| 10 — Standard Library Support   | 196–203   |
+| 11 — Platform Support           | 207–211   |
+| 12 — Usage                      | 215–267   |
+| 13 — Editor Integration         | 271–279   |
+| 14 — File Layout                | 283–438   |
+| 15 — Module Responsibilities    | 442–858   |
+| 16 — Data Flow                  | 862–1038  |
+| 17 — JSON-RPC Dispatch          | 1042–1085 |
+| 18 — Capability Negotiation     | 1089–1136 |
+| 19 — Stdlib Signature Access    | 1140–1149 |
+| 20 — Build Integration          | 1153–1187 |
+| 21 — Error Handling             | 1191–1198 |
+| 22 — Logging                    | 1202–1211 |
+| 23 — Platform-Specific Handling | 1215–1227 |
+| See Also                        | 1231–1237 |
 
 ## Luma_Manual_Tests.md
 
@@ -297,13 +297,14 @@ Section-level table of contents for the reference documents in this directory. U
 
 ## Luma_Syntax_Highlighting.md
 
-| Section                          | Lines   |
-| -------------------------------- | ------- |
-| Table of Contents                | 7–35    |
-| 1 — Token Design                 | 39–305  |
-| 2 — Visual Studio Code Extension | 309–505 |
-| 3 — Zed Extension                | 509–703 |
-| See Also                         | 707–711 |
+| Section                                      | Lines   |
+| -------------------------------------------- | ------- |
+| Table of Contents                            | 7–36    |
+| 1 — Token Design                             | 40–306  |
+| 2 — Visual Studio Code Extension             | 310–506 |
+| 3 — Zed Extension                            | 510–704 |
+| 4 — Semantic Tokens from the Language Server | 708–730 |
+| See Also                                     | 734–738 |
 
 ## Luma_Tutorial.md
 

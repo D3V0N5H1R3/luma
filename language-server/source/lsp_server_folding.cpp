@@ -95,15 +95,83 @@ void collect_comment_folds(const std::string& source, JsonValue::ArrayType& rang
     }
 }
 
-// Fallback folding used when no analysis is available: pair raw '{' and '}'
-// characters from the document text and emit a region fold for each
-// multi-line pair.
+} // namespace
+
+// Fallback folding used when no analysis is available: pair the '{' and '}'
+// characters of the document text and emit a region fold for each multi-line
+// pair. Braces inside comments, string literals (including triple-quoted
+// strings spanning lines) and ${...} interpolations are not block braces and
+// are skipped.
 void collect_brace_folds_from_text(const std::string& source, JsonValue::ArrayType& ranges) {
     std::vector<int> brace_stack;
     int line = 0;
+    bool in_string = false;
+    bool in_triple_string = false;
+    bool in_comment = false;
+    int interpolation_depth = 0;         // brace depth inside the current ${...}
+    bool in_interpolated_string = false; // a string literal inside that ${...}
 
-    for (const char c : source) {
-        if (c == '{') {
+    const auto starts_triple_quote = [&](std::size_t i) {
+        return source.compare(i, 3, R"(""")") == 0;
+    };
+
+    for (std::size_t i{0}; i < source.size(); ++i) {
+        const char c = source[i];
+        if (c == '\n') {
+            ++line;
+            in_comment = false;
+            // A regular string cannot span lines; an unterminated one ends here
+            // instead of hiding every later brace.
+            if (!in_triple_string) {
+                in_string = false;
+                interpolation_depth = 0;
+                in_interpolated_string = false;
+            }
+            continue;
+        }
+        if (in_comment) {
+            continue;
+        }
+        if (in_string || in_triple_string) {
+            if (in_interpolated_string) {
+                if (c == '\\') {
+                    if (i + 1 < source.size() && source[i + 1] != '\n') {
+                        ++i; // skip the escaped character
+                    }
+                } else if (c == '"') {
+                    in_interpolated_string = false;
+                }
+            } else if (interpolation_depth > 0) {
+                if (c == '"') {
+                    in_interpolated_string = true;
+                } else if (c == '{') {
+                    ++interpolation_depth;
+                } else if (c == '}') {
+                    --interpolation_depth;
+                }
+            } else if (c == '\\') {
+                if (i + 1 < source.size() && source[i + 1] != '\n') {
+                    ++i; // skip the escaped character
+                }
+            } else if (c == '$' && i + 1 < source.size() && source[i + 1] == '{') {
+                interpolation_depth = 1;
+                ++i;
+            } else if (in_triple_string && starts_triple_quote(i)) {
+                in_triple_string = false;
+                i += 2;
+            } else if (in_string && c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '#') {
+            in_comment = true;
+        } else if (starts_triple_quote(i)) {
+            in_triple_string = true;
+            i += 2;
+        } else if (c == '"') {
+            in_string = true;
+        } else if (c == '{') {
             brace_stack.push_back(line);
         } else if (c == '}' && !brace_stack.empty()) {
             const int start_line = brace_stack.back();
@@ -111,11 +179,11 @@ void collect_brace_folds_from_text(const std::string& source, JsonValue::ArrayTy
             if (line > start_line) {
                 ranges.push_back(lsp_builders::folding_range(start_line, line, "region"));
             }
-        } else if (c == '\n') {
-            ++line;
         }
     }
 }
+
+namespace {
 
 // Keyword-aware block folding from the token stream. For each '{', scan
 // backward through the token stream to find the nearest block keyword

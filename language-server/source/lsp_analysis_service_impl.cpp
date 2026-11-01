@@ -26,6 +26,7 @@
 #include "lsp_diagnostic_builder.hpp"
 #include "lsp_exception_utils.hpp"
 #include "lsp_include_processor.hpp"
+#include "lsp_path_utils.hpp"
 #include "lsp_string_utils.hpp"
 #include "lsp_types.hpp"
 #include "protocol/uri_utils.hpp"
@@ -122,7 +123,7 @@ void LspAnalysisService::include_phase(Program& program, const std::string& uri,
             // Cannot resolve includes without a valid file path.
             return;
         }
-        const auto base_dir = std::filesystem::path(file_path).parent_path();
+        const auto base_dir = utf8_path(file_path).parent_path();
         const auto log = [this](const std::string& msg) { callbacks_.log(msg); };
 
         include_processor::merge_include_declarations(program, base_dir, cache_snapshot,

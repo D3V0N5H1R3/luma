@@ -139,7 +139,8 @@ constexpr std::array<std::pair<char, char>, 11> two_char_operators{{
     for (std::size_t i = 0; i < line.size(); ++i) {
         const char c = line[i];
 
-        // Let the context tracker handle strings, comments, interpolation.
+        // Let the context tracker consume strings, interpolations, and
+        // comments verbatim; only plain code characters reach the rules below.
         bool append_rest = false;
 
         if (ctx.update(line, i, out, append_rest)) {
@@ -157,14 +158,14 @@ constexpr std::array<std::pair<char, char>, 11> two_char_operators{{
         // Single-character binary operators: = + * /
         // Don't touch '<' and '>' — can't distinguish generics from comparisons
         // without semantic analysis, so leave them as-is.
-        if ((c == '=' || c == '+' || c == '*' || c == '/') && !ctx.in_string) {
+        if (c == '=' || c == '+' || c == '*' || c == '/') {
             if (try_normalize_single_char_operator(line, i, out)) {
                 continue;
             }
         }
 
         // '-' — distinguish binary minus from unary minus.
-        if (c == '-' && !ctx.in_string) {
+        if (c == '-') {
             const bool is_binary = !out.empty() && (is_ident_char(out.back()) ||
                                                     out.back() == ')' || out.back() == ']');
             if (is_binary) {

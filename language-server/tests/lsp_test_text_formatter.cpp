@@ -53,6 +53,28 @@ void test_leaves_string_contents_untouched() {
 // behaviour before any future unification of the lexical-context scanners.
 void test_leaves_interpolation_operators_untouched() {
     ASSERT_EQ(format_luma_source("x=\"${a+b}\"\n", 4), std::string("x = \"${a+b}\"\n"));
+    ASSERT_EQ(format_luma_source("x=\"${a==b}\"\n", 4), std::string("x = \"${a==b}\"\n"));
+}
+
+// Regression: `${` used to raise the interpolation depth twice, so after the
+// closing `}` the scanner never left the interpolation and rewrote the rest of
+// the string, a following string, and a trailing comment.
+void test_text_after_closed_interpolation_untouched() {
+    ASSERT_EQ(format_luma_source("x=\"${lo}..${hi}\"\n", 4), std::string("x = \"${lo}..${hi}\"\n"));
+    ASSERT_EQ(format_luma_source("x=\"${a}\"+\"b==c\"\n", 4),
+              std::string("x = \"${a}\" + \"b==c\"\n"));
+    ASSERT_EQ(format_luma_source("print(\"${a}\") # a->b\n", 4),
+              std::string("print(\"${a}\") # a->b\n"));
+    ASSERT_EQ(format_luma_source("x=\"${f(\"{\")}\"+y\n", 4),
+              std::string("x = \"${f(\"{\")}\" + y\n"));
+}
+
+// Regression: a quote preceded by an escaped backslash (`"\\"`) closes the
+// string; only an odd run of backslashes escapes it.
+void test_escaped_backslash_before_quote_closes_string() {
+    ASSERT_EQ(format_luma_source("x=\"\\\\\"+\"a==b\"\n", 4),
+              std::string("x = \"\\\\\" + \"a==b\"\n"));
+    ASSERT_EQ(format_luma_source("x=\"a\\\"b=c\"\n", 4), std::string("x = \"a\\\"b=c\"\n"));
 }
 
 void test_preserves_multiline_string_contents() {
@@ -71,13 +93,13 @@ void test_leaves_comment_contents_untouched() {
 // ─── Indentation ───────────────────────────────────────────────────
 
 void test_indents_braced_block() {
-    ASSERT_EQ(format_luma_source("function f() {\nreturn 1\n}\n", 4),
-              std::string("function f() {\n    return 1\n}\n"));
+    ASSERT_EQ(format_luma_source("function integer f() {\nreturn 1\n}\n", 4),
+              std::string("function integer f() {\n    return 1\n}\n"));
 }
 
 void test_indent_respects_tab_size() {
-    ASSERT_EQ(format_luma_source("function f() {\nreturn 1\n}\n", 2),
-              std::string("function f() {\n  return 1\n}\n"));
+    ASSERT_EQ(format_luma_source("function integer f() {\nreturn 1\n}\n", 2),
+              std::string("function integer f() {\n  return 1\n}\n"));
 }
 
 void test_indents_case_arms_inside_match() {
@@ -100,14 +122,14 @@ void test_indents_case_arms_inside_match() {
 // ─── Declaration separation ────────────────────────────────────────
 
 void test_inserts_blank_line_before_declaration() {
-    ASSERT_EQ(format_luma_source("x = 1\nfunction f() {\n}\n", 4),
-              std::string("x = 1\n\nfunction f() {\n}\n"));
+    ASSERT_EQ(format_luma_source("integer x = 1\nfunction void f() {\n}\n", 4),
+              std::string("integer x = 1\n\nfunction void f() {\n}\n"));
 }
 
 // ─── Idempotency ───────────────────────────────────────────────────
 
 void test_formatting_is_idempotent() {
-    const std::string input = "x=1\nfunction f() {\nreturn x|>g()\n}\n";
+    const std::string input = "integer x=1\nfunction integer f() {\nreturn x|>g()\n}\n";
     const auto once = format_luma_source(input, 4);
     const auto twice = format_luma_source(once, 4);
     ASSERT_EQ(once, twice);
@@ -136,6 +158,8 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_normalizes_pipe_operator);
     RUN(test_leaves_string_contents_untouched);
     RUN(test_leaves_interpolation_operators_untouched);
+    RUN(test_text_after_closed_interpolation_untouched);
+    RUN(test_escaped_backslash_before_quote_closes_string);
     RUN(test_preserves_multiline_string_contents);
     RUN(test_leaves_comment_contents_untouched);
     RUN(test_indents_braced_block);
