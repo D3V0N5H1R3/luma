@@ -90,6 +90,13 @@ constexpr std::string_view with_requires_record{"'with' requires a record"};
     return std::format("loop exceeded maximum iteration count ({})", max);
 }
 
+[[nodiscard]] inline std::string loop_exceeded_total_iterations(std::int64_t max) {
+    return std::format("loops exceeded the total iteration budget ({})", max);
+}
+
+constexpr std::string_view hint_raise_total_loop_budget{
+    "raise LUMA_LIMIT_MAX_TOTAL_LOOP_ITERATIONS if this many loop iterations are intended"};
+
 [[nodiscard]] inline std::string local_variable_out_of_bounds(std::uint16_t slot,
                                                               std::size_t offset) {
     return std::format("local variable index out of bounds (slot {} at offset {})", slot, offset);

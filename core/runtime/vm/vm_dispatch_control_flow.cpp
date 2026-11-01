@@ -228,6 +228,13 @@ void VM::handle_loop(const std::uint8_t* code_start) {
         runtime_error(
             vm_errors::loop_exceeded_max_iterations(ResourceLimits::max_while_iterations));
     }
+    // The total budget is never reset (not by a for-loop, nor after it trips),
+    // so neither nested for-loops nor a caught error can escape it.
+    if (++total_loop_iterations_ > ResourceLimits::max_total_loop_iterations) [[unlikely]] {
+        runtime_error(
+            vm_errors::loop_exceeded_total_iterations(ResourceLimits::max_total_loop_iterations),
+            vm_errors::hint_raise_total_loop_budget);
+    }
 }
 
 void VM::handle_null_coalesce(const std::uint8_t* code_end) {

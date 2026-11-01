@@ -293,6 +293,14 @@ luma_add_test(NAME integration_test
     LIBS    luma_core
     LABELS  integration)
 
+# Pins the structured fuzzer's source generator: its well-typed programs must
+# type-check, compile, verify and run cleanly (fuzz/ is header-only here).
+luma_add_test(NAME fuzz_generator_test
+    SOURCES  integration/fuzz_generator_test.cpp
+    LIBS     luma_core
+    INCLUDES ${PROJECT_SOURCE_DIR}/fuzz
+    LABELS   integration)
+
 # ── Language server tests ──
 
 set(LUMA_LSP_TESTS

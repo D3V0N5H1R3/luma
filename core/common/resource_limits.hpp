@@ -202,6 +202,16 @@ struct ResourceLimits {
     // deliberately. Set high enough that only pathological loops trip it.
     static inline std::int64_t max_while_iterations = 10'000'000;
 
+    // Cumulative budget of loop back-edges taken by one VM (the main program
+    // and each spawned task count separately).  Unlike max_while_iterations,
+    // no loop resets it, so it also bounds nested `for` loops — each of which
+    // resets the shared while budget on entry — and crafted bytecode that loops
+    // through a for-loop initialiser.  Off by default (a value no program
+    // reaches), because a `for` loop over a finite range is a legitimate long
+    // computation; lower it via LUMA_LIMIT_MAX_TOTAL_LOOP_ITERATIONS to bound
+    // a program's total run time (the fuzzers do).
+    static inline std::int64_t max_total_loop_iterations = 1'000'000'000'000'000'000;
+
     // Maximum nesting depth for exception handlers in the VM.
     static constexpr int k_max_exception_handler_depth = 256;
 
@@ -271,7 +281,8 @@ struct ResourceLimits {
     X(std::size_t,   max_http_header_value_size, 1ULL << 24)  /* 16 MiB */   \
     X(std::size_t,   max_http_response_size,     1ULL << 32)  /* 4 GiB */    \
     /* Loop limits */                                                         \
-    X(std::int64_t,  max_while_iterations,       1'000'000'000'000)
+    X(std::int64_t,  max_while_iterations,       1'000'000'000'000)           \
+    X(std::int64_t,  max_total_loop_iterations,  1'000'000'000'000'000'000)
 // clang-format on
 
 } // namespace luma

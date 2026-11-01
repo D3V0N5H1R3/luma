@@ -971,6 +971,9 @@ private:
     // stable as more are added.
     std::vector<std::unique_ptr<const std::vector<CompiledFunction>>> retained_function_tables_;
     std::int64_t loop_iterations_{0};
+    // Back-edges taken over this VM's lifetime; never reset, unlike
+    // loop_iterations_ (see ResourceLimits::max_total_loop_iterations).
+    std::int64_t total_loop_iterations_{0};
     std::size_t base_depth_{0};
 
     // Cancellation token of the spawned task this VM runs (null on the root

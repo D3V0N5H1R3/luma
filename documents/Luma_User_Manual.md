@@ -3387,6 +3387,7 @@ Include resolution errors. Execution does not start.
 | `unwrap failed: value is none`                                                | Unwrapping `none`, e.g. `?` on `none` inside `@main`                                                |
 | `no @main function found`                                                     | File has no `@main` function (also a TypeError under `--check`)                                     |
 | `loop exceeded maximum iteration count (10000000)`                            | All `while` loops together exceeded the shared iteration budget (`LUMA_LIMIT_MAX_WHILE_ITERATIONS`) |
+| `loops exceeded the total iteration budget (N)`                               | All loops together exceeded `LUMA_LIMIT_MAX_TOTAL_LOOP_ITERATIONS` (off by default)                 |
 
 Awaiting a task more than once is not an error: every `await` on the same task returns the same result.
 

@@ -7,7 +7,7 @@
 // recovered ASTs without crashing.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             auto parsed = luma::fuzz::parse(input);
             luma::fuzz::consume_diagnostics(luma::fuzz::type_check(parsed.program));
         });

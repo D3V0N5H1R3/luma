@@ -26,7 +26,7 @@
 //      reproduce the same decoded bytes (the value is in the decoder's domain).
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             using namespace luma::compression;
 
             // ── Decoders: arbitrary bytes must be rejected or decoded, never crash.

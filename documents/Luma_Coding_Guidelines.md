@@ -1705,7 +1705,7 @@ The interpreter enforces several resource limits to prevent denial-of-service. T
 ### Coding for Resource Limits
 
 - **Call depth.** Prefer iterative algorithms over deeply recursive ones. If recursion is natural (tree traversal), ensure the data structure depth stays well below the limit. Use the `LUMA_LIMIT_MAX_CALL_DEPTH` environment variable to raise the limit when needed.
-- **While loop iterations.** A `while` loop that exceeds the limit is terminated with a runtime error. If you need more iterations, restructure the algorithm or increase the limit via `LUMA_LIMIT_MAX_WHILE_ITERATIONS`.
+- **While loop iterations.** A `while` loop that exceeds the limit is terminated with a runtime error. If you need more iterations, restructure the algorithm or increase the limit via `LUMA_LIMIT_MAX_WHILE_ITERATIONS`. Nested `for` loops are not bounded by it (each `for` resets that budget); to cap a program's total loop work, set the off-by-default `LUMA_LIMIT_MAX_TOTAL_LOOP_ITERATIONS`.
 - **Collection size.** Building a collection beyond the limit fails at runtime. Process large data sets in streaming fashion or in batches.
 - **String size.** Avoid accumulating unbounded string data. Use file I/O or streaming when processing large text.
 

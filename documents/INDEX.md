@@ -187,9 +187,9 @@ Section-level table of contents for the reference documents in this directory. U
 | 3 — String Building                   | 51–70   |
 | 4 — Recursion Limits                  | 72–74   |
 | 5 — Loop Iteration Limits             | 76–78   |
-| 6 — Resource Limits                   | 80–99   |
-| 7 — Interpreter Optimisations         | 101–109 |
-| See Also                              | 113–118 |
+| 6 — Resource Limits                   | 80–100  |
+| 7 — Interpreter Optimisations         | 102–110 |
+| See Also                              | 114–119 |
 
 ## Luma_REPL_Guide.md
 
@@ -373,8 +373,8 @@ Section-level table of contents for the reference documents in this directory. U
 | 26 — Standard Library Reference                  | 2948–2952 |
 | 27 — Linter and `--strict` Mode                  | 2956–3008 |
 | 28 — Reserved Keywords                           | 3012–3031 |
-| 29 — Error Reference                             | 3035–3395 |
-| 30 — Complete Programs                           | 3399–3605 |
-| 31 — Debugging                                   | 3609–3630 |
-| 32 — Formal Grammar (EBNF)                       | 3634–3988 |
-| See Also                                         | 3992–4004 |
+| 29 — Error Reference                             | 3035–3396 |
+| 30 — Complete Programs                           | 3400–3606 |
+| 31 — Debugging                                   | 3610–3631 |
+| 32 — Formal Grammar (EBNF)                       | 3635–3989 |
+| See Also                                         | 3993–4005 |

@@ -342,13 +342,13 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 | `fuzz_lexer`                 | Tokenisation of arbitrary input              |
 | `fuzz_parser`                | AST construction from token stream           |
 | `fuzz_type_checker`          | Static type checking                         |
-| `fuzz_linter`                | Post-type-check lint pass                    |
-| `fuzz_compiler`              | Bytecode compilation from valid ASTs         |
-| `fuzz_optimizer`             | Bytecode optimisation pass                   |
+| `fuzz_linter`                | Type check then lint, as in production       |
+| `fuzz_compiler`              | Production passes; output-verifies oracle    |
+| `fuzz_optimizer`             | Every level and chunk; still-verifies oracle |
 | `fuzz_include_resolver`      | Include path resolution                      |
-| `fuzz_vm`                    | VM execution of compiled bytecode            |
-| `fuzz_structured`            | Records, choices, and pattern matching       |
-| `fuzz_bytecode_deserializer` | Bytecode decode with round-trip oracle       |
+| `fuzz_vm`                    | VM execution, optimised/verified per input   |
+| `fuzz_structured`            | Generated well-typed and chaos programs      |
+| `fuzz_bytecode_deserializer` | Bytecode decode, round-trip, then execute    |
 | `fuzz_json`                  | JSON-RPC body parse with re-serialise oracle |
 | `fuzz_json_stdlib`           | `Json.deserialize` with re-serialise oracle  |
 | `fuzz_csv`                   | RFC 4180 CSV parse with round-trip oracle    |
@@ -370,20 +370,21 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 
 ### Building
 
-Fuzz targets require Clang with AddressSanitizer and libFuzzer:
+Fuzz targets require Clang with libFuzzer; AddressSanitizer and UndefinedBehaviorSanitizer are enabled through the global flags and mirrored onto every target:
 
 ```bash
 cmake -B build-fuzz -DLUMA_BUILD_FUZZ=ON \
-    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined"
 cmake --build build-fuzz
 ```
 
 ### Running
 
-Run a target with the shared corpus and dictionary:
+Run a target with its own seed corpus and the shared dictionary:
 
 ```bash
-./build-fuzz/fuzz_parser fuzz/corpus/ -dict=fuzz/dictionary.txt -max_total_time=300
+./build-fuzz/fuzz_parser fuzz/corpus/parser/ -dict=fuzz/dictionary.txt -timeout=25 -max_total_time=300
 ```
 
 Key libFuzzer flags:
@@ -391,7 +392,11 @@ Key libFuzzer flags:
 - `-max_total_time=N` — stop after N seconds
 - `-max_len=4096` — cap input size (default for this project)
 - `-dict=fuzz/dictionary.txt` — use project dictionary for token-aware mutations
+- `-timeout=N` — report an input running longer than N seconds as a hang
+- `-close_fd_mask=1` — close the target's stdout (executed programs print)
 - `-jobs=N` — run N parallel fuzzing jobs
+
+The harness (`fuzz/fuzz_harness.hpp`) tolerates only `std::runtime_error` and `std::bad_alloc`; any other exception — and a `luma::InternalError`, which the VM raises when a built-in fails with an interpreter fault — traps as a finding. Seeds for the compiling and executing targets (`corpus/compiler/`, `corpus/optimizer/`, `corpus/vm/`) must type-check and run under `luma --box`, or they never reach the stages they seed. The structured generator is pinned by `tests/integration/fuzz_generator_test.cpp`.
 
 ### Corpus
 

@@ -12,6 +12,6 @@ extern "C" int LLVMFuzzerInitialize(int* /*argc*/, char*** /*argv*/) {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_vm_input_size,
+        data, size, luma::fuzz::k_max_vm_input_size,
         [&](const std::string& input) { luma::fuzz::run_full_pipeline(input); });
 }

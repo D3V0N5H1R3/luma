@@ -24,7 +24,7 @@
 //     containing the delimiter, quote, CR or LF, so the round-trip is exact.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             using namespace luma::csv;
 
             const CsvOptions default_opts;
@@ -42,7 +42,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
             luma::fuzz::do_not_optimize(alt.success);
 
             // ── Oracle: re-serialising accepted rows must round-trip exactly.
-            // The fuzz input cap (max_input_size) is far below the parser's
+            // The fuzz input cap (k_max_input_size) is far below the parser's
             // row-count limit (ResourceLimits::max_array_size), so a successful
             // parse here cannot be re-rejected by that limit on the second pass.
             if (first.success) {

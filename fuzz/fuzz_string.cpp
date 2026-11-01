@@ -35,9 +35,9 @@
 //      end or dropping a trailing fragment.
 //   2. Offset/index inverse: utf8_byte_offset and utf8_codepoint_index are
 //      mutual inverses (codepoint_index(byte_offset(i)) == i), byte_offset
-//      reaches the end once the codepoint count is consumed — overshooting a
-//      truncated trailing sequence rather than falling short — and then
-//      saturates, and every per-codepoint advance is 1–4 bytes.
+//      lands exactly on the end once the codepoint count is consumed — even
+//      after a truncated trailing sequence — and then saturates, and every
+//      per-codepoint advance is 1–4 bytes.
 //   3. Encode/decode round-trip: utf8_encode rejects surrogate halves and
 //      out-of-range scalars (empty result) and otherwise emits a sequence whose
 //      length matches utf8_codepoint_len, decodes back to the same scalar, and
@@ -140,87 +140,88 @@ extern "C" int LLVMFuzzerInitialize(int* /*argc*/, char*** /*argv*/) {
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // The whole input is the untrusted text, giving the fuzzer maximal direct
     // control over the bytes the codepoint walkers traverse.
-    return luma::fuzz::run_text(data, size, luma::fuzz::max_input_size, [&](const std::string& s) {
-        // ── Never-crash + Oracle 1: walk every codepoint and reassemble. ──
-        const auto count = utf8_count(s);
+    return luma::fuzz::run_text(
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& s) {
+            // ── Never-crash + Oracle 1: walk every codepoint and reassemble. ──
+            const auto count = utf8_count(s);
 
-        std::string rebuilt;
-        rebuilt.reserve(s.size());
+            std::string rebuilt;
+            rebuilt.reserve(s.size());
 
-        std::int64_t steps{0};
-        std::size_t pos{0};
+            std::int64_t steps{0};
+            std::size_t pos{0};
 
-        while (pos < s.size()) {
-            const auto len = utf8_advance(s, pos);
+            while (pos < s.size()) {
+                const auto len = utf8_advance(s, pos);
 
-            if (len < 1 || len > 4) {
-                luma::fuzz::trap(); // a codepoint advance must be 1–4 bytes.
+                if (len < 1 || len > 4) {
+                    luma::fuzz::trap(); // a codepoint advance must be 1–4 bytes.
+                }
+
+                rebuilt += utf8_char_at_byte(s, pos);
+                luma::fuzz::do_not_optimize(utf8_decode_at(s, pos));
+
+                pos += len;
+                ++steps;
             }
 
-            rebuilt += utf8_char_at_byte(s, pos);
-            luma::fuzz::do_not_optimize(utf8_decode_at(s, pos));
-
-            pos += len;
-            ++steps;
-        }
-
-        if (rebuilt != s) {
-            luma::fuzz::trap(); // the codepoint partition lost or reordered bytes.
-        }
-
-        if (steps != count) {
-            luma::fuzz::trap(); // walking disagrees with utf8_count.
-        }
-
-        // ── Oracle 2: byte_offset / codepoint_index are mutual inverses. ──
-        // Consuming every codepoint reaches the end of the string. For a
-        // truncated trailing multibyte sequence the final advance steps past
-        // the end (utf8_advance adds the full lead-byte length), so the terminal
-        // offset may exceed s.size(); it must never fall short of it.
-        const auto terminal = utf8_byte_offset(s, count);
-
-        if (terminal < s.size()) {
-            luma::fuzz::trap(); // walking every codepoint must reach the end.
-        }
-
-        if (utf8_byte_offset(s, count + 5) != terminal) {
-            luma::fuzz::trap(); // byte_offset must saturate once every codepoint is consumed.
-        }
-
-        // Sample a bounded set of indices so the whole target stays O(n).
-        const auto stride = (count > 16) ? (count / 16) : std::int64_t{1};
-
-        for (std::int64_t i = 0; i <= count; i += stride) {
-            const auto byte_pos = utf8_byte_offset(s, i);
-
-            if (utf8_codepoint_index(s, byte_pos) != i) {
-                luma::fuzz::trap(); // codepoint_index is not the inverse of byte_offset.
-            }
-        }
-
-        // ── Oracle 3: the encoder/decoder round-trips over the scalar domain. ──
-        // (The fixed length anchors are input-independent — verified once in
-        // LLVMFuzzerInitialize.)
-        FuzzedDataProvider fdp{data, size};
-
-        for (int n = 0; n < 8 && fdp.remaining_bytes() >= sizeof(std::uint32_t); ++n) {
-            check_codepoint(fdp.ConsumeIntegral<std::uint32_t>());
-        }
-
-        // ── Oracle 4: every surrogate pair decodes to a supplementary scalar. ──
-        for (int n = 0; n < 4 && fdp.remaining_bytes() >= 2 * sizeof(std::uint16_t); ++n) {
-            const auto high =
-                static_cast<char32_t>(0xD800 + (fdp.ConsumeIntegral<std::uint16_t>() & 0x3FF));
-            const auto low =
-                static_cast<char32_t>(0xDC00 + (fdp.ConsumeIntegral<std::uint16_t>() & 0x3FF));
-
-            const auto cp = static_cast<std::uint32_t>(decode_surrogate_pair(high, low));
-
-            if (cp < 0x10000 || cp > 0x10FFFF) {
-                luma::fuzz::trap(); // a surrogate pair must yield a supplementary scalar.
+            if (rebuilt != s) {
+                luma::fuzz::trap(); // the codepoint partition lost or reordered bytes.
             }
 
-            check_codepoint(cp);
-        }
-    });
+            if (steps != count) {
+                luma::fuzz::trap(); // walking disagrees with utf8_count.
+            }
+
+            // ── Oracle 2: byte_offset / codepoint_index are mutual inverses. ──
+            // Consuming every codepoint reaches exactly the end of the string:
+            // utf8_decode never reports a length past s.size(), even for a
+            // truncated trailing sequence, so the walk can neither overshoot nor
+            // fall short of it.
+            const auto terminal = utf8_byte_offset(s, count);
+
+            if (terminal != s.size()) {
+                luma::fuzz::trap(); // walking every codepoint must end exactly at the end.
+            }
+
+            if (utf8_byte_offset(s, count + 5) != terminal) {
+                luma::fuzz::trap(); // byte_offset must saturate once every codepoint is consumed.
+            }
+
+            // Sample a bounded set of indices so the whole target stays O(n).
+            const auto stride = (count > 16) ? (count / 16) : std::int64_t{1};
+
+            for (std::int64_t i = 0; i <= count; i += stride) {
+                const auto byte_pos = utf8_byte_offset(s, i);
+
+                if (utf8_codepoint_index(s, byte_pos) != i) {
+                    luma::fuzz::trap(); // codepoint_index is not the inverse of byte_offset.
+                }
+            }
+
+            // ── Oracle 3: the encoder/decoder round-trips over the scalar domain. ──
+            // (The fixed length anchors are input-independent — verified once in
+            // LLVMFuzzerInitialize.)
+            FuzzedDataProvider fdp{data, size};
+
+            for (int n = 0; n < 8 && fdp.remaining_bytes() >= sizeof(std::uint32_t); ++n) {
+                check_codepoint(fdp.ConsumeIntegral<std::uint32_t>());
+            }
+
+            // ── Oracle 4: every surrogate pair decodes to a supplementary scalar. ──
+            for (int n = 0; n < 4 && fdp.remaining_bytes() >= 2 * sizeof(std::uint16_t); ++n) {
+                const auto high =
+                    static_cast<char32_t>(0xD800 + (fdp.ConsumeIntegral<std::uint16_t>() & 0x3FF));
+                const auto low =
+                    static_cast<char32_t>(0xDC00 + (fdp.ConsumeIntegral<std::uint16_t>() & 0x3FF));
+
+                const auto cp = static_cast<std::uint32_t>(decode_surrogate_pair(high, low));
+
+                if (cp < 0x10000 || cp > 0x10FFFF) {
+                    luma::fuzz::trap(); // a surrogate pair must yield a supplementary scalar.
+                }
+
+                check_codepoint(cp);
+            }
+        });
 }

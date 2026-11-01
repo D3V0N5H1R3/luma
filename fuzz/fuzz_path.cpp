@@ -31,7 +31,7 @@
 //     sandbox; any disagreement is a genuine boundary defect.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             namespace fs = std::filesystem;
 
             // ── path_utils.hpp primitives: arbitrary bytes must never crash. ──

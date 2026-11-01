@@ -5,6 +5,7 @@
 
 #include <exception>
 #include <format>
+#include <new>
 #include <shared_mutex>
 #include <span>
 #include <string>
@@ -105,17 +106,22 @@ void VM::call_native(const NativeFunctionValue& func, int arg_count) {
         // other runtime_error-derived error already honour the catchable-error
         // contract — propagate them unchanged so try/catch and task
         // cancellation keep working. (ExitSignal is not a std::exception, so it
-        // is unaffected by the broader handler below.)
+        // is unaffected by the broader handlers below.)
         throw;
+    } catch (const std::bad_alloc&) {
+        // Allocation pressure from an oversized request is a resource failure,
+        // not an interpreter fault, so it stays an ordinary RuntimeError.
+        throw RuntimeError{"out of memory in built-in function", current_location()};
     } catch (const std::exception& error) {
         // A built-in hit an internal fault that is not a runtime_error — for
         // example std::bad_variant_access from an unguarded argument-type
-        // access, or std::bad_alloc / std::length_error from an oversized
-        // allocation. Convert it into a catchable RuntimeError instead of
-        // letting it abort the interpreter, honouring the documented
-        // "errors are catchable" contract (Luma_Error_Handling.md).
-        throw RuntimeError{std::string{"internal error in built-in function: "} + error.what(),
-                           current_location()};
+        // access, or std::length_error from an unchecked size. Convert it into
+        // a catchable InternalError instead of letting it abort the interpreter,
+        // honouring the documented "errors are catchable" contract
+        // (Luma_Error_Handling.md), while keeping it distinguishable from a
+        // language-level failure for tools that hunt interpreter bugs.
+        throw InternalError{std::string{"internal error in built-in function: "} + error.what(),
+                            current_location()};
     }
 }
 

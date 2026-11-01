@@ -26,16 +26,26 @@ Configure and build from the repository root with `LUMA_BUILD_FUZZ=ON`:
 ```bash
 cmake -B build-fuzz -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-      -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address" \
+      -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined" \
       -DLUMA_BUILD_FUZZ=ON
 
-cmake --build build-fuzz --parallel
+cmake --build build-fuzz --target luma_fuzzers --parallel
 ```
+
+`luma_fuzzers` builds every fuzz target and nothing else; the default target
+would also compile every test, the language server and the debugger under the
+sanitizers. Executables land at the build-tree root (`build-fuzz/fuzz_lexer`).
+
+The fuzz targets mirror whichever of `address` and `undefined` the global flags
+enable onto their own compile and link lines. UndefinedBehaviorSanitizer turns
+silent undefined behaviour — signed overflow, invalid shifts, misaligned access
+— into a crash the fuzzer can report (`fuzz_random` exists to catch exactly
+that); `-fno-sanitize-recover=undefined` makes every finding abort.
 
 ### Platform notes
 
-The suite targets Linux Clang with libFuzzer and ASan (the configuration shown
-above), which is what CI exercises. It also builds with the Visual Studio
+The suite targets Linux Clang with libFuzzer, ASan and UBSan (the configuration
+shown above), which is what CI exercises. It also builds with the Visual Studio
 `clang-cl` toolchain; the validated Windows configuration uses `RelWithDebInfo`,
 the static runtime, and coverage-only instrumentation:
 
@@ -51,11 +61,21 @@ cmake -B build-fuzz -G Ninja `
 
 ASan is omitted on Windows because the prebuilt libFuzzer runtime links the
 static CRT, which the dynamic ASan runtime cannot be combined with — run the
-fuzzers on Linux for full ASan coverage. One known `clang-cl` caveat:
-`fuzz_protocol` can trap inside the transport's exception-recovery path because
-of an MSVC EH-funclet codegen artifact under SanitizerCoverage, not a transport
-defect (the same malformed-body and resync scenarios pass in `protocol_test`);
-investigate any protocol findings on the Linux build.
+fuzzers on Linux for full ASan coverage. One significant `clang-cl` caveat:
+under SanitizerCoverage, C++ exception unwinding is miscompiled (an MSVC
+EH-funclet codegen artifact), so any target whose input makes the code throw
+and catch faults inside the unwinder within seconds — an access violation, or an
+`int3` (`0x80000003`) at the throw site, with no crash artifact written. That
+covers the parser's `ParseFailure` recovery (so every source-driven target, on
+inputs as small as `a>`), `fuzz_xml`, `fuzz_json_stdlib`, `fuzz_path`,
+`fuzz_http` and `fuzz_protocol`. These are not Luma defects — the same inputs
+pass the MSVC-built unit tests — so investigate findings from those targets on
+the Linux build. The non-throwing codec targets (`fuzz_string`, `fuzz_terminal`,
+`fuzz_decimal`, `fuzz_datetime`, `fuzz_hash`, `fuzz_regex`, `fuzz_random`,
+`fuzz_encoder`, `fuzz_compression`, `fuzz_keyvaluestore`, `fuzz_process`,
+`fuzz_csv`, `fuzz_json`, `fuzz_bytecode_deserializer`) run cleanly on Windows.
+Pass `-dict=` an absolute path there; libFuzzer on Windows fails to open a
+relative dictionary path.
 
 ## Running
 
@@ -66,10 +86,11 @@ relative to the repository root, matching the build commands above:
 ./build-fuzz/fuzz_lexer fuzz/corpus/lexer/ -max_total_time=300
 ```
 
-Use the included dictionary for better input generation:
+Use the included dictionary for better input generation, and bound each input's
+run time so a hang is reported rather than silently consuming the session:
 
 ```bash
-./build-fuzz/fuzz_lexer fuzz/corpus/lexer/ -dict=fuzz/dictionary.txt -max_total_time=300
+./build-fuzz/fuzz_lexer fuzz/corpus/lexer/ -dict=fuzz/dictionary.txt -timeout=25 -max_total_time=300
 ```
 
 Useful LibFuzzer flags:
@@ -81,6 +102,8 @@ Useful LibFuzzer flags:
 | `-jobs=<N>`               | Run N fuzzing jobs in parallel              |
 | `-workers=<N>`            | Number of worker processes                 |
 | `-dict=<file>`            | Use a fuzzing dictionary for guided inputs |
+| `-timeout=<secs>`         | Report an input that runs longer as a hang |
+| `-close_fd_mask=1`        | Close the target's stdout (programs print) |
 | `-artifact_prefix=<dir>/` | Save crash inputs to the given directory   |
 | `-runs=<N>`               | Stop after N inputs (deterministic replay) |
 | `-rss_limit_mb=<N>`       | Abort if RSS exceeds N MB (0 disables)     |
@@ -97,7 +120,9 @@ ctest --test-dir build-fuzz -R _quick --output-on-failure
 ```
 
 The per-run budget is `LUMA_FUZZ_QUICK_TIME` seconds (default 10); override it at
-configure time with `-DLUMA_FUZZ_QUICK_TIME=<secs>`.
+configure time with `-DLUMA_FUZZ_QUICK_TIME=<secs>`. Each entry also passes
+`-timeout=${LUMA_FUZZ_UNIT_TIMEOUT}` (25 s, set in `fuzz/CMakeLists.txt` and
+mirrored by the nightly workflow) and `-close_fd_mask=1`.
 
 ## Targets
 
@@ -106,20 +131,20 @@ configure time with `-DLUMA_FUZZ_QUICK_TIME=<secs>`.
 | `fuzz_lexer`            | Lexer                                    | Tokenises arbitrary byte sequences                                     |
 | `fuzz_parser`           | Lexer → Parser                           | Constructs ASTs from random token streams                              |
 | `fuzz_type_checker`     | Lexer → Parser → Type Checker            | Validates the type checker against arbitrary programs                  |
-| `fuzz_linter`           | Lexer → Parser → Linter                  | Feeds arbitrary AST shapes through the linter                          |
-| `fuzz_compiler`         | Lexer → Parser → Compiler                | Compiles random ASTs to bytecode                                       |
-| `fuzz_optimizer`        | Lexer → Parser → Compiler → Optimizer    | Runs all optimisation levels on arbitrary bytecode                     |
+| `fuzz_linter`           | Lexer → Parser → Type Checker → Linter   | Lints arbitrary AST shapes after type-checking, exactly as production does |
+| `fuzz_compiler`         | Lexer → Parser → Type Checker → Compiler → Optimizer → Verifier | Compiles programs through the production passes; compiler output must verify (oracle) |
+| `fuzz_optimizer`        | Lexer → Parser → Type Checker → Compiler → Optimizer | Runs `OptimizerPass` at every level over every chunk (incl. inlining); optimised bytecode must still verify (oracle) |
 | `fuzz_include_resolver` | Lexer → Parser → Include Resolver        | Handles pathological include paths and circular references             |
-| `fuzz_vm`               | Full pipeline → VM                       | Executes programs end-to-end with sandboxed stdlib and resource limits |
-| `fuzz_structured`       | Full pipeline → VM                       | Generates syntactically plausible Luma source via `FuzzedDataProvider` |
-| `fuzz_bytecode_deserializer` | `.lumc` deserializer                | Decodes arbitrary bytes as bytecode and round-trips valid blobs (oracle) |
+| `fuzz_vm`               | Full pipeline → VM                       | Executes programs end-to-end, optimised and verified per an input-derived profile, with sandboxed stdlib and resource limits |
+| `fuzz_structured`       | Full pipeline → VM                       | Generates well-typed (VM-bound) or chaos (front-end) Luma source via `FuzzedDataProvider` |
+| `fuzz_bytecode_deserializer` | `.lumc` deserializer → VM           | Decodes arbitrary bytes as bytecode, round-trips valid blobs (oracle) and executes them |
 | `fuzz_json`             | `shared/json` parser                     | Parses untrusted JSON-RPC bodies; re-serialise must re-parse (oracle)  |
 | `fuzz_json_stdlib`      | `Json` stdlib parser                     | Parses arbitrary bytes as `Json.deserialize` input; re-serialise must re-parse (oracle) |
 | `fuzz_csv`              | `Csv` codec layer                        | Parses arbitrary bytes as RFC 4180 CSV; serialise→parse round-trips (oracle) |
 | `fuzz_xml`              | `Xml` stdlib parser                      | Parses arbitrary bytes as `Xml.deserialize` input; canonical serialise→parse round-trips byte-for-byte (oracle) |
 | `fuzz_datetime`         | `DateTime` ISO-8601 codec                | Parses arbitrary bytes as ISO-8601 timestamps; format→parse round-trips (oracle) |
 | `fuzz_decimal`          | `Decimal` base-10 parser                 | Parses arbitrary bytes as decimal text (and coerces doubles); canonical text→re-parse round-trips (oracle) |
-| `fuzz_protocol`         | `shared/protocol` transport              | Parses Content-Length framed LSP/DAP messages from a byte stream       |
+| `fuzz_protocol`         | `shared/protocol` transport              | Parses Content-Length framed LSP/DAP messages from a byte stream, continuing past recoverable errors |
 | `fuzz_compression`      | `Compression` codec layer                | Decodes arbitrary bytes as deflate/gzip/RLE; round-trips valid data (oracle) |
 | `fuzz_encoder`          | `Encoder` Base64 / URL codecs            | Decodes arbitrary bytes as Base64/Base64URL/percent-encoding; round-trips valid data (oracle) |
 | `fuzz_hash`             | `Hash` CRC32 + hex codec                 | Checksums and hex-encodes arbitrary bytes; hex encode/decode round-trips and CRC32 known answers hold (oracle) |
@@ -140,7 +165,11 @@ The last nineteen targets close gaps beyond the compile pipeline:
   `BytecodeSerializer::deserialize` — the hand-written binary reader behind the
   `.lumc` cache and pre-compiled module distribution. Buffers that decode are
   re-serialised and decoded again; the bytes must be identical (a deterministic
-  round-trip oracle).
+  round-trip oracle). The decoded program is then executed under the sandboxed
+  stdlib and the fuzzing resource limits, because running it is what a loaded
+  `.lumc` is for: the deserializer re-verifies every chunk, so verified chunks
+  exercise the VM's unchecked fast path (a verifier soundness hole becomes an
+  ASan report) and rejected chunks exercise its runtime bounds checks.
 - **`fuzz_json`** drives the `shared/json` parser used for LSP/DAP message
   bodies. Any value it produces must serialise to text the parser accepts again.
 - **`fuzz_json_stdlib`** drives the separate stdlib JSON parser
@@ -198,7 +227,9 @@ The last nineteen targets close gaps beyond the compile pipeline:
   guards. A round-trip oracle checks that any value the parser accepts renders to
   canonical text that re-parses to an equal decimal.
 - **`fuzz_protocol`** streams arbitrary bytes through the shared `Content-Length`
-  message-framing transport via an in-memory subclass.
+  message-framing transport via an in-memory subclass. Like the LSP/DAP message
+  loops it keeps reading after a recoverable error, so the resync and
+  buffered-header paths that follow a malformed frame are exercised too.
 - **`fuzz_compression`** drives the `Compression` codec layer
   (`core/runtime/stdlib/system/compression_codec.hpp`) behind `Compression.inflate`,
   `Compression.gunzip` and `Compression.decode_rle`. These decoders parse
@@ -323,8 +354,9 @@ The last nineteen targets close gaps beyond the compile pipeline:
   bounds, or loop forever. Four oracles back the never-crash contract: gluing the
   per-codepoint chunks back together reproduces the input exactly and the chunk
   count equals `utf8_count` (partition completeness); `utf8_byte_offset` and
-  `utf8_codepoint_index` are mutual inverses and `byte_offset` saturates at the
-  string length; `utf8_encode` rejects surrogate halves and out-of-range scalars
+  `utf8_codepoint_index` are mutual inverses and `byte_offset` lands exactly on
+  the string length and then saturates; `utf8_encode` rejects surrogate halves
+  and out-of-range scalars
   and otherwise round-trips through `utf8_decode_at` with a length matching
   `utf8_codepoint_len`, pinned by a fixed 1/2/3/4-byte known-answer table; and
   `decode_surrogate_pair` maps every valid half pair into a supplementary scalar
@@ -339,12 +371,15 @@ The last nineteen targets close gaps beyond the compile pipeline:
   reports — into a stable key-name string. The bytes are entirely controlled by
   whatever is connected to stdin (a real terminal, a pipe, a malicious program),
   so the parser must never crash, read out of bounds or loop unboundedly. The
-  decoder is decoupled from blocking I/O via a `byte_reader` callback (the first
-  byte seeds it, the remainder feed the callback, which yields `-1` once spent,
-  mirroring an escape-sequence timeout), and each input is decoded with mouse
-  reporting both disabled and enabled so the SGR branch is reached. The POSIX
-  backend drives this exact code with live stdin, which no unit test can reach
-  deterministically. A non-empty-result oracle backs the never-crash contract:
+  POSIX backend drives this exact code with live stdin, which no unit test can
+  reach deterministically. The decoder is decoupled from blocking I/O via a
+  `byte_reader` callback, and — like the live backend — the whole input is
+  decoded as a stream of keys: each key's first byte seeds `decode_key`, the
+  following bytes feed the callback (which yields `-1` once spent, mirroring an
+  escape-sequence timeout), and decoding resumes where the previous key stopped,
+  so consecutive sequences and their boundaries are exercised. Each input is
+  decoded with mouse reporting both disabled and enabled so the SGR branch is
+  reached. A non-empty-result oracle backs the never-crash contract:
   every byte must classify to a non-empty key name, so an empty result signals a
   regression.
 
@@ -362,52 +397,84 @@ To add a new seed:
 2. Place it in the matching `corpus/<stage>/` directory (e.g. `corpus/lexer/` for
    `fuzz_lexer`).
 
+Seeds for the compiling and executing targets (`corpus/compiler/`,
+`corpus/optimizer/`, `corpus/vm/`) must type-check and run under
+`luma --box`; a seed the type checker rejects never reaches the stage it is
+meant to seed. Check a seed from a copy in a scratch directory: running `luma`
+writes a `.lumc` cache next to the file, and only
+`corpus/bytecode_deserializer/` may hold `.lumc` files.
+
 ## Shared Harness
 
 All targets are built from a small set of shared headers:
 
 - **[fuzz_harness.hpp](fuzz_harness.hpp)** — low-level utilities with no Luma
-  pipeline dependencies: input size caps (`max_input_size` /
-  `max_vm_input_size`), `to_string`, `do_not_optimize` (forces a value to be
-  observed so the work behind it is not optimised away), and `run` — the
-  exception-handling wrapper. `run` treats `luma::RuntimeError`, `std::bad_alloc`
-  and other `std::exception` types as expected for malformed input, and traps on
-  any foreign (non-standard) exception, which indicates a genuine bug. `run_text`
-  builds on `run`: it applies the size cap, converts the bytes to a
-  `std::string`, and forwards it to a caller-supplied body — the single
-  delegating call every string-based target uses in place of the repeated
-  cap-check / `to_string` / `run` prologue.
+  pipeline dependencies: input size caps (`k_max_input_size` /
+  `k_max_vm_input_size`), `to_string`, `leading_double` (reinterprets the first
+  eight input bytes as a hostile double via `std::bit_cast`), `do_not_optimize`
+  (forces a value to be observed so the work behind it is not optimised away),
+  and `run` — the exception-handling wrapper. Every expected failure derives
+  from `std::runtime_error` (`luma::RuntimeError`, the shared parsers'
+  `ParseError`, transport errors, `std::filesystem_error`), so `run` tolerates
+  exactly those plus `std::bad_alloc`, and traps on everything else:
+  `std::logic_error` and its kin, `std::bad_variant_access`, foreign exceptions,
+  and `luma::InternalError` — the `RuntimeError` subtype the VM raises when a
+  built-in fails with an interpreter fault, which would otherwise look like an
+  ordinary catchable error. `run_text` builds on `run`: it applies the size cap,
+  converts the bytes to a `std::string`, and forwards it to a caller-supplied
+  body — the single delegating call every string-based target uses in place of
+  the repeated cap-check / `to_string` / `run` prologue.
 - **[fuzz_oracle.hpp](fuzz_oracle.hpp)** — reusable codec oracles
   (`check_roundtrip`, `check_decoder_stable`) parameterised on a codec's
   `encode`/`decode` callables for `std::optional`-returning decoders. Shared by
   `fuzz_encoder` and `fuzz_compression`; depends only on `fuzz_harness.hpp`.
 - **[fuzz_frontend.hpp](fuzz_frontend.hpp)** — analysis-stage helpers (`lex`,
-  `parse`, `type_check`, `lint`, `has_error`) that depend only on
-  `luma_analysis`. Used by the analysis-only targets.
-- **[fuzz_pipeline.hpp](fuzz_pipeline.hpp)** — back-end helpers
-  (`compile_ready_program`, `compile`, `resolve_includes`, `run_full_pipeline`)
-  plus `apply_fuzz_resource_limits`. Pulls in the runtime/VM headers, so only
+  `parse`, `parse_clean`, `type_check`, `type_check_and_lint`) that depend only
+  on `luma_analysis`. `type_check_and_lint` assembles the production
+  `TypeCheckerPass` + `LintPass` pipeline, because the linter relies on the
+  type checker's annotations. Used by the analysis-only targets.
+- **[fuzz_pipeline.hpp](fuzz_pipeline.hpp)** — back-end helpers. `build`
+  assembles the production `TypeCheckerPass` → `CompilerPass` →
+  [`OptimizerPass`] → [`VerifierPass`] pipeline exactly as `compile_program()`
+  does, so the fuzzers cannot drift from production; `build_options_for` derives
+  the optimisation level and verification flag from the input size, so every
+  production profile — including the VM's verified fast path, which skips its
+  bounds checks — is covered deterministically. `execute` runs bytecode under
+  the sandboxed stdlib, `run_full_pipeline` chains the three, and
+  `resolve_includes` drives the include resolver. `apply_fuzz_resource_limits`
+  tightens every container, string, task-queue and loop limit. The loop budgets
+  are the main bound on execution time: the shared while budget, and the
+  cumulative total budget (off by default outside fuzzing) that bounds nested
+  `for` loops and crafted bytecode that the while budget cannot, since every
+  `for` loop resets it. Pulls in the runtime/VM headers, so only
   targets that link `luma_core` include it.
 - **[fuzz_source_generator.hpp](fuzz_source_generator.hpp)** — umbrella header
-  for the templated grammar generator used by `fuzz_structured`, split by
-  concern across **[fuzz_gen_vocab.hpp](fuzz_gen_vocab.hpp)** (token vocabulary,
-  `pick`, and the small literal/identifier helpers),
-  **[fuzz_gen_grammar.hpp](fuzz_gen_grammar.hpp)** (the recursive,
-  deliberately-ill-typed expression and statement grammar),
-  **[fuzz_gen_stdlib.hpp](fuzz_gen_stdlib.hpp)** (the curated, type-correct
-  stdlib feature emitters), and
-  **[fuzz_gen_program.hpp](fuzz_gen_program.hpp)** (declaration builders and
-  fixed-prelude assembly). It is parameterised on a data provider rather than
-  depending on LibFuzzer directly, so it can be reused or unit-tested with a
-  mock provider. Besides records, choices, functions and control flow, it emits
-  pipes (`|>`), lambdas, string interpolation, match arms, stdlib data-format
-  decoder calls (`Json`/`Csv`/`Xml`) built from sanitised string literals so
-  those parsers are reached through the VM, `Converter` calls that drive its
-  hand-written parsers and encoders (the UTF-8 codepoint decode/encode paths and
-  the roman/base/numeric scanners) with sanitised string literals and generated
-  integers, and structured-concurrency constructs (`task_scope`, `spawn`,
-  `await`, `Channel`/`Task` combinators) designed to stay deadlock-free.
-
+  for the templated grammar generator used by `fuzz_structured`. Each input
+  yields one of two kinds of program, chosen up front because one ill-typed
+  statement rejects a whole program: a **well-typed** program, which reaches the
+  compiler, optimiser, verifier and VM, or a deliberately ill-typed **chaos**
+  program, which stresses parser recovery and the type checker. The generator
+  is split by concern across **[fuzz_gen_vocab.hpp](fuzz_gen_vocab.hpp)** (token
+  vocabulary, `pick`, `pick_kind`, and literal helpers),
+  **[fuzz_gen_features.hpp](fuzz_gen_features.hpp)** (type-correct record,
+  tuple, alias, interface and namespace emitters),
+  **[fuzz_gen_stdlib.hpp](fuzz_gen_stdlib.hpp)** (type-correct concurrency,
+  `LinearAlgebra`, `Math`/`Statistics`, `Converter` and `Json` emitters),
+  **[fuzz_gen_grammar.hpp](fuzz_gen_grammar.hpp)** (the chaos grammar),
+  **[fuzz_gen_typed.hpp](fuzz_gen_typed.hpp)** (the well-typed grammar, which
+  builds every expression for a requested type and avoids runtime failures by
+  construction — bounded operands, non-zero divisors, literal loop bounds), and
+  **[fuzz_gen_program.hpp](fuzz_gen_program.hpp)** (preludes, declarations and
+  program assembly). Every grammar dispatches on an `enum class` with a `Count`
+  sentinel drawn by `pick_kind`, so `-Wswitch` flags any kind a switch forgets.
+  The generator is parameterised on a data provider rather than depending on
+  LibFuzzer directly, and `tests/integration/fuzz_generator_test.cpp` drives it
+  with a deterministic provider: every well-typed program and every well-typed
+  statement kind must type-check without an unknown-stdlib warning, compile at
+  the highest optimisation level, verify, and run cleanly in the sandbox. That
+  matters because the type checker only *warns* about an unknown stdlib member,
+  and `Csv`, `Xml` and the other OS-only modules are absent under the sandbox —
+  either would type-check yet abort the program at run time.
 Each `*_quick` CTest entry runs its target against the target's own
 `corpus/<stage>/` directory with the shared dictionary for
 `LUMA_FUZZ_QUICK_TIME` seconds (default 10; override with
@@ -432,3 +499,12 @@ Minimise the crashing input for a cleaner reproduction case:
 ```bash
 ./build-fuzz/fuzz_lexer -minimize_crash=1 -exact_artifact_path=minimized.txt crash-abc123def
 ```
+
+A `timeout-<hash>` artifact means one input ran longer than `-timeout`. The loop
+budgets in `apply_fuzz_resource_limits` bound every loop, so for most targets a
+timeout is a genuine hang. For `fuzz_vm` and `fuzz_bytecode_deserializer`, which
+run arbitrary programs, first check whether the program simply waits forever by
+design — for example a blocking `Channel.receive` on a channel nothing sends to,
+or an `await` on such a task. That is legitimate Luma behaviour, not an
+interpreter bug. (The structured generator never emits such waits, so a timeout
+from `fuzz_structured` is always worth investigating.)

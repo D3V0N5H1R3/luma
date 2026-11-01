@@ -19,7 +19,7 @@ Luma has two testing layers: **C++ tests** that exercise interpreter internals, 
 | --- | --- | --- |
 | `tests/analysis/` | C++ | Front-end: lexer, parser, type checker, linter, diagnostics, include resolver, pipeline. |
 | `tests/runtime/` | C++ | Back-end: compiler, VM, stdlib modules, concurrency, CLI, REPL. |
-| `tests/integration/` | C++ | Full pipeline, from source to execution. |
+| `tests/integration/` | C++ | Full pipeline, from source to execution, and the structured fuzzer's generator contract (`fuzz_generator_test`). |
 | `tests/platform/` | C++ | Platform-specific behaviour (`safe_getenv`, Win32 UTF-8). |
 | `tests/features/language/` | Luma | Core language features (control flow, types, closures, generics). |
 | `tests/features/stdlib/` | Luma | Standard library modules (`*_functions.luma`). |

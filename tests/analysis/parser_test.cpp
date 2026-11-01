@@ -2129,6 +2129,15 @@ static void test_comparison_with_uppercase_name_is_not_generic() {
     ASSERT_EQ(as_binary(first_initializer(program)).op, TokenType::Less);
 }
 
+static void test_binary_operator_at_end_of_input_is_a_syntax_error() {
+    // A binary operator with no right operand at end of input must be a
+    // recoverable syntax error.  The parser raises ParseFailure and recovers;
+    // fuzz_parser reaches exactly this shape constantly.
+    for (const auto* source : {"a>", "a<", "a+", "a*", "a==", "a>=", "1 -", "x &&"}) {
+        ASSERT_FALSE(parse_errors(source).empty());
+    }
+}
+
 int main() {
     RUN(test_empty_program);
     RUN(test_variable_declaration);
@@ -2296,6 +2305,7 @@ int main() {
     RUN(test_try_without_handler_hint_uses_real_syntax);
     RUN(test_syntax_error_span_starts_at_token);
     RUN(test_comparison_with_uppercase_name_is_not_generic);
+    RUN(test_binary_operator_at_end_of_input_is_a_syntax_error);
 
     return SUMMARY();
 }

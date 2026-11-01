@@ -14,7 +14,7 @@ function result<integer> checked_divide(integer a, integer b) {
         return failure("division by zero")
     }
 
-    return success(a / b)
+    return success(a // b)
 }
 
 @main

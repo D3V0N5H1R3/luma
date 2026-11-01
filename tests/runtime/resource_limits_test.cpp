@@ -81,6 +81,90 @@ static void test_while_loop_within_limit_succeeds() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// Total loop iteration budget
+// ═══════════════════════════════════════════════════════════
+
+// Return the message of the runtime error `source` raises, or "" if none.
+static std::string runtime_error_message(const std::string& source) {
+    try {
+        (void)eval(source);
+    } catch (const RuntimeError& error) {
+        return error.what();
+    }
+    return "";
+}
+
+static bool exceeds_total_loop_budget(const std::string& source) {
+    return runtime_error_message(source).find("total iteration budget") != std::string::npos;
+}
+
+static void test_nested_for_loops_hit_total_budget() {
+    // Each inner `for` resets the shared while budget on entry, so only the
+    // total budget can bound the 10,000 iterations of this nest.
+    LimitGuard guard{ResourceLimits::max_total_loop_iterations, static_cast<std::int64_t>(1000)};
+
+    ASSERT_TRUE(exceeds_total_loop_budget(R"(
+        mutable integer n = 0
+        for a in 0..100 {
+            for b in 0..100 {
+                n += 1
+            }
+        }
+    )"));
+}
+
+static void test_sequential_for_loops_accumulate_total_budget() {
+    LimitGuard guard{ResourceLimits::max_total_loop_iterations, static_cast<std::int64_t>(1000)};
+
+    // 600 + 600 back-edges: neither loop alone exceeds the budget.
+    ASSERT_TRUE(exceeds_total_loop_budget(R"(
+        mutable integer n = 0
+        for a in 0..600 {
+            n += 1
+        }
+        for b in 0..600 {
+            n += 1
+        }
+    )"));
+}
+
+static void test_total_budget_survives_a_caught_error() {
+    LimitGuard guard{ResourceLimits::max_total_loop_iterations, static_cast<std::int64_t>(50)};
+
+    // Catching the error must not hand the program a fresh budget.
+    ASSERT_TRUE(exceeds_total_loop_budget(R"(
+        mutable integer n = 0
+        try {
+            for a in 0..100 {
+                n += 1
+            }
+        } catch(_err) {
+            n = 0
+        }
+        for b in 0..2 {
+            n += 1
+        }
+    )"));
+}
+
+static void test_loops_within_total_budget_succeed() {
+    LimitGuard guard{ResourceLimits::max_total_loop_iterations, static_cast<std::int64_t>(1000)};
+
+    const auto result = eval(R"(
+        mutable integer n = 0
+        for a in 0..10 {
+            for b in 0..10 {
+                n += 1
+            }
+        }
+        n
+    )");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 100);
+}
+
+// ═══════════════════════════════════════════════════════════
 // Array size limit
 // ═══════════════════════════════════════════════════════════
 
@@ -340,6 +424,10 @@ int main() {
     // While loop iterations.
     RUN(test_while_loop_limit_enforced);
     RUN(test_while_loop_within_limit_succeeds);
+    RUN(test_nested_for_loops_hit_total_budget);
+    RUN(test_sequential_for_loops_accumulate_total_budget);
+    RUN(test_total_budget_survives_a_caught_error);
+    RUN(test_loops_within_total_budget_succeed);
 
     // Array size.
     RUN(test_array_push_limit_enforced);

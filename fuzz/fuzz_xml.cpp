@@ -41,7 +41,7 @@
 // the first parse already satisfied.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             // First parse: malformed input legitimately throws, which the shared
             // run() wrapper tolerates.
             const std::shared_ptr<luma::XmlValue> node = luma::xml_parse_string(input);

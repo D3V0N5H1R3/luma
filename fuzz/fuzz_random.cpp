@@ -35,7 +35,7 @@
 //      only the accepted ones, because the modular reduction can never exceed
 //      the span.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    if (size > luma::fuzz::max_input_size) {
+    if (size > luma::fuzz::k_max_input_size) {
         return 0;
     }
 

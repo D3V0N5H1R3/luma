@@ -16,6 +16,20 @@
 
 namespace luma {
 
+// Options that affect compilation output.  An aggregate keyed by the full
+// optimization level: -O1 and -O2 produce different bytecode, so a flag would
+// serve one level's artifact for the other.  Declared at namespace scope
+// rather than nested in CompilationCache: Clang rejects a nested aggregate's
+// default member initializers in the enclosing class's default arguments
+// (`const Options& options = Options{}`) because the enclosing class is still
+// incomplete there.
+struct CompilationCacheOptions {
+    OptimizationLevel optimization_level{OptimizationLevel::Full};
+    bool debug_info{false};
+
+    [[nodiscard]] bool operator==(const CompilationCacheOptions&) const = default;
+};
+
 // In-memory compilation cache that avoids re-compiling unchanged files.
 // Keyed by (absolute path, compilation options, content hash). When a file's
 // content changes, options differ, or a recorded dependency (an included file)
@@ -33,15 +47,7 @@ class CompilationCache {
 public:
     static constexpr std::size_t default_max_entries{128};
 
-    // Options that affect compilation output.  An aggregate keyed by the full
-    // optimization level: -O1 and -O2 produce different bytecode, so a flag
-    // would serve one level's artifact for the other.
-    struct Options {
-        OptimizationLevel optimization_level{OptimizationLevel::Full};
-        bool debug_info{false};
-
-        [[nodiscard]] bool operator==(const Options&) const = default;
-    };
+    using Options = CompilationCacheOptions;
 
     explicit CompilationCache(std::size_t max_entries = default_max_entries)
         : cache_{max_entries} {}

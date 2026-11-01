@@ -55,8 +55,9 @@ CMakeFiles/
 *.so
 
 # Keep intentional .lumc fuzz corpus seeds; the bytecode deserializer fuzz
-# target needs committed binary input (build-artifact .lumc stay ignored above).
-!fuzz/corpus/**/*.lumc
+# target needs committed binary input (build-artifact .lumc stay ignored above —
+# running luma on a seed elsewhere in the corpus writes one next to it).
+!fuzz/corpus/bytecode_deserializer/*.lumc
 
 # ── IDE and editor files ──
 

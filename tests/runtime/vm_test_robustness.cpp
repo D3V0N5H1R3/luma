@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@
 #include "runtime/compiler/compiled_function.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/value.hpp"
+#include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_introspection.hpp"
 #include "runtime/vm/vm_types.hpp"
@@ -529,6 +531,52 @@ LUMA_TEST(vm_stale_exception_handler_does_not_survive_return) {
     // Pre-fix: the stale handler swallowed the error and the top-level frame
     // resumed inside <leaky-try>'s bytecode.
     ASSERT_TRUE(raised_original_error);
+}
+
+// ─── Built-in fault classification ───
+//
+// call_native turns a non-runtime_error exception escaping a built-in into a
+// catchable error.  An interpreter fault must surface as InternalError (so the
+// fuzz harness can flag it as a defect), while allocation pressure stays an
+// ordinary RuntimeError.
+
+// How the VM surfaced an exception escaping a built-in.
+enum class SurfacedAs {
+    nothing,
+    internal_error,
+    runtime_error,
+    other
+};
+
+// Call a native that throws `fault` and classify the exception the VM raised.
+template <typename Fault> static SurfacedAs raise_from_native(Fault fault) {
+    const auto compiled = luma::test::compile_for_eval(luma::test::lex_and_parse("explode()"));
+    const auto env = luma::test::make_std_env();
+    define_native(env, "explode", [fault](Args, SourceLocation) -> Value { throw fault; });
+
+    VM vm{env};
+    try {
+        (void)vm.execute_function(compiled.top_level, compiled.functions);
+    } catch (const InternalError& error) {
+        // The original fault's message must survive the conversion.
+        return std::string{error.what()}.find("broken invariant") != std::string::npos
+                   ? SurfacedAs::internal_error
+                   : SurfacedAs::other;
+    } catch (const RuntimeError&) {
+        return SurfacedAs::runtime_error;
+    } catch (const std::exception&) {
+        return SurfacedAs::other;
+    }
+    return SurfacedAs::nothing;
+}
+
+LUMA_TEST(vm_native_logic_error_becomes_internal_error) {
+    ASSERT_TRUE(raise_from_native(std::logic_error{"broken invariant"}) ==
+                SurfacedAs::internal_error);
+}
+
+LUMA_TEST(vm_native_bad_alloc_stays_plain_runtime_error) {
+    ASSERT_TRUE(raise_from_native(std::bad_alloc{}) == SurfacedAs::runtime_error);
 }
 
 // ─── Main ───

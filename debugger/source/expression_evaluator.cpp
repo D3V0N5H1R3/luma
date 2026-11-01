@@ -307,16 +307,20 @@ Variable ExpressionEvaluator::evaluate_on_scratch_vm(VM* target_vm, int frame_in
         evaluated = scratch_vm.execute_function(*eval_function);
     } catch (const std::exception& ex) {
         threw = true;
-        // A non-terminating expression can also trip the VM's global
-        // runaway-loop guard before the cooperative time deadline fires: on a
-        // fast host the max-iteration cap is reached first and surfaces as a
+        // A non-terminating expression can also trip one of the VM's
+        // runaway-loop guards before the cooperative time deadline fires: on a
+        // fast host an iteration cap is reached first and surfaces as a
         // RuntimeError, whereas on a slow host the deadline wins.  Both mean the
-        // expression does not terminate, so treat the guard the same as a
+        // expression does not terminate, so treat the guards the same as a
         // deadline abort rather than reporting a generic evaluation error — the
-        // shared message generator keeps this in step with the VM.
-        const std::string runaway_message =
+        // shared message generators keep this in step with the VM.
+        const std::string_view message{ex.what()};
+        const std::string while_budget_message =
             vm_errors::loop_exceeded_max_iterations(ResourceLimits::max_while_iterations);
-        if (std::string_view{ex.what()}.find(runaway_message) != std::string_view::npos) {
+        const std::string total_budget_message =
+            vm_errors::loop_exceeded_total_iterations(ResourceLimits::max_total_loop_iterations);
+        if (message.find(while_budget_message) != std::string_view::npos ||
+            message.find(total_budget_message) != std::string_view::npos) {
             runaway = true;
         }
     } catch (...) {
