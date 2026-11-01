@@ -24,6 +24,12 @@ module.exports = grammar({
         [$.generic_type, $.function_type],
         [$.tuple_type],
         [$.block, $.dictionary_literal],
+        [$._tuple_binding, $.lambda_parameter],
+        [$.qualified_identifier, $.qualified_type],
+        [$.record_pattern, $.record_literal, $._type_expression],
+        [$.record_pattern, $._type_expression],
+        [$.record_pattern, $.record_literal],
+        [$._expression, $.call_expression],
     ],
 
     rules: {
@@ -66,7 +72,7 @@ module.exports = grammar({
             seq("include", $.string),
 
         use_statement: ($) =>
-            seq("use", $.qualified_identifier),
+            seq("use", choice($.qualified_identifier, $.type_identifier)),
 
         // ─── Type Alias ───────────────────────────────────────────────────
 
@@ -101,7 +107,8 @@ module.exports = grammar({
                 $.type_identifier,
                 optional($.generic_params),
                 "{",
-                repeat($.interface_field),
+                commaSep($.interface_field),
+                optional(","),
                 "}",
             ),
 
@@ -138,7 +145,7 @@ module.exports = grammar({
                 $.type_identifier,
                 optional($.generic_params),
                 "{",
-                repeat($.choice_variant),
+                repeat(seq($.choice_variant, optional(","))),
                 "}",
             ),
 
@@ -157,6 +164,7 @@ module.exports = grammar({
                 optional("internal"),
                 "function",
                 optional($.generic_params),
+                optional(choice("unique", "borrow")),
                 $._type_expression,
                 field("name", $.function_name),
                 $.parameter_list,
@@ -183,7 +191,6 @@ module.exports = grammar({
                 $.assignment_statement,
                 $.expression_statement,
                 $.return_statement,
-                $.if_statement,
                 $.for_statement,
                 $.while_statement,
                 $.try_statement,
@@ -194,12 +201,20 @@ module.exports = grammar({
 
         block: ($) => seq("{", repeat($._statement), "}"),
 
+        // A tuple destructuring takes `mutable` once, before the parenthesised
+        // bindings, never a type in front of them.
         variable_declaration: ($) =>
             seq(
                 optional("mutable"),
-                optional(choice("unique", "borrow")),
-                $._type_expression,
-                choice($.identifier, $.tuple_destructure),
+                choice(
+                    seq(
+                        optional(choice("unique", "borrow")),
+                        $._type_expression,
+                        $.identifier,
+                    ),
+                    $.tuple_destructure,
+                    alias($.record_pattern, $.record_destructure),
+                ),
                 "=",
                 $._expression,
             ),
@@ -207,9 +222,12 @@ module.exports = grammar({
         tuple_destructure: ($) =>
             seq(
                 "(",
-                commaSep2(seq(optional("mutable"), $._type_expression, $.identifier)),
+                $._tuple_binding,
+                repeat1(seq(",", $._tuple_binding)),
                 ")",
             ),
+
+        _tuple_binding: ($) => seq($._type_expression, $.identifier),
 
         assignment_statement: ($) =>
             seq(
@@ -246,15 +264,17 @@ module.exports = grammar({
 
         // ─── Control Flow ─────────────────────────────────────────────────
 
-        if_statement: ($) =>
-            seq(
-                "if",
-                $._expression,
-                $.block,
-                optional(
+        // `if` is an expression (User Manual §32.7 `if_expr`); at statement
+        // level it appears as an expression_statement.
+        if_expression: ($) =>
+            prec.right(
+                seq(
+                    "if",
+                    $._expression,
+                    $.block,
                     repeat(seq("else", "if", $._expression, $.block)),
+                    optional(seq("else", $.block)),
                 ),
-                optional(seq("else", $.block)),
             ),
 
         for_statement: ($) =>
@@ -290,6 +310,7 @@ module.exports = grammar({
                 $.index_expression,
                 $.field_expression,
                 $.optional_chain_expression,
+                $.if_expression,
                 $.match_expression,
                 $.lambda_expression,
                 $.spawn_expression,
@@ -359,16 +380,37 @@ module.exports = grammar({
         postfix_expression: ($) =>
             prec(14, seq($._expression, "?")),
 
+        // A stored closure can be called through a field (`config.handler(x)`),
+        // and a returned function can be called in place (`make_adder(1)(2)`).
+        // The interpreter starts a new statement at a `(` that begins a line,
+        // but the grammar cannot see line breaks without an external scanner.
+        // So these calls carry no static precedence: the parser keeps both
+        // readings and drops the call when the next line is, say, a tuple
+        // destructuring.
         call_expression: ($) =>
-            prec(
-                15,
-                seq(
-                    field("function", choice($.identifier, $.qualified_identifier)),
-                    optional(seq("::", $.generic_args)),
-                    "(",
-                    commaSep($.argument),
-                    ")",
+            choice(
+                prec(
+                    15,
+                    seq(
+                        field("function", choice($.identifier, $.qualified_identifier)),
+                        $._call_arguments,
+                    ),
                 ),
+                prec.dynamic(
+                    1,
+                    seq(
+                        field("function", choice($.field_expression, $.call_expression)),
+                        $._call_arguments,
+                    ),
+                ),
+            ),
+
+        _call_arguments: ($) =>
+            seq(
+                optional(seq("::", $.generic_args)),
+                "(",
+                commaSep($.argument),
+                ")",
             ),
 
         argument: ($) =>
@@ -402,13 +444,14 @@ module.exports = grammar({
                 ),
             ),
 
+        // The interpreter accepts `else` anywhere among the arms (it always
+        // wins), so the grammar does not force it last.
         match_expression: ($) =>
             seq(
                 "match",
                 $._expression,
                 "{",
-                repeat($.match_arm),
-                optional($.else_arm),
+                repeat(choice($.match_arm, $.else_arm)),
                 "}",
             ),
 
@@ -416,8 +459,9 @@ module.exports = grammar({
             choice(
                 seq(
                     "case",
-                    choice($.match_pattern, $._expression),
-                    repeat(seq("|", choice($.match_pattern, $._expression))),
+                    $._case_pattern,
+                    repeat(seq("|", $._case_pattern)),
+                    optional($.match_guard),
                     $.block,
                 ),
                 seq(
@@ -425,9 +469,40 @@ module.exports = grammar({
                     "(",
                     $.identifier,
                     ")",
+                    optional($.match_guard),
                     $.block,
                 ),
             ),
+
+        _case_pattern: ($) =>
+            choice(
+                $.match_pattern,
+                $.comparison_pattern,
+                $.record_pattern,
+                $._expression,
+            ),
+
+        // `case >= 90 { … }` — compares the match subject with an expression.
+        comparison_pattern: ($) =>
+            seq(choice("==", "!=", "<", ">", "<=", ">="), $._expression),
+
+        // `case Point { x, y } { … }` — binds record fields by name. The same
+        // tokens also read as a shorthand record literal, so prefer the pattern.
+        record_pattern: ($) =>
+            prec.dynamic(
+                1,
+                seq(
+                    choice($.type_identifier, $.qualified_type),
+                    optional($.generic_args),
+                    "{",
+                    commaSep($.identifier),
+                    optional(","),
+                    "}",
+                ),
+            ),
+
+        // `when` is a contextual keyword: it only refines a match arm.
+        match_guard: ($) => seq("when", $._expression),
 
         match_pattern: ($) =>
             prec(
@@ -454,7 +529,12 @@ module.exports = grammar({
             ),
 
         lambda_parameter: ($) =>
-            seq($._type_expression, $.identifier),
+            seq(
+                optional("mutable"),
+                optional(choice("unique", "borrow")),
+                $._type_expression,
+                $.identifier,
+            ),
 
         spawn_expression: ($) =>
             prec(20, seq("spawn", $.call_expression)),
@@ -504,12 +584,14 @@ module.exports = grammar({
         is_expression: ($) =>
             seq("is", "<", $._type_expression, ">", "(", $._expression, ")"),
 
+        // A field initialiser may use the shorthand `Vector { x, y }` for
+        // `Vector { x = x, y = y }`.
         record_literal: ($) =>
             seq(
-                $.type_identifier,
+                choice($.type_identifier, $.qualified_type),
                 optional($.generic_args),
                 "{",
-                commaSep(seq($.identifier, "=", $._expression)),
+                commaSep(choice(seq($.identifier, "=", $._expression), $.identifier)),
                 optional(","),
                 "}",
             ),
@@ -543,6 +625,7 @@ module.exports = grammar({
                 $.generic_type,
                 $.function_type,
                 $.tuple_type,
+                $.qualified_type,
                 $.type_identifier,
             ),
 
@@ -567,6 +650,7 @@ module.exports = grammar({
                 "key_value_store",
                 "set",
                 "xml",
+                "none",
             ),
 
         generic_type: ($) =>
@@ -608,12 +692,16 @@ module.exports = grammar({
 
         // ─── Literals ─────────────────────────────────────────────────────
 
+        // A `$` that does not start `${` is literal text (the interpreter only
+        // interpolates on `${`). The lexer prefers the longer `${` token, so this
+        // single-character alternative never swallows an interpolation start.
         string: ($) =>
             seq(
                 '"',
                 repeat(
                     choice(
                         $.string_content,
+                        alias($._string_dollar, $.string_content),
                         $.string_escape,
                         $.interpolation,
                     ),
@@ -628,12 +716,15 @@ module.exports = grammar({
                     choice(
                         $.triple_string_content,
                         alias(token.immediate('"'), $.triple_string_content),
+                        alias($._string_dollar, $.triple_string_content),
                         $.string_escape,
                         $.interpolation,
                     ),
                 ),
                 '"""',
             ),
+
+        _string_dollar: (_$) => token.immediate("$"),
 
         string_content: (_$) =>
             token.immediate(prec(1, /[^"\\$\n]+/)),
@@ -679,7 +770,9 @@ module.exports = grammar({
         boolean_literal: (_$) =>
             choice("true", "false"),
 
-        none_literal: (_$) => "none",
+        // `none` is also a type name (`result<none>`); where both readings fit
+        // (statement start), the literal wins.
+        none_literal: (_$) => prec(1, "none"),
 
         // ─── Identifiers ──────────────────────────────────────────────────
 
@@ -691,8 +784,23 @@ module.exports = grammar({
 
         function_name: ($) => $.identifier,
 
+        // `Module.member`, `Type.Variant`, or `Namespace.Type.Variant`.
         qualified_identifier: ($) =>
-            seq($.type_identifier, ".", choice($.identifier, $.type_identifier)),
+            seq(
+                $.type_identifier,
+                ".",
+                optional(seq($.type_identifier, ".")),
+                choice($.identifier, $.type_identifier),
+            ),
+
+        // A namespace-qualified type name such as `DateTime.TimeParts`.
+        qualified_type: ($) =>
+            seq(
+                $.type_identifier,
+                ".",
+                $.type_identifier,
+                optional(seq(".", $.type_identifier)),
+            ),
     },
 });
 
@@ -712,13 +820,4 @@ function commaSep(rule) {
  */
 function commaSep1(rule) {
     return seq(rule, repeat(seq(",", rule)));
-}
-
-/**
- * Helper: two or more comma-separated items.
- * @param {RuleOrLiteral} rule
- * @returns {SeqRule}
- */
-function commaSep2(rule) {
-    return seq(rule, ",", rule, repeat(seq(",", rule)));
 }

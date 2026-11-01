@@ -142,8 +142,8 @@
             }
         },
         "typed_binding": {
-            "comment": "Typed variable or parameter: builtin_type[<T>] name",
-            "match": "\\b(boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|xml|key_value_store|set)(?:<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)",
+            "comment": "Typed variable or parameter: builtin_type[<T>] name (one level of nested generics, e.g. array<array<integer>>)",
+            "match": "\\b(boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|xml|key_value_store|set)(?:<(?:[^<>]|<[^<>]*>)*>)?\\s+([a-z_][a-zA-Z0-9_]*)",
             "captures": {
                 "1": { "name": "storage.type.luma" },
                 "2": { "name": "variable.other.luma" }
@@ -163,7 +163,7 @@
         },
         "keyword_control": {
             "name": "keyword.control.luma",
-            "match": "\\b(if|else|for|while|in|break|continue|return|match|case|try|catch|finally)\\b"
+            "match": "\\b(if|else|for|while|in|break|continue|return|match|case|when|try|catch|finally)\\b"
         },
         "keyword_declaration": {
             "name": "keyword.declaration.luma",
@@ -223,8 +223,8 @@
         "function_declaration": {
             "patterns": [
                 {
-                    "comment": "function with or without generics: function[<T>] ReturnType name(",
-                    "match": "(\\bfunction\\b)(?:\\s*<[^>]*>)?\\s+[a-zA-Z0-9_<>(), \\t-]+?\\s+([a-z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+                    "comment": "function with or without generics: function[<T>] ReturnType name( — the return type may be namespace-qualified (DateTime.TimeParts)",
+                    "match": "(\\bfunction\\b)(?:\\s*<[^>]*>)?\\s+[a-zA-Z0-9_<>(), \\t.-]+?\\s+([a-z_][a-zA-Z0-9_]*)\\s*(?=\\()",
                     "captures": {
                         "1": { "name": "keyword.declaration.luma" },
                         "2": { "name": "entity.name.function.luma" }
@@ -335,11 +335,36 @@
             }
         },
         "lambda": {
-            "comment": "Lambda parameters: (x, y) -> body",
-            "match": "\\(([a-z_][a-zA-Z0-9_]*(?:\\s*,\\s*[a-z_][a-zA-Z0-9_]*)*)\\)\\s*(?=->)",
-            "captures": {
-                "1": { "name": "variable.parameter.luma" }
-            }
+            "comment": "Lambda parameter list: (number a, mutable array<T> b) -> body. Lambda parameters are always typed; a parenthesised list followed by -> that holds no nested parentheses.",
+            "begin": "\\((?=[^()]*\\)\\s*->)",
+            "beginCaptures": {
+                "0": { "name": "punctuation.definition.parameters.begin.luma" }
+            },
+            "end": "\\)",
+            "endCaptures": {
+                "0": { "name": "punctuation.definition.parameters.end.luma" }
+            },
+            "patterns": [
+                {
+                    "comment": "One parameter: [mutable|unique|borrow] Type name",
+                    "match": "(?:\\b(mutable|unique|borrow)\\s+)?\\b([A-Za-z_][A-Za-z0-9_.]*(?:<(?:[^<>]|<[^<>]*>)*>)?)\\s+([a-z_][a-zA-Z0-9_]*)\\b",
+                    "captures": {
+                        "1": { "name": "storage.modifier.luma" },
+                        "2": {
+                            "patterns": [
+                                { "include": "#type" },
+                                {
+                                    "match": "[A-Z][a-zA-Z0-9_]*",
+                                    "name": "entity.name.type.luma"
+                                }
+                            ]
+                        },
+                        "3": { "name": "variable.parameter.luma" }
+                    }
+                },
+                { "include": "#type" },
+                { "include": "#operator" }
+            ]
         },
         "catch_variable": {
             "comment": "Catch clause variable: catch(error)",

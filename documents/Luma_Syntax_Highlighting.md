@@ -89,7 +89,9 @@ Keywords are split into sub-categories so that themes can colour control flow di
 
 ##### 3a. Control Flow
 
-`break`, `case`, `catch`, `continue`, `else`, `finally`, `for`, `if`, `in`, `match`, `return`, `try`, `while`
+`break`, `case`, `catch`, `continue`, `else`, `finally`, `for`, `if`, `in`, `match`, `return`, `try`, `when`, `while`
+
+`when` is contextual — it only introduces a match-arm guard (`case >= 0 when n == 0 { … }`) and is not reserved elsewhere.
 
 **Scope:** `keyword.control.luma`
 
@@ -400,6 +402,7 @@ No activation events are needed — grammar-only extensions activate lazily on f
 | Indentation decrease | Lines starting with `}`                                           |
 | Indentation increase | Lines ending with `{`                                             |
 | Line comment toggle  | `#` prefix (VS Code comment toggle command)                       |
+| On Enter             | One indent level after an opening bracket (no extra `appendText`) |
 | Surrounding pairs    | Same as auto-closing                                              |
 | Word pattern         | `[a-zA-Z_][a-zA-Z0-9_]*` (standard identifier pattern)            |
 
@@ -444,15 +447,17 @@ Patterns are included in this order inside the `patterns` array (see [Token Desi
 
 `#for_variable` — Matches the loop-variable binding in `for x in …` and `for k, v in …`. Both variable names receive `variable.other.luma`. Must come before `#type` and `#keyword_control` so the identifiers are captured before `for` and `in` are consumed individually.
 
-`#typed_binding` — Matches a built-in type followed immediately by an identifier (e.g. `integer count`). Captures the type as `storage.type.luma` and the name as `variable.other.luma`. Must come before `#type` so the combined pattern wins over a bare type match.
+`#typed_binding` — Matches a built-in type followed immediately by an identifier (e.g. `integer count`, `array<array<integer>> grid` — one level of nested generics). Captures the type as `storage.type.luma` and the name as `variable.other.luma`. Must come before `#type` so the combined pattern wins over a bare type match.
+
+`#lambda` — Begin/end rule for a lambda's parameter list: a `(` whose matching `)` (with no nested parentheses) is followed by `->`. Lambda parameters are always typed, so each `[mutable|unique|borrow] Type name` entry scopes the name as `variable.parameter.luma`.
 
 `#function_declaration` — Matches the pattern:
 
 ```text
-\bfunction\b\s*(?:<[^>]*>\s*)?(?:\w[\w<>, \[\]().\s]*?\s+)(\w+)\s*(?=\()
+(\bfunction\b)(?:\s*<[^>]*>)?\s+[a-zA-Z0-9_<>(), \t.-]+?\s+([a-z_][a-zA-Z0-9_]*)\s*(?=\()
 ```
 
-Capture group 1 → `entity.name.function.luma`. The pattern is non-greedy to correctly isolate the function name before `(`.
+Capture group 2 → `entity.name.function.luma`. The return-type class includes `.` so a namespace-qualified return type (`DateTime.TimeParts`) still isolates the function name; the pattern is non-greedy to stop at the name before `(`.
 
 `#type_declaration` — Single match covers `record`, `choice`, `interface`, `namespace`, and `type` followed by an uppercase identifier:
 
@@ -566,66 +571,84 @@ Declares:
 - **`description`:** Short one-line description
 - **`authors`:** Author list
 - **`repository`:** Source repository URL
-- **`[grammars.luma]`:** Declares the `luma` tree-sitter grammar — its `repository` (the grammar source; `file://./grammars/tree-sitter-luma` for the in-repo copy) and pinned `rev`
+- **`snippets`:** `["snippets/luma.json"]` — a top-level key, so it must come before the first `[table]` header (written below `[lib]`, TOML files it as `lib.snippets` and Zed never loads the snippets)
+- **`[lib]`:** `kind = "Rust"` — Zed only builds and loads the WASM component (and so registers the debug adapter) for a Rust library
+- **`[grammars.luma]`:** Declares the `luma` tree-sitter grammar — its `repository`, `path` within it, and `rev` (see below)
 - **`[language_servers]`:** Declares the `luma-lsp` language server so Zed can connect to the Luma LSP binary when it is available on the user's `PATH` or at the path configured in the extension settings
 
 ### `[grammars.luma]` — Grammar Reference
 
-The `[grammars.luma]` table in `extension.toml` points to the tree-sitter grammar and a pinned revision:
+The `[grammars.luma]` table in `extension.toml` points to the tree-sitter grammar:
 
 ```toml
 [grammars.luma]
-repository = "file://./grammars/tree-sitter-luma"
+repository = "https://github.com/D3V0N5H1R3/luma"
 rev = "main"
+path = "extensions/zed/grammars/tree-sitter-luma"
 ```
 
-`repository` may be a remote Git URL paired with a full 40-character-SHA `rev` for reproducible release builds, or the in-repo `file://./grammars/tree-sitter-luma` path used here for local development (built with `tree-sitter generate`). Zed reads this single declaration — there is no separate per-grammar manifest file.
+The query files under `languages/luma/` are written against one version of the grammar, so the grammar and the queries must come from the same commit — a query naming a node the fetched grammar lacks makes Zed reject the whole file. Development builds track `main`; the release workflow (`.github/workflows/release-zed.yml`) rewrites `rev` in the packaged `extension.toml` to the tagged commit's full SHA. Zed reads this single declaration — there is no separate per-grammar manifest file.
 
 ### `languages/luma/config.toml` — Language Configuration
 
-| Key             | Value                             |
-| --------------- | --------------------------------- |
-| `block_comment` | none (Luma has no block comments) |
-| `grammar`       | `luma`                            |
-| `indent size`   | 4                                 |
-| `line_comments` | `["# "]`                          |
-| `name`          | `Luma`                            |
-| `path_suffixes` | `["luma"]`                        |
+| Key                | Value                                                                       |
+| ------------------ | --------------------------------------------------------------------------- |
+| `autoclose_before` | `;:.,=}])>` — characters before which an opening bracket is auto-closed     |
+| `block_comment`    | none (Luma has no block comments)                                           |
+| `brackets`         | `{}`, `[]`, `()` (auto-closed, newline-expanded) and `""` (not in strings or comments) |
+| `debuggers`        | `["Luma"]` — the extension's debug adapter                                  |
+| `grammar`          | `luma`                                                                      |
+| `line_comments`    | `["# "]`                                                                    |
+| `name`             | `Luma`                                                                      |
+| `path_suffixes`    | `["luma"]`                                                                  |
+| `tab_size`         | 4                                                                           |
+
+The `not_in = ["string", "comment"]` scopes of the quote pair are defined by `languages/luma/overrides.scm`.
 
 ### Tree-sitter Grammar — `tree-sitter-luma`
 
-The grammar is defined in `grammar.js` using the tree-sitter DSL. Key node types:
+The grammar is defined in `grammar.js` using the tree-sitter DSL and follows the formal grammar in the [User Manual](Luma_User_Manual.md) (§32). Key node types:
 
-| Node type               | Description                                                       |
-| ----------------------- | ----------------------------------------------------------------- |
-| `annotation`            | `@main`, `@test`                                                  |
-| `array_literal`         | `[...]`                                                           |
-| `boolean_literal`       | `true` / `false`                                                  |
-| `call_expression`       | `fn(args)`                                                        |
-| `choice_declaration`    | `choice Name { ... }`                                             |
-| `comment`               | `# ...` line                                                      |
-| `function_declaration`  | Full function including name, params, body                        |
-| `function_name`         | The identifier naming the function                                |
-| `if_statement`          | `if cond { ... } else { ... }` (also used in expression position) |
-| `interface_declaration` | `interface Name { ... }`                                          |
-| `interpolation`         | `${expr}` inside strings                                          |
-| `lambda_expression`     | `(params) -> expr`                                                |
-| `match_expression`      | `match expr { case ... }`                                         |
-| `namespace_declaration` | `namespace Name { ... }`                                          |
-| `number_literal`        | Decimal, hex, binary, float                                       |
-| `pipe_expression`       | `expr \|> Module.fn()`                                            |
-| `qualified_identifier`  | `Module.member`                                                   |
-| `range_expression`      | `a..b`, `a..=b`                                                   |
-| `record_declaration`    | `record Name { ... }`                                             |
-| `source_file`           | Root node                                                         |
-| `string`                | Double-quoted string                                              |
-| `triple_string`         | Triple-quoted string                                              |
-| `type_alias`            | `type Name = ...`                                                 |
-| `variable_declaration`  | Type + name + `=` + expr                                          |
+| Node type               | Description                                                              |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `annotation`            | `@main`, `@test`                                                         |
+| `array_literal`         | `[...]`                                                                  |
+| `boolean_literal`       | `true` / `false`                                                         |
+| `call_expression`       | `fn(args)`, `Module.fn(args)`, `record.handler(args)`, `make(1)(2)`      |
+| `choice_declaration`    | `choice Name { ... }` (variants optionally comma-separated)              |
+| `comment`               | `# ...` line                                                             |
+| `comparison_pattern`    | `case >= 90 { ... }` match arm pattern                                   |
+| `function_declaration`  | Full function including name, params, body                               |
+| `function_name`         | The identifier naming the function                                       |
+| `if_expression`         | `if cond { ... } else { ... }` — an expression, also used as a statement |
+| `interface_declaration` | `interface Name { ... }` (comma-separated fields)                        |
+| `interpolation`         | `${expr}` inside strings                                                 |
+| `lambda_expression`     | `(params) -> expr`                                                       |
+| `match_expression`      | `match expr { case ... }`                                                |
+| `match_guard`           | `when cond` refining a match arm                                         |
+| `namespace_declaration` | `namespace Name { ... }`                                                 |
+| `number_literal`        | Decimal, hex, binary, float                                              |
+| `pipe_expression`       | `expr \|> Module.fn()`                                                   |
+| `qualified_identifier`  | `Module.member`, `Type.Variant`, `Namespace.Type.Variant`                |
+| `qualified_type`        | `Module.Type` in a type position (`DateTime.TimeParts parts = ...`)      |
+| `range_expression`      | `a..b`, `a..=b`                                                          |
+| `record_declaration`    | `record Name { ... }`                                                    |
+| `record_destructure`    | `Line { start, finish } = segment`                                       |
+| `record_pattern`        | `case Point { x, y } { ... }`                                            |
+| `source_file`           | Root node                                                                |
+| `string`                | Double-quoted string (a `$` not followed by `{` is literal text)         |
+| `triple_string`         | Triple-quoted string                                                     |
+| `tuple_destructure`     | `(number x, number y) = coords()`                                        |
+| `type_alias`            | `type Name = ...`                                                        |
+| `variable_declaration`  | Type + name + `=` + expr, or a tuple/record destructuring                |
+
+The interpreter starts a new statement at a `(` that begins a line. The grammar cannot see line breaks (it has no external scanner), so calls through a field or of a call result carry no static precedence: the parser keeps both readings and drops the call when the next line is, for example, a tuple destructuring.
 
 ### `languages/luma/highlights.scm` — Highlight Queries
 
 The highlight queries map tree-sitter node types (and captured nodes) to highlight names. Zed themes map highlight names to colours.
+
+When several patterns capture the same node, Zed applies the **last** one. The general fallbacks `(identifier) @variable` and `(type_identifier) @type` therefore come first and every specific pattern after them; a fallback placed at the end would override all of them. `extensions/tests/validate-queries.js` checks which capture wins for representative tokens.
 
 Key highlight names used:
 
@@ -664,10 +687,11 @@ Defines matching pairs for editor bracket highlighting:
 
 ### `languages/luma/indents.scm` — Indentation
 
-Defines which node types increase or decrease indentation:
+Captures every node delimited by a bracket pair as `@indent`, with `@end` on the closing bracket — `(_ "{" "}" @end) @indent`, and likewise for `[]` and `()`. Zed indents the lines inside a captured node, so the capture must be the whole node: an `@indent` on the opening `{` token alone spans a single line and never indents the body.
 
-- **Indent trigger:** blocks opened by `{` in function bodies, `if`/`else`, `for`, `while`, `match`, `record`, `choice`, `namespace`.
-- **Dedent trigger:** `}` closing those blocks.
+### `languages/luma/outline.scm` — Outline
+
+Lists functions, records, choices, interfaces, namespaces, type aliases, includes, and file- or namespace-level variables (locals inside function bodies are excluded). Each pattern carries an `@item` capture, which Zed requires; a standalone `(annotation) @annotation` attaches `@main`/`@test` to the function that follows it.
 
 ### Build Process
 

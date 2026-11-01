@@ -101,6 +101,78 @@ const HIGHLIGHT_TESTS = [
         code: "function<T: Printable> void f(T x) {}",
         expect: "type.parameter",
     },
+    {
+        name: "match guard keyword",
+        code: "function void f(integer n) { match n { case >= 0 when n == 0 { } else { } } }",
+        expect: "keyword.control",
+    },
+];
+
+// ── Expected winning capture per token (Zed precedence) ────────
+//
+// When several patterns capture the same node, Zed applies the LAST
+// pattern in the file (general fallbacks first, specific patterns after).
+// A nested node with the same range (e.g. the identifier inside
+// function_name) is captured too, and again the later pattern wins. Each
+// case names a token's text and the capture that must win for it, which
+// catches a fallback such as `(identifier) @variable` placed after the
+// specific patterns it is meant to back up.
+
+const PRECEDENCE_TESTS = [
+    {
+        name: "function declaration name beats the identifier fallback",
+        code: "function void greet() {}",
+        text: "greet",
+        expect: "function",
+    },
+    {
+        name: "parameter beats the identifier fallback",
+        code: "function void f(integer count) {}",
+        text: "count",
+        expect: "variable.parameter",
+    },
+    {
+        name: "built-in call beats the generic call",
+        code: "function void f() { print(1) }",
+        text: "print",
+        expect: "function.builtin",
+    },
+    {
+        name: "user call beats the identifier fallback",
+        code: "function void f() { helper(1) }",
+        text: "helper",
+        expect: "function.call",
+    },
+    {
+        name: "field access is a property",
+        code: "function void f(Point p) { number v = p.x }",
+        text: "x",
+        expect: "property",
+    },
+    {
+        name: "closure called through a field is a call",
+        code: "function void f(Config config) { config.handler(1) }",
+        text: "handler",
+        expect: "function.call",
+    },
+    {
+        name: "choice variant beats the type fallback",
+        code: "choice Color { Red, Green }",
+        text: "Red",
+        expect: "constructor",
+    },
+    {
+        name: "generic parameter beats the type fallback",
+        code: "record Box<T> { T value }",
+        text: "T",
+        expect: "type.parameter",
+    },
+    {
+        name: "loop variable beats the identifier fallback",
+        code: "function void f() { for item in [1] { } }",
+        text: "item",
+        expect: "variable.other.loop",
+    },
 ];
 
 // ── Expected regex-injection targets for RegularExpression.* calls ──
@@ -288,6 +360,40 @@ function capturedNames(output) {
     return names;
 }
 
+/**
+ * Returns the capture that wins for the first token whose text is `text`.
+ * `tree-sitter query` prints each match as `pattern: N` followed by its
+ * captures; Zed applies the capture from the highest pattern index.
+ */
+function winningCapture(output, text) {
+    const patternRe = /^\s*pattern:\s*(\d+)/;
+    const captureRe = /^\s*capture:\s*\d+\s*-\s*([\w.]+),\s*start:\s*\((\d+),\s*(\d+)\).*?text:\s*`([^`]*)`/;
+    const byStart = new Map();
+    let pattern = -1;
+    for (const line of output.split("\n")) {
+        const patternMatch = patternRe.exec(line);
+        if (patternMatch) {
+            pattern = Number(patternMatch[1]);
+            continue;
+        }
+        const captureMatch = captureRe.exec(line);
+        if (!captureMatch || captureMatch[4] !== text) {
+            continue;
+        }
+        const [, name, row, column] = captureMatch;
+        const key = Number(row) * 1_000_000 + Number(column);
+        const current = byStart.get(key);
+        if (current === undefined || pattern >= current.pattern) {
+            byStart.set(key, { pattern, name });
+        }
+    }
+    if (byStart.size === 0) {
+        return undefined;
+    }
+    const firstKey = Math.min(...byStart.keys());
+    return byStart.get(firstKey).name;
+}
+
 function capturedInjectionTexts(output) {
     const texts = [];
     const re = /capture:\s*\d+\s*-\s*injection\.content,[^\n]*?text:\s*`([^`]*)`/g;
@@ -346,6 +452,27 @@ function validateHighlights() {
         } else {
             console.log(
                 `  FAIL  highlight: "${test.name}" — expected capture '${test.expect}', got [${[...names].sort().join(", ")}]`,
+            );
+            failures++;
+        }
+    }
+
+    for (const test of PRECEDENCE_TESTS) {
+        const result = runQuery(zedHighlights, test.code);
+        if (!result.ok) {
+            console.log(
+                `  FAIL  precedence: "${test.name}" — query did not compile: ${firstErrorLine(result.output)}`,
+            );
+            failures++;
+            continue;
+        }
+
+        const winner = winningCapture(result.output, test.text);
+        if (winner === test.expect) {
+            console.log(`  PASS  precedence: "${test.name}"`);
+        } else {
+            console.log(
+                `  FAIL  precedence: "${test.name}" — '${test.text}' resolves to '${winner}', expected '${test.expect}'`,
             );
             failures++;
         }

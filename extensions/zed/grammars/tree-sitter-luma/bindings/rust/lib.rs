@@ -188,6 +188,114 @@ function string describe(integer x) {
         );
     }
 
+    // ── Constructs from the User Manual's formal grammar (§32) ──
+
+    #[test]
+    fn parse_literal_dollar_in_strings() {
+        parse_and_check(
+            "dollar",
+            r#"
+function void f(number a) {
+    print("Total: $${a} and $5 with \$ escaped")
+    print("""
+        Price: $10
+        """)
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn parse_comma_separated_choices_and_interfaces() {
+        parse_and_check(
+            "commas",
+            r#"
+choice Color { Red, Green, Blue }
+
+interface Scored {
+    string name,
+    number score,
+}
+
+use Geometry
+"#,
+        );
+    }
+
+    #[test]
+    fn parse_qualified_names() {
+        parse_and_check(
+            "qualified",
+            r#"
+function void f() {
+    DateTime.TimeParts parts = DateTime.to_parts(now)
+    Geometry.Point q = Geometry.Point { x = 1, y = 2 }
+    Terminal.Color tone = Terminal.Color.Red
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn parse_if_expression_and_destructuring() {
+        parse_and_check(
+            "if_and_destructuring",
+            r#"
+function void f(Line segment) {
+    string label = if score >= 60 { "pass" } else { "fail" }
+    (number x, number y) = coords()
+    mutable (number a, number b) = coords()
+    Line { start, finish } = segment
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn parse_match_patterns_and_guards() {
+        parse_and_check(
+            "match_patterns",
+            r#"
+function string f(integer n, Player p) {
+    match p {
+        case Player { name, score } when score > 10 { return name }
+        else { return "" }
+    }
+    return match n {
+        else { "any" }
+        case >= 90 when n < 100 { "A" }
+        case Geometry.Shape.Circle(r) { "circle" }
+        success(v) when v > 0 { "ok" }
+    }
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn parse_paren_on_new_line_starts_new_statement() {
+        // The interpreter starts a new statement at a `(` that begins a line;
+        // the grammar must not read it as a call of the previous line.
+        let code = r#"
+function void f() {
+    assert(true)
+    (integer a, integer b) = pair
+    integer total = pair.0
+    (integer left, integer right) = pair
+    integer sum = make_adder(10)(5)
+    config.handler(1)
+}
+"#;
+        parse_and_check("newline_paren", code);
+        let mut parser = make_parser();
+        let sexp = parser.parse(code, None).unwrap().root_node().to_sexp();
+        assert_eq!(
+            sexp.matches("(tuple_destructure").count(),
+            2,
+            "both destructurings must stay statements: {sexp}"
+        );
+    }
+
     #[test]
     fn parse_string_interpolation() {
         parse_and_check(
@@ -671,8 +779,25 @@ function void main() {
         assert!(
             items
                 .iter()
-                .any(|(cap, text)| cap == "context" && text == "@main"),
-            "expected annotation context '@main' in outline: {items:?}"
+                .any(|(cap, text)| cap == "annotation" && text == "@main"),
+            "expected annotation '@main' in outline: {items:?}"
+        );
+    }
+
+    #[test]
+    fn outline_skips_local_variables() {
+        let items = outline_capture_names(
+            "integer limit = 3\nfunction void f() {\n    integer local = 1\n}\n",
+        );
+        assert!(
+            items
+                .iter()
+                .any(|(cap, text)| cap == "name" && text == "limit"),
+            "expected top-level variable 'limit' in outline: {items:?}"
+        );
+        assert!(
+            !items.iter().any(|(_, text)| text == "local"),
+            "a local variable must not appear in the outline: {items:?}"
         );
     }
 

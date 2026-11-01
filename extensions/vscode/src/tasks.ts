@@ -1,13 +1,7 @@
 import * as vscode from "vscode";
 import { resolveInterpreterPath } from "./utils/util";
 import { COMMANDS } from "./utils/constants";
-import { mainAnnotationPattern, testAnnotationPattern } from "./generated/test-discovery";
-
-// Test/main discovery patterns.
-// Generated from extensions/shared/test-discovery-pattern.json.
-// Tree-sitter equivalent: zed (runnables.scm).
-const MAIN_ANNOTATION_PATTERN = mainAnnotationPattern();
-const TEST_ANNOTATION_PATTERN = testAnnotationPattern();
+import { discoverAnnotations, isLumaTaskCommand, type LumaTaskCommand } from "./task-discovery";
 
 interface LumaTaskConfig {
     args: (file: string) => string[];
@@ -16,7 +10,7 @@ interface LumaTaskConfig {
     group?: vscode.TaskGroup;
 }
 
-const TASK_CONFIGS: Record<string, LumaTaskConfig> = {
+const TASK_CONFIGS: Record<LumaTaskCommand, LumaTaskConfig> = {
     run: { args: (f) => [f], label: "Luma: Run File", matcher: "$luma" },
     test: {
         args: (f) => ["--test", f],
@@ -35,11 +29,7 @@ const TASK_CONFIGS: Record<string, LumaTaskConfig> = {
 /**
  * Build a Luma task definition with the appropriate flags, matcher, and group.
  */
-function createLumaTask(
-    command: "run" | "test" | "check",
-    file: string,
-    label?: string,
-): vscode.Task {
+function createLumaTask(command: LumaTaskCommand, file: string, label?: string): vscode.Task {
     const cfg = TASK_CONFIGS[command];
     const task_label = label ?? cfg.label;
     const args = cfg.args(file);
@@ -88,14 +78,15 @@ class LumaTaskProvider implements vscode.TaskProvider {
 
     resolveTask(task: vscode.Task): vscode.Task | undefined {
         const definition = task.definition;
-        if (definition.type === "luma") {
-            return createLumaTask(
-                definition.command ?? "run",
-                definition.file ?? "${file}",
-                definition.label,
-            );
+        if (definition.type !== "luma") {
+            return undefined;
         }
-        return undefined;
+        const command: unknown = definition.command ?? "run";
+        if (!isLumaTaskCommand(command)) {
+            return undefined;
+        }
+        const file = typeof definition.file === "string" ? definition.file : "${file}";
+        return createLumaTask(command, file, task.name);
     }
 
     private async discoverTasks(): Promise<vscode.Task[]> {
@@ -105,24 +96,27 @@ class LumaTaskProvider implements vscode.TaskProvider {
             createLumaTask("check", "${file}"),
         ];
 
-        // Auto-detect @main and @test files in the workspace.
+        // Auto-detect @main and @test files in the workspace. Read the bytes
+        // directly: opening each file as a TextDocument would send a didOpen
+        // to the language server for every file and flood the Problems panel.
         const luma_files = await vscode.workspace.findFiles("**/*.luma", "**/node_modules/**", 500);
+        const decoder = new TextDecoder("utf-8");
 
         for (const file of luma_files) {
             try {
-                const doc = await vscode.workspace.openTextDocument(file);
-                const text = doc.getText();
+                const text = decoder.decode(await vscode.workspace.fs.readFile(file));
                 const relative = vscode.workspace.asRelativePath(file);
+                const { runnable, has_tests } = discoverAnnotations(text);
 
-                if (MAIN_ANNOTATION_PATTERN.test(text)) {
+                if (runnable) {
                     tasks.push(createLumaTask("run", file.fsPath, `Run: ${relative}`));
                 }
 
-                if (TEST_ANNOTATION_PATTERN.test(text)) {
+                if (has_tests) {
                     tasks.push(createLumaTask("test", file.fsPath, `Test: ${relative}`));
                 }
             } catch {
-                // Skip files that can't be opened.
+                // Skip files that can't be read.
             }
         }
 

@@ -135,6 +135,63 @@ fn label_variable_with_empty_detail() {
     assert_eq!(label.code, "x");
 }
 
+// luma_lsp's actual `detail` formats (see language-server/source/
+// lsp_completion_provider.cpp and lsp_server_completion.cpp): `-> T` for
+// functions and constants, `: T` for variables and fields, and a
+// parenthesised description when the type is unknown.
+
+#[test]
+fn label_function_with_server_arrow_detail() {
+    let comp = make_completion(lsp::CompletionKind::Function, "add", Some("-> number"));
+    let label = completion_label(&comp).unwrap();
+    assert_eq!(label.code, "function number add()");
+    assert_eq!(
+        &label.code[label.filter_range.start as usize..label.filter_range.end as usize],
+        "add"
+    );
+}
+
+#[test]
+fn label_function_with_server_description_detail() {
+    let comp = make_completion(
+        lsp::CompletionKind::Function,
+        "helper",
+        Some("(user function)"),
+    );
+    let label = completion_label(&comp).unwrap();
+    assert_eq!(label.code, "function void helper()");
+}
+
+#[test]
+fn label_variable_with_server_colon_detail() {
+    let comp = make_completion(lsp::CompletionKind::Variable, "count", Some(": integer"));
+    let label = completion_label(&comp).unwrap();
+    assert_eq!(label.code, "integer count");
+}
+
+#[test]
+fn label_variable_with_server_description_detail() {
+    for detail in ["(local variable)", "(parameter)"] {
+        let comp = make_completion(lsp::CompletionKind::Variable, "x", Some(detail));
+        let label = completion_label(&comp).unwrap();
+        assert_eq!(label.code, "x", "detail {detail:?} must not become a type");
+    }
+}
+
+#[test]
+fn label_constant_with_server_arrow_detail() {
+    let comp = make_completion(lsp::CompletionKind::Constant, "pi", Some("-> number"));
+    let label = completion_label(&comp).unwrap();
+    assert_eq!(label.code, "number pi");
+}
+
+#[test]
+fn label_field_with_generic_type_detail() {
+    let comp = make_completion(lsp::CompletionKind::Field, "items", Some(": array<string>"));
+    let label = completion_label(&comp).unwrap();
+    assert_eq!(label.code, "array<string> items");
+}
+
 #[test]
 fn label_class_as_namespace() {
     let comp = make_completion(lsp::CompletionKind::Class, "String", None);
@@ -1551,6 +1608,7 @@ use zed::Extension as _;
 fn dap_ext() -> LumaExtension {
     LumaExtension {
         platform: (zed::Os::Mac, zed::Architecture::Aarch64),
+        cached_binaries: std::collections::HashMap::new(),
     }
 }
 
@@ -1869,4 +1927,302 @@ fn luma_launch_config_omits_defaults_and_sets_request() {
     assert_eq!(full["args"][0], "a");
     assert_eq!(full["cwd"], "/w");
     assert_eq!(full["stopOnEntry"], false);
+}
+
+// ── Locator: the shipped run task ─────────────────────────────
+
+#[test]
+fn dap_locator_converts_shipped_run_task_template() {
+    // Zed hands the locator the unexpanded task template, so the program is
+    // `$ZED_FILE`, not a `.luma` path. Read the real tasks.json to keep the
+    // locator and the template in sync.
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let tasks_json = std::fs::read_to_string(
+        std::path::Path::new(manifest_dir).join("languages/luma/tasks.json"),
+    )
+    .expect("languages/luma/tasks.json should be readable");
+    let tasks: Vec<zed::serde_json::Value> =
+        zed::serde_json::from_str(&tasks_json).expect("tasks.json must be valid JSON");
+    let run = tasks
+        .iter()
+        .find(|task| {
+            task["tags"]
+                .as_array()
+                .is_some_and(|tags| tags.iter().any(|tag| tag == "main"))
+        })
+        .expect("tasks.json must define a task tagged `main`");
+    let args: Vec<&str> = run["args"]
+        .as_array()
+        .expect("the run task must have args")
+        .iter()
+        .filter_map(|arg| arg.as_str())
+        .collect();
+
+    let mut ext = dap_ext();
+    let scenario = ext
+        .dap_locator_create_scenario(
+            "luma".to_string(),
+            run_task(run["command"].as_str().unwrap_or_default(), &args),
+            "run main".to_string(),
+            "Luma".to_string(),
+        )
+        .expect("the shipped run task must yield a debug scenario");
+    let json = parse_config(&scenario.config);
+    assert_eq!(json["program"], "$ZED_FILE");
+}
+
+#[test]
+fn dap_locator_accepts_braced_task_variable() {
+    let mut ext = dap_ext();
+    let scenario = ext.dap_locator_create_scenario(
+        "luma".to_string(),
+        run_task("luma", &["${ZED_RELATIVE_FILE}", "extra"]),
+        "run main".to_string(),
+        "Luma".to_string(),
+    );
+    let json = parse_config(&scenario.expect("a braced variable is the program").config);
+    assert_eq!(json["program"], "${ZED_RELATIVE_FILE}");
+    assert_eq!(json["args"][0], "extra");
+}
+
+#[test]
+fn dap_locator_ignores_unrelated_task_variable() {
+    let mut ext = dap_ext();
+    assert!(
+        ext.dap_locator_create_scenario(
+            "luma".to_string(),
+            run_task("luma", &["$ZED_WORKTREE_ROOT"]),
+            "run".to_string(),
+            "Luma".to_string(),
+        )
+        .is_none(),
+        "only file variables name a program"
+    );
+}
+
+// ── Cached binary versions (offline fallback) ─────────────────
+
+use super::download::{cached_version_dirs_newest_first, find_cached_binary_in};
+
+#[test]
+fn cached_version_dirs_sort_versions_numerically() {
+    let dirs: Vec<String> = [
+        "luma_lsp-v0.9.0",
+        "luma_lsp-v0.15.0",
+        "luma_lsp-v0.10.2",
+        "luma_dap-v9.0.0",
+        "other",
+    ]
+    .iter()
+    .map(ToString::to_string)
+    .collect();
+    assert_eq!(
+        cached_version_dirs_newest_first(&dirs, "luma_lsp"),
+        ["luma_lsp-v0.15.0", "luma_lsp-v0.10.2", "luma_lsp-v0.9.0"]
+    );
+    assert_eq!(
+        cached_version_dirs_newest_first(&dirs, "luma_dap"),
+        ["luma_dap-v9.0.0"]
+    );
+}
+
+#[test]
+fn cached_version_dirs_do_not_confuse_binary_prefixes() {
+    let dirs = vec!["luma_lsp-v1.0.0".to_string()];
+    assert!(
+        cached_version_dirs_newest_first(&dirs, "luma").is_empty(),
+        "`luma-` must not match `luma_lsp-`"
+    );
+}
+
+#[test]
+fn cached_version_dirs_empty_when_nothing_cached() {
+    assert!(cached_version_dirs_newest_first(&[], "luma_lsp").is_empty());
+}
+
+/// A unique scratch directory under the system temp dir, removed on drop.
+struct ScratchDir(std::path::PathBuf);
+
+impl ScratchDir {
+    fn new(name: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir should be creatable");
+        Self(dir)
+    }
+}
+
+impl Drop for ScratchDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+#[test]
+fn find_cached_binary_skips_a_newer_version_without_a_binary() {
+    // A failed download leaves `luma_lsp-v2.0.0/` behind with no binary in it;
+    // the offline fallback must still find the working older version.
+    let root = ScratchDir::new("luma-zed-cache-fallback");
+    std::fs::create_dir_all(root.0.join("luma_lsp-v2.0.0")).unwrap();
+    std::fs::create_dir_all(root.0.join("luma_lsp-v1.0.0")).unwrap();
+    std::fs::write(root.0.join("luma_lsp-v1.0.0/luma_lsp"), "binary").unwrap();
+
+    assert_eq!(
+        find_cached_binary_in(&root.0, "luma_lsp", zed::Os::Linux).as_deref(),
+        Some("luma_lsp-v1.0.0/luma_lsp")
+    );
+}
+
+#[test]
+fn find_cached_binary_none_when_no_version_has_a_binary() {
+    let root = ScratchDir::new("luma-zed-cache-empty");
+    std::fs::create_dir_all(root.0.join("luma_lsp-v2.0.0")).unwrap();
+
+    assert!(find_cached_binary_in(&root.0, "luma_lsp", zed::Os::Linux).is_none());
+}
+
+#[test]
+fn find_cached_binary_uses_the_platform_filename() {
+    let root = ScratchDir::new("luma-zed-cache-windows");
+    std::fs::create_dir_all(root.0.join("luma_dap-v1.0.0")).unwrap();
+    std::fs::write(root.0.join("luma_dap-v1.0.0/luma_dap.exe"), "binary").unwrap();
+
+    assert_eq!(
+        find_cached_binary_in(&root.0, "luma_dap", zed::Os::Windows).as_deref(),
+        Some("luma_dap-v1.0.0/luma_dap.exe")
+    );
+}
+// ── Manifest and language configuration ───────────────────────
+
+fn read_extension_file(relative: &str) -> String {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    std::fs::read_to_string(std::path::Path::new(manifest_dir).join(relative))
+        .unwrap_or_else(|e| panic!("{relative} should be readable: {e}"))
+}
+
+/// Index of the first non-comment line that satisfies `predicate`.
+fn first_line_index(text: &str, predicate: impl Fn(&str) -> bool) -> Option<usize> {
+    text.lines()
+        .map(str::trim)
+        .position(|line| !line.starts_with('#') && !line.starts_with(';') && predicate(line))
+}
+
+#[test]
+fn manifest_snippets_key_is_top_level() {
+    // A key written after a [table] header belongs to that table, so
+    // `snippets` below `[lib]` became `lib.snippets` and Zed never loaded it.
+    let manifest = read_extension_file("extension.toml");
+    let snippets = first_line_index(&manifest, |line| line.starts_with("snippets"))
+        .expect("extension.toml must declare snippets");
+    let first_table = first_line_index(&manifest, |line| line.starts_with('['))
+        .expect("extension.toml has tables");
+    assert!(
+        snippets < first_table,
+        "`snippets` must precede the first [table] header in extension.toml"
+    );
+}
+
+#[test]
+fn release_workflow_pins_grammar_rev_to_tagged_commit() {
+    // The queries ship with the extension; the grammar is fetched from `rev`.
+    // A branch name lets the published grammar drift from its queries.
+    let workflow = read_extension_file("../../.github/workflows/release-zed.yml");
+    assert!(
+        workflow.contains("rev = \\\"${GITHUB_SHA}\\\""),
+        "release-zed.yml must rewrite [grammars.luma] rev to the tagged commit"
+    );
+}
+
+#[test]
+fn language_config_declares_autoclosing_brackets() {
+    let config = read_extension_file("languages/luma/config.toml");
+    for pair in [
+        "start = \"{\", end = \"}\"",
+        "start = \"[\", end = \"]\"",
+        "start = \"(\", end = \")\"",
+        "start = \"\\\"\", end = \"\\\"\"",
+    ] {
+        assert!(
+            config.contains(pair),
+            "config.toml must declare the bracket pair {pair}"
+        );
+    }
+    // The quote pair is suppressed inside strings and comments, which needs
+    // overrides.scm to name those scopes.
+    let overrides = read_extension_file("languages/luma/overrides.scm");
+    assert!(overrides.contains("@string") && overrides.contains("@comment"));
+}
+
+#[test]
+fn highlight_fallbacks_precede_specific_patterns() {
+    // Zed applies the LAST pattern that captures a node, so the generic
+    // `(identifier) @variable` / `(type_identifier) @type` fallbacks must come
+    // before every specific pattern, or they override all of them.
+    let highlights = read_extension_file("languages/luma/highlights.scm");
+    let patterns: Vec<&str> = highlights
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with(';'))
+        .take(2)
+        .collect();
+    assert_eq!(
+        patterns,
+        ["(identifier) @variable", "(type_identifier) @type"],
+        "the fallbacks must be the first patterns in highlights.scm"
+    );
+}
+
+#[test]
+fn indent_captures_whole_nodes() {
+    // An @indent on the opening `{` token covers one line and never indents
+    // the body; Zed needs the whole node plus an @end on the closer.
+    let indents = read_extension_file("languages/luma/indents.scm");
+    assert!(
+        !indents.contains("\"{\" @indent") && !indents.contains("\"[\" @indent"),
+        "indents.scm must not capture an opening bracket token as @indent"
+    );
+    assert!(indents.contains("\"}\" @end) @indent"));
+}
+
+#[test]
+fn outline_items_and_locals() {
+    let outline = read_extension_file("languages/luma/outline.scm");
+    assert!(
+        outline.contains("(annotation) @annotation"),
+        "annotations attach to the following item via @annotation"
+    );
+    assert!(
+        outline.contains("(source_file\n  (variable_declaration"),
+        "variables must be anchored to the file level, not every local"
+    );
+}
+
+#[test]
+fn fetch_scripts_verify_sha256sums_before_extracting() {
+    // Every download path must verify the archive against the release's
+    // SHA256SUMS before unpacking it (extensions/shared/download-spec.md).
+    for (script, hash_call, extract_call) in [
+        ("scripts/download_binaries.sh", "sha256_of", "tar -xzf"),
+        (
+            "scripts/Download-Binaries.ps1",
+            "Get-FileHash",
+            "Expand-Archive -LiteralPath",
+        ),
+    ] {
+        let text = read_extension_file(script);
+        assert!(
+            text.contains("SHA256SUMS"),
+            "{script} must fetch SHA256SUMS"
+        );
+        let hash = text
+            .find(hash_call)
+            .unwrap_or_else(|| panic!("{script} must hash the archive with {hash_call}"));
+        let extract = text
+            .rfind(extract_call)
+            .unwrap_or_else(|| panic!("{script} must extract with {extract_call}"));
+        assert!(
+            hash < extract,
+            "{script} must verify the checksum before extracting"
+        );
+    }
 }

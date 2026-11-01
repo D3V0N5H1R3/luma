@@ -239,6 +239,39 @@ suite("Grammar Structure", () => {
         const missing = allRefs.filter((ref) => !repoKeys.has(ref));
         assert.deepStrictEqual(missing, [], `Unresolved pattern references: ${missing.join(", ")}`);
     });
+
+    test("`when` match guards are scoped as control keywords", () => {
+        const re = new RegExp(grammar.repository.keyword_control.match);
+        assert.ok(re.test("case >= 0 when n == 0 {"));
+    });
+
+    test("Typed bindings accept one level of nested generics", () => {
+        const re = new RegExp(grammar.repository.typed_binding.match);
+        const match = re.exec("array<array<integer>> grid = []");
+        assert.ok(match, "array<array<integer>> grid should be a typed binding");
+        assert.strictEqual(match[2], "grid");
+    });
+
+    test("Function declarations accept a namespace-qualified return type", () => {
+        const re = new RegExp(grammar.repository.function_declaration.patterns[0].match);
+        const match = re.exec("function DateTime.TimeParts parse(string text) {");
+        assert.ok(match, "a qualified return type should still name the function");
+        assert.strictEqual(match[2], "parse");
+    });
+
+    test("Lambda parameter lists match typed parameters (Luma lambdas are always typed)", () => {
+        const lambda = grammar.repository.lambda;
+        const begin = new RegExp(lambda.begin);
+        assert.ok(begin.test("(number a, number b) -> a + b"));
+        assert.ok(begin.test("() -> 42"));
+        assert.ok(!begin.test("(number, number) pair = (1, 2)"), "a tuple type is not a lambda");
+
+        const parameter = new RegExp(lambda.patterns[0].match, "g");
+        const names = [..."mutable array<integer> values, number b".matchAll(parameter)].map(
+            (m) => m[3],
+        );
+        assert.deepStrictEqual(names, ["values", "b"]);
+    });
 });
 
 suite("Markdown Injection Grammar", () => {

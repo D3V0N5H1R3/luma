@@ -132,25 +132,37 @@ def fetch_release(version: str, urls: dict[str, str]) -> dict[str, Any]:
 
 
 def download_file(url: str, dest: Path) -> None:
-    """Download a file with progress reporting."""
+    """Download a file with progress reporting.
+
+    A network failure emits an ``error`` event, removes the partial file, and
+    exits with status 1, so callers parsing the JSON-lines protocol never see a
+    Python traceback instead of an event.
+    """
     emit_progress("download_start", f"Downloading {dest.name}...", url=url)
 
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        total = int(resp.headers.get("Content-Length", 0))
-        downloaded = 0
-        chunk_size = 65536
+    downloaded = 0
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            total = int(resp.headers.get("Content-Length", 0))
+            chunk_size = 65536
 
-        with open(dest, "wb") as f:
-            while True:
-                chunk = resp.read(chunk_size)
-                if not chunk:
-                    break
-                f.write(chunk)
-                downloaded += len(chunk)
-                if total > 0:
-                    pct = int(downloaded * 100 / total)
-                    emit_progress("download_progress", percent=pct, bytes=downloaded, total=total)
+            with open(dest, "wb") as f:
+                while True:
+                    chunk = resp.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total > 0:
+                        pct = int(downloaded * 100 / total)
+                        emit_progress(
+                            "download_progress", percent=pct, bytes=downloaded, total=total
+                        )
+    except OSError as e:  # URLError, HTTPError, timeouts, and file errors
+        dest.unlink(missing_ok=True)
+        emit_progress("error", f"Failed to download {dest.name}: {e}")
+        sys.exit(1)
 
     emit_progress("download_complete", f"Downloaded {dest.name} ({downloaded} bytes)")
 
@@ -218,8 +230,13 @@ def fetch_expected_checksum(release: dict, asset_name: str, checksums_filename: 
 
     url = checksums_asset["browser_download_url"]
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        content = resp.read().decode("utf-8")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            content = resp.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        # The caller treats a missing hash as a verification failure and aborts.
+        emit_progress("error", f"Failed to read {checksums_filename}: {e}")
+        return None
 
     digest = find_asset_hash(content, asset_name)
     if digest is None:
@@ -351,8 +368,10 @@ def main() -> None:
     # Make executable
     bin_ext = ".exe" if os_name == "windows" else ""
     binary_path = target_dir / f"{args.binary}{bin_ext}"
-    if binary_path.exists():
-        make_executable(binary_path)
+    if not binary_path.is_file():
+        emit_progress("error", f"{binary_path.name} not found in {asset_name}")
+        sys.exit(1)
+    make_executable(binary_path)
 
     emit_progress(
         "complete",

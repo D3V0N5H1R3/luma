@@ -59,6 +59,13 @@ jobs:
           mkdir -p dist
           cp target/wasm32-wasip1/release/*.wasm dist/
           cp extension.toml dist/
+          # Pin the grammar to this exact commit so the packaged queries and
+          # grammar always match (extension.toml tracks `main` for development).
+          sed -i -E "s/^rev = \".*\"$/rev = \"${GITHUB_SHA}\"/" dist/extension.toml
+          if ! grep -qx "rev = \"${GITHUB_SHA}\"" dist/extension.toml; then
+            echo "::error::Failed to pin [grammars.luma] rev to ${GITHUB_SHA} in the packaged extension.toml."
+            exit 1
+          fi
           cp -r languages dist/
           cp -r grammars dist/
           archive="luma-zed-extension-v${VERSION}.tar.gz"

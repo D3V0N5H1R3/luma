@@ -51,8 +51,8 @@ TextMate grammar with semantic token support for all Luma constructs:
 
 ### Testing
 
-- **Run tests from the editor** — the `Luma: Run Tests in Current File` command (and the editor title-bar Test button) run `@test` functions via `luma --test`, with results routed through the `$luma-test` problem matcher.
-- **Task integration** — the predefined `luma` test task discovers `@main` / `@test` files across the workspace.
+- **Run tests from the editor** — the `Luma: Run Tests in Current File` command (and the editor title-bar Test button) run `@test` functions via `luma --test`. Compile and type errors are routed through the `$luma-test` problem matcher (it reuses `$luma`); a failing assertion is reported in the task's terminal, since the interpreter prints no source location for it.
+- **Task integration** — the predefined `luma` test task discovers `@main` / `@test` files across the workspace, including annotated functions inside a `namespace`.
 
 ### Debugging
 
@@ -71,8 +71,8 @@ Powered by the Luma debug adapter (`luma_dap`), which the extension downloads an
 ### Additional Features
 
 - **Run / Test commands** — play button in the editor title bar, or via the Command Palette (`Luma: Run Current File`, `Luma: Run Tests in Current File`).
-- **Task provider** — predefined `luma` tasks (`run`, `test`, `check`) with problem matchers for error navigation.
-- **Multi-root workspace support** — one LSP client per workspace folder.
+- **Task provider** — predefined `luma` tasks (`run`, `test`, `check`) with problem matchers for error navigation. The `$luma` matcher reads each diagnostic's header line (`TypeError[E0201] in file:line:col`), so a Problems entry shows the category and code; the full message is in the task terminal and in the language server's diagnostics.
+- **Multi-root workspace support** — one LSP client per workspace folder. Server commands such as `luma.showReferences` are registered once by the extension and routed to the client that owns the document.
 - **Snippets** — 64 snippets for common patterns (`@main`, `@test`, `function`, `record`, `match`, `for`, `try`, `pipe`, etc.).
 - **Themes** — two bundled colour themes, **Luma Dark** and **Luma Light**, tuned to the grammar's token scopes so Luma constructs are clearly distinguished. Select one from **Preferences: Color Theme** in the Command Palette.
 - **File icons** — custom `.luma` file icons for light and dark themes.
