@@ -102,6 +102,10 @@ OVERRIDES: dict[str, ExampleSpec] = {
         category=SKIP,
         reason="TCP server blocks waiting for connections; @test blocks exercise networking",
     ),
+    "blocked_channel.luma": ExampleSpec(
+        category=SKIP,
+        reason="debugger demo that blocks forever on a channel receive by design",
+    ),
     # ── Console-interactive (driven via scripted stdin) ──────────────
     "guess_the_number.luma": ExampleSpec(
         category=STDIN,

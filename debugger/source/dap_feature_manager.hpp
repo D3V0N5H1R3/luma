@@ -26,13 +26,13 @@
 #include <string>
 #include <string_view>
 
-#include "dap_types.hpp" // JsonValue, kFilterCaught, kFilterUncaught
+#include "dap_types.hpp" // JsonValue, k_filter_caught, k_filter_uncaught
 
 namespace luma::dap {
 
 // ─── Feature identifiers ───
 // Strongly-typed enum for every DAP feature the Luma debugger knows about.
-// Keeps call sites readable:  `if (features.is_enabled(Feature::StepInTargets))`
+// Keeps call sites readable:  `if (features.is_enabled(Feature::Completions))`
 
 enum class Feature : int {
     ConfigurationDone,
@@ -41,7 +41,6 @@ enum class Feature : int {
     EvaluateForHovers,
     SetVariable,
     RestartRequest,
-    ExceptionOptions,
     ExceptionInfo,
     LogPoints,
     LoadedSources,
@@ -49,11 +48,11 @@ enum class Feature : int {
     BreakpointLocations,
     InvalidatedEvent,
     ValueFormattingOptions,
-    StepInTargets,
+    Completions,
     Count, // sentinel — must be last
 };
 
-inline constexpr int kFeatureCount = static_cast<int>(Feature::Count);
+inline constexpr int k_feature_count = static_cast<int>(Feature::Count);
 
 // ─── Client capabilities ───
 // Subset of the initialize-request arguments that describe what the
@@ -124,31 +123,34 @@ public:
         set("supportsConfigurationDoneRequest", Feature::ConfigurationDone);
         set("supportsRestartRequest", Feature::RestartRequest);
         set("supportsTerminateRequest", Feature::Terminate);
-        set("supportsStepInTargetsRequest", Feature::StepInTargets);
 
         // ─── Inspection ───
         set("supportsEvaluateForHovers", Feature::EvaluateForHovers);
         set("supportsSetVariable", Feature::SetVariable);
         set("supportsValueFormattingOptions", Feature::ValueFormattingOptions);
+        set("supportsCompletionsRequest", Feature::Completions);
 
         // ─── Sources and modules ───
         set("supportsLoadedSourcesRequest", Feature::LoadedSources);
 
-        // ─── Events and exceptions ───
-        set("supportsInvalidatedEvent", Feature::InvalidatedEvent);
-        set("supportsExceptionOptions", Feature::ExceptionOptions);
+        // ─── Exceptions ───
+        // `invalidated` is a *client* capability (the server only sends the event
+        // when the client advertised supportsInvalidatedEvent), so it is not
+        // part of the server's Capabilities.  exceptionOptions is not
+        // implemented — only the caught/uncaught filters — so it is not
+        // advertised either.
         set("supportsExceptionInfoRequest", Feature::ExceptionInfo);
 
         // Exception breakpoint filters.
         JsonValue::ArrayType filters;
         JsonValue::ObjectType caught;
-        caught["filter"] = JsonValue(std::string(kFilterCaught));
+        caught["filter"] = JsonValue(std::string(k_filter_caught));
         caught["label"] = JsonValue(std::string("Caught Exceptions"));
         caught["default"] = JsonValue(false);
         filters.emplace_back(JsonValue(std::move(caught)));
 
         JsonValue::ObjectType uncaught;
-        uncaught["filter"] = JsonValue(std::string(kFilterUncaught));
+        uncaught["filter"] = JsonValue(std::string(k_filter_uncaught));
         uncaught["label"] = JsonValue(std::string("Uncaught Exceptions"));
         uncaught["default"] = JsonValue(true);
         filters.emplace_back(JsonValue(std::move(uncaught)));
@@ -163,7 +165,7 @@ public:
     // Check whether a specific server feature is enabled after negotiation.
     [[nodiscard]] bool is_enabled(Feature feature) const noexcept {
         const int idx = static_cast<int>(feature);
-        if (idx < 0 || idx >= kFeatureCount) {
+        if (idx < 0 || idx >= k_feature_count) {
             return false;
         }
         return features_[idx];
@@ -232,14 +234,13 @@ private:
         enable(Feature::EvaluateForHovers);
         enable(Feature::SetVariable);
         enable(Feature::RestartRequest);
-        enable(Feature::ExceptionOptions);
         enable(Feature::ExceptionInfo);
         enable(Feature::LogPoints);
         enable(Feature::LoadedSources);
         enable(Feature::Terminate);
         enable(Feature::BreakpointLocations);
         enable(Feature::ValueFormattingOptions);
-        enable(Feature::StepInTargets);
+        enable(Feature::Completions);
 
         // Features gated on client support.
         if (client_.supports_invalidated_event) {
@@ -248,7 +249,7 @@ private:
     }
 
     ClientCapabilities client_;
-    std::array<bool, kFeatureCount> features_{};
+    std::array<bool, k_feature_count> features_{};
     bool initialized_{false};
 };
 

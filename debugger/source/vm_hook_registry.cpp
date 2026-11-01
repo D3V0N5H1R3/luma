@@ -41,8 +41,8 @@ auto make_task_spawn_hook(HookInstallationContext ctx) {
 
         tl_debug_thread_id = task_id;
 
-        ctx.event_callback(std::string{kEventThread},
-                           make_thread_event_body(kThreadReasonStarted, task_id));
+        ctx.event_callback(std::string{k_event_thread},
+                           make_thread_event_body(k_thread_reason_started, task_id));
     };
 }
 
@@ -50,8 +50,13 @@ auto make_task_exit_hook(HookInstallationContext ctx) {
     return [ctx](int task_id) {
         ctx.thread_state_manager->remove_thread(task_id);
 
-        ctx.event_callback(std::string{kEventThread},
-                           make_thread_event_body(kThreadReasonExited, task_id));
+        // The exit hook runs on the task's worker thread, which the pool reuses;
+        // drop the identity so later work on this thread is not attributed to
+        // the finished task.
+        tl_debug_thread_id = k_no_thread_id;
+
+        ctx.event_callback(std::string{k_event_thread},
+                           make_thread_event_body(k_thread_reason_exited, task_id));
     };
 }
 

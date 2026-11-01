@@ -66,26 +66,26 @@ Section-level table of contents for the reference documents in this directory. U
 | 2 — Goals                    | 47–57   |
 | 3 — Non-Goals                | 61–66   |
 | 4 — Architecture             | 70–109  |
-| 5 — Supported DAP Requests   | 113–169 |
-| 6 — Breakpoints              | 173–200 |
-| 7 — Stepping                 | 204–215 |
-| 8 — Variable Inspection      | 219–231 |
-| 9 — Concurrency Support      | 235–246 |
-| 10 — Exception Handling      | 250–263 |
-| 11 — Platform Support        | 267–273 |
-| 12 — Usage                   | 277–301 |
-| 13 — Editor Integration      | 305–346 |
-| 14 — File Layout             | 350–425 |
-| 15 — Module Responsibilities | 429–765 |
-| 16 — Data Flow               | 769–797 |
-| 17 — VM Instrumentation      | 801–856 |
-| 18 — Local Variable Names    | 860–873 |
-| 19 — Output Capture          | 877–881 |
-| 20 — Error Handling          | 885–894 |
-| 21 — CMake Integration       | 898–916 |
-| 22 — Testing Strategy        | 920–965 |
-| 23 — Future Extensions       | 969–975 |
-| See Also                     | 979–985 |
+| 5 — Supported DAP Requests   | 113–180 |
+| 6 — Breakpoints              | 184–217 |
+| 7 — Stepping                 | 221–232 |
+| 8 — Variable Inspection      | 236–250 |
+| 9 — Concurrency Support      | 254–267 |
+| 10 — Exception Handling      | 271–284 |
+| 11 — Platform Support        | 288–294 |
+| 12 — Usage                   | 298–324 |
+| 13 — Editor Integration      | 328–369 |
+| 14 — File Layout             | 373–450 |
+| 15 — Module Responsibilities | 454–625 |
+| 16 — Data Flow               | 629–658 |
+| 17 — VM Instrumentation      | 662–700 |
+| 18 — Local Variable Names    | 704–708 |
+| 19 — Output Capture          | 712–720 |
+| 20 — Error Handling          | 724–735 |
+| 21 — CMake Integration       | 739–755 |
+| 22 — Testing Strategy        | 759–810 |
+| 23 — Future Extensions       | 814–820 |
+| See Also                     | 824–830 |
 
 ## Luma_Error_Handling.md
 

@@ -1,13 +1,20 @@
 #include "dap_handler_context.hpp"
 
 #include "dap_response_builders.hpp"
+#include "dap_types.hpp"
 #include "debug_session.hpp"
 
 namespace luma::dap {
 
 DapHandlerContext::DapHandlerContext(DapProtocolHandler& handler) : protocol_handler(handler) {}
 
-DapHandlerContext::~DapHandlerContext() = default;
+DapHandlerContext::~DapHandlerContext() {
+    // Tear the session down while every other member is still alive: its
+    // destructor terminates the run and emits events (e.g. `invalidated`)
+    // whose callback reads feature_manager, which is declared after `session`
+    // and would otherwise be destroyed first.
+    session.reset();
+}
 
 void DapHandlerContext::create_session(
     std::function<void(const std::string&, const JsonValue&)> event_cb,
@@ -47,12 +54,21 @@ void DapHandlerContext::apply_pending_breakpoints() {
 }
 
 HandlerResult DapHandlerContext::launch_with_config(const LaunchConfig& config) {
-    create_session([this](const std::string& event,
-                          const JsonValue& body) { protocol_handler.send_event(event, body); },
-                   [this](const std::string& category, const std::string& text) {
-                       protocol_handler.send_event(std::string{kEventOutput},
-                                                   make_output_event_body(category, text));
-                   });
+    create_session(
+        [this](const std::string& event, const JsonValue& body) {
+            // DAP: `invalidated` may only be sent to a client that advertised
+            // supportsInvalidatedEvent.
+            if (event == k_event_invalidated &&
+                !feature_manager.client_supports_invalidated_event()) {
+                return;
+            }
+
+            protocol_handler.send_event(event, body);
+        },
+        [this](const std::string& category, const std::string& text) {
+            protocol_handler.send_event(std::string{k_event_output},
+                                        make_output_event_body(category, text));
+        });
 
     const DebugSessionConfig session_config{
         .stop_on_entry = config.stop_on_entry,

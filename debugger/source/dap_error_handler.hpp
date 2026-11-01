@@ -3,12 +3,13 @@
 
 #include <exception>
 #include <format>
-#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <typeinfo>
+
+#include "diagnostic_log.hpp"
 
 namespace luma::dap {
 
@@ -50,8 +51,8 @@ namespace luma::dap {
 
 namespace error_code {
 
-constexpr int kInvalidArgument = 2;
-constexpr int kInternalError = 4;
+constexpr int k_invalid_argument = 2;
+constexpr int k_internal_error = 4;
 
 } // namespace error_code
 
@@ -71,6 +72,10 @@ namespace error_messages {
     return std::format("Unknown thread ID {}", thread_id);
 }
 
+[[nodiscard]] inline std::string thread_not_paused(int thread_id) {
+    return std::format("Thread {} is not paused", thread_id);
+}
+
 } // namespace error_messages
 
 // ═══════════════════════════════════════════════════════════
@@ -84,29 +89,30 @@ namespace error_messages {
 
 struct ClassifiedError {
     std::string message;
-    int code{error_code::kInternalError};
+    int code{error_code::k_internal_error};
 };
 
 // Classify a captured exception into an error message and code.
-// Logs the error to stderr for server-side diagnostics.
+// Logs the error to the adapter's stderr for server-side diagnostics.
 [[nodiscard]] inline ClassifiedError classify_exception(const std::string& command,
                                                         std::exception_ptr ep) {
     try {
         std::rethrow_exception(ep);
     } catch (const std::system_error& e) {
-        std::cerr << "DAP system error in '" << command << "': " << e.code() << " " << e.what()
-                  << '\n';
-        return {std::format("error: {}", e.what()), error_code::kInternalError};
+        write_adapter_diagnostic(
+            std::format("DAP system error in '{}': {} {}", command, e.code().value(), e.what()));
+        return {std::format("error: {}", e.what()), error_code::k_internal_error};
     } catch (const std::invalid_argument& e) {
-        std::cerr << "DAP invalid argument in '" << command << "': " << e.what() << '\n';
-        return {std::format("error: {}", e.what()), error_code::kInvalidArgument};
+        write_adapter_diagnostic(
+            std::format("DAP invalid argument in '{}': {}", command, e.what()));
+        return {std::format("error: {}", e.what()), error_code::k_invalid_argument};
     } catch (const std::exception& e) {
-        std::cerr << "DAP error in '" << command << "': " << typeid(e).name() << ": " << e.what()
-                  << '\n';
-        return {std::format("error: {}", e.what()), error_code::kInternalError};
+        write_adapter_diagnostic(
+            std::format("DAP error in '{}': {}: {}", command, typeid(e).name(), e.what()));
+        return {std::format("error: {}", e.what()), error_code::k_internal_error};
     } catch (...) {
-        std::cerr << "DAP: unknown exception type in '" << command << "'\n";
-        return {std::string("Unknown internal error"), error_code::kInternalError};
+        write_adapter_diagnostic(std::format("DAP: unknown exception type in '{}'", command));
+        return {std::string("Unknown internal error"), error_code::k_internal_error};
     }
 }
 

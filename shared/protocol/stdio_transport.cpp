@@ -17,13 +17,15 @@ namespace luma::protocol {
 
 std::size_t StdioTransport::read_raw(std::span<char> buf) {
 #ifdef _WIN32
-    const auto count = _read(_fileno(stdin), buf.data(), static_cast<unsigned int>(buf.size()));
+    const int fd = input_fd_ == k_use_stdin ? _fileno(stdin) : input_fd_;
+    const auto count = _read(fd, buf.data(), static_cast<unsigned int>(buf.size()));
 #else
-    auto count = ::read(STDIN_FILENO, buf.data(), buf.size());
+    const int fd = input_fd_ == k_use_stdin ? STDIN_FILENO : input_fd_;
+    auto count = ::read(fd, buf.data(), buf.size());
 
     // A signal delivered mid-read is not a broken connection — retry.
     while (count < 0 && errno == EINTR) {
-        count = ::read(STDIN_FILENO, buf.data(), buf.size());
+        count = ::read(fd, buf.data(), buf.size());
     }
 #endif
 

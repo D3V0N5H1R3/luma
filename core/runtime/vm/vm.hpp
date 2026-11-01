@@ -350,6 +350,16 @@ public:
         debug_.pause_requested.store(true, std::memory_order_release);
     }
 
+    // Run this (root) VM under `token`, as a spawned task runs under its own:
+    // cancelling the token stops the VM at its next cancellation point and,
+    // because spawned tasks chain their tokens to it, cancels every task too.
+    // Used by the debugger so terminating a session also ends a program that
+    // is blocked in an await, a task_scope join, or a channel wait.  Call
+    // before execute(), on the thread that will run it.
+    void set_cancellation_token(std::shared_ptr<CancellationToken> token) {
+        cancel_token_ = std::move(token);
+    }
+
     // Expose state for inspection while paused.
     //
     // ═══ Debug / Introspection API ═══
@@ -526,7 +536,7 @@ private:
     // Throws CancelledException when this VM runs a spawned task whose token
     // (or an ancestor scope's token) has been cancelled.  Checked at loop
     // back-edges, function calls, tail calls, and await — one pointer test on
-    // the root VM, which has no token.  A `finally` body entered because of
+    // a root VM, which has no token unless the debugger set one.  A `finally` body entered because of
     // the cancellation is shielded (see VMExceptionManager) so it runs to
     // completion; its closing Rethrow re-raises the cancellation.
     void check_cancellation() const {

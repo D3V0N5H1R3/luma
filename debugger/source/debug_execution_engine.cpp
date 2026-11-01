@@ -6,8 +6,13 @@
 
 #include "analysis/source/source_manager.hpp"
 #include "breakpoint_manager.hpp"
+#include "common/scope_guard.hpp"
+#include "compiled_breakpoint.hpp"
+#include "dap_breakpoint_validator.hpp"
+#include "dap_response_builders.hpp"
 #include "dap_types.hpp"
 #include "debug_stream_utils.hpp"
+#include "diagnostic_log.hpp"
 #include "runtime/stdlib/system/process_module.hpp"
 #include "runtime/vm/vm.hpp"
 #include "thread_state_manager.hpp"
@@ -29,7 +34,13 @@ DebugExecutionEngine::DebugExecutionEngine(SessionComponents components,
       output_callback_(std::move(callbacks.output_cb)) {}
 
 DebugExecutionEngine::~DebugExecutionEngine() noexcept {
-    terminate();
+    // terminate() can throw (std::system_error from a lock or the join); a
+    // destructor must not, so report it instead of calling std::terminate.
+    try {
+        terminate();
+    } catch (const std::exception& e) {
+        write_adapter_diagnostic(std::string{"DAP: error terminating session: "} + e.what());
+    }
 }
 
 // ─── Execution thread body ───
@@ -47,8 +58,19 @@ void DebugExecutionEngine::run_execution(const std::shared_ptr<std::vector<Compi
         return;
     }
 
-    // Resolve breakpoints now that configuration is done.
-    bp_mgr_.resolve_pending_breakpoints();
+    // Resolve breakpoints now that configuration is done, and tell the client
+    // about every one that became bound: it was reported as unverified when it
+    // was set before the program was compiled.  Validate its condition, hit
+    // condition, and log message the way setBreakpoints does, so an invalid
+    // expression is not announced as verified.
+    CompiledBreakpointCache validation_cache;
+
+    for (auto& breakpoint : bp_mgr_.resolve_pending_breakpoints()) {
+        validate_breakpoint_fields(breakpoint, validation_cache);
+        event_callback_(std::string{k_event_breakpoint},
+                        make_breakpoint_event_body(k_breakpoint_reason_changed,
+                                                   serialise_breakpoint(breakpoint)));
+    }
 
     if (!setup_program_environment(program_args, working_dir)) {
         handle_execution_result(1);
@@ -72,7 +94,7 @@ bool DebugExecutionEngine::setup_program_environment(const std::vector<std::stri
         std::filesystem::current_path(working_dir, ec);
 
         if (ec) {
-            output_callback_(std::string{kOutputStderr},
+            output_callback_(std::string{k_output_stderr},
                              std::format("Failed to set working directory '{}': {}\n", working_dir,
                                          ec.message()));
             return false;
@@ -85,42 +107,64 @@ bool DebugExecutionEngine::setup_program_environment(const std::vector<std::stri
 void DebugExecutionEngine::execute_with_stream_redirect(
     const std::shared_ptr<std::vector<CompiledFunction>>& fns,
     const std::shared_ptr<CompiledFunction>& top, std::shared_ptr<ThreadState> main_state) {
-    // Redirect stdout/stderr through DAP output events.
-    LineBufferedStreamBuf line_buf(
-        [this](const std::string& text) { output_callback_(std::string{kOutputStdout}, text); });
-    const StreamRedirectGuard cout_guard(std::cout, &line_buf);
+    int exit_code = 0;
 
-    LineBufferedStreamBuf cerr_buf(
-        [this](const std::string& text) { output_callback_(std::string{kOutputStderr}, text); });
-    const StreamRedirectGuard cerr_guard(std::cerr, &cerr_buf);
+    {
+        // Redirect stdout/stderr through DAP output events.  The buffers are
+        // scoped so their destructors flush any trailing partial line *before*
+        // the terminated/exited events below; otherwise the program's last
+        // output would arrive after the client already ended the session.
+        LineBufferedStreamBuf line_buf([this](const std::string& text) {
+            output_callback_(std::string{k_output_stdout}, text);
+        });
+        const StreamRedirectGuard cout_guard(std::cout, &line_buf);
 
-    try {
-        vm_adapter_->execute(*fns, *top);
-    } catch (const std::exception& e) {
-        handle_unhandled_exception(e, main_state);
-        handle_execution_result(1);
-        return;
+        LineBufferedStreamBuf cerr_buf([this](const std::string& text) {
+            output_callback_(std::string{k_output_stderr}, text);
+        });
+        const StreamRedirectGuard cerr_guard(std::cerr, &cerr_buf);
+
+        // Run under the session's cancellation token: the VM checks it at its
+        // cancellation points, and blocking channel waits poll it through the
+        // thread's active token.
+        vm_->set_cancellation_token(program_cancel_token_);
+        const auto* const previous_cancel_token = luma::detail::active_cancel_token;
+        luma::detail::active_cancel_token = &program_cancel_token_;
+        const ScopeGuard restore_cancel_token{
+            [previous_cancel_token] { luma::detail::active_cancel_token = previous_cancel_token; }};
+
+        try {
+            vm_adapter_->execute(*fns, *top);
+        } catch (const std::exception& e) {
+            flush_program_output();
+            handle_unhandled_exception(e, main_state);
+            exit_code = 1;
+        }
     }
 
-    handle_execution_result(0);
+    handle_execution_result(exit_code);
+}
+
+void DebugExecutionEngine::flush_program_output() {
+    std::cout.flush();
+    std::cerr.flush();
 }
 
 void DebugExecutionEngine::handle_unhandled_exception(const std::exception& e,
                                                       std::shared_ptr<ThreadState>& main_state) {
-    bool already_handled = false;
+    bool already_reported = false;
 
     {
         const auto lock = lock_exception();
-
-        if (!last_exception_message_.empty()) {
-            already_handled = true;
-        }
-
+        already_reported = main_uncaught_stop_reported_;
         last_exception_message_ = e.what();
         last_exception_is_caught_ = false;
     }
 
-    if (already_handled || execution_stop_token_.stop_requested()) {
+    // The uncaught-exception filter already stopped at the throw site (with the
+    // frames still intact); stopping again after the unwind would only repeat
+    // the same exception with an empty stack.
+    if (already_reported || execution_stop_token_.stop_requested()) {
         return;
     }
 
@@ -140,12 +184,12 @@ void DebugExecutionEngine::handle_unhandled_exception(const std::exception& e,
     }
 
     JsonValue::ObjectType body;
-    body["reason"] = JsonValue(std::string{kStopReasonException});
+    body["reason"] = JsonValue(std::string{k_stop_reason_exception});
     body["description"] = JsonValue(std::string(e.what()));
-    body["threadId"] = JsonValue(1);
+    body["threadId"] = JsonValue(k_main_thread_id);
     body["text"] = JsonValue(std::string(e.what()));
     body["allThreadsStopped"] = JsonValue(thread_mgr_.all_threads_stopped());
-    event_callback_(std::string{kEventStopped}, JsonValue(std::move(body)));
+    event_callback_(std::string{k_event_stopped}, JsonValue(std::move(body)));
 
     {
         auto lock = thread_mgr_.lock_state_unique(*main_state);
@@ -165,11 +209,11 @@ void DebugExecutionEngine::handle_execution_result(int exit_code) {
         return;
     }
 
-    event_callback_(std::string{kEventTerminated}, JsonValue(JsonValue::ObjectType{}));
+    event_callback_(std::string{k_event_terminated}, JsonValue(JsonValue::ObjectType{}));
 
     JsonValue::ObjectType exit_body;
     exit_body["exitCode"] = JsonValue(exit_code);
-    event_callback_(std::string{kEventExited}, JsonValue(std::move(exit_body)));
+    event_callback_(std::string{k_event_exited}, JsonValue(std::move(exit_body)));
 }
 
 } // namespace luma::dap

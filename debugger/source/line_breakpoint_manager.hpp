@@ -28,8 +28,11 @@ public:
     [[nodiscard]] std::vector<Breakpoint>
     set_breakpoints(const std::string& path, const std::vector<BreakpointRequest>& requests);
 
-    // Resolve path-based breakpoints that were set before the program was compiled.
-    void resolve_pending_breakpoints();
+    // Resolve path-based breakpoints that were set before the program was
+    // compiled.  Returns the breakpoints that became bound (verified, with
+    // their final line) so the caller can report them to the client; each
+    // keeps the ID the client was already given.
+    [[nodiscard]] std::vector<Breakpoint> resolve_pending_breakpoints();
 
     // Returns paths with pending breakpoints that could not be resolved to a file ID.
     // Call after resolve_pending_breakpoints() to detect unresolved entries.
@@ -50,11 +53,7 @@ public:
     // its updated (saturating) hit count, or std::nullopt if no such breakpoint
     // exists (e.g. removed by a concurrent setBreakpoints).
     // Must be called under ctx_->mutex.
-    [[nodiscard]] std::optional<int> record_breakpoint_hit(int file_id, int line, int bp_id) const;
-
-    // Returns true if any line breakpoints exist for the given file_id.
-    // Must be called under ctx_->mutex.
-    [[nodiscard]] bool has_breakpoints_for_file_id(int file_id) const;
+    [[nodiscard]] std::optional<int> record_breakpoint_hit(int file_id, int line, int bp_id);
 
     // Returns true if at least one line breakpoint is set anywhere.
     // Must be called under ctx_->mutex.
@@ -70,13 +69,15 @@ private:
         std::string condition;
         std::string hit_condition;
         std::string log_message;
-        // Mutable because record_breakpoint_hit() is a const method that
-        // increments the hit counter.  Always accessed under ctx_->mutex.
-        mutable int times_hit{0};
+        int times_hit{0}; // GUARDED_BY(ctx_->mutex)
         int line{0};
     };
 
     [[nodiscard]] static int snap_line(int requested, const std::set<int>& executable);
+
+    // The request's pre-assigned ID, or a freshly allocated one when it has none.
+    // Must be called under ctx_->mutex.
+    [[nodiscard]] int id_for_request(const BreakpointRequest& req) const;
 
     [[nodiscard]] static Breakpoint build_breakpoint_response(int bp_id, bool verified, int line,
                                                               int requested_line,
@@ -98,7 +99,8 @@ private:
     std::unordered_map<int, std::map<int, std::vector<LineBreakpointInfo>>>
         line_breakpoints_; // GUARDED_BY(ctx_->mutex)
 
-    // Path-based breakpoints (before file_id resolution).
+    // Path-based requests, each carrying the ID reported to the client, kept
+    // so resolution after compilation can bind them.
     StringMap<std::vector<BreakpointRequest>> path_breakpoints_; // GUARDED_BY(ctx_->mutex)
 };
 

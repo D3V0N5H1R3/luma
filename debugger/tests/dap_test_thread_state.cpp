@@ -52,7 +52,7 @@ void test_frame_mapping_structure() {
 
 void test_entry_stop_reason() {
     // Verify the "entry" stop reason constant is defined.
-    std::string entry_reason{kStopReasonEntry};
+    std::string entry_reason{k_stop_reason_entry};
     ASSERT_EQ(entry_reason, "entry");
 }
 
@@ -61,7 +61,7 @@ void test_entry_stop_reason() {
 void test_stopped_event_entry_reason() {
     // Build a stopped event with reason "entry" as used for stopOnEntry.
     JsonValue::ObjectType body;
-    body["reason"] = JsonValue(std::string{kStopReasonEntry});
+    body["reason"] = JsonValue(std::string{k_stop_reason_entry});
     body["threadId"] = JsonValue(1);
     body["allThreadsStopped"] = JsonValue(true);
 
@@ -77,7 +77,7 @@ void test_stopped_event_entry_reason() {
 void test_per_thread_stopped_event() {
     // Verify a stopped event with a task thread ID (not just main=1).
     JsonValue::ObjectType body;
-    body["reason"] = JsonValue(std::string{kStopReasonBreakpoint});
+    body["reason"] = JsonValue(std::string{k_stop_reason_breakpoint});
     body["threadId"] = JsonValue(3);
     body["allThreadsStopped"] = JsonValue(true);
 
@@ -107,7 +107,7 @@ void test_exception_terminated_state() {
 // ─── Pause pending flag ────────────────────────────────────────────
 
 void test_pause_pending_flag() {
-    // ThreadState should have a pause_pending flag that produces kStopReasonPause.
+    // ThreadState should have a pause_pending flag that produces k_stop_reason_pause.
     ThreadState state;
     ASSERT_FALSE(state.pending.pause);
 
@@ -119,10 +119,10 @@ void test_pause_pending_flag() {
     std::string reason;
 
     if (state.pending.pause) {
-        reason = std::string{kStopReasonPause};
+        reason = std::string{k_stop_reason_pause};
         state.pending.pause = false;
     } else if (state.step.mode != StepMode::None) {
-        reason = std::string{kStopReasonStep};
+        reason = std::string{k_stop_reason_step};
     }
 
     ASSERT_EQ(reason, "pause");
@@ -136,7 +136,7 @@ void test_all_threads_stopped_event_body() {
     const bool all_stopped = false;
 
     JsonValue::ObjectType body;
-    body["reason"] = JsonValue(std::string{kStopReasonBreakpoint});
+    body["reason"] = JsonValue(std::string{k_stop_reason_breakpoint});
     body["threadId"] = JsonValue(1);
     body["allThreadsStopped"] = JsonValue(all_stopped);
 
@@ -145,7 +145,7 @@ void test_all_threads_stopped_event_body() {
 
     // With all threads stopped, it should be true.
     JsonValue::ObjectType body2;
-    body2["reason"] = JsonValue(std::string{kStopReasonBreakpoint});
+    body2["reason"] = JsonValue(std::string{k_stop_reason_breakpoint});
     body2["threadId"] = JsonValue(1);
     body2["allThreadsStopped"] = JsonValue(true);
 

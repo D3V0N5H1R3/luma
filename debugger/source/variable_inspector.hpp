@@ -70,13 +70,14 @@ struct FrameMapping {
 
 // ─── Variable reference entries ───
 struct ScopeRef {
-    int frame_id;
-    ScopeType scope_type;
+    int frame_id{0};
+    ScopeType scope_type{ScopeType::Local};
 };
 
 struct ValueRef {
     std::shared_ptr<Value> value; // Owned copy — safe after resume.
     int depth{0};                 // Nesting depth — expansion stops at max_expansion_depth.
+    std::string evaluate_name;    // Luma expression for the value; empty if unknown.
 };
 
 using VariableRefEntry = std::variant<ScopeRef, ValueRef>;
@@ -165,7 +166,7 @@ public:
 
     // Invalidate all references (called when execution resumes).
     // Uses generation counter — O(1) instead of clearing the map.
-    void invalidate_refs() const;
+    void invalidate_refs();
 
     // Total number of live variable reference entries currently tracked.
     [[nodiscard]] int reference_count() const;
@@ -193,9 +194,12 @@ public:
     [[nodiscard]] std::pair<int, int> get_variable_counts(int reference,
                                                           const ThreadResolver& resolver) const;
 
-    // Build a Variable representation for a Value.
+    // Build a Variable representation for a Value.  `evaluate_name` is the Luma
+    // expression that re-evaluates the value (DAP evaluateName); it is also
+    // remembered for a structured value so its children get full expressions.
     [[nodiscard]] Variable make_variable(const std::string& name, const Value& val,
-                                         bool is_mutable = false, int depth = 0) const;
+                                         bool is_mutable = false, int depth = 0,
+                                         std::string evaluate_name = {}) const;
 
     // ─── Modification ───
 

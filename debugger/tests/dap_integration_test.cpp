@@ -6,6 +6,7 @@
 #include <format>
 #include <iostream>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -36,6 +37,8 @@ constexpr int variables_basic_stop = 10;
 constexpr int variables_basic_set_variable = 13;
 constexpr int breakpoint_basic_no_debug = 7;
 constexpr int breakpoint_basic_conditional = 8;
+constexpr int breakpoint_basic_print = 8;
+constexpr int nested_tasks_inner_body = 5;
 constexpr int conditional_loop_body = 8;
 constexpr int conditional_loop_range_start = 4;
 constexpr int conditional_loop_range_end = 10;
@@ -568,10 +571,8 @@ bool wait_for_event(DapProcess& proc, const std::string& event_name,
 }
 
 // Wait for either a `terminated` or a `stopped` event, returning which arrived
-// ("" on timeout). An unhandled exception can stop twice — once at the throw
-// point (the exception hook) and once at the top-level unwind — so a client
-// driving such a session to completion must keep continuing until it sees
-// `terminated`, without knowing in advance how many stops there will be.
+// ("" on timeout). Lets a client drive a session with exception stops to
+// completion without knowing in advance how many stops there will be.
 std::string wait_for_terminate_or_stop(DapProcess& proc, int max_attempts = 100,
                                        int timeout_per_read_ms = 200) {
     for (int i = 0; i < max_attempts; ++i) {
@@ -956,11 +957,11 @@ void test_exception_breakpoint() {
 // emitted the exception `stopped` event *before* marking itself paused, so a
 // racing `continue` could see is_paused == false, skip the unpause, and notify
 // an unregistered waiter — the wakeup was lost and the execution thread blocked
-// forever. An unhandled exception stops twice (at the throw point, then at the
-// top-level unwind), so the test continues until termination; a reintroduced
-// race would strand one of those continues and the harness read timeout turns
-// the hang into a failure, not a deadlock. Repeated to raise the odds of
-// catching the race.
+// forever. With the uncaught filter on, the exception stops at the throw point;
+// the loop keeps continuing until termination regardless of how many stops
+// occur, so a reintroduced race strands a continue and the harness read
+// timeout turns the hang into a failure, not a deadlock. Repeated to raise the
+// odds of catching the race.
 void test_continue_after_unhandled_exception() {
     constexpr int iterations = 3;
 
@@ -2177,6 +2178,444 @@ void test_structured_values() {
     disconnect(proc);
 }
 
+// ─── Review-fix regression tests ───────────────────────────────────
+
+// Read messages until an event named `event_name` arrives (optionally with
+// body[body_field] == body_value), appending every event read to `seen`.
+// Returns the matching event, or std::nullopt on timeout.
+std::optional<JsonValue> read_event(DapProcess& proc, std::vector<JsonValue>& seen,
+                                    const std::string& event_name,
+                                    const std::string& body_field = "",
+                                    const std::string& body_value = "", int max_attempts = 100,
+                                    int timeout_per_read_ms = 200) {
+    for (int i = 0; i < max_attempts; ++i) {
+        auto msg = proc.read_message(timeout_per_read_ms);
+
+        if (!msg.has_value() || !msg->has("event")) {
+            continue;
+        }
+
+        seen.push_back(*msg);
+
+        if ((*msg)["event"].as_string() != event_name) {
+            continue;
+        }
+
+        if (body_field.empty() || ((*msg).has("body") && (*msg)["body"].has(body_field) &&
+                                   (*msg)["body"][body_field].as_string() == body_value)) {
+            return msg;
+        }
+    }
+
+    return std::nullopt;
+}
+
+// The first event in `events` matching the name (and body field), if any.
+std::optional<JsonValue> find_event(const std::vector<JsonValue>& events,
+                                    const std::string& event_name,
+                                    const std::string& body_field = "",
+                                    const std::string& body_value = "") {
+    for (const auto& evt : events) {
+        if (!evt.has("event") || evt["event"].as_string() != event_name) {
+            continue;
+        }
+
+        if (body_field.empty() || (evt.has("body") && evt["body"].has(body_field) &&
+                                   evt["body"][body_field].as_string() == body_value)) {
+            return evt;
+        }
+    }
+
+    return std::nullopt;
+}
+
+// Wait for an event that may already be among `events` (collected with a
+// response) or may still be in flight.
+std::optional<JsonValue> await_event(DapProcess& proc, std::vector<JsonValue>& events,
+                                     const std::string& event_name,
+                                     const std::string& body_field = "",
+                                     const std::string& body_value = "") {
+    if (auto found = find_event(events, event_name, body_field, body_value)) {
+        return found;
+    }
+
+    return read_event(proc, events, event_name, body_field, body_value);
+}
+
+// Continue `thread_id` and wait for the program to terminate.  The
+// `terminated` event can race ahead of the continue response, so it may be
+// among the events read with the response.
+bool continue_to_termination(DapProcess& proc, int thread_id = 1) {
+    auto cont = continue_execution(proc, thread_id);
+    return has_event(cont.events, "terminated") || wait_for_event(proc, "terminated");
+}
+
+int top_frame_id(DapProcess& proc, int thread_id = 1) {
+    auto st_result = get_stack_trace(proc, thread_id);
+    ASSERT_SUCCESS(st_result.response);
+    return static_cast<int>(
+        st_result.response["body"]["stackFrames"].as_array()[0]["id"].as_integer());
+}
+
+JsonValue evaluate_request(DapProcess& proc, const std::string& expression, int frame_id) {
+    JsonValue::ObjectType args;
+    args["expression"] = JsonValue(expression);
+    args["frameId"] = JsonValue(frame_id);
+    args["context"] = JsonValue(std::string("repl"));
+    proc.send_message(make_request("evaluate", JsonValue(std::move(args))));
+    return read_until_response(proc, "evaluate").response;
+}
+
+// Regression (B01, B13): the debuggee runs inside luma_dap, whose stdin is the
+// DAP stream.  A program reading input used to consume the editor's requests
+// (and block forever once none were left).  Its stdin is now the null device,
+// so the read sees end of input.  The prompt (written with a flush) and the
+// final newline-less write must arrive as output *before* `terminated`.
+void test_program_stdin_isolated_from_protocol() {
+    DapProcess proc;
+    initialize(proc);
+
+    auto launch_result = launch_program(proc, "read_input.luma");
+    ASSERT_SUCCESS(launch_result.response);
+
+    auto config_result = send_configuration_done(proc);
+    std::vector<JsonValue> events = config_result.events;
+    ASSERT_TRUE(await_event(proc, events, "terminated").has_value());
+
+    std::string output_before_termination;
+
+    for (const auto& evt : events) {
+        if (evt["event"].as_string() == "terminated") {
+            break;
+        }
+
+        if (evt["event"].as_string() == "output") {
+            output_before_termination += evt["body"]["output"].as_string();
+        }
+    }
+
+    ASSERT_TRUE(output_before_termination.find("Your name? ") != std::string::npos);
+    ASSERT_TRUE(output_before_termination.find("Hello, nobody") != std::string::npos);
+    ASSERT_TRUE(output_before_termination.find("done") != std::string::npos);
+
+    // The protocol stream is intact: a later request is still answered.
+    proc.send_message(make_request("threads"));
+    ASSERT_SUCCESS(read_until_response(proc, "threads").response);
+
+    disconnect(proc);
+}
+
+// Regression (B02): every VM numbered its spawned tasks from 2, so a task
+// spawned inside a task reused a sibling's thread ID and overwrote its entry in
+// the thread table.  The nested task must be its own thread.
+void test_nested_task_threads_are_distinct() {
+    DapProcess proc;
+    initialize(proc);
+
+    auto launch_result = launch_program(proc, "nested_tasks.luma");
+    ASSERT_SUCCESS(launch_result.response);
+    (void)set_line_breakpoint(proc, example_path("nested_tasks.luma"),
+                              test_lines::nested_tasks_inner_body);
+
+    auto config_result = send_configuration_done(proc);
+    std::vector<JsonValue> events = config_result.events;
+    auto stopped = await_event(proc, events, "stopped", "reason", "breakpoint");
+    ASSERT_TRUE(stopped.has_value());
+
+    proc.send_message(make_request("threads"));
+    auto threads_result = read_until_response(proc, "threads");
+    ASSERT_SUCCESS(threads_result.response);
+
+    std::set<long long> ids;
+
+    for (const auto& thread : threads_result.response["body"]["threads"].as_array()) {
+        ids.insert(thread["id"].as_integer());
+    }
+
+    // Main, the outer task, and the nested task.
+    ASSERT_GE(ids.size(), 3U);
+    ASSERT_EQ(ids.size(), threads_result.response["body"]["threads"].as_array().size());
+
+    const auto stopped_thread = static_cast<int>((*stopped)["body"]["threadId"].as_integer());
+    ASSERT_TRUE(continue_to_termination(proc, stopped_thread));
+
+    disconnect(proc);
+}
+
+// Regression (B05): a breakpoint set before `launch` was reported unverified,
+// and nothing ever told the client it became verified; resolution also gave it
+// a new ID, so `hitBreakpointIds` named an ID the client had never seen.
+void test_pending_breakpoint_becomes_verified() {
+    DapProcess proc;
+    initialize(proc);
+
+    auto program_path = example_path("breakpoint_basic.luma");
+    auto bp_result = set_line_breakpoint(proc, program_path, test_lines::breakpoint_basic_print);
+    ASSERT_SUCCESS(bp_result.response);
+
+    const auto& pending = bp_result.response["body"]["breakpoints"].as_array()[0];
+    ASSERT_FALSE(pending["verified"].as_bool());
+    const auto pending_id = pending["id"].as_integer();
+
+    (void)launch_program(proc, "breakpoint_basic.luma");
+    auto config_result = send_configuration_done(proc);
+    std::vector<JsonValue> events = config_result.events;
+
+    auto changed = await_event(proc, events, "breakpoint", "reason", "changed");
+    ASSERT_TRUE(changed.has_value());
+    const auto& bound = (*changed)["body"]["breakpoint"];
+    ASSERT_EQ(bound["id"].as_integer(), pending_id);
+    ASSERT_TRUE(bound["verified"].as_bool());
+    ASSERT_EQ(bound["line"].as_integer(), test_lines::breakpoint_basic_print);
+
+    auto stopped = await_event(proc, events, "stopped", "reason", "breakpoint");
+    ASSERT_TRUE(stopped.has_value());
+    ASSERT_EQ((*stopped)["body"]["hitBreakpointIds"].as_array()[0].as_integer(), pending_id);
+
+    ASSERT_TRUE(continue_to_termination(proc));
+
+    disconnect(proc);
+}
+
+// Regression (B06): the first qualifying breakpoint on a line decided the
+// outcome, so a logpoint listed before a real breakpoint on the same line
+// logged and the program never stopped.
+void test_logpoint_and_breakpoint_on_same_line() {
+    DapProcess proc;
+    initialize(proc);
+
+    auto launch_result = launch_program(proc, "breakpoint_basic.luma");
+    ASSERT_SUCCESS(launch_result.response);
+
+    JsonValue::ObjectType source;
+    source["path"] = JsonValue(example_path("breakpoint_basic.luma"));
+
+    JsonValue::ObjectType logpoint;
+    logpoint["line"] = JsonValue(test_lines::breakpoint_basic_print);
+    logpoint["logMessage"] = JsonValue(std::string("logged sum={sum}"));
+
+    JsonValue::ObjectType plain;
+    plain["line"] = JsonValue(test_lines::breakpoint_basic_print);
+
+    JsonValue::ArrayType bps;
+    bps.emplace_back(std::move(logpoint));
+    bps.emplace_back(std::move(plain));
+
+    JsonValue::ObjectType args;
+    args["source"] = JsonValue(std::move(source));
+    args["breakpoints"] = JsonValue(std::move(bps));
+    proc.send_message(make_request("setBreakpoints", JsonValue(std::move(args))));
+    ASSERT_SUCCESS(read_until_response(proc, "setBreakpoints").response);
+
+    auto config_result = send_configuration_done(proc);
+    std::vector<JsonValue> events = config_result.events;
+    ASSERT_TRUE(await_event(proc, events, "stopped", "reason", "breakpoint").has_value());
+
+    bool logged = false;
+
+    for (const auto& evt : events) {
+        if (evt["event"].as_string() == "output" &&
+            evt["body"]["output"].as_string().find("logged sum=30") != std::string::npos) {
+            logged = true;
+        }
+    }
+
+    ASSERT_TRUE(logged);
+
+    ASSERT_TRUE(continue_to_termination(proc));
+
+    disconnect(proc);
+}
+
+// Regression (B10): a breakpoint hit while stepping over a call was reported
+// with reason "step" (and no hitBreakpointIds) because the step mode was
+// checked first.  Also guards the return to the call line: the line-change hook
+// fires again there, and must not re-trigger that line's breakpoint, or the
+// final continue would stop a second time instead of terminating.
+void test_breakpoint_hit_while_stepping_reports_breakpoint() {
+    DapProcess proc;
+    initialize(proc);
+
+    auto launch_result = launch_program(proc, "step_into_function.luma");
+    ASSERT_SUCCESS(launch_result.response);
+
+    JsonValue::ObjectType source;
+    source["path"] = JsonValue(example_path("step_into_function.luma"));
+
+    JsonValue::ArrayType bps;
+    JsonValue::ObjectType call_line;
+    call_line["line"] = JsonValue(test_lines::step_into_function_call);
+    bps.emplace_back(std::move(call_line));
+    JsonValue::ObjectType body_line;
+    body_line["line"] = JsonValue(test_lines::step_into_function_body);
+    bps.emplace_back(std::move(body_line));
+
+    JsonValue::ObjectType args;
+    args["source"] = JsonValue(std::move(source));
+    args["breakpoints"] = JsonValue(std::move(bps));
+    proc.send_message(make_request("setBreakpoints", JsonValue(std::move(args))));
+    ASSERT_SUCCESS(read_until_response(proc, "setBreakpoints").response);
+
+    auto config_result = send_configuration_done(proc);
+    std::vector<JsonValue> events = config_result.events;
+    ASSERT_TRUE(await_event(proc, events, "stopped", "reason", "breakpoint").has_value());
+
+    // Step over the call: the breakpoint inside the callee must win.
+    JsonValue::ObjectType next_args;
+    next_args["threadId"] = JsonValue(1);
+    proc.send_message(make_request("next", JsonValue(std::move(next_args))));
+    auto next_result = read_until_response(proc, "next");
+    ASSERT_SUCCESS(next_result.response);
+
+    std::vector<JsonValue> step_events = next_result.events;
+    auto stopped = await_event(proc, step_events, "stopped");
+    ASSERT_TRUE(stopped.has_value());
+    ASSERT_EQ((*stopped)["body"]["reason"].as_string(), "breakpoint");
+    ASSERT_TRUE((*stopped)["body"].has("hitBreakpointIds"));
+
+    ASSERT_TRUE(continue_to_termination(proc));
+
+    disconnect(proc);
+}
+
+// Regression (B07, B11): compound expressions could not see a lambda's captured
+// variables (only plain-name lookups could), and a frameId from an earlier stop
+// was reinterpreted as a raw VM frame index instead of being rejected.
+void test_evaluate_captured_variable_and_stale_frame() {
+    DapProcess proc;
+    initialize(proc);
+
+    auto launch_result = launch_program(proc, "closure_variables.luma");
+    ASSERT_SUCCESS(launch_result.response);
+    (void)set_line_breakpoint(proc, example_path("closure_variables.luma"),
+                              test_lines::closure_lambda_body);
+
+    auto config_result = send_configuration_done(proc);
+    std::vector<JsonValue> events = config_result.events;
+    ASSERT_TRUE(await_event(proc, events, "stopped", "reason", "breakpoint").has_value());
+
+    const int first_frame = top_frame_id(proc);
+    auto compound = evaluate_request(proc, "base + n", first_frame);
+    ASSERT_SUCCESS(compound);
+    ASSERT_EQ(compound["body"]["result"].as_string(), "15"); // base 10 + n 5
+
+    // The lambda runs a second time; the first stop's frame ID is now stale.
+    auto cont = continue_execution(proc);
+    std::vector<JsonValue> second_events = cont.events;
+    ASSERT_TRUE(await_event(proc, second_events, "stopped", "reason", "breakpoint").has_value());
+
+    auto stale = evaluate_request(proc, "base + n", first_frame);
+    ASSERT_SUCCESS(stale);
+    ASSERT_EQ(stale["body"]["result"].as_string(), "<evaluation failed>");
+
+    auto fresh = evaluate_request(proc, "base + n", top_frame_id(proc));
+    ASSERT_EQ(fresh["body"]["result"].as_string(), "17"); // base 10 + n 7
+
+    // Completions complete the identifier at the cursor.  The DAP column counts
+    // UTF-16 code units, so a non-ASCII character before the cursor must not
+    // shift it (a byte-indexed cursor landed before `n` and offered everything).
+    JsonValue::ObjectType completion_args;
+    completion_args["frameId"] = JsonValue(top_frame_id(proc));
+    completion_args["text"] = JsonValue(std::string("\"\xC3\xA4\" + n"));
+    completion_args["column"] = JsonValue(8); // after `n`: 7 UTF-16 units precede it
+    proc.send_message(make_request("completions", JsonValue(std::move(completion_args))));
+    auto completions = read_until_response(proc, "completions");
+    ASSERT_SUCCESS(completions.response);
+
+    const auto& targets = completions.response["body"]["targets"].as_array();
+    bool offers_n = false;
+
+    for (const auto& target : targets) {
+        const auto label = target["label"].as_string();
+        ASSERT_TRUE(label.starts_with("n"));
+        offers_n = offers_n || label == "n";
+    }
+
+    ASSERT_TRUE(offers_n);
+
+    ASSERT_TRUE(continue_to_termination(proc));
+
+    disconnect(proc);
+}
+
+// Regression (B14): with the uncaught-exception filter on, an unhandled
+// exception stopped at the throw site and then *again* after the unwind,
+// because continuing cleared the state the second stop was meant to check.
+void test_uncaught_exception_stops_once() {
+    DapProcess proc;
+    initialize(proc);
+
+    JsonValue::ArrayType filters;
+    filters.push_back(JsonValue(std::string("uncaught")));
+    JsonValue::ObjectType exc_args;
+    exc_args["filters"] = JsonValue(std::move(filters));
+    proc.send_message(make_request("setExceptionBreakpoints", JsonValue(std::move(exc_args))));
+    (void)read_until_response(proc, "setExceptionBreakpoints");
+
+    (void)launch_program(proc, "exception_unhandled.luma");
+    auto config_result = send_configuration_done(proc);
+    std::vector<JsonValue> events = config_result.events;
+    ASSERT_TRUE(await_event(proc, events, "stopped", "reason", "exception").has_value());
+
+    auto cont = continue_execution(proc);
+
+    std::string next = has_event(cont.events, "terminated")                       ? "terminated"
+                       : has_event(cont.events, "stopped", "reason", "exception") ? "stopped"
+                                                                                  : "";
+
+    if (next.empty()) {
+        next = wait_for_terminate_or_stop(proc);
+    }
+
+    ASSERT_EQ(next, "terminated");
+
+    disconnect(proc);
+}
+
+// Regression (B12): stepping a thread that is not stopped read its running
+// VM's frames from the protocol thread.  It must be rejected instead.
+void test_step_on_running_thread_is_rejected() {
+    DapProcess proc;
+    initialize(proc);
+
+    (void)launch_program(proc, "long_loop.luma");
+    (void)send_configuration_done(proc);
+
+    JsonValue::ObjectType next_args;
+    next_args["threadId"] = JsonValue(1);
+    proc.send_message(make_request("next", JsonValue(std::move(next_args))));
+    auto next_result = read_until_response(proc, "next");
+
+    // The program could in principle have finished already, in which case the
+    // thread is unknown — either way the step must not succeed.
+    ASSERT_FALSE(next_result.response["success"].as_bool());
+
+    disconnect(proc);
+}
+
+// Regression (B09): disconnect joins the execution thread, but a program
+// blocked in a channel receive never reached a line change to notice the stop
+// request, so the disconnect handler (and luma_dap) hung forever.  Terminating
+// now cancels the program's root token, which ends the wait.
+void test_disconnect_ends_blocked_program() {
+    DapProcess proc;
+    initialize(proc);
+
+    auto launch_result = launch_program(proc, "blocked_channel.luma");
+    ASSERT_SUCCESS(launch_result.response);
+    (void)send_configuration_done(proc);
+
+    // Give the program time to block in Channel.receive.
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    proc.send_message(make_request("disconnect"));
+    auto disconnect_result = read_until_response(proc, "disconnect", 10000);
+    ASSERT_SUCCESS(disconnect_result.response);
+    ASSERT_TRUE(proc.wait_exited_cleanly());
+
+    proc.close();
+}
+
 } // namespace
 
 // ─── Entry point ───────────────────────────────────────────────────
@@ -2297,6 +2736,17 @@ int main(int /*argc*/, char* argv[]) {
     RUN(test_closure_variables);
     RUN(test_recursive_stack);
     RUN(test_structured_values);
+
+    // Review-fix regressions.
+    RUN(test_program_stdin_isolated_from_protocol);
+    RUN(test_nested_task_threads_are_distinct);
+    RUN(test_pending_breakpoint_becomes_verified);
+    RUN(test_logpoint_and_breakpoint_on_same_line);
+    RUN(test_breakpoint_hit_while_stepping_reports_breakpoint);
+    RUN(test_evaluate_captured_variable_and_stale_frame);
+    RUN(test_uncaught_exception_stops_once);
+    RUN(test_step_on_running_thread_is_rejected);
+    RUN(test_disconnect_ends_blocked_program);
 
     return SUMMARY();
 }

@@ -100,7 +100,7 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 
 ## Debug
 
-Minimal programs that exercise the debugger and stepping workflows described in the [Luma Debugger guide](../documents/Luma_Debugger.md). Each keeps its Luma code deliberately small so the focus stays on a single debugging scenario rather than the program itself. Every example has an `@main` entry point, so the [example runner](#running-and-verifying-every-example) also runs each one end to end.
+Minimal programs that exercise the debugger and stepping workflows described in the [Luma Debugger guide](../documents/Luma_Debugger.md). Each keeps its Luma code deliberately small so the focus stays on a single debugging scenario rather than the program itself. Every example has an `@main` entry point, so the [example runner](#running-and-verifying-every-example) also runs each one end to end — except `blocked_channel`, which blocks forever by design and is skipped.
 
 | File                  | Demonstrates                                              |
 | --------------------- | --------------------------------------------------------- |
@@ -114,7 +114,10 @@ Minimal programs that exercise the debugger and stepping workflows described in 
 | `set_variable`        | Modifying mutable variables from the debugger             |
 | `recursive_stack`     | Deep, multi-frame call stacks from recursion              |
 | `concurrent_tasks`    | Multiple threads via `task_scope` for thread debugging    |
+| `nested_tasks`        | Tasks spawned inside tasks each get their own thread      |
 | `long_loop`           | A long-running loop for async pause / interrupt           |
+| `blocked_channel`     | Disconnecting ends a program blocked on a channel         |
+| `read_input`          | Program stdin kept apart from the DAP message stream      |
 | `exception_caught`    | A division-by-zero handled by `try` / `catch`             |
 | `exception_unhandled` | An unhandled division by zero that halts execution        |
 | `global_scope`        | Evaluating calls to top-level functions in a nested frame |

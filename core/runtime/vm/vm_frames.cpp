@@ -68,12 +68,11 @@ void VM::transfer_state(VM&& other) noexcept {
     debug_.last_file = other.debug_.last_file;
     debug_.pause_requested.store(other.debug_.pause_requested.load());
 
-    // Task manager — atomic next_task_id is non-movable, so transfer fields.
-    // The static thread-local current_scope is thread-global and not moved.
+    // Task manager — transfer the per-VM fields.  The static next_task_id and
+    // thread-local current_scope are process/thread-global and not moved.
     task_manager_.task_scopes = std::move(other.task_manager_.task_scopes);
     task_manager_.owned_pool = std::move(other.task_manager_.owned_pool);
     task_manager_.shared_pool = std::exchange(other.task_manager_.shared_pool, nullptr);
-    task_manager_.next_task_id.store(other.task_manager_.next_task_id.load());
 }
 
 // ─────────── Inline cache for global variables ───────────

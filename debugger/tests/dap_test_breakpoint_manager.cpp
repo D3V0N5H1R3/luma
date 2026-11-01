@@ -107,17 +107,17 @@ void test_exception_breakpoints_replace_filters() {
 // Previously the second overwrote the first in a one-entry-per-line map, so the
 // first breakpoint's condition was silently lost.
 void test_two_breakpoints_snapping_to_one_line_both_retained() {
-    constexpr luma::FileId kFileId = 1;
+    constexpr luma::FileId k_file_id = 1;
 
     // Compiled program with executable lines {10, 20}; lines 8 and 9 are not
     // executable and snap forward to line 10.
     auto top_level = std::make_shared<luma::CompiledFunction>();
     top_level->mutable_chunk().source_map.append(
-        0, luma::SourceLocation{.file_id = kFileId, .line = 10});
+        0, luma::SourceLocation{.file_id = k_file_id, .line = 10});
     top_level->mutable_chunk().source_map.append(
-        1, luma::SourceLocation{.file_id = kFileId, .line = 20});
+        1, luma::SourceLocation{.file_id = k_file_id, .line = 20});
 
-    SingleFileLocator locator{kFileId};
+    SingleFileLocator locator{k_file_id};
 
     BreakpointManager mgr;
     mgr.set_source_locator(&locator);
@@ -152,18 +152,100 @@ void test_two_breakpoints_snapping_to_one_line_both_retained() {
 
     // When only cond_a holds, breakpoint A fires — proving A's condition was not
     // dropped by the collision with B.
-    const auto hit_a = mgr.check_breakpoint(kFileId, 10, only_true("cond_a"));
+    const auto hit_a = mgr.check_breakpoint(k_file_id, 10, only_true("cond_a"));
     ASSERT_TRUE(hit_a.should_break);
     ASSERT_EQ(hit_a.hit_breakpoint_id, id_a);
 
     // When only cond_b holds, breakpoint B fires.
-    const auto hit_b = mgr.check_breakpoint(kFileId, 10, only_true("cond_b"));
+    const auto hit_b = mgr.check_breakpoint(k_file_id, 10, only_true("cond_b"));
     ASSERT_TRUE(hit_b.should_break);
     ASSERT_EQ(hit_b.hit_breakpoint_id, id_b);
 
     // When neither condition holds, nothing fires.
-    const auto no_hit = mgr.check_breakpoint(kFileId, 10, only_true("nothing"));
+    const auto no_hit = mgr.check_breakpoint(k_file_id, 10, only_true("nothing"));
     ASSERT_FALSE(no_hit.should_break);
+}
+
+// Compiled program for k_test_file_id with executable lines {10, 20}.
+constexpr luma::FileId k_test_file_id = 1;
+
+[[nodiscard]] std::shared_ptr<luma::CompiledFunction> make_two_line_program() {
+    auto top_level = std::make_shared<luma::CompiledFunction>();
+    top_level->mutable_chunk().source_map.append(
+        0, luma::SourceLocation{.file_id = k_test_file_id, .line = 10});
+    top_level->mutable_chunk().source_map.append(
+        1, luma::SourceLocation{.file_id = k_test_file_id, .line = 20});
+    return top_level;
+}
+
+// Regression: every breakpoint bound to a line is evaluated.  Returning at the
+// first qualifying one let a logpoint hide a real breakpoint on the same line
+// (the program never stopped) and left later logpoints silent.
+void test_logpoint_does_not_hide_breakpoint_on_same_line() {
+    SingleFileLocator locator{k_test_file_id};
+
+    BreakpointManager mgr;
+    mgr.set_source_locator(&locator);
+    mgr.set_compiled_program(std::make_shared<std::vector<luma::CompiledFunction>>(),
+                             make_two_line_program());
+
+    BreakpointRequest log_a;
+    log_a.line = 10;
+    log_a.log_message = "first {x}";
+
+    BreakpointRequest stop;
+    stop.line = 10;
+
+    BreakpointRequest log_b;
+    log_b.line = 10;
+    log_b.log_message = "second";
+
+    const auto responses = mgr.set_breakpoints("test.luma", {log_a, stop, log_b});
+    ASSERT_EQ(responses.size(), static_cast<std::size_t>(3));
+
+    const auto result = mgr.check_breakpoint(k_test_file_id, 10, {});
+
+    ASSERT_TRUE(result.should_break);
+    ASSERT_EQ(result.hit_breakpoint_id, responses[1].id);
+    ASSERT_EQ(result.log_messages.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(result.log_messages[0], "first {x}");
+    ASSERT_EQ(result.log_messages[1], "second");
+}
+
+// Regression: a breakpoint set before the program was compiled keeps the ID the
+// client was given, and resolution reports it so the adapter can send a
+// `breakpoint` event marking it verified.  Resolution used to allocate a new ID
+// and report nothing, leaving the editor's breakpoint unverified forever.
+void test_pending_breakpoint_keeps_id_when_resolved() {
+    BreakpointManager mgr;
+
+    BreakpointRequest pending;
+    pending.line = 15;
+    pending.id = -7;
+
+    const auto before = mgr.set_breakpoints("test.luma", {pending});
+    ASSERT_EQ(before.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(before[0].id, -7);
+    ASSERT_FALSE(before[0].verified);
+
+    SingleFileLocator locator{k_test_file_id};
+    mgr.set_source_locator(&locator);
+    mgr.set_compiled_program(std::make_shared<std::vector<luma::CompiledFunction>>(),
+                             make_two_line_program());
+
+    const auto resolved = mgr.resolve_pending_breakpoints();
+    ASSERT_EQ(resolved.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(resolved[0].id, -7);
+    ASSERT_TRUE(resolved[0].verified);
+    ASSERT_EQ(resolved[0].line, 20);
+
+    // The bound breakpoint fires under the same ID.
+    const auto hit = mgr.check_breakpoint(k_test_file_id, 20, {});
+    ASSERT_TRUE(hit.should_break);
+    ASSERT_EQ(hit.hit_breakpoint_id, -7);
+
+    // A second resolution binds nothing new.
+    ASSERT_TRUE(mgr.resolve_pending_breakpoints().empty());
 }
 
 } // namespace
@@ -182,6 +264,8 @@ int main() {
 
     // Line breakpoints.
     RUN(test_two_breakpoints_snapping_to_one_line_both_retained);
+    RUN(test_logpoint_does_not_hide_breakpoint_on_same_line);
+    RUN(test_pending_breakpoint_keeps_id_when_resolved);
 
     return SUMMARY();
 }

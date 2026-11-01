@@ -30,7 +30,12 @@ int main() try { // NOLINT(bugprone-exception-escape)
     _setmode(_fileno(stderr), _O_BINARY);
 #endif
 
-    luma::dap::Transport transport;
+    // Keep the protocol stream away from the debuggee: it runs in this process,
+    // so its stdin reads would otherwise consume DAP requests.
+    const auto protocol_fd = luma::dap::detach_protocol_input_from_stdin();
+
+    luma::dap::Transport transport =
+        protocol_fd ? luma::dap::Transport{*protocol_fd} : luma::dap::Transport{};
     luma::dap::DapServer server(transport);
 
     return server.run();

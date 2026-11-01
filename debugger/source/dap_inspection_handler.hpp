@@ -15,8 +15,8 @@ namespace luma::dap {
 
 // ─── Inspection Handler ───
 // Handles DAP state inspection requests: threads, stackTrace, scopes,
-// variables, evaluate, setVariable, completions, stepInTargets,
-// loadedSources, source, and exceptionInfo.
+// variables, evaluate, setVariable, completions, loadedSources, source, and
+// exceptionInfo.
 
 class DapInspectionHandler : public DapHandler {
 public:
@@ -30,11 +30,6 @@ public:
     [[nodiscard]] HandlerResult handle_evaluate(const JsonValue& args);
     [[nodiscard]] HandlerResult handle_set_variable(const JsonValue& args);
     [[nodiscard]] HandlerResult handle_completions(const JsonValue& args);
-    // Return the list of candidate step-in targets at the current source location.
-    // Clients use this to offer "Step into X()" choices when multiple function
-    // calls appear on the same line.  Returns an empty targets array when
-    // the current frame has no resolvable call targets.
-    [[nodiscard]] HandlerResult handle_step_in_targets(const JsonValue& args);
 
     // ─── Sources ───
     [[nodiscard]] HandlerResult handle_loaded_sources(const JsonValue& args);

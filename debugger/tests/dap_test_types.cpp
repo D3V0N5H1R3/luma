@@ -204,19 +204,19 @@ void test_serialise_variable_named_children() {
 
 void test_stop_reason_values() {
     // DAP spec stop reasons.
-    ASSERT_EQ(kStopReasonBreakpoint, "breakpoint");
-    ASSERT_EQ(kStopReasonStep, "step");
-    ASSERT_EQ(kStopReasonException, "exception");
-    ASSERT_EQ(kStopReasonPause, "pause");
-    ASSERT_EQ(kStopReasonEntry, "entry");
+    ASSERT_EQ(k_stop_reason_breakpoint, "breakpoint");
+    ASSERT_EQ(k_stop_reason_step, "step");
+    ASSERT_EQ(k_stop_reason_exception, "exception");
+    ASSERT_EQ(k_stop_reason_pause, "pause");
+    ASSERT_EQ(k_stop_reason_entry, "entry");
 }
 
 // ─── Output category constants ─────────────────────────────────────
 
 void test_output_category_values() {
-    ASSERT_EQ(kOutputConsole, "console");
-    ASSERT_EQ(kOutputStdout, "stdout");
-    ASSERT_EQ(kOutputStderr, "stderr");
+    ASSERT_EQ(k_output_console, "console");
+    ASSERT_EQ(k_output_stdout, "stdout");
+    ASSERT_EQ(k_output_stderr, "stderr");
 }
 
 // ─── BreakpointRequest struct ──────────────────────────────────────

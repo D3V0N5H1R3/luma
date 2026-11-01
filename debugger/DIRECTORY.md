@@ -25,15 +25,16 @@ The debugger implements a broad subset of the Debug Adapter Protocol.
 | Feature               | Description                                           |
 | --------------------- | ----------------------------------------------------- |
 | Conditional           | Pause only when a per-breakpoint expression is `true` |
-| Hit count             | Pause after N hits (`5`, `>3`, `>=10`, `==5`)         |
+| Hit count             | Pause on condition-true hits (`5`, `>3`, `<=2`, `%2`) |
 | Log points            | Emit an interpolated message instead of pausing       |
+| Pending breakpoints   | Set before launch; verified via a `breakpoint` event  |
 | Exception breakpoints | Break on `caught` and/or `uncaught` exceptions        |
 
 ### Specialised
 
-| Feature     | Description                                       |
-| ----------- | ------------------------------------------------- |
-| Concurrency | Map each `task_scope` task to its own DAP thread  |
+| Feature     | Description                                      |
+| ----------- | ------------------------------------------------ |
+| Concurrency | Map each `task_scope` task to its own DAP thread |
 
 ## Architecture
 
@@ -70,11 +71,11 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 
 ### Entry and transport
 
-| File                        | Responsibility                                                        |
-| --------------------------- | --------------------------------------------------------------------- |
-| `main.cpp`                  | Entry point: stdio transport wiring                                   |
-| `dap_transport.hpp/cpp`     | Thread-safe Content-Length framed stdio transport                     |
-| `dap_types.hpp/cpp`         | DAP protocol constants and serialisation helpers                      |
+| File                    | Responsibility                                                         |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `main.cpp`              | Entry point: stdin isolation, stdio transport wiring                   |
+| `dap_transport.hpp/cpp` | Shared stdio transport alias; moves DAP input off the debuggee's stdin |
+| `dap_types.hpp/cpp`     | DAP protocol constants and serialisation helpers                       |
 
 ### Protocol and dispatch
 
@@ -106,31 +107,31 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 
 ### Session and execution
 
-| File                             | Responsibility                                        |
-| -------------------------------- | ----------------------------------------------------- |
-| `debug_session.hpp/cpp`          | Session lifecycle; owns the VM; compile/execute/pause |
-| `debug_session_state.hpp`        | Cache of evaluated watch results                      |
-| `dap_session_types.hpp`          | Session and thread type definitions                   |
-| `thread_state_manager.hpp/cpp`   | Multi-thread debug state coordination                 |
-| `debug_execution_engine.hpp/cpp` | Drives VM execution with debug hooks                  |
-| `debug_execution_control.cpp`    | continue / step / pause control logic                 |
-| `debug_execution_lifecycle.cpp`  | Execution start/stop lifecycle management             |
-| `debug_execution_hooks.cpp`      | Debug hook installation and callbacks                 |
-| `vm_hook_registry.hpp/cpp`       | VM execution hook registration and dispatch           |
-| `vm_debug_adapter.hpp/cpp`       | VM adapter for debug introspection                    |
-| `debug_stream_utils.hpp`         | Output capture and redirection utilities              |
-| `vm_assert.hpp`                  | Assertion macro for an active VM pointer              |
+| File                             | Responsibility                                    |
+| -------------------------------- | ------------------------------------------------- |
+| `debug_session.hpp/cpp`          | Session orchestrator delegating to the components |
+| `debug_session_state.hpp`        | Cache of evaluated watch results                  |
+| `dap_session_types.hpp`          | Session and thread type definitions               |
+| `thread_state_manager.hpp/cpp`   | Multi-thread debug state coordination             |
+| `debug_execution_engine.hpp/cpp` | Drives VM execution with debug hooks              |
+| `debug_execution_control.cpp`    | continue / step / pause control logic             |
+| `debug_execution_lifecycle.cpp`  | Execution start/stop lifecycle management         |
+| `debug_execution_hooks.cpp`      | Debug hook installation and callbacks             |
+| `vm_hook_registry.hpp/cpp`       | VM execution hook registration and dispatch       |
+| `vm_debug_adapter.hpp/cpp`       | VM adapter for debug introspection                |
+| `debug_stream_utils.hpp`         | Line-buffered program-output capture              |
+| `vm_assert.hpp`                  | Assertion macro for an active VM pointer          |
 
 ### Breakpoints
 
-| File                                  | Responsibility                                       |
-| ------------------------------------- | ---------------------------------------------------- |
-| `breakpoint_manager.hpp/cpp`          | Breakpoint storage and hit testing                   |
-| `breakpoint_shared_context.hpp/cpp`   | Shared breakpoint hit snapshot and response building |
-| `line_breakpoint_manager.hpp/cpp`     | Line breakpoint resolution and line snapping         |
-| `exception_breakpoint_settings.hpp`   | Atomic caught/uncaught filter flags                  |
-| `compiled_breakpoint.hpp/cpp`         | Compile/validate cache for breakpoint conditions     |
-| `dap_breakpoint_validator.hpp/cpp`    | Condition / hit-count / log-message validation       |
+| File                                | Responsibility                                       |
+| ----------------------------------- | ---------------------------------------------------- |
+| `breakpoint_manager.hpp/cpp`        | Breakpoint storage and hit testing                   |
+| `breakpoint_shared_context.hpp/cpp` | Shared breakpoint hit snapshot and response building |
+| `line_breakpoint_manager.hpp/cpp`   | Line breakpoint resolution and line snapping         |
+| `exception_breakpoint_settings.hpp` | Atomic caught/uncaught filter flags                  |
+| `compiled_breakpoint.hpp/cpp`       | Condition validation cache; logpoint template parser |
+| `dap_breakpoint_validator.hpp/cpp`  | Condition / hit-count / log-message validation       |
 
 ### Inspection and evaluation
 
@@ -138,6 +139,7 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 | --------------------------------- | -------------------------------------------- |
 | `variable_inspector.hpp/cpp`      | Variable scope inspection for debug views    |
 | `variable_reference_registry.hpp` | Generational variable reference IDs          |
+| `value_expander.hpp/cpp`          | Child expansion, paging, and `evaluateName`  |
 | `expression_compiler.hpp/cpp`     | Compile watch expressions to bytecode        |
 | `expression_evaluator.hpp/cpp`    | Runtime evaluation for watch, hover, console |
 
@@ -156,7 +158,7 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 | ----------------------- | --------------------------------------------------------- |
 | `debugger_config.hpp`   | Centralised constexpr constants (limits, timeouts, sizes) |
 | `debugger_messages.hpp` | Centralised error and diagnostic message strings          |
-| `diagnostic_log.hpp`    | Callback-or-stderr diagnostic reporting helper            |
+| `diagnostic_log.hpp`    | Adapter diagnostics to stderr, bypassing `std::cerr`      |
 
 > For the authoritative per-file listing, see the [File Layout](../documents/Luma_Debugger.md#14--file-layout) section of the design document.
 
@@ -181,6 +183,8 @@ This produces `build/luma_dap` on Linux and macOS, or `build\Release\luma_dap.ex
 ## Usage
 
 In normal use you do not run `luma_dap` directly — your editor launches it automatically when you start a debug session.
+
+Under the debugger the program's stdin is not connected (input functions see end of input), because `luma_dap` itself reads the DAP messages from stdin.
 
 ### VS Code
 
@@ -237,7 +241,7 @@ Add a debug configuration to `.vscode/launch.json`:
 | `variables`     | Return variables within a scope or structured value         |
 | `evaluate`      | Evaluate an expression in the paused frame's context        |
 | `setVariable`   | Modify a variable's value while paused                      |
-| `stepInTargets` | List step-in targets for the current line                   |
+| `completions`   | Complete names typed in the debug console                   |
 | `exceptionInfo` | Return details about the current exception                  |
 | `source`        | Return the contents of a source file                        |
 | `loadedSources` | List all source files loaded by the program                 |
@@ -250,15 +254,17 @@ Add a debug configuration to `.vscode/launch.json`:
 
 ### Events (server to client)
 
-| Event         | Meaning                                           |
-| ------------- | ------------------------------------------------- |
-| `initialized` | Debugger is ready to accept breakpoint requests   |
-| `stopped`     | Execution paused (breakpoint, step, or exception) |
-| `continued`   | Execution resumed                                 |
-| `thread`      | A thread started or exited                        |
-| `output`      | Program produced console output                   |
-| `terminated`  | Program finished executing                        |
-| `exited`      | Program exited with a status code                 |
+| Event         | Meaning                                            |
+| ------------- | -------------------------------------------------- |
+| `initialized` | Debugger is ready to accept breakpoint requests    |
+| `stopped`     | Execution paused (breakpoint, step, or exception)  |
+| `continued`   | Execution resumed                                  |
+| `thread`      | A thread started or exited                         |
+| `breakpoint`  | A pending breakpoint became verified               |
+| `invalidated` | Variables/stacks are stale (if client supports it) |
+| `output`      | Program produced console output                    |
+| `terminated`  | Program finished executing                         |
+| `exited`      | Program exited with a status code                  |
 
 ## Design Document
 

@@ -40,44 +40,62 @@ const CompiledCondition& CompiledBreakpointCache::compile_condition(int breakpoi
 
 // ─── Log template helpers ───
 
-std::vector<CompiledLogMessage::Segment>
-CompiledBreakpointCache::parse_log_template_segments(const std::string& template_text) {
-    std::vector<CompiledLogMessage::Segment> segments;
+std::vector<LogTemplatePart> parse_log_template(std::string_view template_text) {
+    std::vector<LogTemplatePart> parts;
+    std::string literal;
     std::size_t pos = 0;
 
-    auto push_segment = [&](bool is_expression, std::string text) {
-        CompiledLogMessage::Segment seg;
-        seg.is_expression = is_expression;
-        seg.literal = std::move(text);
-        segments.push_back(std::move(seg));
+    const auto flush_literal = [&parts, &literal] {
+        if (!literal.empty()) {
+            parts.push_back(LogTemplatePart{.is_expression = false, .text = std::move(literal)});
+            literal.clear();
+        }
     };
 
     while (pos < template_text.size()) {
-        auto brace = template_text.find('{', pos);
+        const char c = template_text[pos];
 
-        if (brace == std::string::npos) {
-            // Remaining literal.
-            push_segment(false, template_text.substr(pos));
+        if (c == '\\' && pos + 1 < template_text.size() && template_text[pos + 1] == '{') {
+            literal += '{';
+            pos += 2;
+            continue;
+        }
+
+        if (c != '{') {
+            literal += c;
+            ++pos;
+            continue;
+        }
+
+        const auto close = template_text.find('}', pos + 1);
+
+        if (close == std::string_view::npos) {
+            literal.append(template_text.substr(pos));
             break;
         }
 
-        // Literal before the brace.
-        if (brace > pos) {
-            push_segment(false, template_text.substr(pos, brace - pos));
-        }
-
-        // Find matching close brace.
-        auto close = template_text.find('}', brace + 1);
-
-        if (close == std::string::npos) {
-            // Unmatched brace — treat rest as literal.
-            push_segment(false, template_text.substr(brace));
-            break;
-        }
-
-        // Expression between braces — store expression text in literal temporarily.
-        push_segment(true, template_text.substr(brace + 1, close - brace - 1));
+        flush_literal();
+        parts.push_back(
+            LogTemplatePart{.is_expression = true,
+                            .text = std::string{template_text.substr(pos + 1, close - pos - 1)}});
         pos = close + 1;
+    }
+
+    flush_literal();
+    return parts;
+}
+
+std::vector<CompiledLogMessage::Segment>
+CompiledBreakpointCache::parse_log_template_segments(const std::string& template_text) {
+    std::vector<CompiledLogMessage::Segment> segments;
+
+    // Expression segments store the raw expression text in `literal` until
+    // compile_log_message() compiles them.
+    for (auto& part : parse_log_template(template_text)) {
+        CompiledLogMessage::Segment seg;
+        seg.is_expression = part.is_expression;
+        seg.literal = std::move(part.text);
+        segments.push_back(std::move(seg));
     }
 
     return segments;

@@ -105,7 +105,7 @@ When the program enters a `task_scope`, the debugger emits `thread` started even
 ### Thread-Level Control
 
 - **Pause one thread:** Select a specific thread in the Threads panel and pause it. Other threads continue executing.
-- **Pause all threads:** Use the global pause button. The `stopped` event includes `allThreadsStopped: true`.
+- **Pause all threads:** Use the global pause button. Each thread reports its own `stopped` event; once every thread is paused, the event's `allThreadsStopped` is `true`.
 - **Continue one thread:** Resume a single paused thread while others remain paused.
 - **Step within a thread:** Step Over, Step Into, and Step Out apply to the selected thread only.
 

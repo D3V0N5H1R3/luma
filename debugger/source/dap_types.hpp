@@ -12,27 +12,31 @@ namespace luma::dap {
 using luma::json::JsonValue;
 
 // ─── DAP event names ───
-constexpr std::string_view kEventInitialized = "initialized";
-constexpr std::string_view kEventStopped = "stopped";
-constexpr std::string_view kEventContinued = "continued";
-constexpr std::string_view kEventTerminated = "terminated";
-constexpr std::string_view kEventExited = "exited";
-constexpr std::string_view kEventThread = "thread";
-constexpr std::string_view kEventOutput = "output";
-constexpr std::string_view kEventInvalidated = "invalidated";
+constexpr std::string_view k_event_initialized = "initialized";
+constexpr std::string_view k_event_stopped = "stopped";
+constexpr std::string_view k_event_continued = "continued";
+constexpr std::string_view k_event_terminated = "terminated";
+constexpr std::string_view k_event_exited = "exited";
+constexpr std::string_view k_event_thread = "thread";
+constexpr std::string_view k_event_output = "output";
+constexpr std::string_view k_event_invalidated = "invalidated";
+constexpr std::string_view k_event_breakpoint = "breakpoint";
+
+// ─── Breakpoint event reasons ───
+constexpr std::string_view k_breakpoint_reason_changed = "changed";
 
 // ─── Thread event reasons ───
-constexpr std::string_view kThreadReasonStarted = "started";
-constexpr std::string_view kThreadReasonExited = "exited";
+constexpr std::string_view k_thread_reason_started = "started";
+constexpr std::string_view k_thread_reason_exited = "exited";
 
 // ─── Stop reasons ───
 // DAP protocol string values — these exact strings are required by the
 // Debug Adapter Protocol specification for stopped-event reasons.
-constexpr std::string_view kStopReasonBreakpoint = "breakpoint";
-constexpr std::string_view kStopReasonStep = "step";
-constexpr std::string_view kStopReasonException = "exception";
-constexpr std::string_view kStopReasonPause = "pause";
-constexpr std::string_view kStopReasonEntry = "entry";
+constexpr std::string_view k_stop_reason_breakpoint = "breakpoint";
+constexpr std::string_view k_stop_reason_step = "step";
+constexpr std::string_view k_stop_reason_exception = "exception";
+constexpr std::string_view k_stop_reason_pause = "pause";
+constexpr std::string_view k_stop_reason_entry = "entry";
 
 // Type-safe enum for stop reasons.  Use stop_reason_string() to convert
 // to the DAP protocol string when serialising stopped events.
@@ -47,33 +51,30 @@ enum class StopReason {
 [[nodiscard]] constexpr std::string_view stop_reason_string(StopReason reason) noexcept {
     switch (reason) {
         case StopReason::Step:
-            return kStopReasonStep;
+            return k_stop_reason_step;
         case StopReason::Breakpoint:
-            return kStopReasonBreakpoint;
+            return k_stop_reason_breakpoint;
         case StopReason::Exception:
-            return kStopReasonException;
+            return k_stop_reason_exception;
         case StopReason::Pause:
-            return kStopReasonPause;
+            return k_stop_reason_pause;
         case StopReason::Entry:
-            return kStopReasonEntry;
+            return k_stop_reason_entry;
     }
     return "unknown";
 }
 
 // Sentinel value indicating "no file" or "file not found".
-constexpr int kFileIdNotFound = -1;
+constexpr int k_file_id_not_found = -1;
 
 // ─── Exception filter IDs ───
-constexpr std::string_view kFilterCaught = "caught";
-constexpr std::string_view kFilterUncaught = "uncaught";
+constexpr std::string_view k_filter_caught = "caught";
+constexpr std::string_view k_filter_uncaught = "uncaught";
 
 // ─── Output categories ───
-constexpr std::string_view kOutputConsole = "console";
-constexpr std::string_view kOutputStdout = "stdout";
-constexpr std::string_view kOutputStderr = "stderr";
-
-// ─── Error messages ───
-constexpr std::string_view kErrorUnknownInternal = "Unknown internal error";
+constexpr std::string_view k_output_console = "console";
+constexpr std::string_view k_output_stdout = "stdout";
+constexpr std::string_view k_output_stderr = "stderr";
 
 // ─── Step modes ───
 enum class StepMode {
@@ -91,6 +92,12 @@ struct BreakpointRequest {
     std::string condition;
     std::string hit_condition;
     std::string log_message;
+
+    // Identifier already reported to the client for this breakpoint (assigned
+    // before the program was compiled), or 0 to let the breakpoint manager
+    // allocate one.  Carrying it through resolution keeps the ID the editor
+    // knows identical to the one in later `breakpoint` and `stopped` events.
+    int id{0};
 };
 
 struct Source {

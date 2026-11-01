@@ -119,6 +119,7 @@ The protocol thread remains responsive to DAP requests while the program runs.
 | `initialize`        | Client → Server | Negotiate capabilities and protocol options       |
 | `launch`            | Client → Server | Compile and start executing the target program    |
 | `configurationDone` | Client → Server | Signal that all configuration requests are done   |
+| `restart`           | Client → Server | Tear down the run and launch it again             |
 | `terminate`         | Client → Server | Request graceful program termination              |
 | `disconnect`        | Client → Server | Stop execution and terminate the debugger process |
 
@@ -138,6 +139,7 @@ The protocol thread remains responsive to DAP requests while the program runs.
 | ------------------------- | --------------- | ------------------------------------------------ |
 | `setBreakpoints`          | Client → Server | Set breakpoints for a source file (replaces all) |
 | `setExceptionBreakpoints` | Client → Server | Configure which exceptions trigger a pause       |
+| `breakpointLocations`     | Client → Server | List the executable lines in a range of a source |
 
 ### State Inspection
 
@@ -148,7 +150,12 @@ The protocol thread remains responsive to DAP requests while the program runs.
 | `scopes`        | Client → Server | Return variable scopes (local, closure, global)     |
 | `variables`     | Client → Server | Return variables within a scope or structured value |
 | `evaluate`      | Client → Server | Evaluate an expression in a paused frame's context  |
+| `completions`   | Client → Server | Complete names typed in the Debug Console           |
+| `exceptionInfo` | Client → Server | Describe the exception a thread stopped on          |
 | `loadedSources` | Client → Server | Return all source files loaded by the program       |
+| `source`        | Client → Server | Return the text of a loaded source file             |
+
+`luma/concurrencyState` is a Luma-specific request that lists the live tasks.
 
 ### Modification
 
@@ -156,48 +163,58 @@ The protocol thread remains responsive to DAP requests while the program runs.
 | ------------- | --------------- | -------------------------------------- |
 | `setVariable` | Client → Server | Modify a variable's value while paused |
 
+Only variables in the Local, Closure, and Global scopes can be modified, and the new value must parse as the variable's current type. A variable inside an expanded value (a record field or array element) is a snapshot copy and cannot be edited; the request fails with an explanatory message, as it does when the frame is no longer paused.
+
 ### Events (Server → Client)
 
-| Event         | Direction       | Purpose                                         |
-| ------------- | --------------- | ----------------------------------------------- |
-| `initialized` | Server → Client | Debugger is ready to accept breakpoint requests |
-| `stopped`     | Server → Client | Execution paused (breakpoint, step, exception)  |
-| `continued`   | Server → Client | Execution resumed                               |
-| `thread`      | Server → Client | Thread started or exited                        |
-| `terminated`  | Server → Client | Program finished executing                      |
-| `output`      | Server → Client | Program produced console output                 |
-| `exited`      | Server → Client | Program exited with a status code               |
+| Event         | Direction       | Purpose                                                    |
+| ------------- | --------------- | ---------------------------------------------------------- |
+| `initialized` | Server → Client | Debugger is ready to accept breakpoint requests            |
+| `stopped`     | Server → Client | Execution paused (breakpoint, step, exception)             |
+| `continued`   | Server → Client | Execution resumed                                          |
+| `breakpoint`  | Server → Client | A breakpoint set before launch became verified (`changed`) |
+| `thread`      | Server → Client | Thread started or exited                                   |
+| `invalidated` | Server → Client | Variables/stacks are stale (client must support it)        |
+| `terminated`  | Server → Client | Program finished executing                                 |
+| `output`      | Server → Client | Program produced console output                            |
+| `exited`      | Server → Client | Program exited with a status code                          |
 
 ---
 
 ## 6 — Breakpoints
 
-The debugger maintains a set of verified breakpoints per source file. When the editor sends `setBreakpoints`, the debugger:
+The debugger maintains a set of breakpoints per source file. When the editor sends `setBreakpoints`, the debugger:
 
-1. Clears all existing breakpoints for the specified file.
+1. Replaces all existing breakpoints for the specified file.
 2. For each requested line, finds the nearest line that contains executable bytecode (using the chunk's `source_map`).
-3. Stores the verified breakpoint as a `(file_id, line)` pair.
-4. Returns the verified breakpoint locations (which may differ from the requested lines).
+3. Binds the breakpoint to that `(file_id, line)`. Several breakpoints may bind to the same line (distinct requested lines can snap to one executable line); each keeps its own condition, hit condition, log message, and hit count.
+4. Returns the breakpoint locations (which may differ from the requested lines).
 
-At runtime, the VM checks after each instruction whether the source location has changed to a new line. If the new `(file_id, line)` matches a breakpoint, execution pauses.
+Breakpoints set before the program is compiled (before `launch`, or for a file the program has not loaded yet) are reported as unverified. Each is given an ID unique across all files, and keeps that ID when it is resolved after `configurationDone`; the debugger then sends a `breakpoint` event with reason `changed` carrying the verified breakpoint and its final line, so the editor updates the breakpoint it is already showing. A breakpoint whose file is not part of the program is reported in the Debug Console.
+
+At runtime, the VM calls the debug hook whenever the source location changes to a new line. If the new `(file_id, line)` has bound breakpoints, the debugger evaluates every one of them. Returning from a call lands back on the caller's line; that is not treated as reaching the line again, so a breakpoint on a line that makes a call fires once, not again after the call returns.
 
 ### Conditional Breakpoints
 
-Each breakpoint may have a `condition` expression. When the breakpoint line is reached, the debugger evaluates the condition in the current frame's context. Execution pauses only if the condition evaluates to `true`.
+Each breakpoint may have a `condition` expression. When the breakpoint line is reached, the debugger evaluates the condition in the current frame's context (locals, captured variables, and globals are all visible). Execution pauses only if the condition evaluates to `true`.
 
 ### Hit Count Breakpoints
 
-Each breakpoint may have a `hitCondition` expression that controls how many hits are required before pausing. Supported formats: bare number (`5`), comparison operators (`>3`, `>=10`, `==5`). The hit count is tracked per breakpoint and incremented on every hit regardless of whether the condition passes.
+Each breakpoint may have a `hitCondition` that controls how many hits are required before pausing. Supported formats: a bare number (`5`, meaning exactly the fifth hit), comparison operators (`>3`, `>=10`, `<4`, `<=2`, `==5`), and `%n` (every n-th hit).
 
-When both `condition` and `hitCondition` are specified, the hit condition is evaluated first. If the hit condition is not met, the breakpoint is skipped entirely. If met, the condition is then evaluated.
+A breakpoint counts as *hit* only when its condition holds (or it has none), following the DAP semantics. So when both `condition` and `hitCondition` are specified, the condition is evaluated first; a false condition does not advance the hit count, and the hit condition is then checked against the count of condition-true hits.
 
 ### Log Points
 
-A breakpoint with a `logMessage` attribute acts as a non-breaking tracepoint. Instead of pausing, the debugger interpolates `{expression}` placeholders in the log message and emits the result as a `console` output event. If the breakpoint also has condition/hitCondition, those are evaluated first.
+A breakpoint with a `logMessage` attribute acts as a non-breaking tracepoint. Instead of pausing, the debugger interpolates `{expression}` placeholders in the log message and emits the result as a `console` output event; write `\{` for a literal brace. If the breakpoint also has condition/hitCondition, those are evaluated first. A logpoint never hides other breakpoints on the same line: every qualifying logpoint logs, and the line still stops if any qualifying breakpoint on it is not a logpoint.
 
 ### Breakpoint Line Snapping
 
 Requested breakpoint lines are snapped to the nearest executable line using the compiled chunk's source map. If no executable line exists at or after the requested line, the breakpoint is placed at the closest preceding executable line.
+
+### Stop Reasons
+
+The `stopped` event's `reason` reflects what stopped the thread, in this precedence: `exception`, `entry`, `pause`, `breakpoint`, then `step`. A breakpoint hit while a step is in progress (for example inside a function being stepped over) is therefore reported as `breakpoint`, with its ID in `hitBreakpointIds`.
 
 ---
 
@@ -212,7 +229,7 @@ The debugger tracks a `StepMode` and a reference frame depth:
 | `Into` | Pause when the source line changes (regardless of depth)             |
 | `Out`  | Pause when frame depth < reference depth                             |
 
-The reference depth is captured at the moment the step command is issued.
+The reference depth is captured at the moment the step command is issued. A step request is accepted only for a stopped thread; stepping a running thread fails with an error, because its stack is still changing.
 
 ---
 
@@ -226,9 +243,11 @@ When execution is paused, the debugger exposes three scopes per stack frame:
 | Closure | Captured upvalues from enclosing scopes                     |
 | Global  | Top-level global bindings                                   |
 
-Variable values are formatted as human-readable strings. Structured types (arrays, dictionaries, records, tuples) are presented as expandable containers, allowing the editor to request their children via nested `variables` requests.
+Variable values are formatted as human-readable strings. Structured types (arrays, dictionaries, records, tuples, and the other collections) are presented as expandable containers, allowing the editor to request their children via nested `variables` requests.
 
-The `CompiledFunction` already stores `param_names`, and the compiler can be extended to emit a local variable table mapping slot indices to names and source ranges.
+Each variable carries an `evaluateName` — a Luma expression that re-evaluates it — so "Add to Watch" and "Copy as Expression" work on nested values too: `items[3]`, `point.x`, `pair.0`, `ages["bob"]`. Children of collections with no index syntax (queues, stacks, sets, key-value stores) have no `evaluateName`.
+
+Local variable names come from the compiler's per-slot debug information (see [§18](#18--local-variable-names)).
 
 ---
 
@@ -241,7 +260,9 @@ Luma's `task_scope` blocks spawn concurrent tasks, each running its own VM insta
 | 1             | Main thread (top-level program) |
 | 2+            | Spawned tasks                   |
 
-When a task hits a breakpoint, only that thread pauses. Other threads continue executing unless the user explicitly pauses them. The `stopped` event includes the thread ID, so the editor shows the correct call stack.
+Task IDs are unique across the whole process, so a task spawned inside another task gets its own thread and its own breakpoints, stepping, and stack, like a task spawned by the main program.
+
+When a task hits a breakpoint, only that thread pauses. Other threads continue executing unless the user explicitly pauses them. The `stopped` event includes the thread ID, so the editor shows the correct call stack, and `allThreadsStopped` reports whether every thread is now paused.
 
 > **In depth.** For a hands-on walkthrough of debugging concurrent programs — tasks, channels, deadlocks, and common pitfalls — see the [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md).
 
@@ -256,11 +277,11 @@ The debugger supports exception breakpoints via the `setExceptionBreakpoints` re
 | `caught`   | Pause on exceptions caught by a `try`/`catch` block in user code |
 | `uncaught` | Pause on unhandled exceptions (enabled by default)               |
 
-When an exception matches an active filter, the debugger pauses execution and sends a `stopped` event with `reason: "exception"`. The exception message is included in the event's `text` and `description` fields.
+When an exception matches an active filter, the debugger pauses execution at the throw site and sends a `stopped` event with `reason: "exception"`. The exception message is included in the event's `text` and `description` fields and is available through `exceptionInfo`.
 
-When the VM throws and no exception filter is active, or if the exception propagates past all frames, the debugger still pauses on the unhandled exception and allows the user to inspect the final state.
+When no exception filter matches an unhandled exception, the debugger still pauses once the exception has propagated past all frames, so the user can inspect the final state. An unhandled exception that already stopped at its throw site through the `uncaught` filter is not reported a second time after the unwind.
 
-The `stopped` event includes `allThreadsStopped: true` for both exception and breakpoint stops.
+The `stopped` event's `allThreadsStopped` field reports whether every thread is paused at that moment.
 
 ---
 
@@ -290,6 +311,8 @@ This produces `build/luma_dap` on Linux and macOS, or `build\Release\luma_dap.ex
 ### Running
 
 The debugger reads DAP messages from **stdin** and writes responses/events to **stdout**. Program output (`print`) is captured and sent as `output` events rather than written to the debugger's stdout.
+
+The program being debugged runs inside `luma_dap`, so it cannot share the debugger's stdin: its input would otherwise be read from the editor's DAP messages. At startup the debugger moves the protocol stream to a private copy of stdin and points the process's stdin at the null device, so input functions such as `Console.read_line` and `Console.prompt` see end of input under the debugger. To exercise a program's input handling, run it with `luma` directly.
 
 Editors start the debugger automatically via launch configurations. For manual testing:
 
@@ -355,8 +378,8 @@ debugger/source/
 ├── breakpoint_manager.cpp             # Breakpoint storage and hit testing
 ├── breakpoint_shared_context.hpp      # Shared breakpoint response building
 ├── breakpoint_shared_context.cpp      # Shared breakpoint response building impl
-├── compiled_breakpoint.hpp            # CompiledBreakpoint for bytecode-level breakpoints
-├── compiled_breakpoint.cpp            # Compiled breakpoint implementation
+├── compiled_breakpoint.hpp            # Breakpoint expression validation cache; logpoint template parser
+├── compiled_breakpoint.cpp            # Compiled breakpoint cache and parse_log_template
 ├── dap_breakpoint_handler.hpp         # Breakpoint request handler group
 ├── dap_breakpoint_validator.hpp       # BreakpointValidator class declaration
 ├── dap_breakpoint_validator.cpp       # Breakpoint validation logic
@@ -381,8 +404,8 @@ debugger/source/
 ├── dap_server_lifecycle.cpp           # Lifecycle request handlers (initialize/launch/disconnect/restart)
 ├── dap_server_inspection.cpp          # Variable/stack inspection request handlers
 ├── dap_session_types.hpp              # Session type definitions (ThreadId, ThreadState)
-├── dap_transport.hpp                  # Transport class declaration (Content-Length framing)
-├── dap_transport.cpp                  # Read/write DAP messages over stdio
+├── dap_transport.hpp                  # Shared stdio transport alias; stdin isolation declaration
+├── dap_transport.cpp                  # Moves the DAP input stream off the debuggee's stdin
 ├── dap_types.hpp                      # DAP protocol type definitions and constants
 ├── dap_types.cpp                      # DAP type serialisation helpers
 ├── debug_execution_control.cpp        # Execution control logic (continue, step, pause)
@@ -390,13 +413,13 @@ debugger/source/
 ├── debug_execution_engine.cpp         # VM execution with debug hooks
 ├── debug_execution_hooks.cpp          # VM debug hook installation and callbacks
 ├── debug_execution_lifecycle.cpp      # Execution lifecycle management
-├── debug_session.hpp                  # DebugSession class declaration (owns the VM)
+├── debug_session.hpp                  # DebugSession class declaration (session orchestrator)
 ├── debug_session.cpp                  # DebugSession: compile, execute, pause/resume, inspect
 ├── debug_session_state.hpp            # WatchCache — caches evaluated watch results
-├── debug_stream_utils.hpp             # Stream utility helpers
+├── debug_stream_utils.hpp             # Line-buffered program-output capture (cout/cerr redirect)
 ├── debugger_config.hpp                # Centralised constexpr constants
 ├── debugger_messages.hpp              # Centralised error/diagnostic message strings
-├── diagnostic_log.hpp                 # report_or_log: callback-or-stderr diagnostics
+├── diagnostic_log.hpp                 # Adapter diagnostics to stderr (bypassing the redirected std::cerr)
 ├── exception_breakpoint_settings.hpp  # Exception breakpoint configuration
 ├── expression_compiler.hpp            # ExpressionCompiler class declaration
 ├── expression_compiler.cpp            # Compile watch expressions to bytecode
@@ -407,13 +430,15 @@ debugger/source/
 ├── i_vm_introspection.hpp             # VM introspection interface
 ├── line_breakpoint_manager.hpp        # Line breakpoint detail types
 ├── line_breakpoint_manager.cpp        # Line breakpoint resolution
-├── main.cpp                           # Entry point: launch protocol thread, start message loop
+├── main.cpp                           # Entry point: isolate stdin, create transport and server, run loop
 ├── source_manager_locator.hpp         # Source file locator class declaration
 ├── source_manager_locator.cpp         # Source file locator implementation
 ├── thread_state_manager.hpp           # ThreadStateManager class declaration
 ├── thread_state_manager.cpp           # Multi-thread debug state coordination
 ├── variable_inspector.hpp             # VariableInspector class declaration
 ├── variable_inspector.cpp             # Variable scope inspection for debug views
+├── value_expander.hpp                 # ValueExpander class declaration
+├── value_expander.cpp                 # Child expansion of structured values (paging, evaluateName)
 ├── variable_reference_registry.hpp    # Variable reference ID management
 ├── vm_assert.hpp                      # VM assertion macro and lifecycle documentation
 ├── vm_debug_adapter.hpp               # VM debug adapter class declaration
@@ -434,17 +459,23 @@ Initialises the transport and server, then enters the message loop:
 
 ```cpp
 int main() {
-    luma::dap::Transport transport;
+    // Keep the debuggee's stdin reads away from the DAP stream.
+    const auto protocol_fd = luma::dap::detach_protocol_input_from_stdin();
+
+    luma::dap::Transport transport =
+        protocol_fd ? luma::dap::Transport{*protocol_fd} : luma::dap::Transport{};
     luma::dap::DapServer server(transport);
     return server.run();
 }
 ```
 
-On Windows, sets `stdin`, `stdout`, and `stderr` to binary mode to prevent `\r\n` translation.
+On Windows, sets `stdin`, `stdout`, and `stderr` to binary mode to prevent `\r\n` translation. On POSIX, ignores `SIGPIPE` so a closed connection surfaces as a write error instead of killing the process.
 
 ### `dap_transport.hpp` — Message Framing (Shared Transport)
 
 `dap_transport.hpp` re-exports the shared stdio transport under the debugger's namespace: `using luma::dap::Transport = luma::protocol::StdioTransport;`. The Content-Length framing, thread-safe writes, and shared JSON value type (`luma::json::JsonValue` from `shared/json/`) are exactly those the language server uses.
+
+It also declares `detach_protocol_input_from_stdin()`, which duplicates stdin to a private descriptor for the transport (`StdioTransport(int input_fd)`) and points the process's stdin — the C descriptor and, on Windows, the standard input handle — at the null device. On POSIX the private descriptor is close-on-exec, so processes the debuggee launches do not inherit the protocol pipe.
 
 That shared transport and JSON type are documented authoritatively in the [Language Server](Luma_Language_Server.md) design document — see §15 (Module Responsibilities) and §23 (Platform-Specific Handling).
 
@@ -456,16 +487,16 @@ Defines C++ types for DAP structures and provides serialisation to/from `JsonVal
 namespace luma::dap {
 
 // ─── Stop reasons ───
-constexpr std::string_view kStopReasonBreakpoint = "breakpoint";
-constexpr std::string_view kStopReasonStep       = "step";
-constexpr std::string_view kStopReasonException  = "exception";
-constexpr std::string_view kStopReasonPause      = "pause";
-constexpr std::string_view kStopReasonEntry      = "entry";
+constexpr std::string_view k_stop_reason_breakpoint = "breakpoint";
+constexpr std::string_view k_stop_reason_step       = "step";
+constexpr std::string_view k_stop_reason_exception  = "exception";
+constexpr std::string_view k_stop_reason_pause      = "pause";
+constexpr std::string_view k_stop_reason_entry      = "entry";
 
 // ─── Output categories ───
-constexpr std::string_view kOutputConsole  = "console";
-constexpr std::string_view kOutputStdout   = "stdout";
-constexpr std::string_view kOutputStderr   = "stderr";
+constexpr std::string_view k_output_console  = "console";
+constexpr std::string_view k_output_stdout   = "stdout";
+constexpr std::string_view k_output_stderr   = "stderr";
 
 // ─── Types ───
 
@@ -475,6 +506,7 @@ struct BreakpointRequest {
     std::string condition;
     std::string hit_condition;
     std::string log_message;
+    int id{0}; // ID already reported to the client (pre-launch), or 0
 };
 
 struct Source {
@@ -511,6 +543,8 @@ struct Variable {
     int variables_reference{0};     // Non-zero if expandable
     int named_variables{0};         // Number of named children
     int indexed_variables{0};       // Number of indexed children
+    std::string evaluate_name;      // Expression that re-evaluates it
+    bool is_mutable{false};         // Writable via setVariable
 };
 
 enum class StepMode { None, Over, Into, Out };
@@ -520,249 +554,75 @@ enum class StepMode { None, Over, Into, Out };
 [[nodiscard]] JsonValue serialise_breakpoint(const Breakpoint& bp);
 [[nodiscard]] JsonValue serialise_stack_frame(const StackFrame& frame);
 [[nodiscard]] JsonValue serialise_scope(const Scope& scope);
-[[nodiscard]] JsonValue serialise_variable(const Variable& var);
+[[nodiscard]] JsonValue serialise_variable(const Variable& var, bool include_type = true);
 
 } // namespace luma::dap
 ```
 
 ### `dap_server.hpp` / `dap_server.cpp` — Protocol Dispatch
 
-Manages the DAP message loop, dispatches requests and sends responses/events:
+`DapServer` wires the protocol layer to four handler groups and owns nothing else:
 
 ```cpp
 namespace luma::dap {
 
 class DapServer {
 public:
-    explicit DapServer(Transport& transport);
-
-    // Run the message loop until disconnect. Returns exit code.
-    [[nodiscard]] int run();
+    explicit DapServer(protocol::Transport& transport);
+    [[nodiscard]] int run(); // Message loop until disconnect; returns the exit code.
 
 private:
-    // Handler type: takes arguments, returns response body.
-    using Handler = std::function<JsonValue(const JsonValue&)>;
-
-    // Build the command → handler dispatch table.
-    void init_dispatch_table();
-
-    // ─── Lifecycle ───
-    [[nodiscard]] JsonValue handle_initialize(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_launch(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_disconnect(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_terminate(const JsonValue& args);
-
-    // ─── Execution control ───
-    [[nodiscard]] JsonValue handle_continue(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_next(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_step_in(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_step_out(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_pause(const JsonValue& args);
-
-    // ─── Breakpoints ───
-    [[nodiscard]] JsonValue handle_set_breakpoints(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_set_exception_breakpoints(const JsonValue& args);
-
-    // ─── State inspection ───
-    [[nodiscard]] JsonValue handle_threads(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_stack_trace(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_scopes(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_variables(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_evaluate(const JsonValue& args);
-
-    // ─── Modification ───
-    [[nodiscard]] JsonValue handle_set_variable(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_loaded_sources(const JsonValue& args);
-
-    // ─── Response/event helpers ───
-    void send_response(int request_seq, const std::string& command,
-                       const JsonValue& body, bool success = true,
-                       const std::string& message = "");
-    void send_event(const std::string& event, const JsonValue& body);
-
-    // ─── State ───
-    Transport& transport_;
-    std::unique_ptr<DebugSession> session_;
-    int sequence_number_{1};
-    bool disconnected_{false};
-    std::unordered_map<std::string, Handler> dispatch_table_;
-    std::unordered_map<std::string, std::vector<BreakpointRequest>> pending_breakpoints_;
+    DapProtocolHandler protocol_handler_; // Framing, dispatch, responses/events
+    DapHandlerContext ctx_;               // Shared state for the handler groups
+    DapLifecycleHandler lifecycle_;       // initialize/launch/restart/terminate/disconnect
+    DapExecutionHandler execution_;       // continue/next/stepIn/stepOut/pause
+    DapBreakpointHandler breakpoints_;    // setBreakpoints/setExceptionBreakpoints/...
+    DapInspectionHandler inspection_;     // threads/stackTrace/scopes/variables/evaluate/...
 };
 
 } // namespace luma::dap
 ```
 
-The dispatch table maps DAP command strings to handler methods:
+- **`DapProtocolHandler`** (`dap_protocol_handler.hpp`) reads Content-Length framed messages, dispatches each request through a command → handler registry, and serialises `send_response`/`send_event` under one send mutex so sequence numbers stay monotonic. It is the single error boundary: a handler exception becomes one error response. A *post-response action* (for example sending `initialized` after the `initialize` response) runs after the response is written; if it fails, the failure is logged rather than answered with a second response for the same request. A write failure never invokes the session-terminating disconnect callback while the send mutex is held, and the callback fires exactly once however the disconnect is detected.
+- **`DapHandlerContext`** (`dap_handler_context.hpp`) holds the `DebugSession`, the watch cache, breakpoints set before a session exists (each with a pre-assigned, globally unique negative ID), the last launch configuration, and the negotiated `FeatureManager` capabilities. Its event callback drops `invalidated` events when the client did not advertise `supportsInvalidatedEvent`.
+- **`FeatureManager`** (`dap_feature_manager.hpp`) advertises only implemented features. `exceptionOptions` and step-in targets are not implemented and not advertised; `completions` is.
 
-```cpp
-void DapServer::handle_request(const std::string& command,
-                               const JsonValue& arguments,
-                               int seq) {
-    if (command == "initialize")     { /* ... */ }
-    else if (command == "launch")    { /* ... */ }
-    else if (command == "continue")  { /* ... */ }
-    // ...
-}
-```
+### `debug_session.hpp` / `debug_session.cpp` — Session Orchestration
 
-### `debug_session.hpp` / `debug_session.cpp` — VM Execution and Debug State
+`DebugSession` is a slim orchestrator. Its public API mirrors the DAP requests (`launch`, `configuration_done`, `terminate`, `set_breakpoints`, `continue_execution`, `step_over`, `get_stack_trace`, `get_scopes`, `get_variables`, `evaluate`, `set_variable`, `get_completions`, `get_threads`, `exception_info`, …) and delegates to five components, declared in dependency order:
 
-The core debugging logic. Owns the VM instance, manages breakpoints, and coordinates the execution thread:
+| Component              | Responsibility                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| `BreakpointManager`    | Line breakpoints (pending and bound), conditions, hit counts, logpoints, exception filters |
+| `ThreadStateManager`   | Per-thread pause/step state (`ThreadState`), the paused-thread counter, task registry      |
+| `VariableInspector`    | Generational variable/frame references, scope listing, expansion, `setVariable`            |
+| `ExpressionEvaluator`  | Evaluation in a paused frame: local → upvalue → global → sandboxed scratch VM              |
+| `DebugExecutionEngine` | Launch, VM creation and hooks, continue/step/pause, exceptions, termination                |
 
-```cpp
-namespace luma::dap {
+The session lifecycle is a single atomic `SessionState` (`Idle`, `Running`, `Terminated`). Inspection reads a thread's VM only while that thread is paused, under the thread's `ThreadState` lock; `terminate()` nulls every `ThreadState::vm` under the same lock before the VM is destroyed.
 
-class DebugSession {
-public:
-    using OutputFn = std::function<void(const std::string& category,
-                                             const std::string& text)>;
-    using EventCallback = std::function<void(const std::string& event,
-                                            const JsonValue& body)>;
+The engine publishes the execution thread's stop token, and creates the program's root `CancellationToken`, before the execution thread starts. `terminate()` requests the stop and cancels the token: a program blocked in an `await`, a `task_scope` join, or a channel wait is cancelled (and with it every task), instead of hanging the join. Natives that block in the operating system without polling a token — sockets, child processes, HTTP — still finish only when that call returns.
 
-    explicit DebugSession(EventCallback event_cb, OutputFn output_cb);
-
-    // ─── Lifecycle ───
-    // Compile and start executing the program on a background thread.
-    // Returns an error message on compilation failure, or empty on success.
-    [[nodiscard]] std::string launch(const std::string& program_path,
-                                     bool stop_on_entry);
-
-    // Stop execution and join the background thread.
-    void terminate();
-
-    // ─── Breakpoints ───
-    [[nodiscard]] std::vector<Breakpoint> set_breakpoints(
-        const std::string& path, const std::vector<BreakpointRequest>& breakpoints);
-    void set_exception_breakpoints(const std::vector<std::string>& filters);
-
-    // ─── Execution control ───
-    void continue_execution(int thread_id);
-    void step_over(int thread_id);
-    void step_into(int thread_id);
-    void step_out(int thread_id);
-    void pause(int thread_id);
-
-    // ─── State inspection (only valid when paused) ───
-    [[nodiscard]] std::vector<StackFrame> get_stack_trace(int thread_id) const;
-    [[nodiscard]] std::vector<Scope> get_scopes(int frame_id) const;
-    [[nodiscard]] std::vector<Variable> get_variables(int reference) const;
-    [[nodiscard]] Variable evaluate(int frame_id,
-                                    const std::string& expression) const;
-
-    // ─── Modification ───
-    [[nodiscard]] Variable set_variable(int variables_reference,
-                                        const std::string& name,
-                                        const std::string& value) const;
-
-    // ─── Completions ───
-    [[nodiscard]] std::vector<std::pair<std::string, std::string>>
-    get_completions(int frame_id, const std::string& text) const;
-
-    // ─── Sources ───
-    [[nodiscard]] std::vector<Source> get_loaded_sources() const;
-
-    // ─── Thread listing ───
-    [[nodiscard]] std::vector<std::pair<int, std::string>> get_threads() const;
-
-private:
-    // ─── Debug hook (called by instrumented VM after each line change) ───
-    // Returns true if execution should pause.
-    bool should_break(FileId file_id, int line, std::size_t frame_depth);
-
-    // Block the execution thread until resumed by a continue/step command.
-    // Returns true to continue execution, false to terminate.
-    [[nodiscard]] bool wait_for_resume();
-
-    // ─── Variable reference helpers ───
-    [[nodiscard]] int alloc_ref(VariableRefEntry entry) const;
-    void clear_refs() const;
-    [[nodiscard]] Variable make_variable(const std::string& name, const Value& val) const;
-
-    // ─── Breakpoint helpers ───
-    // Returns a reference into the internal source-map cache to avoid copying
-    // the executable-line set on every breakpoint query; valid while the
-    // breakpoint mutex is held.
-    [[nodiscard]] const std::set<int>& collect_executable_lines(FileId file_id) const;
-    [[nodiscard]] int snap_line(int requested, const std::set<int>& executable) const;
-    [[nodiscard]] static Value parse_value(const std::string& str);
-    bool on_exception(const std::string& message, bool is_caught);
-
-    // ─── State ───
-    EventCallback event_callback_;
-    OutputFn output_callback_;
-
-    std::jthread execution_thread_;
-    std::atomic<bool> running_{false};
-    std::atomic<bool> terminated_{false};
-    std::atomic<bool> terminate_requested_{false};
-
-    // Per-thread debugging state (decomposed into sub-structs).
-    // See dap_session_types.hpp for StepState / PendingEvents definitions.
-    struct ThreadState {
-        int thread_id{0};
-        std::string name;
-        VM* vm{nullptr};                                    // GUARDED_BY(mutex)
-
-        mutable std::mutex mutex;
-        std::condition_variable cv;
-        bool is_paused{false};                              // GUARDED_BY(mutex)
-        bool is_exception_terminated{false};                // GUARDED_BY(mutex)
-        StepState step;                                     // GUARDED_BY(mutex)
-        PendingEvents pending;                              // GUARDED_BY(mutex)
-    };
-
-    // Breakpoints: file_id → (line → BreakpointInfo).
-    struct BreakpointInfo {
-        int id{0};
-        int line{0};
-        std::string condition;
-        std::string hit_condition;
-        std::string log_message;
-        int hit_count{0};
-    };
-
-    mutable std::mutex breakpoint_mutex_;
-    std::unordered_map<int, std::map<int, BreakpointInfo>> breakpoints_;
-
-    // Exception breakpoint filters.
-    std::atomic<bool> break_on_caught_{false};
-    std::atomic<bool> break_on_uncaught_{false};
-    std::string pending_exception_message_;
-    int pending_hit_breakpoint_id_{0};
-
-    // Compiled program.
-    std::unique_ptr<SourceManager> source_manager_;
-    std::shared_ptr<std::vector<CompiledFunction>> compiled_functions_;
-    std::shared_ptr<CompiledFunction> compiled_top_level_;
-
-    // VM instance (created on execution thread).
-    std::unique_ptr<VM> vm_;
-
-    // Variable reference registry.
-    mutable std::unordered_map<int, VariableRefEntry> ref_registry_;
-    mutable int next_ref_id_{1};
-    int next_breakpoint_id_{1};
-};
-
-} // namespace luma::dap
-```
+Lock ordering for the session locks is `ThreadStateManager` registry → `ThreadState::mutex` → config, with the exception mutex as a leaf. It is documented, with every other mutex, in `dap_lock_ordering.hpp` and enforced in debug builds by `OrderedLockGuard`.
 
 ### Additional Modules
 
 The following modules were added to support advanced debugging features:
 
-| Module                            | Responsibility                                                                                                                |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `compiled_breakpoint`             | Compile/validate cache for breakpoint condition/log expressions; runtime evaluation is performed by `debug_execution_engine`. |
-| `dap_response_builders.hpp`       | Helpers to construct well-formed DAP response and event JSON.                                                                 |
-| `dap_session_types.hpp`           | Shared type definitions used across handler files.                                                                            |
-| `debug_execution_engine`          | Drives the VM with debug hooks installed; separates execution logic from session state.                                       |
-| `debug_session_state`             | WatchCache — caches evaluated watch expressions. Session state is managed directly by DapServer.                              |
-| `debug_stream_utils.hpp`          | Stream capture and redirection utilities for output events.                                                                   |
-| `expression_compiler`             | Compiles watch/hover expressions to bytecode for evaluation in a paused frame.                                                |
-| `thread_state_manager`            | Coordinates debug state across multiple concurrent task threads.                                                              |
-| `variable_reference_registry.hpp` | Allocates and tracks variable reference IDs across inspection requests.                                                       |
-| `vm_hook_registry`                | Central registry for VM execution hooks (breakpoints, stepping, coverage).                                                    |
+| Module                            | Responsibility                                                                                                                                                                         |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compiled_breakpoint`             | Compile/validate cache for breakpoint condition/log expressions, and `parse_log_template`, the logpoint template parser shared with runtime interpolation in `debug_execution_engine`. |
+| `dap_response_builders.hpp`       | Helpers to construct well-formed DAP response and event JSON.                                                                                                                          |
+| `dap_session_types.hpp`           | Shared type definitions used across handler files.                                                                                                                                     |
+| `debug_execution_engine`          | Drives the VM with debug hooks installed; separates execution logic from session state.                                                                                                |
+| `debug_session_state`             | WatchCache — caches evaluated watch expressions. Session state is managed directly by DapServer.                                                                                       |
+| `debug_stream_utils.hpp`          | Line-buffered capture of `std::cout`/`std::cerr` into output events; `std::flush` emits a pending partial line.                                                                        |
+| `expression_compiler`             | Compiles watch/hover expressions to bytecode for evaluation in a paused frame.                                                                                                         |
+| `thread_state_manager`            | Coordinates debug state across multiple concurrent task threads.                                                                                                                       |
+| `variable_reference_registry.hpp` | Allocates and tracks variable reference IDs across inspection requests.                                                                                                                |
+| `vm_hook_registry`                | Installs the VM hooks (line, pause, exception, task spawn/exit) that connect a VM to the execution engine.                                                                             |
+| `value_expander`                  | Expands structured values into child variables with paging and full `evaluateName`s.                                                                                                   |
+| `diagnostic_log.hpp`              | Adapter diagnostics written to the process's stderr, bypassing the redirected `std::cerr`.                                                                                             |
 
 ---
 
@@ -773,104 +633,79 @@ The following modules were added to support advanced debugging features:
 1. Editor sends `initialize` request.
 2. Debugger responds with capabilities (supports breakpoints, stepping, variable inspection).
 3. Debugger sends `initialized` event.
-4. Editor sends `setBreakpoints` for each file with breakpoints.
+4. Editor sends `setBreakpoints` for each file with breakpoints. Sent before `launch`, they are returned unverified with unique IDs.
 5. Editor sends `launch` with the program path.
 6. Debugger compiles the program. On failure, responds with an error.
-7. On success, spawns the execution thread and begins VM dispatch.
-8. If `stopOnEntry` is true, pauses before the first instruction and sends `stopped` event.
+7. On success, starts the execution thread, which waits for `configurationDone`.
+8. On `configurationDone`, pending breakpoints are bound to executable lines; each one that becomes verified is reported with a `breakpoint` event (`reason: "changed"`, same ID).
+9. If `stopOnEntry` is true, pauses before the first line and sends a `stopped` event with reason `entry`.
 
 ### Breakpoint Hit
 
-1. Execution thread: VM executes an instruction that moves to a new source line.
-2. `should_break()` checks the new `(file_id, line)` against the breakpoint set.
-3. Match found → sets `is_paused = true`, sends `stopped` event via callback.
-4. Execution thread blocks on `cv`.
+1. Execution thread: the VM moves to a new source line and calls the debug hook.
+2. `should_break()` checks the step mode, then evaluates every breakpoint bound to `(file_id, line)`: conditions, hit counts, and logpoints.
+3. A qualifying breakpoint → `is_paused = true` under the thread's lock, then a `stopped` event.
+4. Execution thread blocks on the thread's `cv`.
 5. Protocol thread receives `stackTrace`, `scopes`, `variables` requests and services them from the paused VM state.
-6. Protocol thread receives `continue` → sets `step.mode = StepMode::None`, signals `cv`.
+6. Protocol thread receives `continue` → sets `step.mode = StepMode::None`, invalidates variable references, signals `cv`.
 7. Execution thread wakes and resumes dispatch.
 
 ### Program Termination
 
-1. VM's `run_dispatch()` returns (program finished or unhandled exception).
-2. Execution thread sets `terminated_ = true`.
-3. Sends `terminated` event, then `exited` event with exit code.
+1. The VM's `execute()` returns (program finished) or throws (unhandled exception).
+2. Any pending partial output line is flushed as an `output` event.
+3. The execution thread sets the session state to `Terminated` and sends a `terminated` event, then an `exited` event with the exit code (suppressed when a `restart` tears the run down).
 4. Protocol thread receives `disconnect` and exits cleanly.
 
 ---
 
 ## 17 — VM Instrumentation
 
-The existing `VM::run_dispatch()` loop requires minimal modification. A debug hook is inserted at the point where the source location changes:
+The VM checks for the debugger in `VM::check_debug_hooks()`, called as instructions execute. The check is gated on a single atomic, `pause_requested`, so a run without a debugger, or a debugged run with nothing armed, costs one atomic load per instruction:
 
 ```cpp
-Value VM::run_dispatch() {
-    // ... existing setup ...
-    for (;;) {
-        // ─── Debug hook (new) ───
-        if (debug_hook_) {
-            auto loc = current_location();
-            if (loc.line != last_debug_line_ || loc.file_id != last_debug_file_) {
-                last_debug_line_ = loc.line;
-                last_debug_file_ = loc.file_id;
-                if (debug_hook_(loc.file_id, loc.line, frames_.size())) {
-                    // Pause requested — block until resumed.
-                    debug_pause_callback_();
-                }
-            }
-        }
-
-        // ─── Existing dispatch ───
-        auto op = static_cast<Op>(read_byte());
-        switch (op) {
-            // ... existing cases ...
-        }
+bool VM::check_debug_hooks() {
+    if (!debug_.pause_requested.load(std::memory_order_acquire)) {
+        return false; // Fast path: nothing armed.
     }
+
+    auto loc = current_location();
+    if (loc.line == debug_.last_line && loc.file_id == debug_.last_file) {
+        return false; // Only line changes reach the hook.
+    }
+    debug_.last_line = loc.line;
+    debug_.last_file = loc.file_id;
+
+    if (!debug_hook(loc.file_id, loc.line, stack_.frames.size())) {
+        return false; // Keep running; the check stays armed.
+    }
+
+    debug_.pause_requested.store(false, std::memory_order_release);
+    return !pause_callback(); // Blocks until resumed; false means terminate.
 }
 ```
 
-The hook is a `std::function` set by `DebugSession`. When no debugger is attached (normal execution via `luma` CLI), the hook is null and the `if` branch is never taken — zero overhead for non-debug runs.
+`request_pause_check()` arms the check; it is thread-safe, so the protocol thread uses it for `pause` and new breakpoints. The hooks live in `DebugCallbacks` (`vm_debug_types.hpp`):
 
-### Required VM Interface Additions
+| Hook              | Purpose                                                           |
+| ----------------- | ----------------------------------------------------------------- |
+| `debug_hook`      | `(file_id, line, frame_depth) → should_pause` on each line change |
+| `pause_callback`  | Blocks while paused; returns false to terminate the run           |
+| `exception_hook`  | `(message, is_caught) → should_pause` for exception breakpoints   |
+| `task_spawn_hook` | Registers a new task VM (and its thread) when a task starts       |
+| `task_exit_hook`  | Unregisters the task before its VM is destroyed                   |
 
-```cpp
-class VM {
-public:
-    // Debug hook type: (file_id, line, frame_depth) → should_pause
-    using DebugHook = std::function<bool(FileId, int, std::size_t)>;
-    using PauseCallback = std::function<void()>;
+A spawned task's VM receives *all* of its parent's hooks, so tasks spawned inside tasks are registered and debuggable too. Task IDs come from a process-wide counter, so they are unique across nested task VMs. `VM::set_cancellation_token()` lets the debugger run the root VM under a cancellation token (see [§15](#15--module-responsibilities)).
 
-    // Set debug hooks (called by DebugSession before execution).
-    void set_debug_hook(DebugHook hook);
-    void set_pause_callback(PauseCallback callback);
-
-    // Expose state for inspection while paused.
-    [[nodiscard]] const std::vector<CallFrame>& frames() const;
-    [[nodiscard]] const std::vector<Value>& stack() const;
-
-private:
-    DebugHook debug_hook_;
-    PauseCallback debug_pause_callback_;
-    int last_debug_line_{-1};
-    int last_debug_file_{-1};
-};
-```
+The debugger inspects a paused VM through `VMIntrospector` (`vm_introspection.hpp`): stack trace, locals, upvalues, and local/upvalue writes for `setVariable`.
 
 ---
 
 ## 18 — Local Variable Names
 
-The compiler currently stores parameter names in `CompiledFunction::param_names` but does not retain names for local variables. To support variable inspection, the compiler emits a local variable table:
+The compiler records debug information per stack slot in `CompiledFunction::debug_info`: `local_names` (the variable name for each slot) and `local_mutable` (whether it was declared `mutable`). `VMIntrospector::locals()` pairs these with the frame's slot values to build the Local scope.
 
-```cpp
-struct LocalVarInfo {
-    std::string name;
-    int slot;               // Stack slot relative to frame base
-    std::size_t start_ip;   // First instruction where the variable is live
-    std::size_t end_ip;     // Last instruction where the variable is live
-};
-```
-
-This table is stored in `CompiledFunction` alongside the existing `param_names`. The debugger uses it to map stack slot values to named variables in the `variables` response.
+There are no live ranges: a slot keeps its name for the whole function, so two sibling blocks that each declare `i` produce two slots named `i`. Lookups by name (watch expressions, hover, `setVariable`) use the first slot with that name, and the scratch-VM evaluator defines each name once, consistently.
 
 ---
 
@@ -878,42 +713,46 @@ This table is stored in `CompiledFunction` alongside the existing `param_names`.
 
 Program output via `print` and related stdlib functions normally writes to `stdout`. When running under the debugger, stdout is reserved for DAP protocol messages.
 
-The debugger redirects program output by injecting a custom output handler into the VM's environment. The handler routes output text to `DebugSession::output_callback_`, which sends DAP `output` events to the editor.
+For the duration of the run, the execution engine replaces the stream buffers of `std::cout` and `std::cerr` with `LineBufferedStreamBuf`s (`debug_stream_utils.hpp`). Each complete line becomes an `output` event (`stdout` or `stderr` category). `std::flush` — used by `Console.prompt` and `Console.flush` — emits a pending partial line immediately, as does every `stopped` event, and the buffers flush any remaining text before `terminated` is sent.
+
+The adapter's own diagnostics bypass `std::cerr` (they go straight to the process's stderr through `diagnostic_log.hpp`, as do the shared transport's framing errors through the error callback `DapServer` installs), so they are never shown as program output.
+
+Program *input* is kept apart as well: see [§12](#12--usage).
 
 ---
 
 ## 20 — Error Handling
 
-| Condition                   | Behaviour                                                     |
-| --------------------------- | ------------------------------------------------------------- |
-| Compilation error           | `launch` response with `success: false` and error message     |
-| Unhandled runtime exception | `stopped` event with `reason: "exception"` and exception text |
-| Malformed DAP message       | Ignored (logged to stderr if available)                       |
-| Unknown request command     | Error response with `"command not supported"` message         |
-| Inspection while running    | Error response with `"not paused"` message                    |
-| `disconnect` while running  | Terminates VM execution, joins thread, exits                  |
+| Condition                      | Behaviour                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| Compilation error              | `launch` response with `success: false` and error message                      |
+| Unhandled runtime exception    | `stopped` event with `reason: "exception"` and exception text                  |
+| Malformed DAP message          | Skipped and logged to stderr; the run stops after repeated read errors         |
+| Unknown request command        | Error response with the message `"Unsupported command"`                        |
+| Inspection while running       | Empty result (no frames, scopes, or variables) — only stopped threads are read |
+| Step on a running thread       | Error response: the thread is not paused                                       |
+| `setVariable` on a stale frame | Error response: the frame is no longer paused                                  |
+| `disconnect` while running     | Terminates VM execution (cancelling blocked waits), joins thread, exits        |
 
 ---
 
 ## 21 — CMake Integration
 
-The `luma_dap` target is added to the top-level `CMakeLists.txt`:
+The debugger is built from `debugger/CMakeLists.txt`, which the top-level `CMakeLists.txt` adds with `add_subdirectory(debugger)`. It uses the shared tool helper from `cmake/LumaTargetHelpers.cmake`:
 
 ```cmake
-# ─── Debugger (DAP) ───
-add_executable(luma_dap
-    debugger/main.cpp
-    debugger/dap_server.cpp
-    debugger/dap_transport.cpp
-    debugger/dap_types.cpp
-    debugger/debug_session.cpp
-    shared/json/json.cpp          # Shared JSON implementation
+luma_add_tool_library(dap
+    SOURCES
+        source/dap_server.cpp
+        source/dap_transport.cpp
+        source/debug_session.cpp
+        # … every other source/*.cpp, listed explicitly (no file(GLOB))
+    DEPENDS
+        luma_core
 )
-target_link_libraries(luma_dap PRIVATE luma_core)
-target_include_directories(luma_dap PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/server)
 ```
 
-The debugger links `luma_core` (which contains the lexer, parser, type checker, compiler, VM, and stdlib) and reuses the JSON implementation from `shared/json/json.cpp`.
+The helper produces two targets: `luma_dap_lib`, a static library holding everything except `main.cpp` (linked by the `dap_test_*` unit tests), and the `luma_dap` executable built from `source/main.cpp`. Both link `luma_core` (lexer, parser, type checker, compiler, VM, and stdlib) and `luma_shared` (JSON and the protocol transport shared with the language server).
 
 ---
 
@@ -921,12 +760,13 @@ The debugger links `luma_core` (which contains the lexer, parser, type checker, 
 
 ### Unit Tests
 
-A `dap_test` target exercises the debug components in isolation:
+The `dap_test_*` targets (registered with the CTest label `dap`) exercise the debug components in isolation:
 
 - **Protocol serialisation:** Verify that DAP types serialise to correct JSON with all required fields.
 - **Response/event structure:** Verify that `send_response` and `send_event` produce spec-compliant messages.
 - **Capabilities:** Verify the `initialize` response includes all advertised capabilities and exception breakpoint filters.
-- **Variable formatting:** Verify that Luma `Value` types are formatted correctly for DAP responses.
+- **Variable formatting:** Verify that Luma `Value` types are formatted correctly for DAP responses, including paging and `evaluateName`.
+- **Breakpoints:** Verify binding, one-to-many lines, logpoints alongside breakpoints, and pending IDs kept through resolution.
 
 ### Integration Tests
 
@@ -938,7 +778,9 @@ End-to-end tests that spawn `luma_dap` as a subprocess, send DAP messages via st
 - Continue past a breakpoint, verify `terminated` event.
 - Launch a program with a compile error, verify error response.
 - Set conditional and hit count breakpoints, verify correct firing.
-- Configure exception breakpoints, verify exception stops.
+- Configure exception breakpoints, verify exception stops (once per unhandled exception).
+- Verify the program's stdin is isolated from the DAP stream and that partial output arrives before `terminated`.
+- Verify nested tasks get distinct threads, breakpoints set before launch become verified, and disconnect ends a program blocked on a channel.
 
 ### Test Programs
 
@@ -946,6 +788,7 @@ Small Luma programs in `examples/debug/` designed for debugger testing:
 
 ```text
 examples/debug/
+├── blocked_channel.luma       # Blocks forever on a channel; disconnect must end it
 ├── breakpoint_basic.luma      # Simple breakpoint on a print statement
 ├── closure_variables.luma     # Captured upvalues for closure-scope inspection
 ├── concurrent_tasks.luma      # task_scope with multiple tasks
@@ -955,6 +798,8 @@ examples/debug/
 ├── global_scope.luma          # Nested frame that evaluates calls to top-level functions
 ├── infinite_eval.luma         # Non-terminating function for the evaluation timeout
 ├── long_loop.luma             # Long-running loop for pause testing
+├── nested_tasks.luma          # A task that spawns a task, for distinct task threads
+├── read_input.luma            # Reads stdin; under the debugger it sees end of input
 ├── recursive_stack.luma       # Deep recursion for call-stack and step-out testing
 ├── set_variable.luma          # Mutable integer and string for setVariable testing
 ├── step_into_function.luma    # Function call for step-in testing

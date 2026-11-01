@@ -49,6 +49,11 @@ struct DapHandlerContext {
     std::vector<std::string> pending_exception_filters;
     LaunchConfig last_launch_config;
 
+    // ID for the next breakpoint set before a session exists.  Negative and
+    // decreasing across every file, so pre-launch IDs are unique and never
+    // collide with the positive IDs a session allocates.
+    int next_pending_breakpoint_id{-1};
+
     // ─── Feature negotiation ───
     FeatureManager feature_manager;
 

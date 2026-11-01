@@ -103,14 +103,14 @@ template <typename BodyFn> void VM::iter_step_generic(TupleValue& state, BodyFn&
 // ─────────── Spawn helpers ───────────
 
 void VM::propagate_debug_hooks(const DebugCallbacks& parent_cbs, VM& child) {
-    if (parent_cbs.debug_hook) {
-        child.set_debug_hook(parent_cbs.debug_hook);
-        child.set_pause_callback(parent_cbs.pause_callback);
-        child.request_pause_check();
-    }
+    // Hand the child every hook, including the task spawn/exit hooks: without
+    // them a task spawned *inside* this task would never be registered with
+    // the debugger, so its breakpoints, stepping, and thread entry would be
+    // silently missing.
+    child.set_debug_callbacks(parent_cbs);
 
-    if (parent_cbs.exception_hook) {
-        child.set_exception_hook(parent_cbs.exception_hook);
+    if (parent_cbs.debug_hook) {
+        child.request_pause_check();
     }
 }
 
@@ -280,7 +280,7 @@ void VM::handle_spawn() {
 
     auto cancel_token = std::make_shared<CancellationToken>(std::move(parent_token));
     auto completion = std::make_shared<TaskCompletion>();
-    auto task_id = task_manager_.next_task_id.fetch_add(1);
+    auto task_id = VMTaskManager::next_task_id.fetch_add(1, std::memory_order_relaxed);
 
     // THREAD_SAFETY: Captures a consistent snapshot of debug callbacks under
     // shared_lock; safe to move into spawned task.
