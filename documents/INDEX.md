@@ -131,17 +131,17 @@ Section-level table of contents for the reference documents in this directory. U
 | ------------------------------------- | ------- |
 | Table of Contents                     | 7–21    |
 | 1 — Overview                          | 25–35   |
-| 2 — Download                          | 39–53   |
-| 3 — Verify Checksums                  | 57–82   |
-| 4 — Windows                           | 86–119  |
-| 5 — macOS                             | 123–168 |
-| 6 — Linux                             | 172–217 |
-| 7 — Editor Setup — Visual Studio Code | 221–273 |
-| 8 — Editor Setup — Zed                | 277–284 |
-| 9 — Verify the Installation           | 288–327 |
-| 10 — Building from Source             | 331–341 |
-| 11 — Troubleshooting                  | 345–361 |
-| See Also                              | 365–375 |
+| 2 — Download                          | 39–55   |
+| 3 — Verify Checksums                  | 59–84   |
+| 4 — Windows                           | 88–123  |
+| 5 — macOS                             | 127–172 |
+| 6 — Linux                             | 176–221 |
+| 7 — Editor Setup — Visual Studio Code | 225–277 |
+| 8 — Editor Setup — Zed                | 281–288 |
+| 9 — Verify the Installation           | 292–331 |
+| 10 — Building from Source             | 335–345 |
+| 11 — Troubleshooting                  | 349–365 |
+| See Also                              | 369–379 |
 
 ## Luma_Language_Server.md
 
@@ -199,9 +199,9 @@ Section-level table of contents for the reference documents in this directory. U
 | 3 — String Building                   | 51–70   |
 | 4 — Recursion Limits                  | 72–74   |
 | 5 — Loop Iteration Limits             | 76–78   |
-| 6 — Resource Limits                   | 80–100  |
-| 7 — Interpreter Optimisations         | 102–110 |
-| See Also                              | 114–119 |
+| 6 — Resource Limits                   | 80–101  |
+| 7 — Interpreter Optimisations         | 103–111 |
+| See Also                              | 115–120 |
 
 ## Luma_REPL_Guide.md
 
@@ -302,10 +302,10 @@ Section-level table of contents for the reference documents in this directory. U
 | 33 — Stack             | 1962–1988 |
 | 34 — Statistics        | 1990–2002 |
 | 35 — String            | 2004–2116 |
-| 36 — Task              | 2118–2188 |
-| 37 — Terminal          | 2190–2409 |
-| 38 — Xml               | 2411–2486 |
-| See Also               | 2490–2497 |
+| 36 — Task              | 2118–2192 |
+| 37 — Terminal          | 2194–2413 |
+| 38 — Xml               | 2415–2490 |
+| See Also               | 2494–2501 |
 
 ## Luma_Syntax_Highlighting.md
 
@@ -360,33 +360,33 @@ Section-level table of contents for the reference documents in this directory. U
 | 1 — Getting Started                              | 46–177    |
 | 2 — Types                                        | 181–287   |
 | 3 — Variables and Mutability                     | 291–404   |
-| 4 — Operators                                    | 408–618   |
-| 5 — Control Flow                                 | 622–815   |
-| 6 — Functions                                    | 819–930   |
-| 7 — Lambdas                                      | 934–1022  |
-| 8 — Records                                      | 1026–1180 |
-| 9 — Arrays                                       | 1184–1279 |
-| 10 — Dictionaries                                | 1283–1343 |
-| 11 — Tuples                                      | 1347–1415 |
-| 12 — Choice Types — Unit Variants                | 1419–1469 |
-| 13 — Choice Types (ADTs)                         | 1473–1584 |
-| 14 — Result and Optional                         | 1588–1826 |
-| 15 — Match                                       | 1830–2078 |
-| 16 — String Interpolation and Multi-Line Strings | 2082–2144 |
-| 17 — Pipe Operator                               | 2148–2193 |
-| 18 — Named Arguments                             | 2197–2227 |
-| 19 — Type Aliases                                | 2231–2253 |
-| 20 — Interfaces                                  | 2257–2333 |
-| 21 — Generics, `downcast`, and `is`              | 2337–2567 |
-| 22 — Namespaces and `use`                        | 2571–2766 |
-| 23 — Ownership (`unique` and `borrow`)           | 2770–2814 |
-| 24 — Testing with `@test`                        | 2818–2875 |
-| 25 — Including Files                             | 2879–2944 |
-| 26 — Standard Library Reference                  | 2948–2952 |
-| 27 — Linter and `--strict` Mode                  | 2956–3008 |
-| 28 — Reserved Keywords                           | 3012–3031 |
-| 29 — Error Reference                             | 3035–3396 |
-| 30 — Complete Programs                           | 3400–3606 |
-| 31 — Debugging                                   | 3610–3631 |
-| 32 — Formal Grammar (EBNF)                       | 3635–3989 |
-| See Also                                         | 3993–4005 |
+| 4 — Operators                                    | 408–620   |
+| 5 — Control Flow                                 | 624–824   |
+| 6 — Functions                                    | 828–939   |
+| 7 — Lambdas                                      | 943–1031  |
+| 8 — Records                                      | 1035–1189 |
+| 9 — Arrays                                       | 1193–1288 |
+| 10 — Dictionaries                                | 1292–1352 |
+| 11 — Tuples                                      | 1356–1424 |
+| 12 — Choice Types — Unit Variants                | 1428–1478 |
+| 13 — Choice Types (ADTs)                         | 1482–1593 |
+| 14 — Result and Optional                         | 1597–1835 |
+| 15 — Match                                       | 1839–2098 |
+| 16 — String Interpolation and Multi-Line Strings | 2102–2164 |
+| 17 — Pipe Operator                               | 2168–2213 |
+| 18 — Named Arguments                             | 2217–2247 |
+| 19 — Type Aliases                                | 2251–2273 |
+| 20 — Interfaces                                  | 2277–2353 |
+| 21 — Generics, `downcast`, and `is`              | 2357–2587 |
+| 22 — Namespaces and `use`                        | 2591–2786 |
+| 23 — Ownership (`unique` and `borrow`)           | 2790–2834 |
+| 24 — Testing with `@test`                        | 2838–2895 |
+| 25 — Including Files                             | 2899–2964 |
+| 26 — Standard Library Reference                  | 2968–2972 |
+| 27 — Linter and `--strict` Mode                  | 2976–3028 |
+| 28 — Reserved Keywords                           | 3032–3051 |
+| 29 — Error Reference                             | 3055–3422 |
+| 30 — Complete Programs                           | 3426–3632 |
+| 31 — Debugging                                   | 3636–3657 |
+| 32 — Formal Grammar (EBNF)                       | 3661–4015 |
+| See Also                                         | 4019–4031 |
