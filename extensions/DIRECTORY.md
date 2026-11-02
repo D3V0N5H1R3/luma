@@ -23,7 +23,7 @@ Tracks feature availability across editor extensions in a comparison matrix. Sho
 
 ### [`CLAUDE.md`](CLAUDE.md)
 
-Claude Code context file (auto-loaded when working on files under `extensions/`). Points to the TypeScript and Rust coding instruction files so the AI assistant applies the correct conventions for each extension's language.
+Claude Code context file (auto-loaded when working on files under `extensions/`). Points to the coding instruction files for every language in this tree — TypeScript, Rust, Python, JavaScript, Luma, PowerShell, and shell — plus the extensions learnings, so the AI assistant applies the correct conventions.
 
 ## Design Principles
 

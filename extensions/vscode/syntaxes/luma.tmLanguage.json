@@ -14,12 +14,14 @@
         { "include": "#for_variable" },
         { "include": "#typed_binding" },
         { "include": "#user_typed_binding" },
+        { "include": "#tuple_type_binding" },
         { "include": "#type" },
         { "include": "#catch_variable" },
         { "include": "#record_declaration_body" },
         { "include": "#keyword_control" },
         { "include": "#function_declaration" },
         { "include": "#type_declaration" },
+        { "include": "#function_type" },
         { "include": "#keyword_declaration" },
         { "include": "#storage_modifier" },
         { "include": "#with_field" },
@@ -142,22 +144,80 @@
             }
         },
         "typed_binding": {
-            "comment": "Typed variable or parameter: builtin_type[<T>] name (one level of nested generics, e.g. array<array<integer>>)",
-            "match": "\\b(boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|xml|key_value_store|set)(?:<(?:[^<>]|<[^<>]*>)*>)?\\s+([a-z_][a-zA-Z0-9_]*)",
+            "comment": "Typed variable or parameter: builtin_type[<T>] name (one level of nested generics, e.g. array<array<integer>>). The generic arguments are a type position, so container names inside them (result<(set, set)>) are types.",
+            "match": "\\b(boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|xml|key_value_store|set)(<(?:[^<>-]|-(?!>)|->|<[^<>]*>)*>)?\\s+(?!(?:in|is|with)\\b)([a-z_][a-zA-Z0-9_]*)",
             "captures": {
                 "1": { "name": "storage.type.luma" },
-                "2": { "name": "variable.other.luma" }
+                "2": { "patterns": [{ "include": "#type_arguments" }] },
+                "3": { "name": "variable.other.luma" }
             }
         },
         "user_typed_binding": {
             "comment": "User-defined type binding: PascalCase name",
-            "match": "(?<=^|\\s)([A-Z][a-zA-Z0-9_]*)(?:<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)\\s*(?==)",
+            "match": "(?<=^|\\s)([A-Z][a-zA-Z0-9_]*)(<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)\\s*(?==)",
             "captures": {
                 "1": { "name": "entity.name.type.luma" },
-                "2": { "name": "variable.other.luma" }
+                "2": { "patterns": [{ "include": "#type_arguments" }] },
+                "3": { "name": "variable.other.luma" }
             }
         },
+        "type_arguments": {
+            "comment": "Contents of a span already known to be a type (generic arguments, tuple types, function-type parameters): every built-in type name is a type here",
+            "patterns": [
+                { "include": "#function_type" },
+                { "include": "#builtin_type_name" },
+                {
+                    "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
+                    "name": "entity.name.type.luma"
+                },
+                {
+                    "name": "keyword.operator.arrow.luma",
+                    "match": "->"
+                }
+            ]
+        },
+        "function_type": {
+            "comment": "Function type: function(T, U) -> R. The parameter list holds only types.",
+            "begin": "\\b(function)\\s*(\\()",
+            "beginCaptures": {
+                "1": { "name": "keyword.declaration.luma" }
+            },
+            "end": "\\)",
+            "patterns": [
+                {
+                    "comment": "Nested parentheses, e.g. a tuple type parameter",
+                    "begin": "\\(",
+                    "end": "\\)",
+                    "patterns": [{ "include": "#type_arguments" }]
+                },
+                { "include": "#type_arguments" }
+            ]
+        },
+        "tuple_type_binding": {
+            "comment": "Tuple-typed binding: (T, U) name = … — the parenthesised list holds only types",
+            "begin": "\\((?=[^()]*\\)\\s+[a-z_][a-zA-Z0-9_]*\\s*=(?!=))",
+            "end": "\\)(?:\\s+([a-z_][a-zA-Z0-9_]*))?",
+            "endCaptures": {
+                "1": { "name": "variable.other.luma" }
+            },
+            "patterns": [{ "include": "#type_arguments" }]
+        },
         "type": {
+            "patterns": [
+                {
+                    "comment": "Reserved type keywords: always a type",
+                    "name": "storage.type.luma",
+                    "match": "\\b(boolean|integer|number|decimal|string|array|dictionary|optional|result)\\b"
+                },
+                {
+                    "comment": "void and the container/handle type names lex as identifiers (valid variable and field names), so they are a type only in type position: before < or a name, or after < or -> (mirrors the LSP semantic-token rule)",
+                    "name": "storage.type.luma",
+                    "match": "(?:(?<=<|<\\s|->|->\\s)\\b(void|reference|task|channel|socket|queue|stack|xml|key_value_store|set)\\b|\\b(void|reference|task|channel|socket|queue|stack|xml|key_value_store|set)\\b(?=\\s*<|\\s+(?!(?:in|is|with)\\b)[A-Za-z_]))"
+                }
+            ]
+        },
+        "builtin_type_name": {
+            "comment": "Any built-in type name, for captures already known to be in type position",
             "name": "storage.type.luma",
             "match": "\\b(boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|xml|key_value_store|set)\\b"
         },
@@ -352,7 +412,7 @@
                         "1": { "name": "storage.modifier.luma" },
                         "2": {
                             "patterns": [
-                                { "include": "#type" },
+                                { "include": "#builtin_type_name" },
                                 {
                                     "match": "[A-Z][a-zA-Z0-9_]*",
                                     "name": "entity.name.type.luma"

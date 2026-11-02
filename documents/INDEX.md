@@ -312,11 +312,11 @@ Section-level table of contents for the reference documents in this directory. U
 | Section                                      | Lines   |
 | -------------------------------------------- | ------- |
 | Table of Contents                            | 7–36    |
-| 1 — Token Design                             | 40–308  |
-| 2 — Visual Studio Code Extension             | 312–511 |
-| 3 — Zed Extension                            | 515–728 |
-| 4 — Semantic Tokens from the Language Server | 732–754 |
-| See Also                                     | 758–762 |
+| 1 — Token Design                             | 40–310  |
+| 2 — Visual Studio Code Extension             | 314–524 |
+| 3 — Zed Extension                            | 528–741 |
+| 4 — Semantic Tokens from the Language Server | 745–767 |
+| See Also                                     | 771–775 |
 
 ## Luma_Tutorial.md
 

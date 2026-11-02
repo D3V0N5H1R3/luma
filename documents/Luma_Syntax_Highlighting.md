@@ -117,9 +117,11 @@ Keywords are split into sub-categories so that themes can colour control flow di
 
 #### 4. Built-in Types
 
-`array`, `boolean`, `channel`, `dictionary`, `integer`, `key_value_store`, `number`, `optional`, `queue`, `reference`, `result`, `set`, `socket`, `stack`, `string`, `task`, `xml`
+`array`, `boolean`, `channel`, `decimal`, `dictionary`, `integer`, `key_value_store`, `number`, `optional`, `queue`, `reference`, `result`, `set`, `socket`, `stack`, `string`, `task`, `void`, `xml`
 
 **Scope:** `storage.type.luma`
+
+Only `array`, `boolean`, `decimal`, `dictionary`, `integer`, `number`, `optional`, `result`, and `string` are reserved words. `void` and the container/handle names (`channel`, `key_value_store`, `queue`, `reference`, `set`, `socket`, `stack`, `task`, `xml`) lex as ordinary identifiers and are valid variable and field names, so grammars scope them as types only in type position (see `#type` in §2 and the semantic-token rules in §4).
 
 `none` is excluded from this category — it is a language constant (see §5a) rather than a standalone type, since `none` is the empty case of `optional<T>`. Including it in the type rule would conflict with literal matching.
 
@@ -421,21 +423,28 @@ Patterns are included in this order inside the `patterns` array (see [Token Desi
 5. `#constant`
 6. `#for_variable`
 7. `#typed_binding`
-8. `#type`
-9. `#keyword_control`
-10. `#function_declaration` — **must precede `#keyword_declaration`** so the full `function <return> <name>(` pattern is consumed before the bare `function` keyword rule fires
-11. `#type_declaration` — same rationale as `#function_declaration`
-12. `#keyword_declaration`
-13. `#storage_modifier`
-14. `#with_field`
-15. `#record_literal_field`
-16. `#keyword_other`
-17. `#named_argument`
-18. `#function_call`
-19. `#constructor_call`
-20. `#operator`
-21. `#module_access`
-22. `#string` (double-quoted, after triple-quoted)
+8. `#user_typed_binding`
+9. `#tuple_type_binding`
+10. `#type`
+11. `#catch_variable`
+12. `#record_declaration_body`
+13. `#keyword_control`
+14. `#function_declaration` — **must precede `#keyword_declaration`** so the full `function <return> <name>(` pattern is consumed before the bare `function` keyword rule fires
+15. `#type_declaration` — same rationale as `#function_declaration`
+16. `#function_type` — **must follow `#function_declaration`** (so a tuple return type in `function (T, U) name(` is not read as a function type) and **precede `#keyword_declaration`** (so `function(` opens the function-type parameter list instead of matching the bare keyword)
+17. `#keyword_declaration`
+18. `#storage_modifier`
+19. `#with_field`
+20. `#record_literal_field`
+21. `#keyword_other`
+22. `#lambda`
+23. `#named_argument`
+24. `#function_call`
+25. `#constructor_call`
+26. `#turbofish` — must precede `#operator` to win the tie on `::`
+27. `#operator`
+28. `#module_access`
+29. `#string` (double-quoted, after triple-quoted)
 
 #### Key Repository Rules
 
@@ -447,7 +456,11 @@ Patterns are included in this order inside the `patterns` array (see [Token Desi
 
 `#for_variable` — Matches the loop-variable binding in `for x in …` and `for k, v in …`. Both variable names receive `variable.other.luma`. Must come before `#type` and `#keyword_control` so the identifiers are captured before `for` and `in` are consumed individually.
 
-`#typed_binding` — Matches a built-in type followed immediately by an identifier (e.g. `integer count`, `array<array<integer>> grid` — one level of nested generics). Captures the type as `storage.type.luma` and the name as `variable.other.luma`. Must come before `#type` so the combined pattern wins over a bare type match.
+`#typed_binding` — Matches a built-in type followed immediately by an identifier (e.g. `integer count`, `array<array<integer>> grid` — one level of nested generics). Captures the type as `storage.type.luma` and the name as `variable.other.luma`; the generic arguments are scoped through `#type_arguments`. A following `in`, `is`, or `with` is never taken as the name. Must come before `#type` so the combined pattern wins over a bare type match. `#user_typed_binding` does the same for a PascalCase type followed by a name and `=`.
+
+`#type_arguments` — Applied to spans that can only hold types: generic arguments, tuple types, and function-type parameter lists. Every built-in type name in them is scoped through `#builtin_type_name`, which matches every built-in type name unconditionally, so a bare container name such as the `set` in `result<(set, set)>` is still a type. `#tuple_type_binding` (`(T, U) name = …`) and `#function_type` (`function(T, U) -> R`) open such spans with `begin`/`end` rules.
+
+`#type` — Scopes the reserved type keywords as `storage.type.luma` everywhere, but `void` and the container/handle names only in type position: before `<` or a name, or after `<` or `->`. A variable named `task` or `set` therefore keeps its identifier scope. A lambda parameter's type capture is always a type, so it uses `#builtin_type_name` directly.
 
 `#lambda` — Begin/end rule for a lambda's parameter list: a `(` whose matching `)` (with no nested parentheses) is followed by `->`. Lambda parameters are always typed, so each `[mutable|unique|borrow] Type name` entry scopes the name as `variable.parameter.luma`.
 
