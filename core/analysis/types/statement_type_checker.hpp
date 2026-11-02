@@ -50,12 +50,15 @@ public:
 
     void check_statement(const Statement& stmt);
     void check_statement_list(const std::vector<StatementPtr>& stmts);
+    // True when every path through `stmts` returns — or ends in a call that
+    // never returns (Process.exit) — so a function body cannot fall off its end.
     [[nodiscard]] bool definitely_returns(std::span<const StatementPtr> stmts) const;
 
     // True when no path through `stmts` reaches its end: every path ends in a
-    // return, break, or continue (or an endless `while true` loop).  A branch
-    // like this does not feed the ownership merge after its if/match, because
-    // control never continues there from it.
+    // return, break, continue, a call that never returns (Process.exit), or an
+    // endless `while true` loop.  A branch like this does not feed the
+    // ownership merge after its if/match, because control never continues
+    // there from it.
     [[nodiscard]] bool never_falls_through(std::span<const StatementPtr> stmts) const;
 
     // ─── Statement dispatch handlers (called by StatementDispatcher) ───

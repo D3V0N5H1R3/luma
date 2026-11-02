@@ -582,21 +582,56 @@ static void test_function_and_record_persist_across_lines() {
     ASSERT_EQ(result.as_integer(), 13);
 }
 
-static void test_redefinition_shadows_earlier_line() {
-    // Redefining a name on a later line is allowed and may change its type.
+static void test_redefinition_with_same_type_replaces_earlier_line() {
+    // Redefining a name with the same type on a later line is allowed; code
+    // entered earlier sees the new value, since the VM keeps one global.
     const auto env = luma::test::make_std_env();
 
     VM vm{env};
     TypeChecker checker;
     std::vector<Program> programs;
 
-    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer y = 1").is_null());
-    ASSERT_TRUE(repl_eval(checker, vm, programs, "string y = \"one\"").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer limit = 10").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "function integer doubled() { return limit * 2 }")
+                    .is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer limit = 21").is_null());
+    // Redefining a function with the same signature is allowed too.
+    ASSERT_TRUE(
+        repl_eval(checker, vm, programs, "function integer doubled() { return limit * 2 + 0 }")
+            .is_null());
 
-    const auto result = repl_eval(checker, vm, programs, "String.length(y)");
+    const auto result = repl_eval(checker, vm, programs, "doubled()");
 
     ASSERT_TRUE(result.is_integer());
-    ASSERT_EQ(result.as_integer(), 3);
+    ASSERT_EQ(result.as_integer(), 42);
+}
+
+static void test_redefinition_with_different_type_rejected() {
+    // Regression: a redefinition with another type used to shadow in the type
+    // checker but overwrite the single runtime global, so `doubled()` — checked
+    // against `integer limit` — then multiplied a string.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer limit = 10").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "function integer doubled() { return limit * 2 }")
+                    .is_null());
+
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "string limit = \"ten\""),
+                               "cannot redefine 'limit' as 'string': an earlier input defined it "
+                               "as 'integer'");
+    ASSERT_THROWS_WITH_MESSAGE(
+        repl_eval(checker, vm, programs, "function string doubled() { return \"x\" }"),
+        "cannot redefine 'doubled'");
+
+    // The rejected lines changed nothing.
+    const auto result = repl_eval(checker, vm, programs, "doubled()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 20);
 }
 
 static void test_rejected_line_defines_nothing() {
@@ -1193,7 +1228,8 @@ int main() {
     RUN(test_pipeline_recovers_across_multiple_errors);
     RUN(test_variable_persists_across_lines);
     RUN(test_function_and_record_persist_across_lines);
-    RUN(test_redefinition_shadows_earlier_line);
+    RUN(test_redefinition_with_same_type_replaces_earlier_line);
+    RUN(test_redefinition_with_different_type_rejected);
     RUN(test_rejected_line_defines_nothing);
     RUN(test_runtime_error_keeps_definitions_that_ran);
     RUN(test_rejected_line_does_not_consume_unique);

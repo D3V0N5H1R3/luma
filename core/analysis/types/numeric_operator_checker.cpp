@@ -45,6 +45,26 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
 
     // Postfix ? — error/none propagation on result and optional types.
     if (expr.op == TokenType::QuestionMark) {
+        // An expression-bodied lambda's type is inferred from its body, which
+        // the '?' unwraps — yet on failure (or none) the lambda returns that
+        // wrapper itself.  The inferred `function(...) -> T` would then lie
+        // about what callers receive, so reject the '?' outright.
+        if (tc_.context().in_inferred_expression_lambda) {
+            tc_.error("error propagation '?' cannot be used in an expression-bodied lambda: "
+                      "the lambda would return the failure (or none) itself, not a value of "
+                      "the type inferred from its body",
+                      expr.location,
+                      "handle the value inside the lambda with '??' or 'match', or use a block "
+                      "body with explicit returns, e.g. (string s) -> { return ... }");
+            if (!operand_type.inner_types.empty() &&
+                (operand_type.kind == TypeInfo::Kind::Result ||
+                 operand_type.kind == TypeInfo::Kind::Optional)) {
+                return operand_type.inner_types[0];
+            }
+
+            return TypeInfo::make(TypeInfo::Kind::StdlibAny);
+        }
+
         // '?' requires the enclosing function to return result<T> or optional<T>,
         // or to be inside @main (where a propagated failure prints the error and
         // exits). A StdlibAny return context is an unconstrained lambda whose

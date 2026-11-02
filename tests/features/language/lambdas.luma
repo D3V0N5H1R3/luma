@@ -315,3 +315,24 @@ function function(integer) -> integer make_adder(integer amount) {
 function void test_call_result_called_immediately() {
     assert(make_adder(10)(5) == 15, "a returned function can be called in place")
 }
+
+# Regression: a call on a zero-parameter function value is arity-checked like
+# any other; a correct call keeps working.
+function integer call_twice(function() -> integer produce) {
+    return produce() + produce()
+}
+
+@test
+function void test_zero_parameter_function_value_call() {
+    assert(call_twice(() -> 21) == 42, "a zero-parameter function value is called with no arguments")
+}
+
+# A '?' inside an expression-bodied lambda is rejected; handle the value inside
+# the lambda instead.
+@test
+function void test_expression_lambda_handles_result_inline() {
+    function(string) -> integer parse_or_zero = (string text) -> String.parse_integer(text) ?? 0
+
+    assert(parse_or_zero("12") == 12)
+    assert(parse_or_zero("x") == 0)
+}

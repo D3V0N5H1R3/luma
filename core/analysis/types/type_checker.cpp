@@ -315,6 +315,7 @@ std::vector<Diagnostic> TypeChecker::check_incremental(const Program& program) {
 
     ctx_.reset();
     ctx_.current_scope = std::make_shared<TypeScope>(incremental_.committed_scope);
+    ctx_.repl_input_scope = ctx_.current_scope;
     incremental_.has_pending_input = true;
 
     check_program(program);
@@ -365,16 +366,15 @@ void TypeChecker::initialize_global_scope() {
     // Create global scope with built-in functions.
     ctx_.current_scope = std::make_shared<TypeScope>();
 
+    // `print` takes any number of arguments, so it has no fixed signature (a
+    // Func without a return type skips the arity check); `type_of` takes
+    // exactly one value of any type.
     ctx_.current_scope->define("print", TypeInfo::make(TypeInfo::Kind::Func), {});
     ctx_.current_scope->define("assert", TypeInfo::make(TypeInfo::Kind::Func), {});
-
-    {
-        auto type_of_func = TypeInfo::make(TypeInfo::Kind::Func);
-        type_of_func.return_type =
-            std::make_shared<TypeInfo>(TypeInfo::make(TypeInfo::Kind::String));
-
-        ctx_.current_scope->define("type_of", type_of_func, {});
-    }
+    ctx_.current_scope->define("type_of",
+                               TypeInfo::make_func({TypeInfo::make(TypeInfo::Kind::StdlibAny)},
+                                                   TypeInfo::make(TypeInfo::Kind::String)),
+                               {});
 
     for (const auto& ns : stdlib_handler_.namespaces()) {
         ctx_.current_scope->define(ns, TypeInfo::make(TypeInfo::Kind::Namespace), {});

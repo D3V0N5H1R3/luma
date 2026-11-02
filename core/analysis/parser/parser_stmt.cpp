@@ -158,6 +158,20 @@ StatementPtr Parser::parse_variable_decl(bool is_mutable) {
 // Lookahead helpers (type skipping, declaration detection)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+namespace {
+
+// More tokens than any real type annotation spans; a generic-argument scan
+// that gets this far is looking at an expression, not a type.
+constexpr int k_max_type_lookahead_tokens = 1024;
+
+} // namespace
+
+bool Parser::type_lookahead_exceeded(int offset, int scanned, int angle_depth,
+                                     int paren_depth) const {
+    return scanned > k_max_type_lookahead_tokens || angle_depth > ResourceLimits::max_parse_depth ||
+           (paren_depth == 0 && peek_at(offset).preceded_by_newline);
+}
+
 int Parser::skip_type_at(int offset, int depth) const {
     // Guard against offset overflow and runaway recursion.  This lookahead runs
     // *before* the depth-tracked parse path, so without its own bound a deeply
@@ -231,17 +245,28 @@ int Parser::skip_type_at(int offset, int depth) const {
 
         // Generic params: Type<T, U>.  The scan stops at the first token that
         // cannot be part of a type, so `MAX < x` in an expression does not
-        // scan to end-of-file looking for a closing '>'.
+        // scan to end-of-file looking for a closing '>'.  It is also bounded
+        // by type_lookahead_exceeded() — otherwise every line of `X<X ...`
+        // input would rescan the rest of the file, which is quadratic — and
+        // then reports "no type here" with an offset past the end of input,
+        // so no caller mistakes the token it stopped at for a declared name.
         if (token_type_at(offset) == TokenType::Less) {
             ++offset;
 
             int angle_depth = 1;
+            int paren_depth = 0;
+            const int scan_start = offset;
 
             while (angle_depth > 0 && token_pos_ + offset < token_count_) {
                 const TokenType type = token_type_at(offset);
 
                 if (!error_recovery::can_appear_in_type(type)) {
                     return offset;
+                }
+
+                if (type_lookahead_exceeded(offset, offset - scan_start, angle_depth,
+                                            paren_depth)) {
+                    return token_count_ - token_pos_;
                 }
 
                 if (type == TokenType::Less) {
@@ -255,6 +280,12 @@ int Parser::skip_type_at(int offset, int depth) const {
                 // '>>' is tokenised as a single token for nested generics.
                 if (type == TokenType::GreaterGreater) {
                     angle_depth -= 2;
+                }
+
+                if (type == TokenType::LeftParen) {
+                    ++paren_depth;
+                } else if (type == TokenType::RightParen && paren_depth > 0) {
+                    --paren_depth;
                 }
 
                 ++offset;

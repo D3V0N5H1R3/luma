@@ -272,6 +272,17 @@ struct UnaryExpression : Expression {
     explicit UnaryExpression(SourceLocation loc, TokenType op, ExpressionPtr operand)
         : Expression{ExpressionKind::Unary, loc}, op{op}, operand{std::move(operand)} {}
 
+    UnaryExpression(const UnaryExpression&) = delete;
+    UnaryExpression(UnaryExpression&&) noexcept = default;
+
+    UnaryExpression& operator=(const UnaryExpression&) = delete;
+    UnaryExpression& operator=(UnaryExpression&&) noexcept = default;
+
+    // Custom destructor tears the operand spine down iteratively — a postfix
+    // '?' sits on the same spine as field accesses and calls; see
+    // release_linear_chain below.
+    ~UnaryExpression() noexcept;
+
     TokenType op;
     ExpressionPtr operand;
 };
@@ -310,6 +321,16 @@ struct CallExpression : Expression {
           named_arguments{std::move(named_arguments)},
           type_arguments{std::move(type_arguments)} {}
 
+    CallExpression(const CallExpression&) = delete;
+    CallExpression(CallExpression&&) noexcept = default;
+
+    CallExpression& operator=(const CallExpression&) = delete;
+    CallExpression& operator=(CallExpression&&) noexcept = default;
+
+    // Custom destructor tears the callee spine down iteratively — see
+    // release_linear_chain below.
+    ~CallExpression() noexcept;
+
     ExpressionPtr callee;
     std::vector<ExpressionPtr> arguments;
     std::vector<NamedArgument> named_arguments;
@@ -324,6 +345,16 @@ struct FieldAccessExpression : Expression {
           field_name{std::move(field_name)},
           is_optional{is_optional} {}
 
+    FieldAccessExpression(const FieldAccessExpression&) = delete;
+    FieldAccessExpression(FieldAccessExpression&&) noexcept = default;
+
+    FieldAccessExpression& operator=(const FieldAccessExpression&) = delete;
+    FieldAccessExpression& operator=(FieldAccessExpression&&) noexcept = default;
+
+    // Custom destructor tears the object spine down iteratively — see
+    // release_linear_chain below.
+    ~FieldAccessExpression() noexcept;
+
     ExpressionPtr object;
     std::string field_name;
     bool is_optional{false};
@@ -336,6 +367,16 @@ struct IndexAccessExpression : Expression {
           object{std::move(object)},
           index{std::move(index)},
           is_optional{is_optional} {}
+
+    IndexAccessExpression(const IndexAccessExpression&) = delete;
+    IndexAccessExpression(IndexAccessExpression&&) noexcept = default;
+
+    IndexAccessExpression& operator=(const IndexAccessExpression&) = delete;
+    IndexAccessExpression& operator=(IndexAccessExpression&&) noexcept = default;
+
+    // Custom destructor tears the object spine down iteratively — see
+    // release_linear_chain below.
+    ~IndexAccessExpression() noexcept;
 
     ExpressionPtr object;
     ExpressionPtr index;
@@ -541,10 +582,13 @@ struct ErrorPipeExpression : Expression {
 
 namespace detail {
 
-// Detaches and returns the deep (left-associative) child of a linear expression
-// node, or nullptr when `node` is not one. Binary, pipe, and error-pipe chains
-// are the only node kinds a parser builds iteratively, so they are the only ones
-// whose left spine can grow past the recursive-descent depth guard.
+// Detaches and returns the deep child of a linear expression node, or nullptr
+// when `node` is not one.  The parser builds two kinds of spine iteratively, so
+// their depth is not bounded by the recursive-descent guard: the left operand
+// of binary-operator, pipe, and error-pipe chains, and the receiver of postfix
+// chains — a field access's or index's object, a call's callee, and a unary
+// (e.g. postfix '?') operand.  The two kinds can alternate (`(a.b + c).d`), so
+// all of them are released by one loop.
 [[nodiscard]] inline ExpressionPtr detach_linear_child(Expression& node) noexcept {
     switch (node.kind) {
         case ExpressionKind::Binary:
@@ -553,17 +597,26 @@ namespace detail {
             return std::move(static_cast<PipeExpression&>(node).left);
         case ExpressionKind::ErrorPipe:
             return std::move(static_cast<ErrorPipeExpression&>(node).left);
+        case ExpressionKind::FieldAccess:
+            return std::move(static_cast<FieldAccessExpression&>(node).object);
+        case ExpressionKind::IndexAccess:
+            return std::move(static_cast<IndexAccessExpression&>(node).object);
+        case ExpressionKind::Call:
+            return std::move(static_cast<CallExpression&>(node).callee);
+        case ExpressionKind::Unary:
+            return std::move(static_cast<UnaryExpression&>(node).operand);
         default:
             return nullptr;
     }
 }
 
-// Iteratively releases a left-associative chain of expression nodes. A long
-// operator or pipe chain (e.g. `a + b + c + ...` with thousands of terms) forms
-// a deeply left-leaning tree whose naive recursive destructor would overflow the
-// native stack. Walking the spine into a local and destroying one node at a time
-// keeps teardown at O(1) stack depth; each detached node's remaining (shallow)
-// children are freed by its own destructor.
+// Iteratively releases a linear chain of expression nodes. A long operator,
+// pipe, or postfix chain (e.g. `a + b + c + ...` with thousands of terms, or
+// field accesses nested through parentheses) forms a deeply one-sided tree
+// whose naive recursive destructor would overflow the native stack. Walking
+// the spine into a local and destroying one node at a time keeps teardown at
+// O(1) stack depth; each detached node's remaining (shallow) children are freed
+// by its own destructor.
 inline void release_linear_chain(ExpressionPtr head) noexcept {
     while (head) {
         ExpressionPtr next = detach_linear_child(*head);
@@ -584,6 +637,22 @@ inline PipeExpression::~PipeExpression() noexcept {
 
 inline ErrorPipeExpression::~ErrorPipeExpression() noexcept {
     detail::release_linear_chain(std::move(left));
+}
+
+inline UnaryExpression::~UnaryExpression() noexcept {
+    detail::release_linear_chain(std::move(operand));
+}
+
+inline CallExpression::~CallExpression() noexcept {
+    detail::release_linear_chain(std::move(callee));
+}
+
+inline FieldAccessExpression::~FieldAccessExpression() noexcept {
+    detail::release_linear_chain(std::move(object));
+}
+
+inline IndexAccessExpression::~IndexAccessExpression() noexcept {
+    detail::release_linear_chain(std::move(object));
 }
 
 struct RecordFieldInit {

@@ -2,20 +2,35 @@
 // recursion depth limits.
 
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "analysis/ast/expression.hpp"
 #include "ast_test_util.hpp"
 #include "common/resource_limits.hpp"
 #include "parser_test_helpers.hpp"
 #include "test_parse_helper.hpp"
 
+using luma::BinaryExpression;
+using luma::CallExpression;
 using luma::ChoiceDeclaration;
 using luma::Diagnostic;
+using luma::ExpressionPtr;
+using luma::FieldAccessExpression;
 using luma::FunctionDeclaration;
+using luma::IndexAccessExpression;
+using luma::LiteralExpression;
 using luma::MatchStatement;
+using luma::NamedArgument;
 using luma::ResourceLimits;
+using luma::SourceLocation;
 using luma::StatementKind;
+using luma::TokenType;
+using luma::UnaryExpression;
+using luma::VariableExpression;
 using luma::test::first_function;
 using luma::test::LimitGuard;
 using luma::test::parse;
@@ -841,6 +856,114 @@ static void test_moderate_flat_chain_still_parses() {
     ASSERT_EQ(program.statements[0]->kind, StatementKind::VariableDeclaration);
 }
 
+static void test_postfix_chain_limit_spans_parentheses() {
+    // Regression: the postfix chain counter restarted inside every parenthesis,
+    // so `((a.b…b).b…b).b…b` built max_parse_depth × max_expression_depth
+    // nested field accesses.  A parenthesised receiver's chain now counts
+    // towards the chain it continues.
+    const std::string chain = [] {
+        std::string links;
+
+        for (int i = 0; i < 12; ++i) {
+            links += ".b";
+        }
+
+        return links;
+    }();
+
+    std::string nested = "a";
+
+    for (int i = 0; i < 3; ++i) {
+        nested = "(" + nested + chain + ")";
+    }
+
+    ASSERT_TRUE(has_depth_error(parse_errors_capped_expr("integer x = " + nested, 16)));
+
+    // Short chains through parentheses, and an operator between them, still parse.
+    const LimitGuard guard{ResourceLimits::max_expression_depth, 16};
+
+    ASSERT_TRUE(parse_errors("integer x = (a.b.c).d(1)[0]?.e").empty());
+    ASSERT_TRUE(parse_errors("integer x = (a" + chain + " + c)" + chain).empty());
+}
+
+static void test_deep_postfix_spine_teardown_is_iterative() {
+    // Regression: only binary/pipe chains were destroyed iteratively.  A
+    // postfix spine (field access, index, call, '?') that alternates with
+    // binary operators — as nested parentheses produce — was freed recursively
+    // and could overflow the native stack.  Build one far deeper than any
+    // native stack could unwind recursively and destroy it.
+    const SourceLocation loc{};
+    ExpressionPtr spine = std::make_unique<VariableExpression>(loc, "a");
+
+    for (int i = 0; i < 200'000; ++i) {
+        switch (i % 5) {
+            case 0:
+                spine = std::make_unique<FieldAccessExpression>(loc, std::move(spine), "b");
+                break;
+            case 1:
+                spine = std::make_unique<IndexAccessExpression>(
+                    loc, std::move(spine),
+                    std::make_unique<LiteralExpression>(loc, std::int64_t{0}));
+                break;
+            case 2:
+                spine = std::make_unique<CallExpression>(loc, std::move(spine),
+                                                         std::vector<ExpressionPtr>{},
+                                                         std::vector<NamedArgument>{});
+                break;
+            case 3:
+                spine = std::make_unique<UnaryExpression>(loc, TokenType::QuestionMark,
+                                                          std::move(spine));
+                break;
+            default:
+                spine = std::make_unique<BinaryExpression>(
+                    loc, std::move(spine), TokenType::Plus,
+                    std::make_unique<LiteralExpression>(loc, std::int64_t{1}));
+                break;
+        }
+    }
+
+    spine.reset();
+
+    ASSERT_TRUE(spine == nullptr);
+}
+
+// Regression: the generic-argument lookahead (skip_type_at at every statement
+// start, is_generic_record_creation at every `Name<`) scanned to end-of-file
+// over type-like tokens, so many lines of `X<X` took quadratic time.  It now
+// stops at a line break outside parentheses and after a bounded number of
+// tokens.  The input is large enough that a quadratic scan (~10^9 token
+// visits) takes many seconds, while the linear one parses in milliseconds.
+static void test_generic_lookahead_is_bounded() {
+    std::string many_lines;
+
+    for (int i = 0; i < 40'000; ++i) {
+        many_lines += "X<X\n";
+    }
+
+    const auto start = std::chrono::steady_clock::now();
+
+    (void)parse_errors(many_lines);
+
+    std::string one_line = "boolean b = X";
+
+    for (int i = 0; i < 20'000; ++i) {
+        one_line += "<X>X";
+    }
+
+    (void)parse_errors(one_line);
+
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+
+    ASSERT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(), 3000);
+
+    // Generic types and generic record creation still parse.
+    ASSERT_TRUE(parse_errors("dictionary<array<integer>> d = {}\n"
+                             "function(integer) -> array<string> f = (integer n) -> [\"x\"]\n"
+                             "Box<integer> b = Box<integer> { value = 1 }\n"
+                             "boolean lt = n < limit\n")
+                    .empty());
+}
+
 int main() {
     // Syntax errors.
     RUN(test_syntax_error_reported);
@@ -915,6 +1038,9 @@ int main() {
     RUN(test_flat_pipe_chain_rejected);
     RUN(test_flat_postfix_chain_rejected);
     RUN(test_moderate_flat_chain_still_parses);
+    RUN(test_postfix_chain_limit_spans_parentheses);
+    RUN(test_deep_postfix_spine_teardown_is_iterative);
+    RUN(test_generic_lookahead_is_bounded);
 
     return SUMMARY();
 }

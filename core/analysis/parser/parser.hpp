@@ -331,6 +331,16 @@ private:
     [[nodiscard]] bool looks_like_variable_decl() const;
     [[nodiscard]] int skip_type_at(int offset, int depth = 0) const;
 
+    // Bounds a lookahead scan over a generic argument list (skip_type_at,
+    // is_generic_record_creation).  True once the scan has looked at more
+    // tokens than any real type spans, nests angle brackets deeper than
+    // max_parse_depth, or reaches a token that starts a new line outside
+    // parentheses (a type argument list never continues on the next line
+    // except inside a function type's parameter list).  Without it, input such
+    // as many lines of `X<X` rescans to end-of-file from every line.
+    [[nodiscard]] bool type_lookahead_exceeded(int offset, int scanned, int angle_depth,
+                                               int paren_depth) const;
+
     [[nodiscard]] bool looks_like_tuple_destructuring() const;
     [[nodiscard]] StatementPtr parse_tuple_destructuring(bool is_mutable);
     [[nodiscard]] bool looks_like_record_destructuring() const;

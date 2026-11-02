@@ -932,3 +932,87 @@ function void test_match_else_before_arm_statement_form() {
 
     assert(outcome == "default", "statement-form else before a later arm must win")
 }
+
+# ─── Regression: diverging arms, `case !=` coverage, and choice patterns ───
+
+function integer value_or_zero_failure_first(result<integer> outcome) {
+    # A `return` arm takes no part in the match's value, wherever it appears:
+    # with the failure arm first the match used to be typed as `void`.
+    integer value = match outcome {
+        failure(_reason) { return 0 }
+        success(v)       { v }
+    }
+
+    return value + 1
+}
+
+@test
+function void test_match_diverging_arm_first() {
+    assert(value_or_zero_failure_first(success(41)) == 42)
+    assert(value_or_zero_failure_first(failure("bad")) == 0)
+}
+
+@test
+function void test_match_not_equal_arm_covers_rest_with_equal_arm() {
+    # `case != 5` covers every other value only together with `case 5`; then
+    # no `else` is needed and every value yields a string.
+    integer code = 5
+
+    string label = match code {
+        case != 5 { "other" }
+        case 5    { "five" }
+    }
+
+    assert(label == "five")
+}
+
+@test
+function void test_match_choice_pattern_on_own_choice() {
+    # Each pattern names a variant of the subject's own choice type.
+    Shape shape = Shape.Square(3.0)
+
+    string kind = match shape {
+        case Shape.Circle(_) { "round" }
+        case Shape.Square(_) { "square" }
+        else                 { "other" }
+    }
+
+    assert(kind == "square")
+}
+
+# ─── Regression: a branch ending in a call that never returns ───
+# Process.exit leaves its branch like `return`, so the branch needs no value and
+# a function body may end in it.  (The tests only take the non-exiting paths.)
+
+function integer port_or_exit(boolean configured) {
+    integer port = if configured { 8080 } else { Process.exit(1) }
+
+    return port
+}
+
+function integer value_or_exit(result<integer> parsed) {
+    integer value = match parsed {
+        success(v) { v }
+        failure(reason) {
+            print("fatal: ${reason}")
+            Process.exit(2)
+        }
+    }
+
+    return value
+}
+
+function integer checked_or_exit(boolean valid) {
+    if valid {
+        return 5
+    }
+
+    Process.exit(3)
+}
+
+@test
+function void test_branch_ending_in_process_exit() {
+    assert(port_or_exit(true) == 8080)
+    assert(value_or_exit(success(5)) == 5)
+    assert(checked_or_exit(true) == 5)
+}

@@ -188,6 +188,45 @@ namespace luma::type_check_helpers {
     return false;
 }
 
+// ── check_repl_redefinition ─────────────────────────────────────────────────
+// In the REPL, a top-level definition of a name an earlier (committed) input
+// already defined replaces the single runtime global of that name, so code
+// compiled earlier — e.g. a function reading the variable — sees the new value.
+// That is sound only when the type is unchanged; otherwise report an error.
+// A no-op outside incremental checking and below an input's top level.
+
+inline void check_repl_redefinition(TypeCheckingServices& tc, std::string_view name,
+                                    const TypeInfo& type, const SourceLocation& loc) {
+    const auto& ctx = tc.context();
+
+    if (!ctx.repl_input_scope || ctx.current_scope != ctx.repl_input_scope) {
+        return;
+    }
+
+    const auto committed = ctx.repl_input_scope->parent();
+    const auto* previous = committed ? committed->lookup(name) : nullptr;
+
+    if (previous == nullptr || previous->type == type) {
+        return;
+    }
+
+    const auto is_indefinite = [](const TypeInfo& t) {
+        return t.kind == TypeInfo::Kind::Unknown || t.kind == TypeInfo::Kind::StdlibAny;
+    };
+
+    if (is_indefinite(previous->type) || is_indefinite(type)) {
+        return;
+    }
+
+    tc.error(std::format("cannot redefine '{}' as '{}': an earlier input defined it as '{}'", name,
+                         type.to_string(), previous->type.to_string()),
+             loc,
+             std::format("code entered earlier still uses '{}' as '{}' — keep that type, choose "
+                         "a new name, or start over with ':clear'",
+                         name, previous->type.to_string()),
+             DiagnosticCode::TypeMismatch);
+}
+
 // ── check_iterable_type ──────────────────────────────────────────────────────
 // Returns true when type is a valid for-loop iterable: array<T>, range,
 // string, dictionary<V>, StdlibAny, or Unknown.
@@ -332,6 +371,15 @@ void mark_numeric_widening(TypeCheckingServices& tc, const Expression& expr, con
 // at least one diagnostic was emitted.
 bool report_unknown_types(TypeCheckingServices& tc, const TypeAnnotation& ann,
                           std::string_view context, const SourceLocation& loc);
+
+// ── is_never_returning_call ──────────────────────────────────────────────────
+// True when `expr` is a call (directly, or as the call a pipe feeds into) to a
+// stdlib function the catalog marks as never returning normally
+// (FunctionSpec::never_returns, e.g. `Process.exit(1)`).  Such a call leaves its
+// block like `return` does, so return-path and branch-value analysis treat a
+// statement list or if/match branch ending in it as diverging.  A namespace
+// name shadowed by a local variable is not the stdlib module.
+[[nodiscard]] bool is_never_returning_call(const TypeCheckingServices& tc, const Expression& expr);
 
 // ── Call-argument mapping ────────────────────────────────────────────────────
 // The parameter index each written argument of a call to a declared function

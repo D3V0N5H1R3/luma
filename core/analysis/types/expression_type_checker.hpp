@@ -161,6 +161,20 @@ private:
                                               const std::vector<MatchArm>& arms,
                                               const SourceLocation& location);
 
+    // One match arm's contribution to the match's result type.
+    struct ArmOutcome {
+        TypeInfo type;
+        bool diverges{false};
+        SourceLocation location;
+    };
+
+    // Unify the arm types into the match's result type, independent of arm
+    // order: diverging arms take no part, the widest compatible type wins, and
+    // an arm that falls through without a value while another produces one is
+    // an error.
+    [[nodiscard]] TypeInfo merge_match_arm_types(const std::vector<ArmOutcome>& outcomes,
+                                                 const SourceLocation& location);
+
     // ─── visit_record_creation helpers ──────────────────────────────────
     // Reject construction of a namespace-internal record from outside its
     // namespace.  Returns true (after emitting a diagnostic) when access is
@@ -180,10 +194,23 @@ private:
     // ─── visit_if / if-statement-in-value-position helpers ──────────────
     // Which branches of a conditional never fall through (they end in return,
     // break, or continue), so their ownership state is left out of the merge.
+    // `has_else` is false only for an if *statement* in value position that has
+    // no else branch: its implicit else produces no value.
     struct BranchExits {
         bool then_exits{};
         bool else_exits{};
+        bool has_else{true};
     };
+
+    // Does a branch of an if/match never reach the code after it?  A statement
+    // block diverges when it never falls through (it ends in return, break,
+    // continue, or a call that never returns such as Process.exit); an
+    // expression branch diverges when it is such a call, or an if/match
+    // expression all of whose branches diverge.
+    [[nodiscard]] bool expression_diverges(const Expression& expr) const;
+    [[nodiscard]] bool branch_diverges(const Expression* expr,
+                                       const std::vector<StatementPtr>& body) const;
+    [[nodiscard]] bool arm_diverges(const MatchArm& arm) const;
 
     // Shared conditional inference: type-checks the condition, computes each
     // branch type via the supplied callables (under their own scope, with
@@ -196,8 +223,10 @@ private:
                                                     const SourceLocation& location);
 
     // Unify two if/conditional branch types into the expression's result type.
+    // A diverging branch takes no part; a falling-through branch that produces
+    // no value while the other produces one is an error.
     [[nodiscard]] TypeInfo merge_if_branch_types(const TypeInfo& then_type,
-                                                 const TypeInfo& else_type,
+                                                 const TypeInfo& else_type, BranchExits exits,
                                                  const SourceLocation& location);
 
     // Infer the result type of an if *statement* used in value position (e.g.

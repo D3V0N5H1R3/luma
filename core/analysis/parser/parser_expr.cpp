@@ -16,6 +16,7 @@
 //  12. Generic record creation lookahead
 //  13. Record creation
 
+#include <cstddef>
 #include <format>
 
 #include "analysis/lexer/token_type.hpp"
@@ -24,6 +25,46 @@
 #include "common/string_utils.hpp"
 
 namespace luma {
+
+namespace {
+
+// Number of postfix links — field accesses, indexes, calls, and '?' — already
+// stacked on `expr`'s receiver spine.  Non-zero only for a parenthesised
+// primary such as `(a.b.c)`; the walk is bounded by the chain limit that the
+// inner parse_postfix() already enforced.
+[[nodiscard]] std::size_t postfix_spine_length(const Expression& expr) {
+    std::size_t length = 0;
+
+    for (const Expression* node = &expr; node != nullptr; ++length) {
+        switch (node->kind) {
+            case ExpressionKind::FieldAccess:
+                node = static_cast<const FieldAccessExpression&>(*node).object.get();
+                break;
+            case ExpressionKind::IndexAccess:
+                node = static_cast<const IndexAccessExpression&>(*node).object.get();
+                break;
+            case ExpressionKind::Call:
+                node = static_cast<const CallExpression&>(*node).callee.get();
+                break;
+            case ExpressionKind::Unary: {
+                const auto& unary = static_cast<const UnaryExpression&>(*node);
+
+                if (unary.op != TokenType::QuestionMark) {
+                    return length;
+                }
+
+                node = unary.operand.get();
+                break;
+            }
+            default:
+                return length;
+        }
+    }
+
+    return length;
+}
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Top-level expression and record-with
@@ -155,7 +196,11 @@ ExpressionPtr Parser::parse_unary() {
 ExpressionPtr Parser::parse_postfix() {
     auto expression = parse_primary();
 
-    std::size_t chain_length = 0;
+    // A parenthesised primary may already carry a postfix chain — `(a.b.c).d`
+    // continues the spine of `a.b.c` — so the length limit counts those links
+    // too.  Restarting at zero inside every parenthesis let nested groups
+    // build a spine of max_parse_depth × max_expression_depth nodes.
+    std::size_t chain_length = postfix_spine_length(*expression);
     while (true) {
         if (check(TokenType::Dot)) {
             const auto location = current().location;
@@ -782,6 +827,7 @@ ExpressionPtr Parser::parse_inline_lambda() {
 bool Parser::is_generic_record_creation() const {
     // Precondition: current token is '<'.
     int depth = 1;
+    int paren_depth = 0;
     int offset = 1;
 
     while (depth > 0) {
@@ -789,8 +835,11 @@ bool Parser::is_generic_record_creation() const {
 
         // Stop at the first token that cannot be part of a type argument (this
         // includes end-of-file), so a comparison such as `MAX < x` is settled
-        // without scanning the rest of the file for a closing '>'.
-        if (!error_recovery::can_appear_in_type(type)) {
+        // without scanning the rest of the file for a closing '>'.  The scan is
+        // bounded as well (see type_lookahead_exceeded), so a chain of
+        // comparisons such as `X<X<X ...` or `X<X` on many lines stays linear.
+        if (!error_recovery::can_appear_in_type(type) ||
+            type_lookahead_exceeded(offset, offset - 1, depth, paren_depth)) {
             return false;
         }
 
@@ -800,6 +849,10 @@ bool Parser::is_generic_record_creation() const {
             --depth;
         } else if (type == TokenType::GreaterGreater) {
             depth -= 2;
+        } else if (type == TokenType::LeftParen) {
+            ++paren_depth;
+        } else if (type == TokenType::RightParen && paren_depth > 0) {
+            --paren_depth;
         }
 
         ++offset;

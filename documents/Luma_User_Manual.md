@@ -166,7 +166,7 @@ The `:file` command loads and executes a `.luma` file in the current REPL sessio
 
 `include` works in REPL input and in programs run with `--eval`. With no including file, paths resolve against the current working directory, then `LUMA_PATH` (see [§25 — Including Files](#25--including-files)).
 
-The REPL type-checks every input before running it. Each input is checked against the definitions of the earlier inputs that ran, so a type error is reported straight away and the rejected line defines nothing. Redefining a name on a later line replaces it, even with a different type.
+The REPL type-checks every input before running it. Each input is checked against the definitions of the earlier inputs that ran, so a type error is reported straight away and the rejected line defines nothing. Redefining a name on a later line replaces it — including for functions entered earlier, which then see the new value — so the new definition must keep the type of the old one (for a function, the same signature). A redefinition with a different type is rejected with `cannot redefine 'limit' as 'string': an earlier input defined it as 'integer'`; choose a new name, or start over with `:clear`.
 
 Using `break` or `continue` outside a loop in the REPL prints a clear error message instead of crashing:
 
@@ -587,6 +587,8 @@ function optional<string> get_display_name(optional<User> user) {
 
 > `?` **requires the enclosing function to return** `result<T>`, `optional<T>`, or to be `@main`. Using `?` in a function that returns a plain type (e.g. `integer`) is a type error. On a `result`, the propagated error type must also fit the enclosing function's error type — see [§14 — Result and Optional](#14--result-and-optional).
 
+> `?` **cannot be used in an expression-bodied lambda** such as `(string s) -> String.parse_integer(s)?`. The lambda's type is inferred from its body, which `?` unwraps to `integer`, yet on a failure the lambda would return the failure itself — so callers expecting an `integer` would receive a `result`. Handle the value inside the lambda instead (`(string s) -> String.parse_integer(s) ?? 0`), or write a block body with explicit `return`s.
+
 ### Truthiness
 
 The type checker requires `boolean` for conditions in `if`, `while`, and `assert`. For reference, the following values are considered **falsy** at runtime; all others are **truthy**:
@@ -642,6 +644,13 @@ string label = if score >= 60 { "pass" } else { "fail" }
 ```
 
 Both branches must produce the same type. `else if` chaining is supported in the expression form — the final branch must be a plain `else`.
+
+A branch may instead leave early with `return`, `break`, or `continue`; it then takes no part in the result, and the other branch decides the type. A branch that simply ends without a value — an empty `{ }`, or a call to a `void` function such as `print` — is a type error when the other branch produces one, because the variable would otherwise silently hold `none`:
+
+```luma
+integer n = if ready { 1 } else { return 0 }          # OK — the else branch leaves the function
+string s  = if loud { "LOUD" } else { print("quiet") } # error: the 'else' branch of this 'if' produces no value
+```
 
 ### For … in (Range)
 
@@ -1829,11 +1838,13 @@ See the [Standard Library Reference — §22 Optional](Luma_Standard_Library_Ref
 
 ## 15 — Match
 
-Match dispatches on the value of an expression. Arms are evaluated in declaration order and the first matching arm executes. Match is exhaustive for booleans, choice types, `result<T>`, and `optional<T>` — a type error is raised if arms are missing and execution is aborted before the program runs.
+Match dispatches on the value of an expression. Arms are evaluated in declaration order and the first matching arm executes. Match is exhaustive for booleans, choice types, `result<T>`, and `optional<T>` — a type error is raised if arms are missing and execution is aborted before the program runs. A match on any other type (integers, strings, numbers, …) needs an `else` arm.
+
+Every pattern must fit the type of the value being matched: `true`/`false` need a `boolean`, `some(x)`/`none` an `optional<T>`, `success(x)`/`failure(e)` a `result<T>`, integer and range arms an `integer`, string arms a `string`, and a choice pattern must name a variant of the subject's own choice type — `case Badge.Circle(label)` on a `Shape` is a type error even if `Shape` also has a `Circle` variant. A pattern naming a variant its choice does not declare is a type error too.
 
 ### Comparison Arms
 
-All six comparison operators are supported. Comparison matches require an `else` arm (or a `case !=` arm, which acts as a catch-all for the type checker). The `==` operator compares the subject against a **non-literal** expression; to match a literal by value, use the bare-literal form below rather than `case == <literal>`:
+All six comparison operators are supported. Comparison matches require an `else` arm. A `case != v` arm covers the remaining values only together with an unguarded arm that matches `v` itself (`case 5 { … } case != 5 { … }`); on its own it leaves `v` unmatched, so the type checker still requires `else`. The `==` operator compares the subject against a **non-literal** expression; to match a literal by value, use the bare-literal form below rather than `case == <literal>`:
 
 ```luma
 match score {
@@ -2074,6 +2085,15 @@ number doubled = match x {
     else {
         x * 2
     }
+}
+```
+
+An arm may leave early with `return`, `break`, or `continue` instead of producing a value; such arms take no part in the match's type, wherever they appear. An arm that ends without a value (an empty `{ }`, or a `void` call) while other arms produce one is a type error (`this match arm produces no value, but other arms produce 'string'`):
+
+```luma
+integer value = match parsed {
+    failure(_e) { return 0 } # leaves the function — no value needed
+    success(v)  { v }
 }
 ```
 
@@ -3264,15 +3284,21 @@ These checks run in the type checker, on operands that are integer literals. Whe
 
 #### Match Exhaustiveness
 
-| Error                                                     | Cause                                |
-| --------------------------------------------------------- | ------------------------------------ |
-| `match must have at least one arm`                        | Empty match statement                |
-| `match on boolean must cover both 'true' and 'false'`     | Non-exhaustive boolean match         |
-| `match on choice 'C' is missing variant 'V'`              | Non-exhaustive choice match          |
-| `match on result must cover both 'success' and 'failure'` | Non-exhaustive result match          |
-| `match on optional must cover both 'some' and 'none'`     | Non-exhaustive optional match        |
-| `match with comparison arms must include an 'else' arm`   | Comparison match without a catch-all |
-| `match guard: expected boolean, got 'T'`                  | A `when` guard is not a boolean      |
+| Error                                                                         | Cause                                                        |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `match must have at least one arm`                                            | Empty match statement                                        |
+| `match on boolean must cover both 'true' and 'false'`                         | Non-exhaustive boolean match                                 |
+| `match on choice 'C' is missing variant 'V'`                                  | Non-exhaustive choice match                                  |
+| `match on result must cover both 'success' and 'failure'`                     | Non-exhaustive result match                                  |
+| `match on optional must cover both 'some' and 'none'`                         | Non-exhaustive optional match                                |
+| `match with comparison arms must include an 'else' arm`                       | Comparison match without a catch-all                         |
+| `match on 'T' must include an 'else' arm`                                     | Match on a type with no finite set of values, without `else` |
+| `match arm has 'P' pattern but subject is 'T'`                                | The pattern can never match a value of the subject's type    |
+| `match arm pattern 'C.V' is not a variant of the subject's choice type 'S'`   | A choice pattern names another choice type                   |
+| `choice 'C' has no variant 'V'`                                               | A pattern names a variant the choice does not declare        |
+| `this match arm produces no value, but other arms produce 'T'`                | A match used as a value has an arm without a value           |
+| `the 'else' branch of this 'if' produces no value, but the 'then' branch ...` | An `if` used as a value has a branch without a value         |
+| `match guard: expected boolean, got 'T'`                                      | A `when` guard is not a boolean                              |
 
 #### Functions and Declarations
 

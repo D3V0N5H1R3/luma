@@ -54,6 +54,13 @@ struct TypeCheckingContext {
     // ─── Scope tracking ───
     std::shared_ptr<TypeScope> current_scope;
 
+    // The top-level scope of the REPL input being checked incrementally (null
+    // outside TypeChecker::check_incremental).  Its parent chain holds every
+    // committed input's definitions — and the VM keeps one global per name,
+    // so a top-level redefinition there replaces the value earlier functions
+    // read rather than shadowing it.
+    std::shared_ptr<TypeScope> repl_input_scope;
+
     // ─── Function context ───
     std::optional<TypeInfo> current_return_type;
     int main_count{0};
@@ -62,6 +69,11 @@ struct TypeCheckingContext {
     // declared return type uses it to tell a value-returning body from one
     // that only ever returns nothing (and so has type `void`).
     bool has_value_return{false};
+    // True while checking the body of an expression-bodied lambda without a
+    // declared return type.  Its type is inferred from the body expression, so
+    // a '?' there would make the lambda return a failure (or none) that the
+    // inferred type does not describe; the checker rejects it.
+    bool in_inferred_expression_lambda{false};
 
     // ─── Expression context ───
     bool is_in_pipe{false};

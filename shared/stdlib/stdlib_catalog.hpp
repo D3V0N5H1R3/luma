@@ -68,6 +68,12 @@ struct FunctionSpec {
     std::vector<ReturnTypeDesc>
         param_types; // Structured parameter types for the type checker (empty = unchecked).
     bool is_variadic_fn{false}; // True if this function accepts a variable number of arguments.
+    // True if a call never returns normally (it ends the process or always
+    // raises), e.g. Process.exit.  The type checker treats such a call as
+    // leaving its block, like `return`: an if/match branch ending in it takes
+    // no part in the expression's value, and a function body ending in it does
+    // not fall through.
+    bool never_returns{false};
 
     // Returns true if this function carries an OS capability tag.  This is not
     // the same as "unavailable in sandbox mode" — see Capability.

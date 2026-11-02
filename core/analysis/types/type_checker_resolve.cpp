@@ -36,6 +36,7 @@
 #include "analysis/types/type_checker.hpp"
 #include "common/resource_limits.hpp"
 #include "common/scope_guard.hpp"
+#include "stdlib/stdlib_catalog.hpp"
 #include "symbols/qualified_name.hpp"
 
 namespace luma {
@@ -1070,6 +1071,44 @@ bool report_unknown_types(TypeCheckingServices& tc, const TypeAnnotation& ann,
     report_internal_types(tc, ann, loc);
 
     return report_unknown_names(tc, ann, context, loc);
+}
+
+bool is_never_returning_call(const TypeCheckingServices& tc, const Expression& expr) {
+    const Expression* call_expr = &expr;
+
+    // `code |> Process.exit()` calls Process.exit as well.
+    if (expr.kind == ExpressionKind::Pipe) {
+        call_expr = static_cast<const PipeExpression&>(expr).right.get();
+    }
+
+    if (call_expr == nullptr || call_expr->kind != ExpressionKind::Call) {
+        return false;
+    }
+
+    const auto& callee = *static_cast<const CallExpression&>(*call_expr).callee;
+
+    if (callee.kind != ExpressionKind::FieldAccess) {
+        return false;
+    }
+
+    const auto& field = static_cast<const FieldAccessExpression&>(callee);
+
+    if (field.object->kind != ExpressionKind::Variable) {
+        return false;
+    }
+
+    const auto& module = static_cast<const VariableExpression&>(*field.object).name;
+    const auto* symbol = tc.lookup_variable(module);
+
+    if (symbol == nullptr || symbol->type.kind != TypeInfo::Kind::Namespace ||
+        !tc.is_stdlib_namespace(module)) {
+        return false;
+    }
+
+    const auto& catalog = stdlib::catalog();
+    const auto spec = catalog.find(symbols::make_qualified(module, field.field_name));
+
+    return spec != catalog.end() && spec->second.never_returns;
 }
 
 } // namespace type_check_helpers

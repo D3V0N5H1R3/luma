@@ -56,6 +56,8 @@ void StatementTypeChecker::visit_variable_declaration(const VariableDeclStatemen
     if (tc_.context().current_scope->has_local(stmt.name)) {
         tc_.error(std::format("variable '{}' is already declared in this scope", stmt.name),
                   stmt.location, "choose a different name, or use the existing variable");
+    } else {
+        type_check_helpers::check_repl_redefinition(tc_, stmt.name, declared_type, stmt.location);
     }
 
     // Shadowing an outer variable is reported by the linter (W0012), not here.
@@ -105,6 +107,7 @@ void StatementTypeChecker::visit_tuple_destructuring(const TupleDestructuringSta
             (void)type_check_helpers::check_type_assignable(tc_, declared, actual,
                                                             "tuple destructuring", stmt.location);
 
+            type_check_helpers::check_repl_redefinition(tc_, name, declared, stmt.location);
             tc_.context().current_scope->define(name, declared, {.is_mutable = stmt.is_mutable});
         }
 

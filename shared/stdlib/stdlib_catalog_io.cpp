@@ -96,7 +96,7 @@ void register_process_functions(std::vector<FunctionSpec>& specs, const ModuleBu
             m.fn("command", 2, "(program: string, arguments: array<string>)", named::command(),
                  {p.string, p.array_string}),
             m.fn("execute", 1, "(command: string)", R::result(named::command_output()), {p.string}),
-            m.fn("exit", 1, "(code: integer)", R::void_type(), {p.integer}),
+            never_returning(m.fn("exit", 1, "(code: integer)", R::void_type(), {p.integer})),
             m.fn("exit_status", 1, "(output: Process.CommandOutput)", named::exit_status(),
                  {named::command_output()}),
             m.fn("find_executable", 1, "(name: string)", R::optional(R::string_type()), {p.string}),

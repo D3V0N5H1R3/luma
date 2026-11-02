@@ -85,10 +85,14 @@ TypeInfo ExpressionTypeChecker::visit_call(const CallExpression& expr) {
         if (declared != nullptr) {
             check_declared_function_args(expr, *declared, callee_type, fn_name, arg_types,
                                          named_arg_types);
-        } else if (!callee_type.inner_types.empty()) {
+        } else if (!callee_type.inner_types.empty() || callee_type.return_type) {
             // A function value (lambda, parameter, imported name) has no
             // parameter names, so only the argument count and the positional
-            // argument types can be checked.
+            // argument types can be checked.  A known signature always carries
+            // a return type — even `function()` resolves to `-> void` — so a
+            // zero-parameter function value is checked too; only a Func
+            // without one (the variadic `print`, a stdlib function value of
+            // unspecified signature) skips the check.
             check_call_arity(expr, callee_type);
             check_positional_args(expr, callee_type, arg_types);
         }

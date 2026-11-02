@@ -220,9 +220,9 @@ void StatementTypeChecker::visit_match_statement(const MatchStatement& stmt) {
 
         tc_.push_scope();
 
-        match_arm_binding::check_arm_comparison(tc_, arm, subject_type, stmt.location);
+        match_arm_binding::check_arm_patterns(tc_, arm, subject_type, stmt.location);
         match_arm_binding::bind_arm_names(tc_, arm, subject_type);
-        match_arm_binding::bind_choice_fields(tc_, arm, subject_type, stmt.location, true);
+        match_arm_binding::bind_choice_fields(tc_, arm, subject_type, stmt.location);
 
         if (arm.kind() == MatchArm::Kind::RecordCase) {
             match_arm_binding::bind_record_fields(tc_, arm.record_type(),
@@ -342,6 +342,16 @@ bool StatementTypeChecker::definitely_returns(std::span<const StatementPtr> stmt
             case StatementKind::Return:
                 return true;
 
+            case StatementKind::Expression:
+                // A call that never returns (Process.exit) ends every path
+                // through it, so the function cannot fall off its end there.
+                if (type_check_helpers::is_never_returning_call(
+                        tc_, *static_cast<const ExpressionStatement&>(*stmt).expression)) {
+                    return true;
+                }
+
+                break;
+
             case StatementKind::If: {
                 const auto& if_stmt = static_cast<const IfStatement&>(*stmt);
 
@@ -437,6 +447,15 @@ bool StatementTypeChecker::never_falls_through(std::span<const StatementPtr> stm
             case StatementKind::Break:
             case StatementKind::Continue:
                 return true;
+
+            case StatementKind::Expression:
+                // A call that never returns (Process.exit) leaves the block too.
+                if (type_check_helpers::is_never_returning_call(
+                        tc_, *static_cast<const ExpressionStatement&>(*stmt).expression)) {
+                    return true;
+                }
+
+                break;
 
             case StatementKind::If: {
                 const auto& if_stmt = static_cast<const IfStatement&>(*stmt);

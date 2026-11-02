@@ -505,6 +505,13 @@ struct ModuleBuilder {
     }
 };
 
+// Marks a function spec as never returning normally (see
+// FunctionSpec::never_returns): `never_returning(m.fn("exit", ...))`.
+[[nodiscard]] inline FunctionSpec never_returning(FunctionSpec spec) {
+    spec.never_returns = true;
+    return spec;
+}
+
 // Structured parameter-type shorthands shared by all register_* helpers.
 // Field names are descriptive to improve readability at registration sites.
 struct ParamShorthands {

@@ -48,6 +48,12 @@ TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
     const ScopeGuard restore_loop_flows{
         [&] { tc_.context().loop_flows = std::move(saved_loop_flows); }};
 
+    const bool saved_in_inferred_expression_lambda =
+        std::exchange(tc_.context().in_inferred_expression_lambda,
+                      expr.is_expression_body() && !expr.return_type);
+    const ScopeGuard restore_in_inferred_expression_lambda{
+        [&] { tc_.context().in_inferred_expression_lambda = saved_in_inferred_expression_lambda; }};
+
     TypeInfo func_type{
         .kind = TypeInfo::Kind::Func, .name = {}, .inner_types = {}, .return_type = {}};
 
@@ -156,8 +162,8 @@ TypeInfo ExpressionTypeChecker::visit_if(const IfExpression& expr) {
                                                     : infer_block_result(expr.else_body());
             return else_type;
         },
-        {.then_exits = expr.then_expr() == nullptr && tc_.never_falls_through(expr.then_body()),
-         .else_exits = expr.else_expr() == nullptr && tc_.never_falls_through(expr.else_body())},
+        {.then_exits = branch_diverges(expr.then_expr(), expr.then_body()),
+         .else_exits = branch_diverges(expr.else_expr(), expr.else_body())},
         expr.location);
 
     // A branch narrower than the merged type (`if c { 1 } else { 2.5 }`) widens.
@@ -185,8 +191,44 @@ TypeInfo ExpressionTypeChecker::infer_if_statement_result(const IfStatement& stm
                                           : infer_block_result(stmt.else_body);
         },
         {.then_exits = tc_.never_falls_through(stmt.then_body),
-         .else_exits = !stmt.else_body.empty() && tc_.never_falls_through(stmt.else_body)},
+         .else_exits = !stmt.else_body.empty() && tc_.never_falls_through(stmt.else_body),
+         .has_else = !stmt.else_body.empty()},
         stmt.location);
+}
+
+bool ExpressionTypeChecker::expression_diverges(const Expression& expr) const {
+    if (expr.kind == ExpressionKind::If) {
+        const auto& if_expr = static_cast<const IfExpression&>(expr);
+
+        return branch_diverges(if_expr.then_expr(), if_expr.then_body()) &&
+               branch_diverges(if_expr.else_expr(), if_expr.else_body());
+    }
+
+    if (expr.kind == ExpressionKind::Match) {
+        const auto& match_expr = static_cast<const MatchExpression&>(expr);
+
+        // A non-exhaustive match is already an error, so every arm diverging
+        // means the match never produces a value.
+        return !match_expr.arms.empty() &&
+               std::ranges::all_of(match_expr.arms,
+                                   [this](const MatchArm& arm) { return arm_diverges(arm); });
+    }
+
+    // A call that never returns (Process.exit) leaves the branch like `return`.
+    return type_check_helpers::is_never_returning_call(tc_, expr);
+}
+
+bool ExpressionTypeChecker::branch_diverges(const Expression* expr,
+                                            const std::vector<StatementPtr>& body) const {
+    if (expr != nullptr) {
+        return expression_diverges(*expr);
+    }
+
+    return tc_.never_falls_through(body);
+}
+
+bool ExpressionTypeChecker::arm_diverges(const MatchArm& arm) const {
+    return branch_diverges(arm.body_expr.get(), arm.body);
 }
 
 TypeInfo
@@ -250,22 +292,69 @@ ExpressionTypeChecker::infer_conditional_result(const Expression& condition,
 
     match_arm_binding::merge_branch_ownership(tc_, before, falling_through);
 
-    return merge_if_branch_types(then_type, else_type, location);
+    return merge_if_branch_types(then_type, else_type, exits, location);
 }
 
+namespace {
+
+// A branch type that may stand for a missing value without proof — error
+// recovery (Unknown) or a permissive stdlib result (StdlibAny) — so a
+// "produces no value" diagnostic against it would be a guess.
+[[nodiscard]] bool is_indefinite(const TypeInfo& type) {
+    return type.kind == TypeInfo::Kind::Unknown || type.kind == TypeInfo::Kind::StdlibAny;
+}
+
+} // namespace
+
 TypeInfo ExpressionTypeChecker::merge_if_branch_types(const TypeInfo& then_type,
-                                                      const TypeInfo& else_type,
+                                                      const TypeInfo& else_type, BranchExits exits,
                                                       const SourceLocation& location) {
-    if (then_type.kind == TypeInfo::Kind::Void && else_type.kind == TypeInfo::Kind::Void) {
+    // A branch that never falls through (return, break, continue) produces no
+    // value for the conditional, so only the other branch decides its type.
+    if (exits.then_exits && exits.else_exits) {
         return TypeInfo::make(TypeInfo::Kind::Void);
     }
 
-    if (then_type.kind == TypeInfo::Kind::Void) {
+    if (exits.then_exits) {
         return else_type;
     }
 
-    if (else_type.kind == TypeInfo::Kind::Void) {
+    if (exits.else_exits) {
         return then_type;
+    }
+
+    const bool then_void = then_type.kind == TypeInfo::Kind::Void;
+    const bool else_void = else_type.kind == TypeInfo::Kind::Void;
+
+    if (then_void && else_void) {
+        return TypeInfo::make(TypeInfo::Kind::Void);
+    }
+
+    if (then_void || else_void) {
+        // One branch falls through without a value while the other produces
+        // one: used as a value, the conditional would silently yield `none`.
+        const auto& value_type = then_void ? else_type : then_type;
+
+        if (!is_indefinite(value_type)) {
+            if (!exits.has_else) {
+                tc_.error(std::format("this 'if' has no 'else' branch, so it produces no value "
+                                      "when its condition is false, but its 'then' branch "
+                                      "produces '{}'",
+                                      value_type.to_string()),
+                          location, "add an 'else' branch that produces a value of the same type");
+            } else {
+                tc_.error(std::format("the '{}' branch of this 'if' produces no value, but the "
+                                      "'{}' branch produces '{}'",
+                                      then_void ? "then" : "else", then_void ? "else" : "then",
+                                      value_type.to_string()),
+                          location,
+                          std::format("end every branch with a value of type '{}', or leave the "
+                                      "branch early with 'return'",
+                                      value_type.to_string()));
+            }
+        }
+
+        return value_type;
     }
 
     // Like match arms: an unknown (error-recovery or type-parameter) then-branch
@@ -308,8 +397,10 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
     // Expression-bodied arms, widened to the match's result type afterwards.
     std::vector<std::pair<const Expression*, TypeInfo>> arm_values;
 
-    TypeInfo result_type = TypeInfo::make(TypeInfo::Kind::Unknown);
-    bool first{true};
+    // Each arm's type, and whether it diverges, merged after all arms are
+    // checked so the result does not depend on the order of the arms.
+    std::vector<ArmOutcome> outcomes;
+    outcomes.reserve(arms.size());
 
     for (const auto& arm : arms) {
         // Restore to pre-match state before each arm.
@@ -317,13 +408,13 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
 
         tc_.push_scope();
 
-        match_arm_binding::check_arm_comparison(tc_, arm, subject_type, location);
+        match_arm_binding::check_arm_patterns(tc_, arm, subject_type, location);
 
         // Bind success/failure/some names.
         match_arm_binding::bind_arm_names(tc_, arm, subject_type);
 
         // Bind choice variant destructured fields.
-        match_arm_binding::bind_choice_fields(tc_, arm, subject_type, location, false);
+        match_arm_binding::bind_choice_fields(tc_, arm, subject_type, location);
 
         // Bind record destructured fields.
         if (arm.kind() == MatchArm::Kind::RecordCase) {
@@ -352,46 +443,94 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
             }
         }
 
-        if (first) {
-            result_type = arm_type;
-            first = false;
-        } else if (result_type.kind == TypeInfo::Kind::Unknown &&
-                   arm_type.kind != TypeInfo::Kind::Unknown &&
-                   arm_type.kind != TypeInfo::Kind::Void) {
-            // First arm resolved to Unknown (error recovery); adopt this arm's type.
-            result_type = arm_type;
-        } else if (result_type.kind != TypeInfo::Kind::Void &&
-                   arm_type.kind != TypeInfo::Kind::Void &&
-                   result_type.kind != TypeInfo::Kind::Unknown &&
-                   arm_type.kind != TypeInfo::Kind::Unknown) {
-            if (!tc_.is_assignable(result_type, arm_type) &&
-                !tc_.is_assignable(arm_type, result_type)) {
-                tc_.error(std::format("match arms have different types: '{}' and '{}'",
-                                      result_type.to_string(), arm_type.to_string()),
-                          location, "ensure all match arms return the same type");
-            } else if (!tc_.is_assignable(result_type, arm_type)) {
-                // A wider arm widens the whole match, as for if branches:
-                // `case 1 { 2 } else { 2.5 }` is a number.
-                result_type = arm_type;
-            }
-        }
+        outcomes.push_back({.type = arm_type,
+                            .diverges = arm_diverges(arm),
+                            .location = arm.location.value_or(location)});
 
         tc_.pop_scope();
 
         // Capture ownership state after this arm, unless the arm never
         // reaches the code after the match.
-        if (arm.body_expr || !tc_.never_falls_through(arm.body)) {
+        if (!outcomes.back().diverges) {
             arm_snapshots.push_back(tc_.context().current_scope->snapshot_ownership());
         }
     }
 
     match_arm_binding::merge_branch_ownership(tc_, before, arm_snapshots);
 
+    const auto result_type = merge_match_arm_types(outcomes, location);
+
     for (const auto& [arm_value, arm_type] : arm_values) {
         type_check_helpers::mark_numeric_widening(tc_, *arm_value, result_type, arm_type);
     }
 
     return result_type;
+}
+
+TypeInfo ExpressionTypeChecker::merge_match_arm_types(const std::vector<ArmOutcome>& outcomes,
+                                                      const SourceLocation& location) {
+    if (outcomes.empty()) {
+        return TypeInfo::make(TypeInfo::Kind::Unknown);
+    }
+
+    std::optional<TypeInfo> result_type;
+    const ArmOutcome* valueless_arm{nullptr};
+
+    for (const auto& outcome : outcomes) {
+        // An arm that never falls through (return, break, continue) produces
+        // no value for the match, wherever it appears among the arms.
+        if (outcome.diverges) {
+            continue;
+        }
+
+        const auto& arm_type = outcome.type;
+
+        if (arm_type.kind == TypeInfo::Kind::Void) {
+            if (valueless_arm == nullptr) {
+                valueless_arm = &outcome;
+            }
+
+            continue;
+        }
+
+        // An Unknown arm (error recovery) adopts the next concrete arm type.
+        if (!result_type || (result_type->kind == TypeInfo::Kind::Unknown &&
+                             arm_type.kind != TypeInfo::Kind::Unknown)) {
+            result_type = arm_type;
+            continue;
+        }
+
+        if (arm_type.kind == TypeInfo::Kind::Unknown) {
+            continue;
+        }
+
+        if (!tc_.is_assignable(*result_type, arm_type) &&
+            !tc_.is_assignable(arm_type, *result_type)) {
+            tc_.error(std::format("match arms have different types: '{}' and '{}'",
+                                  result_type->to_string(), arm_type.to_string()),
+                      location, "ensure all match arms return the same type");
+        } else if (!tc_.is_assignable(*result_type, arm_type)) {
+            // A wider arm widens the whole match, as for if branches:
+            // `case 1 { 2 } else { 2.5 }` is a number.
+            result_type = arm_type;
+        }
+    }
+
+    if (!result_type) {
+        // Every arm diverges or none produces a value.
+        return TypeInfo::make(TypeInfo::Kind::Void);
+    }
+
+    if (valueless_arm != nullptr && !is_indefinite(*result_type)) {
+        tc_.error(std::format("this match arm produces no value, but other arms produce '{}'",
+                              result_type->to_string()),
+                  valueless_arm->location,
+                  std::format("end the arm with a value of type '{}', or leave it early with "
+                              "'return'",
+                              result_type->to_string()));
+    }
+
+    return *result_type;
 }
 
 bool ExpressionTypeChecker::check_internal_record_access(const RecordCreationExpression& expr) {

@@ -762,6 +762,47 @@ static void test_lambda_call_wrong_arg_count_fails() {
                            DiagnosticCode::WrongArgCount));
 }
 
+// Regression: a function value with zero parameters skipped the arity check,
+// because "no parameter types" was read as "unknown signature".
+static void test_zero_param_function_value_call_with_args_fails() {
+    ASSERT_TRUE(fails_with("function integer call_it(function() -> integer f) {\n"
+                           "    integer r = f(\"surprise\")\n"
+                           "    return r\n"
+                           "}\n",
+                           DiagnosticCode::WrongArgCount));
+    ASSERT_TRUE(fails_with("function() -> integer f = () -> 1\n"
+                           "integer y = 5 |> f()\n",
+                           DiagnosticCode::WrongArgCount));
+    ASSERT_TRUE(passes("function integer call_it(function() -> integer f) {\n"
+                       "    integer r = f()\n"
+                       "    return r\n"
+                       "}\n"));
+}
+
+static void test_builtin_call_arity() {
+    // `print` stays variadic; `type_of` takes exactly one value.
+    ASSERT_TRUE(passes("print()\n"
+                       "print(1, \"two\", 3.0)\n"
+                       "string t = type_of([1])\n"));
+    ASSERT_TRUE(fails_with("string t = type_of(1, 2)\n", DiagnosticCode::WrongArgCount));
+}
+
+// Regression: `?` in an expression-bodied lambda gave the lambda the unwrapped
+// type, although a failure makes the lambda return the result itself.
+static void test_propagation_in_expression_lambda_fails() {
+    ASSERT_TRUE(fails_with_message(
+        "function(string) -> integer g = (string s) -> String.parse_integer(s)?\n",
+        "error propagation '?' cannot be used in an expression-bodied lambda"));
+    ASSERT_TRUE(fails_with_message(
+        "function result<array<integer>> parse_all(array<string> xs) {\n"
+        "    return success(Array.map(xs, (string s) -> String.parse_integer(s)?))\n"
+        "}\n",
+        "error propagation '?' cannot be used in an expression-bodied lambda"));
+    // Handling the value inside the lambda stays valid.
+    ASSERT_TRUE(
+        passes("function(string) -> integer g = (string s) -> String.parse_integer(s) ?? 0\n"));
+}
+
 static void test_lambda_call_wrong_arg_type_fails() {
     ASSERT_TRUE(fails("function(integer) -> integer f = (integer x) -> x * 2\n"
                       "integer y = f(\"hi\")\n"));
@@ -1223,6 +1264,9 @@ int main() {
     RUN(test_lambda_body_type_mismatch_fails);
     RUN(test_lambda_param_signature_mismatch_fails);
     RUN(test_lambda_call_wrong_arg_count_fails);
+    RUN(test_zero_param_function_value_call_with_args_fails);
+    RUN(test_builtin_call_arity);
+    RUN(test_propagation_in_expression_lambda_fails);
     RUN(test_lambda_call_wrong_arg_type_fails);
     RUN(test_lambda_undefined_variable_in_body_fails);
 

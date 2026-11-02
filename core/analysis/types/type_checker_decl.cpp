@@ -80,6 +80,11 @@ void TypeChecker::register_declaration(const Declaration& decl) {
 
             define_function_in_scope(node, node.name);
 
+            if (const auto* defined = current_scope()->lookup(node.name)) {
+                type_check_helpers::check_repl_redefinition(*this, node.name, defined->type,
+                                                            node.location);
+            }
+
             if (node.is_main) {
                 ++ctx_.main_count;
 
