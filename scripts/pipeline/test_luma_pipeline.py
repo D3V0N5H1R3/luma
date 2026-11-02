@@ -4,9 +4,11 @@
 Pins the gate and agent result contracts with fake ``cmake`` / ``ctest`` /
 ``python`` / agent tools: each fake prints output and exits with a chosen code,
 and the tests assert the exact value the helper returns. Also covers the pure
-helpers (argument vectors, JSONL reduction, the abort rule), the git
-checkpoint and artifact-protection helpers in scratch repositories, and the
-CLI's dry-run path, which must never spawn a process.
+helpers (argument vectors, JSONL reduction, the abort rule), process-tree
+cleanup on errors, timeouts, Ctrl+C, and termination signals, the clang-tidy
+compile-database refresh, Visual Studio discovery, the git checkpoint, revert,
+and artifact-protection helpers in scratch repositories, end-to-end ``fix``
+runs, and the CLI's dry-run path, which must never spawn a process.
 
 No real agent CLI, build, or test run is ever invoked.
 
@@ -16,6 +18,7 @@ Run from the repository root:
 
 from __future__ import annotations
 
+import _thread
 import contextlib
 import ctypes
 import io
@@ -27,9 +30,10 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import unittest
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from unittest import mock
 
@@ -43,9 +47,11 @@ from pipeline_core import (
     Pipeline,
     PipelineError,
     Status,
+    TerminationRequested,
 )
 
 HAS_GIT = shutil.which("git") is not None
+IS_WINDOWS = os.name == "nt"
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _STILL_ACTIVE = 259
 
@@ -124,6 +130,62 @@ def read_calls(record_file: Path) -> list[dict[str, object]]:
     if not record_file.is_file():
         return []
     return [json.loads(line) for line in record_file.read_text(encoding="utf-8").splitlines()]
+
+
+def make_tree_agent(
+    directory: Path, name: str, pid_file: Path, *, should_exit_early: bool = False
+) -> Path:
+    """Write a fake agent that starts a long-running child of its own.
+
+    The child's PID goes to *pid_file*, and the child inherits the agent's
+    output pipe. The agent then sleeps for a minute, or exits at once when
+    *should_exit_early*, leaving the child holding the pipe open.
+    """
+    return make_launcher(
+        directory,
+        name,
+        f"""\
+        import subprocess
+        import sys
+        import time
+
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        with open({str(pid_file)!r}, "w", encoding="utf-8") as handle:
+            handle.write(str(child.pid))
+        print("child started", flush=True)
+        if not {should_exit_early!r}:
+            time.sleep(60)
+        """,
+    )
+
+
+def read_pid(pid_file: Path) -> int | None:
+    """Return the PID a tree agent recorded, or None while it is not written yet."""
+    try:
+        return int(pid_file.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def interrupt_when_started(pid_file: Path, signum: int = signal.SIGINT) -> threading.Thread:
+    """Deliver *signum* to the main thread once a tree agent has written its PID.
+
+    ``_thread.interrupt_main`` runs the main thread's Python handler for the
+    signal, which works the same on every platform. Nothing is sent when the
+    agent never starts within 30 seconds.
+    """
+
+    def wait_then_interrupt() -> None:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if read_pid(pid_file) is not None:
+                _thread.interrupt_main(signum)
+                return
+            time.sleep(0.05)
+
+    thread = threading.Thread(target=wait_then_interrupt, daemon=True)
+    thread.start()
+    return thread
 
 
 def forbid_spawning() -> contextlib.AbstractContextManager[object]:
@@ -210,6 +272,16 @@ class FakeToolTestCase(unittest.TestCase):
     def fake_tool(self, name: str, **kwargs: object) -> Path:
         return make_fake_tool(self.tool_dir, name, **kwargs)  # type: ignore[arg-type]
 
+    def assert_child_was_killed(self, pid_file: Path) -> None:
+        """Assert the child a tree agent started is gone (and never leak it)."""
+        pid = read_pid(pid_file)
+        self.assertIsNotNone(pid, "the fake agent never started its child")
+        assert pid is not None
+        self.addCleanup(_kill_if_alive, pid)
+        self.assertTrue(
+            wait_for_exit(pid, timeout=10), "the agent's child process was left running"
+        )
+
 
 # ── Gate contracts ────────────────────────────────────────────────
 
@@ -274,7 +346,7 @@ class BuildAndTestTests(FakeToolTestCase):
         self.assertNotIn("LUMA_TEST_MARKER", os.environ)
 
     def test_dry_run_prints_the_gate_and_spawns_nothing(self) -> None:
-        pipeline = Pipeline(self.repo_root, dry_run=True, console=self.console)
+        pipeline = Pipeline(self.repo_root, is_dry_run=True, console=self.console)
         with forbid_spawning():
             self.assertIs(pipeline.build_and_test(), True)
         self.assertIn("[dry-run] cmake --preset default", self.out.getvalue())
@@ -315,6 +387,299 @@ class LintAndFormatTests(FakeToolTestCase):
 
         self.assertIs(self.pipeline.lint_and_format(check_only=True), True)
         self.assertEqual([call["args"] for call in read_calls(self.calls)], [["scripts/lint.py"]])
+
+
+class CompileDatabaseTests(FakeToolTestCase):
+    """``build/compile_commands.json`` is regenerated when missing or stale."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.fake_tool("clang-tidy")
+        # A fake cmake that writes a compile database into its -B directory.
+        make_launcher(
+            self.tool_dir,
+            "cmake",
+            f"""\
+            import json
+            import pathlib
+            import sys
+
+            with open({str(self.calls)!r}, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps({{"args": sys.argv[1:]}}) + "\\n")
+            build_dir = pathlib.Path(sys.argv[sys.argv.index("-B") + 1])
+            build_dir.mkdir(parents=True, exist_ok=True)
+            (build_dir / "compile_commands.json").write_text("[]", encoding="utf-8")
+            """,
+        )
+        self.build_db = self.repo_root / "build" / "compile_commands.json"
+        self.build_db.parent.mkdir()
+        self.cmake_lists = self.repo_root / "CMakeLists.txt"
+        self.cmake_lists.write_text("project(test)\n", encoding="utf-8")
+        self.cache = self.repo_root / "build" / "CMakeCache.txt"
+
+    def write_database(self, *, modified: float) -> None:
+        self.build_db.write_text("old", encoding="utf-8")
+        os.utime(self.build_db, (modified, modified))
+
+    def touch(self, path: Path, *, modified: float, text: str = "") -> None:
+        if not path.exists() or text:
+            path.write_text(text, encoding="utf-8")
+        os.utime(path, (modified, modified))
+
+    def configure_runs(self) -> int:
+        return len(read_calls(self.calls))
+
+    def test_generates_a_missing_database(self) -> None:
+        self.pipeline._ensure_compile_database()
+
+        self.assertEqual(self.configure_runs(), 1)
+        self.assertEqual(self.build_db.read_text(encoding="utf-8"), "[]")
+
+    def test_keeps_a_database_newer_than_every_input(self) -> None:
+        self.touch(self.cmake_lists, modified=1000)
+        self.touch(self.cache, modified=1000)
+        self.write_database(modified=2000)
+
+        self.pipeline._ensure_compile_database()
+
+        self.assertEqual(self.configure_runs(), 0)
+        self.assertEqual(self.build_db.read_text(encoding="utf-8"), "old")
+
+    def test_refreshes_a_database_older_than_a_cmake_lists_file(self) -> None:
+        # A phase added a source to CMakeLists.txt; clang-tidy must see it.
+        self.write_database(modified=1000)
+        self.touch(self.cmake_lists, modified=2000)
+
+        self.pipeline._ensure_compile_database()
+
+        self.assertEqual(self.configure_runs(), 1)
+        self.assertEqual(self.build_db.read_text(encoding="utf-8"), "[]")
+
+    def test_refreshes_a_database_older_than_the_last_configure(self) -> None:
+        self.touch(self.cmake_lists, modified=1000)
+        self.write_database(modified=2000)
+        self.touch(
+            self.cache, modified=3000, text="CMAKE_GENERATOR:INTERNAL=Visual Studio 17 2022\n"
+        )
+
+        self.pipeline._ensure_compile_database()
+
+        self.assertEqual(self.configure_runs(), 1)
+
+    def test_leaves_a_database_the_build_generator_maintains_itself(self) -> None:
+        self.write_database(modified=1000)
+        self.touch(
+            self.cache,
+            modified=3000,
+            text="CMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON\nCMAKE_GENERATOR:INTERNAL=Unix Makefiles\n",
+        )
+
+        self.pipeline._ensure_compile_database()
+
+        self.assertEqual(self.configure_runs(), 0)
+
+    def test_does_nothing_without_clang_tidy(self) -> None:
+        with mock.patch.object(Pipeline, "_which", return_value=None):
+            self.pipeline._ensure_compile_database()
+
+        self.assertEqual(self.configure_runs(), 0)
+        self.assertFalse(self.build_db.exists())
+
+
+class VisualStudioDiscoveryTests(FakeToolTestCase):
+    """vswhere lists every installation; each one is searched, newest first."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        program_files = self.root / "pf86"
+        vswhere = program_files / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+        vswhere.parent.mkdir(parents=True)
+        vswhere.write_bytes(b"")
+        self.newest = self.root / "vs-preview"
+        self.older = self.root / "vs-2022"
+        empty_path = self.root / "empty-path"
+        empty_path.mkdir()
+        self.pipeline = self.make_pipeline(
+            env={"PATH": str(empty_path), "PROGRAMFILES(X86)": str(program_files)}
+        )
+        self.commands: list[list[str]] = []
+
+        def fake_vswhere(_pipeline: Pipeline, args: Sequence[str]) -> object:
+            self.commands.append(list(args))
+            stdout = f"{self.newest}\n{self.older}\n"
+            return subprocess.CompletedProcess(list(args), 0, stdout=stdout, stderr="")
+
+        for patcher in (
+            mock.patch.object(pipeline_core, "_IS_WINDOWS", True),
+            mock.patch.object(Pipeline, "_capture", autospec=True, side_effect=fake_vswhere),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_finds_the_bundled_cmake_in_an_older_installation(self) -> None:
+        cmake = self.older.joinpath(*pipeline_core._VS_CMAKE_PARTS, "cmake.exe")
+        cmake.parent.mkdir(parents=True)
+        cmake.write_bytes(b"")
+
+        self.assertEqual(self.pipeline._find_cmake(), str(cmake))
+        self.assertTrue(self.pipeline._search_path.startswith(str(cmake.parent)))
+        (command,) = self.commands
+        for flag in ("-sort", "-prerelease", "-utf8"):
+            self.assertIn(flag, command)
+        self.assertNotIn("-latest", command)
+
+    def test_finds_vcvars_in_an_older_installation(self) -> None:
+        vcvars = self.older / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
+        vcvars.parent.mkdir(parents=True)
+        vcvars.write_bytes(b"")
+
+        self.assertEqual(self.pipeline._find_vcvars(), vcvars)
+
+
+@unittest.skipUnless(IS_WINDOWS, "vcvars runs only on Windows")
+class MsvcEnvironmentTests(FakeToolTestCase):
+    def test_imports_the_vcvars_environment_without_code_page_damage(self) -> None:
+        # Characters outside every OEM code page: `set` output decoded as
+        # "oem" turned them into '?'; the JSON round trip keeps them exact.
+        self.fake_tool("clang-tidy")
+        vcvars = self.root / "fake vcvars64.bat"
+        vcvars.write_text("@set LUMA_VCVARS_TEST=from vcvars\r\n", encoding="ascii")
+        system_root = os.environ["SYSTEMROOT"]
+        pipeline = self.make_pipeline(
+            env={
+                "PATH": f"{self.tool_dir}{os.pathsep}{Path(system_root, 'System32')}",
+                "SYSTEMROOT": system_root,
+                "COMSPEC": os.environ.get("COMSPEC", str(Path(system_root, "System32", "cmd.exe"))),
+                "LUMA_TEST_UNICODE": "café \u6f22\u5b57",
+            }
+        )
+
+        with mock.patch.object(Pipeline, "_find_vcvars", return_value=vcvars):
+            self.assertIs(pipeline._import_msvc_environment(), True)
+
+        self.assertEqual(pipeline._env["LUMA_VCVARS_TEST"], "from vcvars")
+        self.assertEqual(pipeline._env["LUMA_TEST_UNICODE"], "café \u6f22\u5b57")
+        self.assertNotIn(pipeline_core._VCVARS_VARIABLE, pipeline._env)
+
+
+class ConsoleTests(unittest.TestCase):
+    def test_raw_output_keeps_a_utf8_sequence_split_across_chunks(self) -> None:
+        out = io.StringIO()
+        console = Console(out=out, use_colour=False)
+
+        console.write_raw(b"caf\xc3")
+        console.write_raw(b"\xa9!")
+        console.end_raw()
+
+        self.assertEqual(out.getvalue(), "café!")
+
+    def test_a_truncated_sequence_at_the_end_prints_a_replacement_character(self) -> None:
+        out = io.StringIO()
+        console = Console(out=out, use_colour=False)
+
+        console.write_raw(b"ok\xc3")
+        console.end_raw()
+        console.write_raw(b"next")
+
+        self.assertEqual(out.getvalue(), "ok\ufffdnext")
+
+
+class TerminationHandlerTests(unittest.TestCase):
+    @staticmethod
+    def wait_for_handler() -> None:
+        """Give the main thread a few bytecode boundaries to run a pending handler."""
+        for _ in range(20):
+            time.sleep(0.05)
+
+    def test_a_termination_signal_raises_and_the_old_handler_is_restored(self) -> None:
+        before = signal.getsignal(signal.SIGTERM)
+
+        with (
+            self.assertRaises(TerminationRequested) as caught,
+            pipeline_core.termination_handlers(),
+        ):
+            _thread.interrupt_main(signal.SIGTERM)
+            self.wait_for_handler()
+
+        self.assertEqual(caught.exception.exit_code, 128 + signal.SIGTERM)
+        self.assertEqual(signal.getsignal(signal.SIGTERM), before)
+
+    def test_a_second_signal_cannot_interrupt_the_cleanup(self) -> None:
+        with pipeline_core.termination_handlers():
+            with self.assertRaises(TerminationRequested):
+                _thread.interrupt_main(signal.SIGTERM)
+                self.wait_for_handler()
+            # Cleanup is running now; a repeated signal is ignored.
+            _thread.interrupt_main(signal.SIGTERM)
+            self.wait_for_handler()
+
+
+# A leader that starts a long-running child detached from its output, prints
+# the child's PID, and exits.
+_LEADER_SCRIPT = (
+    "import subprocess, sys\n"
+    "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],"
+    " stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+    "print(child.pid, flush=True)\n"
+)
+
+
+class ProcessTreeTests(unittest.TestCase):
+    """The tree kill reaches a grandchild whose parent already exited."""
+
+    def start_leader(self) -> tuple[subprocess.Popen[bytes], object, int]:
+        """Start the leader through the pipeline's launcher; return it, its job, and the child."""
+        leader, job = pipeline_core._start_process(
+            [sys.executable, "-c", _LEADER_SCRIPT], stdout=subprocess.PIPE
+        )
+        if job is not None:
+            self.addCleanup(job.close)
+        assert leader.stdout is not None
+        with leader.stdout:
+            grandchild = int(leader.stdout.readline())
+        self.addCleanup(_kill_if_alive, grandchild)
+        leader.wait(timeout=30)
+        self.assertTrue(is_process_alive(grandchild))
+        return leader, job, grandchild
+
+    def test_kills_the_tree_even_after_its_leader_exited(self) -> None:
+        leader, job, grandchild = self.start_leader()
+
+        pipeline_core._kill_process_tree(leader, job)  # type: ignore[arg-type]
+
+        self.assertTrue(wait_for_exit(grandchild, timeout=10), "the orphaned child survived")
+
+    @unittest.skipUnless(IS_WINDOWS, "Job Objects are Windows-only")
+    def test_every_child_starts_inside_a_job(self) -> None:
+        # A silent fallback to taskkill would bring back the orphan gap.
+        _, job, _ = self.start_leader()
+
+        self.assertIsNotNone(job)
+
+    @unittest.skipUnless(IS_WINDOWS, "Job Objects are Windows-only")
+    def test_closing_the_job_kills_the_tree(self) -> None:
+        # What the OS does when the pipeline itself dies without cleaning up.
+        _, job, grandchild = self.start_leader()
+        assert isinstance(job, pipeline_core._WindowsJob)
+
+        job.close()
+
+        self.assertTrue(wait_for_exit(grandchild, timeout=10), "the orphaned child survived")
+
+
+class SupervisedRunTests(FakeToolTestCase):
+    def test_a_child_left_running_without_the_output_survives_a_clean_exit(self) -> None:
+        # Only a failure, interruption, or a held output pipe kills the tree;
+        # a clean exit releases it on every platform.
+        exit_code, output = self.pipeline._run_bounded(
+            [sys.executable, "-c", _LEADER_SCRIPT], stdin_text="", timeout=30
+        )
+
+        self.assertEqual(exit_code, 0, output)
+        grandchild = int(output.strip())
+        self.addCleanup(_kill_if_alive, grandchild)
+        time.sleep(0.5)
+        self.assertTrue(is_process_alive(grandchild))
 
 
 # ── Agent contracts ───────────────────────────────────────────────
@@ -392,7 +757,7 @@ class AgentModeTests(FakeToolTestCase):
         self.assertEqual(caught.exception.exit_code, 127)
 
     def test_dry_run_renders_the_command_and_spawns_nothing(self) -> None:
-        pipeline = Pipeline(self.repo_root, dry_run=True, console=self.console)
+        pipeline = Pipeline(self.repo_root, is_dry_run=True, console=self.console)
         with forbid_spawning():
             outcome = pipeline.invoke_agent_phase(
                 agent="claude", mode="agent", instruction="multi\nline", log_file=self.log_file
@@ -405,21 +770,7 @@ class AgentModeTests(FakeToolTestCase):
         # The agent starts a long-running child of its own, then prints a line;
         # the console then fails, which must take the whole process tree down.
         pid_file = self.root / "grandchild.pid"
-        make_launcher(
-            self.tool_dir,
-            "luma-fake-copilot",
-            f"""\
-            import subprocess
-            import sys
-            import time
-
-            child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-            with open({str(pid_file)!r}, "w", encoding="utf-8") as handle:
-                handle.write(str(child.pid))
-            print("child started", flush=True)
-            time.sleep(60)
-            """,
-        )
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file)
 
         class BrokenConsole(Console):
             def write_raw(self, chunk: bytes) -> None:
@@ -429,11 +780,68 @@ class AgentModeTests(FakeToolTestCase):
         with self.assertRaisesRegex(RuntimeError, "console broke"):
             self.run_agent()
 
-        grandchild = int(pid_file.read_text(encoding="utf-8"))
-        self.addCleanup(_kill_if_alive, grandchild)
-        self.assertTrue(
-            wait_for_exit(grandchild, timeout=10), "the agent's child process was left running"
-        )
+        self.assert_child_was_killed(pid_file)
+
+    def test_ctrl_c_kills_the_agent_and_its_children(self) -> None:
+        pid_file = self.root / "grandchild.pid"
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file)
+
+        interrupter = interrupt_when_started(pid_file)
+        with self.assertRaises(KeyboardInterrupt):
+            self.run_agent()
+        interrupter.join()
+
+        self.assert_child_was_killed(pid_file)
+
+    def test_a_termination_signal_kills_the_agent_and_its_children(self) -> None:
+        pid_file = self.root / "grandchild.pid"
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file)
+
+        interrupter = interrupt_when_started(pid_file, signal.SIGTERM)
+        with self.assertRaises(TerminationRequested), pipeline_core.termination_handlers():
+            self.run_agent()
+        interrupter.join()
+
+        self.assert_child_was_killed(pid_file)
+
+    def test_a_child_holding_the_output_open_does_not_hang_the_phase(self) -> None:
+        # The agent exits at once, but its child inherited the output pipe and
+        # keeps it open; the drain is bounded instead of waiting for the child.
+        pid_file = self.root / "grandchild.pid"
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file, should_exit_early=True)
+
+        started = time.monotonic()
+        with mock.patch.object(pipeline_core, "_DRAIN_TIMEOUT_SECONDS", 1):
+            outcome = self.run_agent()
+        elapsed = time.monotonic() - started
+
+        pid = read_pid(pid_file)
+        self.assertIsNotNone(pid)
+        assert pid is not None
+        self.addCleanup(_kill_if_alive, pid)
+        self.assertTrue(outcome.success)
+        self.assertLess(elapsed, 30)
+        self.assertIn("child started", self.log_file.read_text(encoding="utf-8"))
+        # The process group (POSIX) or job (Windows) is killed even though the
+        # agent itself already exited.
+        self.assertTrue(wait_for_exit(pid, timeout=10), "the agent's child was left running")
+        self.assertNotIn("still holds its output open", self.err.getvalue())
+
+    @unittest.skipUnless(IS_WINDOWS, "Job Objects are Windows-only")
+    def test_without_a_job_ctrl_c_falls_back_to_taskkill(self) -> None:
+        # E.g. nested-job restrictions on old Windows: the live tree is still killed.
+        pid_file = self.root / "grandchild.pid"
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file)
+
+        interrupter = interrupt_when_started(pid_file)
+        with (
+            mock.patch.object(pipeline_core._WindowsJob, "create", return_value=None),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            self.run_agent()
+        interrupter.join()
+
+        self.assert_child_was_killed(pid_file)
 
 
 class PlanModeTests(FakeToolTestCase):
@@ -495,6 +903,35 @@ class PlanModeTests(FakeToolTestCase):
 
         self.assertEqual(self.run_plan("claude").exit_code, 1)
 
+    def test_ctrl_c_kills_the_audit_agent_and_its_children(self) -> None:
+        # Audits run through the same supervised launch as fix phases: their
+        # own process group and a tree kill on any interruption.
+        pid_file = self.root / "grandchild.pid"
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file)
+
+        interrupter = interrupt_when_started(pid_file)
+        with self.assertRaises(KeyboardInterrupt):
+            self.run_plan()
+        interrupter.join()
+
+        self.assert_child_was_killed(pid_file)
+
+    def test_claude_stderr_is_kept_separate_from_the_report(self) -> None:
+        make_launcher(
+            self.tool_dir,
+            "luma-fake-claude",
+            """\
+            import sys
+
+            print("# Report", flush=True)
+            print("a warning", file=sys.stderr, flush=True)
+            """,
+        )
+
+        self.assertTrue(self.run_plan("claude").success)
+        self.assertEqual(self.report.read_text(encoding="utf-8"), "# Report\n")
+        self.assertIn("a warning", self.err.getvalue())
+
 
 class ResolveCopilotModelTests(FakeToolTestCase):
     def setUp(self) -> None:
@@ -529,6 +966,15 @@ class ResolveCopilotModelTests(FakeToolTestCase):
         self.assertEqual(model, "claude-opus-4.6")
         self.assertLess(elapsed, 15)
 
+    def test_a_timed_out_probe_kills_the_whole_process_tree(self) -> None:
+        pid_file = self.root / "grandchild.pid"
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file)
+
+        model = self.pipeline.resolve_copilot_model("copilot", "claude-opus-4.6", timeout=8)
+
+        self.assertEqual(model, "claude-opus-4.6")
+        self.assert_child_was_killed(pid_file)
+
     def test_probes_each_model_once(self) -> None:
         self.fake_tool("luma-fake-copilot", read_stdin=True, lines=["ok"])
         self.pipeline.resolve_copilot_model("copilot", "gpt-5.4")
@@ -537,7 +983,7 @@ class ResolveCopilotModelTests(FakeToolTestCase):
             self.assertEqual(self.pipeline.resolve_copilot_model("copilot", "gpt-5.4"), "gpt-5.4")
 
     def test_never_probes_claude_auto_an_empty_model_or_a_dry_run(self) -> None:
-        dry = Pipeline(self.repo_root, dry_run=True, console=self.console)
+        dry = Pipeline(self.repo_root, is_dry_run=True, console=self.console)
         with forbid_spawning():
             self.assertEqual(self.pipeline.resolve_copilot_model("claude", "opus"), "opus")
             self.assertEqual(self.pipeline.resolve_copilot_model("copilot", "auto"), "auto")
@@ -643,8 +1089,28 @@ class GitCheckpointTests(GitTestCase):
         with self.assertRaises(CheckpointError):
             self.checkpoint()
 
+    def test_refuses_to_commit_when_the_artifact_root_cannot_be_unstaged(self) -> None:
+        artifacts = self.repo_root / "custom-artifacts"
+        artifacts.mkdir()
+        (artifacts / "log.txt").write_text("transcript\n", encoding="utf-8")
+        (self.repo_root / "README.md").write_text("changed\n", encoding="utf-8")
+        original_run = Pipeline._run
+
+        def failing_reset(pipeline: Pipeline, args: Sequence[str], **kwargs: object) -> int:
+            if "reset" in args:
+                return 128
+            return original_run(pipeline, args, **kwargs)  # type: ignore[arg-type]
+
+        with (
+            mock.patch.object(Pipeline, "_run", autospec=True, side_effect=failing_reset),
+            self.assertRaisesRegex(CheckpointError, "could not unstage"),
+        ):
+            self.checkpoint(artifacts)
+
+        self.assertEqual(self.git("rev-list", "--count", "HEAD").strip(), "1")
+
     def test_dry_run_prints_the_checkpoint_and_spawns_nothing(self) -> None:
-        pipeline = Pipeline(self.repo_root, dry_run=True, console=self.console)
+        pipeline = Pipeline(self.repo_root, is_dry_run=True, console=self.console)
         with forbid_spawning():
             sha = pipeline.git_checkpoint(
                 subject="chore(pipeline): x", agent="copilot", artifact_root=None
@@ -663,7 +1129,7 @@ class RevertTests(GitTestCase):
         (ignored / "run.log").write_text("transcript\n", encoding="utf-8")
 
     def test_removes_the_files_a_failed_phase_created_but_keeps_ignored_ones(self) -> None:
-        self.assertIs(self.pipeline.revert_to_head(remove_untracked=True), True)
+        self.assertIs(self.pipeline.revert_to(remove_untracked=True), True)
 
         self.assertEqual((self.repo_root / "README.md").read_text(encoding="utf-8"), "initial\n")
         self.assertFalse((self.repo_root / "new-by-phase.txt").exists())
@@ -675,21 +1141,21 @@ class RevertTests(GitTestCase):
         artifacts.mkdir()
         (artifacts / "run.log").write_text("transcript\n", encoding="utf-8")
 
-        self.assertIs(self.pipeline.revert_to_head(remove_untracked=True, keep=artifacts), True)
+        self.assertIs(self.pipeline.revert_to(remove_untracked=True, keep=artifacts), True)
 
         self.assertTrue((artifacts / "run.log").is_file())
         self.assertFalse((self.repo_root / "new-by-phase.txt").exists())
 
     def test_without_removal_only_tracked_files_are_reset(self) -> None:
-        self.assertIs(self.pipeline.revert_to_head(remove_untracked=False), True)
+        self.assertIs(self.pipeline.revert_to(remove_untracked=False), True)
 
         self.assertEqual((self.repo_root / "README.md").read_text(encoding="utf-8"), "initial\n")
         self.assertTrue((self.repo_root / "new-by-phase.txt").is_file())
 
     def test_dry_run_prints_the_reset_and_clean_and_spawns_nothing(self) -> None:
-        pipeline = self.make_pipeline(dry_run=True)
+        pipeline = self.make_pipeline(is_dry_run=True)
         with forbid_spawning():
-            self.assertIs(pipeline.revert_to_head(remove_untracked=True), True)
+            self.assertIs(pipeline.revert_to(remove_untracked=True), True)
         self.assertIn("[dry-run] git reset --hard HEAD", self.out.getvalue())
         self.assertIn("[dry-run] git clean -fd", self.out.getvalue())
         self.assertTrue((self.repo_root / "new-by-phase.txt").is_file())
@@ -732,6 +1198,35 @@ class ArtifactProtectionTests(GitTestCase):
 
         self.assertIsNone(self.pipeline.save_artifacts(outside))
         self.assertTrue(outside.is_dir())
+
+    def test_never_deletes_a_backup_left_by_an_earlier_failed_restore(self) -> None:
+        self.backup.mkdir()
+        (self.backup / "recover-me.md").write_text("only copy\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(PipelineError, "still exists") as caught:
+            self.pipeline.save_artifacts(self.artifact_root)
+
+        self.assertIn(str(self.backup), str(caught.exception))
+        self.assertTrue((self.backup / "recover-me.md").is_file())
+        self.assertTrue((self.artifact_root / "audit-1.md").is_file())
+
+    def test_a_failed_restore_keeps_the_backup_and_says_where_it_is(self) -> None:
+        with (
+            mock.patch.object(Pipeline, "restore_artifacts", side_effect=OSError("disk full")),
+            self.pipeline.protect_artifacts(self.artifact_root, self.log_dir) as phase_log_dir,
+        ):
+            (phase_log_dir / "release-verification.log").write_text("log\n", encoding="utf-8")
+
+        self.assertIn(str(self.backup), self.err.getvalue())
+        self.assertTrue((self.backup / "audit-1.md").is_file())
+        self.assertTrue((self.log_dir / "release-verification.log").is_file())
+        # The next protected phase refuses to run rather than delete the backup.
+        with (
+            self.assertRaises(PipelineError),
+            self.pipeline.protect_artifacts(self.artifact_root, self.log_dir),
+        ):
+            self.fail("a protected phase ran over an unrecovered backup")
+        self.assertTrue((self.backup / "audit-1.md").is_file())
 
 
 # ── Pure helpers ──────────────────────────────────────────────────
@@ -914,6 +1409,30 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("no audit phase matched", output)
 
+    def test_allow_dirty_with_revert_on_failure_is_a_usage_error(self) -> None:
+        # The revert's git reset --hard would destroy the uncommitted changes.
+        for argv in (
+            ("fix", "--dry-run", "--allow-dirty", "--revert-on-failure"),
+            ("all", "--dry-run", "--fix-arg", "--allow-dirty", "--fix-arg", "--revert-on-failure"),
+        ):
+            with self.subTest(argv=argv), forbid_spawning():
+                out = io.StringIO()
+                with (
+                    self.assertRaises(SystemExit) as caught,
+                    contextlib.redirect_stdout(out),
+                    contextlib.redirect_stderr(out),
+                ):
+                    luma_pipeline.main(list(argv))
+                self.assertEqual(caught.exception.code, 2)
+                self.assertIn("cannot be combined with --allow-dirty", out.getvalue())
+
+    def test_an_empty_model_or_effort_for_all_means_the_agent_default(self) -> None:
+        with forbid_spawning():
+            code, output = self.run_main("all", "--dry-run", "--model=", "--effort=")
+        self.assertEqual(code, 0, output)
+        self.assertNotIn("--model", output)
+        self.assertNotIn("--effort", output)
+
     def test_missing_agent_exits_127_before_any_phase(self) -> None:
         with mock.patch.dict(os.environ, {"LUMA_COPILOT": "luma-no-such-agent"}), forbid_spawning():
             code, output = self.run_main("audit")
@@ -949,12 +1468,17 @@ class FixRunTests(GitTestCase):
         return summary.read_text(encoding="utf-8")
 
     def break_tests_after_agent(
-        self, *, on_calls: Sequence[int], create_file: str | None = None
+        self,
+        *,
+        on_calls: Sequence[int],
+        create_file: str | None = None,
+        then: Callable[[int], None] | None = None,
     ) -> contextlib.AbstractContextManager[object]:
         """Make ctest fail after the listed agent calls (1-based) and pass after the others.
 
         Optionally the failing phase also creates *create_file*, as an agent
-        adding a new source file would.
+        adding a new source file would, and *then* runs after every agent call
+        with its 1-based number.
         """
         failing = make_fake_tool(self.root, "ctest-red", exit_code=1)
         passing = make_fake_tool(self.root, "ctest-green")
@@ -971,9 +1495,39 @@ class FixRunTests(GitTestCase):
             if is_failing_call and create_file is not None:
                 (self.repo_root / create_file).write_text("new\n", encoding="utf-8")
             shutil.copyfile(failing if is_failing_call else passing, self.ctest)
+            if then is not None:
+                then(call_count)
             return outcome
 
         return mock.patch.object(Pipeline, "invoke_agent_phase", agent_then_set_tests)
+
+    def make_committing_agent(self) -> None:
+        """Replace the fake agent with one that commits its own change."""
+        make_launcher(
+            self.tool_dir,
+            "luma-fake-copilot",
+            """\
+            import subprocess
+            import sys
+
+            sys.stdin.read()
+            with open("README.md", "a", encoding="utf-8") as handle:
+                handle.write("committed by the agent\\n")
+            subprocess.run(["git", "commit", "-q", "-am", "agent commit"], check=True)
+            """,
+        )
+
+    def reject_commits_containing(self, name: str) -> None:
+        """Install a pre-commit hook that rejects any commit while *name* exists."""
+        hooks = self.root / "hooks"
+        hooks.mkdir()
+        hook = hooks / "pre-commit"
+        hook.write_text(f"#!/bin/sh\ntest ! -e {name}\n", encoding="utf-8", newline="\n")
+        hook.chmod(0o755)
+        self.git("config", "core.hooksPath", str(hooks))
+
+    def head(self) -> str:
+        return self.git("rev-parse", "HEAD").strip()
 
     def test_a_green_phase_is_committed_on_a_new_branch(self) -> None:
         code, output = self.run_fix()
@@ -1007,15 +1561,128 @@ class FixRunTests(GitTestCase):
         self.assertEqual(committed, ["README.md"])
         self.assertRegex(self.summary(), r"\| bug-fix-debugger \| .* \| ok \| [0-9a-f]+ \|")
 
-    def test_a_revert_keeps_the_users_untracked_files_when_the_run_started_dirty(self) -> None:
+    def test_allow_dirty_with_revert_on_failure_is_refused_before_touching_the_tree(
+        self,
+    ) -> None:
+        (self.repo_root / "README.md").write_text("my uncommitted edit\n", encoding="utf-8")
         (self.repo_root / "notes.txt").write_text("mine\n", encoding="utf-8")
+        branch = self.git("branch", "--show-current").strip()
 
-        with self.break_tests_after_agent(on_calls=[1]):
-            code, output = self.run_fix("--allow-dirty", "--revert-on-failure")
+        with self.assertRaises(SystemExit) as caught:
+            self.run_fix("--allow-dirty", "--revert-on-failure")
+
+        self.assertEqual(caught.exception.code, 2)
+        self.assertEqual(
+            (self.repo_root / "README.md").read_text(encoding="utf-8"), "my uncommitted edit\n"
+        )
+        self.assertTrue((self.repo_root / "notes.txt").is_file())
+        self.assertEqual(self.git("branch", "--show-current").strip(), branch)
+
+    def test_a_rejected_commit_is_reverted_and_the_run_continues(self) -> None:
+        self.reject_commits_containing("reject.txt")
+
+        def create_rejected_file(call: int) -> None:
+            if call == 1:
+                (self.repo_root / "reject.txt").write_text("blocked\n", encoding="utf-8")
+
+        with self.break_tests_after_agent(on_calls=[], then=create_rejected_file):
+            code, output = self.run_fix(
+                "--revert-on-failure",
+                "--continue-on-failure",
+                phases="bug-fix-core,bug-fix-debugger",
+            )
 
         self.assertEqual(code, 1, output)
-        self.assertTrue((self.repo_root / "notes.txt").is_file())
-        self.assertIn("resets only tracked files", output)
+        self.assertFalse((self.repo_root / "reject.txt").exists())
+        self.assertRegex(self.summary(), r"\| bug-fix-core \| .* \| commit-failed \| - \|")
+        self.assertRegex(self.summary(), r"\| bug-fix-debugger \| .* \| ok \| [0-9a-f]+ \|")
+        self.assertEqual(
+            (self.repo_root / "README.md").read_text(encoding="utf-8"),
+            "initial\nchanged by the fake agent\n",
+        )
+        self.assertEqual(
+            self.git("show", "--name-only", "--format=", "HEAD").split(), ["README.md"]
+        )
+
+    def test_a_rejected_commit_stops_the_run_without_a_revert(self) -> None:
+        self.reject_commits_containing("README.md")
+
+        code, output = self.run_fix("--continue-on-failure", phases="bug-fix-core,bug-fix-debugger")
+
+        self.assertEqual(code, 1, output)
+        self.assertIn("cannot be skipped", output)
+        self.assertIn("commit-failed", self.summary())
+        self.assertNotIn("bug-fix-debugger", self.summary())
+
+    def test_a_failed_revert_stops_the_run_even_with_continue_on_failure(self) -> None:
+        git_dir = Path(self.git("rev-parse", "--absolute-git-dir").strip())
+
+        def lock_the_index(call: int) -> None:
+            # A stale index.lock makes git reset --hard fail.
+            if call == 1:
+                (git_dir / "index.lock").write_text("", encoding="utf-8")
+
+        with self.break_tests_after_agent(on_calls=[1], then=lock_the_index):
+            code, output = self.run_fix(
+                "--revert-on-failure",
+                "--continue-on-failure",
+                phases="bug-fix-core,bug-fix-debugger",
+            )
+
+        self.assertEqual(code, 1, output)
+        self.assertIn("the revert failed", output)
+        self.assertIn("stopped early", self.summary())
+        self.assertNotIn("bug-fix-debugger", self.summary())
+
+    def test_a_revert_drops_commits_the_agent_made_during_the_failed_phase(self) -> None:
+        self.make_committing_agent()
+        start = self.head()
+
+        with self.break_tests_after_agent(on_calls=[1]):
+            code, output = self.run_fix("--revert-on-failure")
+
+        self.assertEqual(code, 1, output)
+        self.assertEqual(self.head(), start)
+        self.assertEqual((self.repo_root / "README.md").read_text(encoding="utf-8"), "initial\n")
+        self.assertIn("made 1 commit(s) of its own", output)
+        self.assertIn("git branch <name>", output)
+
+    def test_commits_the_agent_made_in_a_green_phase_are_reported(self) -> None:
+        self.make_committing_agent()
+        start = self.head()
+
+        code, output = self.run_fix()
+
+        self.assertEqual(code, 0, output)
+        self.assertIn("made 1 commit(s) of its own", output)
+        self.assertEqual(self.git("rev-list", "--count", f"{start}..HEAD").strip(), "1")
+        short_head = self.git("rev-parse", "--short", "HEAD").strip()
+        self.assertRegex(self.summary(), rf"\| bug-fix-core \| .* \| ok \| {short_head} \|")
+
+    def test_a_termination_signal_stops_the_run_and_kills_the_agent_tree(self) -> None:
+        pid_file = self.root / "grandchild.pid"
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file)
+        before = signal.getsignal(signal.SIGTERM)
+
+        interrupter = interrupt_when_started(pid_file, signal.SIGTERM)
+        code, output = self.run_fix()
+        interrupter.join()
+
+        self.assertEqual(code, 128 + signal.SIGTERM, output)
+        self.assertIn("terminated", output)
+        self.assert_child_was_killed(pid_file)
+        self.assertEqual(signal.getsignal(signal.SIGTERM), before)
+
+    def test_ctrl_c_stops_the_run_with_exit_code_130(self) -> None:
+        pid_file = self.root / "grandchild.pid"
+        make_tree_agent(self.tool_dir, "luma-fake-copilot", pid_file)
+
+        interrupter = interrupt_when_started(pid_file)
+        code, output = self.run_fix()
+        interrupter.join()
+
+        self.assertEqual(code, 130, output)
+        self.assert_child_was_killed(pid_file)
 
     def test_a_red_baseline_says_how_to_leave_the_run_branch(self) -> None:
         shutil.copyfile(make_fake_tool(self.root, "ctest-red", exit_code=1), self.ctest)

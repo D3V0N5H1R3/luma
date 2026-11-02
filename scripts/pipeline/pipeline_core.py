@@ -2,7 +2,7 @@
 
 Every side effect the pipeline performs — invoking the agent CLI, building,
 testing, linting, and touching git or the artifact tree — flows through
-:class:`Pipeline`. Its ``dry_run`` flag gives all of them one uniform preview
+:class:`Pipeline`. Its ``is_dry_run`` flag gives all of them one uniform preview
 path: a dry run prints the exact command each step would run and returns a
 neutral result without spawning anything.
 
@@ -16,10 +16,10 @@ Standard library only; Python 3.10+. Works on Windows, macOS, and Linux.
 
 from __future__ import annotations
 
+import codecs
 import contextlib
 import ctypes
 import functools
-import io
 import json
 import os
 import re
@@ -30,10 +30,12 @@ import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import Iterator, Mapping, Sequence
+import time
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from types import FrameType
 from typing import IO, TextIO
 
 AGENTS = ("copilot", "claude")
@@ -51,12 +53,30 @@ ARTIFACT_BACKUP_NAME = "_pipeline-artifacts.pipeline.bak"
 INSTRUCTION_PLACEHOLDER = "<instruction>"
 
 _MODEL_UNAVAILABLE = re.compile(r"model .*is not available", re.IGNORECASE)
-_ENV_ASSIGNMENT = re.compile(r"^([^=]+)=(.*)$")
 _IS_WINDOWS = os.name == "nt"
 _CHUNK_SIZE = 65536
 # Bound on draining a child's pipes after it exits: a grandchild that inherited
 # the pipe handles could otherwise hold them open indefinitely.
 _DRAIN_TIMEOUT_SECONDS = 10
+# How long the main thread blocks at a time while it supervises a child. Short
+# waits keep it responsive to Ctrl+C and termination signals on every platform
+# (a blocking pipe read on Windows cannot be interrupted by Ctrl+C).
+_POLL_INTERVAL_SECONDS = 0.1
+# Grace period for the output readers after the process tree was killed.
+_POST_KILL_DRAIN_SECONDS = 2
+# Signals that ask the pipeline to stop; each one is routed through the same
+# cleanup as Ctrl+C. SIGBREAK is the Windows Ctrl+Break / console-close signal.
+TERMINATION_SIGNALS = tuple(
+    getattr(signal, name) for name in ("SIGTERM", "SIGHUP", "SIGBREAK") if hasattr(signal, name)
+)
+_CMAKE_TRUE_VALUES = frozenset({"1", "ON", "TRUE", "YES", "Y"})
+# Generators that write compile_commands.json themselves on every configure.
+_COMPILE_DATABASE_GENERATORS = ("Ninja", "Makefiles")
+# Run inside the vcvars-initialised cmd.exe: dump its environment as ASCII-only
+# JSON, so no console code page can garble a value on its way back.
+_ENV_DUMP_CODE = "import json,os,sys;sys.stdout.write(json.dumps(dict(os.environ)))"
+_VCVARS_VARIABLE = "LUMA_PIPELINE_VCVARS"
+_ENV_PYTHON_VARIABLE = "LUMA_PIPELINE_PYTHON"
 _ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 _STD_OUTPUT_HANDLE = -11
 _STD_ERROR_HANDLE = -12
@@ -88,6 +108,59 @@ class PipelineError(RuntimeError):
 
 class CheckpointError(PipelineError):
     """A git checkpoint was rejected (e.g. by a pre-commit hook)."""
+
+
+class TerminationRequested(BaseException):
+    """Raised in the main thread when the pipeline receives a termination signal.
+
+    Like ``KeyboardInterrupt`` it derives from ``BaseException``, so phase-level
+    error handling never swallows it, while every cleanup path — the
+    process-tree kill and the artifact restore — still runs as it unwinds.
+    """
+
+    def __init__(self, signum: int) -> None:
+        self.signum = signum
+        super().__init__(f"received {signal.Signals(signum).name}")
+
+    @property
+    def exit_code(self) -> int:
+        """The conventional ``128 + signal`` exit code."""
+        return 128 + self.signum
+
+
+@contextlib.contextmanager
+def termination_handlers() -> Iterator[None]:
+    """Turn SIGTERM / SIGHUP / SIGBREAK into :class:`TerminationRequested` for the block.
+
+    Without this, a termination signal ends the pipeline on the spot and skips
+    the cleanup that kills the agent's process tree (on POSIX the agent leads its
+    own session, so the signal never reaches it). The first signal raises; later
+    ones are ignored so they cannot interrupt the cleanup. The previous handlers
+    are restored on exit. A no-op outside the main thread, where Python cannot
+    install signal handlers.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    is_raised = False
+
+    def handle(signum: int, _frame: FrameType | None) -> None:
+        nonlocal is_raised
+        if is_raised:
+            return
+        is_raised = True
+        raise TerminationRequested(signum)
+
+    previous: dict[int, signal.Handlers | Callable[[int, FrameType | None], object] | int] = {}
+    try:
+        for signum in TERMINATION_SIGNALS:
+            installed = signal.signal(signum, handle)
+            # None means the old handler was not installed from Python.
+            previous[signum] = signal.SIG_DFL if installed is None else installed
+        yield
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 # ── Console ───────────────────────────────────────────────────────
@@ -166,6 +239,9 @@ class Console:
         self._out = out
         self._err = err
         self._use_colour = use_colour
+        # Decodes raw child output for a stream without a byte buffer; being
+        # incremental, it keeps a UTF-8 sequence split across chunks intact.
+        self._raw_decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
     @property
     def out(self) -> TextIO:
@@ -237,11 +313,19 @@ class Console:
         buffer = getattr(self.out, "buffer", None)
         self.out.flush()
         if buffer is None:
-            self.out.write(chunk.decode("utf-8", "replace"))
+            self.out.write(self._raw_decoder.decode(chunk))
             self.out.flush()
             return
         buffer.write(chunk)
         buffer.flush()
+
+    def end_raw(self) -> None:
+        """Finish one child's raw output; a truncated UTF-8 sequence prints as U+FFFD."""
+        tail = self._raw_decoder.decode(b"", final=True)
+        self._raw_decoder.reset()
+        if tail:
+            self.out.write(tail)
+            self.out.flush()
 
 
 # ── Pure helpers ──────────────────────────────────────────────────
@@ -537,32 +621,262 @@ def find_repo_root(start: Path) -> Path:
 # ── Process plumbing ──────────────────────────────────────────────
 
 
-def _kill_process_tree(process: subprocess.Popen[bytes]) -> None:
+# -- Windows Job Objects -------------------------------------------------------
+#
+# Windows has no process groups, and ``taskkill /T`` walks the tree from a live
+# parent, so the descendants of a child that already exited are unreachable.
+# Every supervised child therefore runs in a Job Object: the job contains the
+# child and everything it spawns, however deep, and terminating the job kills
+# them all — even after the direct child exited.
+#
+# The child is started with CREATE_SUSPENDED, assigned to the job, and only then
+# resumed, so it cannot spawn anything before it is in the job (assigning a
+# running child races with its first CreateProcess). Popen closes the primary
+# thread handle, so the whole process is resumed with NtResumeProcess.
+#
+# The job is created with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, so if the pipeline
+# itself dies abruptly the OS closes the handle and the agent's tree dies with
+# it. After a normal exit the flag is cleared before the handle is closed, so a
+# process the child deliberately left running survives, as on POSIX. When the
+# job cannot be set up (e.g. nested-job restrictions before Windows 8), the
+# tree kill falls back to ``taskkill /T``.
+
+_CREATE_SUSPENDED = 0x00000004
+_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
+_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS = 9
+_PROCESS_TERMINATE = 0x0001
+_PROCESS_SET_QUOTA = 0x0100
+_PROCESS_SUSPEND_RESUME = 0x0800
+
+
+class _IoCounters(ctypes.Structure):
+    _fields_ = [
+        (name, ctypes.c_uint64)
+        for name in (
+            "ReadOperationCount",
+            "WriteOperationCount",
+            "OtherOperationCount",
+            "ReadTransferCount",
+            "WriteTransferCount",
+            "OtherTransferCount",
+        )
+    ]
+
+
+class _BasicLimitInformation(ctypes.Structure):
+    _fields_ = [
+        ("PerProcessUserTimeLimit", ctypes.c_int64),
+        ("PerJobUserTimeLimit", ctypes.c_int64),
+        ("LimitFlags", ctypes.c_uint32),
+        ("MinimumWorkingSetSize", ctypes.c_size_t),
+        ("MaximumWorkingSetSize", ctypes.c_size_t),
+        ("ActiveProcessLimit", ctypes.c_uint32),
+        ("Affinity", ctypes.c_size_t),
+        ("PriorityClass", ctypes.c_uint32),
+        ("SchedulingClass", ctypes.c_uint32),
+    ]
+
+
+class _ExtendedLimitInformation(ctypes.Structure):
+    _fields_ = [
+        ("BasicLimitInformation", _BasicLimitInformation),
+        ("IoInfo", _IoCounters),
+        ("ProcessMemoryLimit", ctypes.c_size_t),
+        ("JobMemoryLimit", ctypes.c_size_t),
+        ("PeakProcessMemoryUsed", ctypes.c_size_t),
+        ("PeakJobMemoryUsed", ctypes.c_size_t),
+    ]
+
+
+@functools.cache
+def _job_api() -> tuple[ctypes.CDLL, ctypes.CDLL]:
+    """Return kernel32 and ntdll with the prototypes the job code needs.
+
+    Private ``WinDLL`` instances, so these prototypes never clash with other
+    users of ``ctypes.windll``.
+    """
+    from ctypes import wintypes  # Windows-only, so imported on first use
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    ntdll = ctypes.WinDLL("ntdll")  # type: ignore[attr-defined]
+    prototypes: dict[str, tuple[object, list[object]]] = {
+        "CreateJobObjectW": (wintypes.HANDLE, [ctypes.c_void_p, wintypes.LPCWSTR]),
+        "SetInformationJobObject": (
+            wintypes.BOOL,
+            [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD],
+        ),
+        "AssignProcessToJobObject": (wintypes.BOOL, [wintypes.HANDLE, wintypes.HANDLE]),
+        "TerminateJobObject": (wintypes.BOOL, [wintypes.HANDLE, wintypes.UINT]),
+        "OpenProcess": (wintypes.HANDLE, [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]),
+        "CloseHandle": (wintypes.BOOL, [wintypes.HANDLE]),
+    }
+    for name, (restype, argtypes) in prototypes.items():
+        function = getattr(kernel32, name)
+        function.restype = restype
+        function.argtypes = argtypes
+    ntdll.NtResumeProcess.restype = ctypes.c_long
+    ntdll.NtResumeProcess.argtypes = [wintypes.HANDLE]
+    return kernel32, ntdll
+
+
+class _WindowsJob:
+    """A kill-on-close Job Object holding one supervised child's process tree."""
+
+    def __init__(self, handle: int) -> None:
+        self._handle: int | None = handle
+
+    @classmethod
+    def create(cls) -> _WindowsJob | None:
+        """Create the job; None when the API is unavailable or refuses."""
+        try:
+            kernel32, _ = _job_api()
+        except (AttributeError, OSError):
+            return None
+        handle = kernel32.CreateJobObjectW(None, None)
+        if not handle:
+            return None
+        job = cls(handle)
+        if not job._set_kill_on_close(is_enabled=True):
+            job._close_handle()
+            return None
+        return job
+
+    def _set_kill_on_close(self, *, is_enabled: bool) -> bool:
+        kernel32, _ = _job_api()
+        info = _ExtendedLimitInformation()
+        if is_enabled:
+            info.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        return bool(
+            kernel32.SetInformationJobObject(
+                self._handle,
+                _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
+                ctypes.byref(info),
+                ctypes.sizeof(info),
+            )
+        )
+
+    def adopt(self, pid: int) -> bool:
+        """Assign the suspended process *pid* to the job, then resume it.
+
+        Returns:
+            True when the process is in the job; False when the assignment was
+            refused (it is resumed regardless).
+
+        Raises:
+            OSError: When the process cannot be opened or resumed; the caller
+                must kill it.
+        """
+        kernel32, ntdll = _job_api()
+        access = _PROCESS_SET_QUOTA | _PROCESS_TERMINATE | _PROCESS_SUSPEND_RESUME
+        process_handle = kernel32.OpenProcess(access, False, pid)
+        if not process_handle:
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+        try:
+            is_assigned = bool(kernel32.AssignProcessToJobObject(self._handle, process_handle))
+            status = ntdll.NtResumeProcess(process_handle)
+        finally:
+            kernel32.CloseHandle(process_handle)
+        if status < 0:
+            raise OSError(f"could not resume the child process (NTSTATUS {status & 0xFFFFFFFF:#x})")
+        return is_assigned
+
+    def terminate(self) -> None:
+        """Kill every process in the job, including orphaned descendants."""
+        if self._handle is not None:
+            kernel32, _ = _job_api()
+            kernel32.TerminateJobObject(self._handle, 1)
+
+    def release(self) -> None:
+        """Close the job without killing what is left in it."""
+        if self._handle is not None:
+            self._set_kill_on_close(is_enabled=False)
+            self._close_handle()
+
+    def close(self) -> None:
+        """Close the job; kill-on-close ends every process still in it."""
+        self._close_handle()
+
+    def _close_handle(self) -> None:
+        if self._handle is not None:
+            kernel32, _ = _job_api()
+            kernel32.CloseHandle(self._handle)
+            self._handle = None
+
+
+def _start_process(
+    args: Sequence[str], **popen_options: object
+) -> tuple[subprocess.Popen[bytes], _WindowsJob | None]:
+    """Start a child that can later be killed together with all its descendants.
+
+    POSIX: the child leads its own session, so its process group is the tree.
+    Windows: the child runs in a :class:`_WindowsJob` (None when the job could
+    not be set up, in which case the tree kill falls back to ``taskkill /T``).
+
+    Args:
+        args: The command line.
+        popen_options: Further ``subprocess.Popen`` arguments.
+
+    Returns:
+        The process and its job.
+    """
+    job = _WindowsJob.create() if _IS_WINDOWS else None
+    process: subprocess.Popen[bytes] = subprocess.Popen(  # type: ignore[call-overload]
+        list(args),
+        start_new_session=not _IS_WINDOWS,
+        creationflags=_CREATE_SUSPENDED if job is not None else 0,
+        **popen_options,
+    )
+    if job is None:
+        return process, None
+    try:
+        is_assigned = job.adopt(process.pid)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            process.kill()
+        job.close()
+        raise
+    if not is_assigned:
+        job.release()
+        return process, None
+    return process, job
+
+
+def _kill_process_tree(process: subprocess.Popen[bytes], job: _WindowsJob | None = None) -> None:
     """Kill *process* and its descendants (e.g. node behind a ``.cmd`` shim).
 
-    On POSIX this relies on the child leading its own session (see
-    ``start_new_session`` where the agent processes are started), so its
-    process group holds exactly the tree to kill.
+    POSIX: the child leads its own session (see :func:`_start_process`), so its
+    process group holds exactly the tree. The group is signalled even when the
+    leader has already exited: a grandchild that outlived it is still in the
+    group, and may be holding the leader's output pipe open.
+
+    Windows: terminating the child's *job* kills every process in it, including
+    the descendants of a child that already exited. Without a job,
+    ``taskkill /T`` walks the tree from the live child, which cannot reach the
+    descendants of an exited one.
     """
-    if process.poll() is not None:
-        return
     if _IS_WINDOWS:
-        taskkill = shutil.which("taskkill")
-        if taskkill is not None:
-            subprocess.run(
-                [taskkill, "/T", "/F", "/PID", str(process.pid)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
+        if job is not None:
+            job.terminate()
+        elif process.poll() is None:
+            taskkill = shutil.which("taskkill")
+            if taskkill is not None:
+                subprocess.run(
+                    [taskkill, "/T", "/F", "/PID", str(process.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
     else:
         with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(process.pid, signal.SIGKILL)
-    with contextlib.suppress(OSError):
-        process.kill()
-    # Reap it, so no zombie outlives the pipeline's handle on it.
-    with contextlib.suppress(subprocess.TimeoutExpired):
-        process.wait(timeout=_DRAIN_TIMEOUT_SECONDS)
+    if process.poll() is None:
+        with contextlib.suppress(OSError):
+            process.kill()
+    # Reap it, so no zombie outlives the pipeline's handle on it. Polled rather
+    # than wait(timeout), which can hang on Windows if Ctrl+C lands mid-wait.
+    deadline = time.monotonic() + _DRAIN_TIMEOUT_SECONDS
+    while process.poll() is None and time.monotonic() < deadline:
+        time.sleep(_POLL_INTERVAL_SECONDS)
 
 
 def _feed_stdin(process: subprocess.Popen[bytes], text: str) -> None:
@@ -577,10 +891,93 @@ def _feed_stdin(process: subprocess.Popen[bytes], text: str) -> None:
         process.stdin.close()
 
 
-def _drain(stream: IO[bytes], sink: list[bytes]) -> None:
-    """Read *stream* to the end into *sink*; used from a reader thread."""
-    with contextlib.suppress(OSError, ValueError):
-        sink.append(stream.read())
+class _OutputPump:
+    """Copy a child's output stream to a callback on a daemon reader thread.
+
+    Reading off the main thread lets the main thread wait with short timeouts,
+    so it notices Ctrl+C, termination signals, and deadlines even while a
+    grandchild holds the pipe open. A callback failure is stored and re-raised
+    in the main thread by :meth:`raise_if_failed`; after it, or after
+    :meth:`detach`, output is still read (so the child never blocks on a full
+    pipe) but discarded.
+    """
+
+    def __init__(self, stream: IO[bytes], on_chunk: Callable[[bytes], None]) -> None:
+        self._stream = stream
+        self._on_chunk = on_chunk
+        self._lock = threading.Lock()
+        self._is_detached = False
+        self._error: BaseException | None = None
+        self._thread = threading.Thread(target=self._pump, daemon=True)
+
+    def start(self) -> None:
+        """Start reading."""
+        self._thread.start()
+
+    def _pump(self) -> None:
+        read = getattr(self._stream, "read1", self._stream.read)
+        try:
+            while True:
+                try:
+                    chunk = read(_CHUNK_SIZE)
+                except (OSError, ValueError):
+                    return
+                if not chunk:
+                    return
+                with self._lock:
+                    if self._is_detached:
+                        continue
+                    try:
+                        self._on_chunk(chunk)
+                    except BaseException as err:
+                        self._error = err
+                        self._is_detached = True
+        finally:
+            # Closed here, at end of file, because a reader the main thread gave
+            # up on may still be blocked on the stream.
+            with contextlib.suppress(OSError):
+                self._stream.close()
+
+    def is_alive(self) -> bool:
+        """True while the stream has not reached end of file."""
+        return self._thread.is_alive()
+
+    def join(self, timeout: float) -> None:
+        """Wait up to *timeout* seconds for end of file (no-op if never started)."""
+        if self._thread.ident is not None:
+            self._thread.join(timeout)
+
+    def detach(self) -> None:
+        """Stop forwarding output, waiting (bounded) for an in-flight callback."""
+        is_locked = self._lock.acquire(timeout=_POST_KILL_DRAIN_SECONDS)
+        self._is_detached = True
+        if is_locked:
+            self._lock.release()
+
+    def raise_if_failed(self) -> None:
+        """Re-raise a callback failure in the calling thread."""
+        if self._error is not None:
+            raise self._error
+
+
+def _join_pumps(pumps: Sequence[_OutputPump], timeout: float) -> bool:
+    """Wait, in short interruptible slices, until every pump reached end of file.
+
+    Returns:
+        True when they all finished within *timeout* seconds.
+
+    Raises:
+        BaseException: A pump's callback failure, re-raised here.
+    """
+    deadline = time.monotonic() + timeout
+    for pump in pumps:
+        while pump.is_alive():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            pump.join(min(remaining, _POLL_INTERVAL_SECONDS))
+            pump.raise_if_failed()
+    return True
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -645,7 +1042,7 @@ class Pipeline:
         self,
         repo_root: Path,
         *,
-        dry_run: bool = False,
+        is_dry_run: bool = False,
         console: Console | None = None,
         python_executable: str = sys.executable,
         model_cache: dict[tuple[str, str], str] | None = None,
@@ -655,14 +1052,14 @@ class Pipeline:
 
         Args:
             repo_root: Repository root; every tool runs from here.
-            dry_run: Print each command instead of running it.
+            is_dry_run: Print each command instead of running it.
             console: Where progress, dry-run lines, and warnings go.
             python_executable: Interpreter for ``scripts/format.py`` / ``lint.py``.
             model_cache: Resolved Copilot models, shared across stages of one run.
             env: Environment for child processes (default: a copy of ``os.environ``).
         """
         self.repo_root = repo_root
-        self.dry_run = dry_run
+        self.is_dry_run = is_dry_run
         self.console = console if console is not None else Console()
         self.python_executable = python_executable
         self.model_cache = model_cache if model_cache is not None else {}
@@ -717,6 +1114,94 @@ class Pipeline:
             check=False,
         )
 
+    def _run_supervised(
+        self,
+        args: Sequence[str],
+        *,
+        stdin_text: str,
+        on_stdout: Callable[[bytes], None],
+        on_stderr: Callable[[bytes], None] | None = None,
+        timeout: float | None = None,
+    ) -> int | None:
+        """Run a child in its own process group and pump its output on reader threads.
+
+        The main thread only waits, in short slices, so Ctrl+C, a termination
+        signal, a reader failure, or the deadline is acted on promptly. Any of
+        them kills the whole process tree; an exception then propagates. After
+        the child exits, its pipes are drained for a bounded time: a grandchild
+        still holding them open is then killed with the rest of the tree.
+
+        Args:
+            args: The command line.
+            stdin_text: Text for the child's stdin, which is then closed.
+            on_stdout: Receives each chunk of standard output (called on a
+                reader thread).
+            on_stderr: Receives standard error; ``None`` merges it into stdout.
+            timeout: Seconds before the tree is killed; ``None`` waits forever.
+
+        Returns:
+            The exit code, or ``None`` when the deadline passed.
+        """
+        self.console.flush()
+        # Its own process group (POSIX) or job (Windows), so the whole process
+        # tree can be killed if anything goes wrong while it runs.
+        process, job = _start_process(
+            args,
+            cwd=self.repo_root,
+            env=self._env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT if on_stderr is None else subprocess.PIPE,
+        )
+        streams = [(process.stdout, on_stdout), (process.stderr, on_stderr)]
+        pumps = [
+            _OutputPump(stream, callback)
+            for stream, callback in streams
+            if stream is not None and callback is not None
+        ]
+        # Feed stdin from a thread so a prompt larger than the pipe buffer cannot
+        # deadlock against the output being read.
+        writer = threading.Thread(target=_feed_stdin, args=(process, stdin_text), daemon=True)
+        deadline = None if timeout is None else time.monotonic() + timeout
+        try:
+            for pump in pumps:
+                pump.start()
+            writer.start()
+            # poll() + sleep() rather than wait(timeout): a KeyboardInterrupt
+            # that lands inside Popen.wait(timeout) after the timeout elapsed
+            # makes its SIGINT grace period negative, which Windows treats as an
+            # infinite wait for the child.
+            while (exit_code := process.poll()) is None:
+                for pump in pumps:
+                    pump.raise_if_failed()
+                if deadline is not None and time.monotonic() >= deadline:
+                    _kill_process_tree(process, job)
+                    break
+                time.sleep(_POLL_INTERVAL_SECONDS)
+            if not _join_pumps(pumps, _DRAIN_TIMEOUT_SECONDS):
+                # A descendant still holds the output open: take it down too.
+                _kill_process_tree(process, job)
+                if not _join_pumps(pumps, _POST_KILL_DRAIN_SECONDS):
+                    self.console.warn(
+                        "a process the child started still holds its output open; "
+                        "no longer reading it."
+                    )
+            for pump in pumps:
+                pump.raise_if_failed()
+        except BaseException:
+            # Covers Ctrl+C and termination signals: never leave a child running.
+            _kill_process_tree(process, job)
+            raise
+        finally:
+            for pump in pumps:
+                pump.detach()
+            if job is not None:
+                # Everything was killed or drained; anything the child left
+                # running on purpose (and not holding its output) survives.
+                job.release()
+        writer.join(_POLL_INTERVAL_SECONDS)
+        return exit_code
+
     def _run_bounded(
         self, args: Sequence[str], *, stdin_text: str, timeout: float
     ) -> tuple[int | None, str]:
@@ -726,44 +1211,22 @@ class Pipeline:
             The exit code (``None`` when the deadline passed) and the merged
             stdout/stderr output collected so far.
         """
-        process = subprocess.Popen(
-            list(args),
-            cwd=self.repo_root,
-            env=self._env,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            start_new_session=not _IS_WINDOWS,
-        )
         chunks: list[bytes] = []
-        reader = threading.Thread(target=_drain, args=(process.stdout, chunks), daemon=True)
-        reader.start()
-        _feed_stdin(process, stdin_text)
-        exit_code: int | None
-        try:
-            exit_code = process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            _kill_process_tree(process)
-            exit_code = None
-        except KeyboardInterrupt:
-            _kill_process_tree(process)
-            raise
-        reader.join(_DRAIN_TIMEOUT_SECONDS)
-        # Close the pipe only once drained; a grandchild may still hold it open.
-        if not reader.is_alive() and process.stdout is not None:
-            process.stdout.close()
+        exit_code = self._run_supervised(
+            args, stdin_text=stdin_text, on_stdout=chunks.append, timeout=timeout
+        )
         return exit_code, b"".join(chunks).decode("utf-8", "replace")
 
     # -- file system -------------------------------------------------------
 
     def make_dirs(self, path: Path) -> None:
         """Create *path* and its parents (skipped in a dry run)."""
-        if not self.dry_run:
+        if not self.is_dry_run:
             path.mkdir(parents=True, exist_ok=True)
 
     def write_text(self, path: Path, text: str) -> None:
         """Write a UTF-8 text file with LF line endings (skipped in a dry run)."""
-        if not self.dry_run:
+        if not self.is_dry_run:
             _write_text(path, text)
 
     # -- agent ---------------------------------------------------------------
@@ -790,7 +1253,7 @@ class Pipeline:
         Returns:
             *model*, or ``auto`` when Copilot cannot select it.
         """
-        if agent != "copilot" or self.dry_run or not model or model == "auto":
+        if agent != "copilot" or self.is_dry_run or not model or model == "auto":
             return model
         cached = self.model_cache.get((agent, model))
         if cached is not None:
@@ -877,7 +1340,7 @@ class Pipeline:
             args = build_copilot_args(mode, model=model, effort=effort, log_dir=log_dir)
         stdin_text = instruction if should_pipe_prompt else ""
 
-        if self.dry_run:
+        if self.is_dry_run:
             self.console.dry(render_command(agent, args, instruction=instruction))
             if should_pipe_prompt:
                 self.console.dry(f"stdin  <- {INSTRUCTION_PLACEHOLDER}")
@@ -895,18 +1358,18 @@ class Pipeline:
         self, agent: str, command: list[str], stdin_text: str, output_file: Path
     ) -> int:
         """Capture a read-only phase's report; never record a hollow success."""
-        self.console.flush()
-        completed = subprocess.run(
+        stdout_chunks: list[bytes] = []
+        stderr_chunks: list[bytes] = []
+        returned = self._run_supervised(
             command,
-            cwd=self.repo_root,
-            env=self._env,
-            input=stdin_text.encode("utf-8"),
-            capture_output=True,
-            check=False,
+            stdin_text=stdin_text,
+            on_stdout=stdout_chunks.append,
+            on_stderr=stderr_chunks.append,
         )
-        stdout = completed.stdout.decode("utf-8", "replace")
-        stderr = completed.stderr.decode("utf-8", "replace")
-        exit_code = completed.returncode
+        # Without a deadline the child always reports an exit code.
+        exit_code = 1 if returned is None else returned
+        stdout = b"".join(stdout_chunks).decode("utf-8", "replace")
+        stderr = b"".join(stderr_chunks).decode("utf-8", "replace")
         report = extract_report_from_jsonl(stdout) if agent == "copilot" else stdout
 
         if report.strip():
@@ -938,37 +1401,18 @@ class Pipeline:
     ) -> int:
         """Stream a mutating phase to the console and tee it to *log_file*."""
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        self.console.flush()
-        # Its own session on POSIX, so the agent's whole process tree can be
-        # killed as one group if anything goes wrong while it runs.
-        process = subprocess.Popen(
-            command,
-            cwd=self.repo_root,
-            env=self._env,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            start_new_session=not _IS_WINDOWS,
-        )
-        # Feed stdin from a thread so a prompt larger than the pipe buffer cannot
-        # deadlock against the output we are reading here.
-        writer = threading.Thread(target=_feed_stdin, args=(process, stdin_text), daemon=True)
-        writer.start()
-        output = process.stdout
-        try:
-            if not isinstance(output, io.BufferedReader):
-                raise PipelineError("could not open the agent's output stream.")
-            with output, log_file.open("wb") as log:
-                while chunk := output.read1(_CHUNK_SIZE):
-                    log.write(chunk)
-                    log.flush()
-                    self.console.write_raw(chunk)
-            exit_code = process.wait()
-        except BaseException:
-            # Covers Ctrl+C as well: never leave an agent running unattended.
-            _kill_process_tree(process)
-            raise
-        writer.join(_DRAIN_TIMEOUT_SECONDS)
+        with log_file.open("wb") as log:
+
+            def tee(chunk: bytes) -> None:
+                log.write(chunk)
+                log.flush()
+                self.console.write_raw(chunk)
+
+            try:
+                returned = self._run_supervised(command, stdin_text=stdin_text, on_stdout=tee)
+            finally:
+                self.console.end_raw()
+        exit_code = 1 if returned is None else returned
 
         if agent == "copilot" and exit_code == 0:
             transcript = log_file.read_bytes().decode("utf-8", "replace")
@@ -1010,7 +1454,7 @@ class Pipeline:
         configure_args = ["--preset", preset]
         build_args = ["--build", "--preset", preset]
         test_args = ["--preset", preset]
-        if self.dry_run:
+        if self.is_dry_run:
             if not skip_build:
                 self.console.dry(render_command("cmake", configure_args))
                 self.console.dry(render_command("cmake", build_args))
@@ -1061,10 +1505,12 @@ class Pipeline:
         Returns:
             True when ``lint.py`` passed.
         """
-        if self.dry_run:
+        if self.is_dry_run:
             if not check_only:
                 self.console.dry("python scripts/format.py")
-            self.console.dry("generate build/compile_commands.json for clang-tidy (if missing)")
+            self.console.dry(
+                "refresh build/compile_commands.json for clang-tidy (if missing or stale)"
+            )
             self.console.dry("python scripts/lint.py")
             return True
 
@@ -1088,47 +1534,55 @@ class Pipeline:
             return False
         return True
 
-    def _find_visual_studio(self, *, requires: str | None = None) -> Path | None:
-        """Return the newest Visual Studio installation that vswhere reports.
+    def _visual_studio_installations(self, *, requires: str | None = None) -> list[Path]:
+        """List the Visual Studio installations vswhere reports, newest first.
+
+        ``-sort`` lists every installation (``-latest`` would return only the
+        newest, which may lack what the caller needs), ``-prerelease`` includes
+        Preview builds, and ``-utf8`` keeps a non-ASCII path intact. Mirrors
+        ``find_visual_studio_llvm_tool`` in ``scripts/_common.py``.
 
         Args:
             requires: A workload component the installation must have.
 
         Returns:
-            The installation directory, or None when there is none (or no vswhere).
+            The installation directories; empty when there are none (or no vswhere).
         """
         program_files = self._env.get("PROGRAMFILES(X86)")
         if not program_files:
-            return None
+            return []
         vswhere = Path(program_files, "Microsoft Visual Studio", "Installer", "vswhere.exe")
         if not vswhere.is_file():
-            return None
-        command = [str(vswhere), "-latest", "-products", "*"]
+            return []
+        command = [str(vswhere), "-sort", "-prerelease", "-products", "*", "-utf8"]
         if requires is not None:
             command += ["-requires", requires]
         command += ["-property", "installationPath"]
-        completed = self._capture(command)
-        lines = completed.stdout.strip().splitlines()
-        if completed.returncode != 0 or not lines:
-            return None
-        return Path(lines[0].strip())
+        try:
+            completed = self._capture(command)
+        except OSError:
+            return []
+        if completed.returncode != 0:
+            return []
+        return [Path(line.strip()) for line in completed.stdout.splitlines() if line.strip()]
 
     def _find_cmake(self) -> str | None:
         """Return cmake, adding a well-known Windows install to the pipeline's ``PATH``.
 
         Visual Studio bundles a CMake that is on ``PATH`` only inside a Developer
-        prompt, and a standalone install may be missing from a fresh shell. The
-        install directory is prepended to the pipeline's own environment, so
-        ctest beside it and every child process find it; ``os.environ`` is left
-        alone.
+        prompt, and a standalone install may be missing from a fresh shell. Every
+        Visual Studio installation is checked, newest first, then the standalone
+        install. The install directory is prepended to the pipeline's own
+        environment, so ctest beside it and every child process find it;
+        ``os.environ`` is left alone.
         """
         cmake = self._which("cmake")
         if cmake is not None or not _IS_WINDOWS:
             return cmake
-        candidates: list[Path] = []
-        visual_studio = self._find_visual_studio()
-        if visual_studio is not None:
-            candidates.append(visual_studio.joinpath(*_VS_CMAKE_PARTS, "cmake.exe"))
+        candidates = [
+            installation.joinpath(*_VS_CMAKE_PARTS, "cmake.exe")
+            for installation in self._visual_studio_installations()
+        ]
         for variable in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
             root = self._env.get(variable)
             if root:
@@ -1141,11 +1595,11 @@ class Pipeline:
 
     def _find_vcvars(self) -> Path | None:
         """Return ``vcvars64.bat`` of the newest Visual Studio with the C++ tools."""
-        visual_studio = self._find_visual_studio(requires=_VC_TOOLS_COMPONENT)
-        if visual_studio is None:
-            return None
-        vcvars = visual_studio / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
-        return vcvars if vcvars.is_file() else None
+        for installation in self._visual_studio_installations(requires=_VC_TOOLS_COMPONENT):
+            vcvars = installation / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
+            if vcvars.is_file():
+                return vcvars
+        return None
 
     def _import_msvc_environment(self) -> bool:
         """On Windows, load vcvars64's INCLUDE/LIB/PATH so clang-tidy finds headers.
@@ -1165,44 +1619,160 @@ class Pipeline:
         vcvars = self._find_vcvars()
         if vcvars is None:
             return False
-        # A batch file can only run under cmd.exe; a generated wrapper keeps the
-        # vcvars path out of a hand-quoted command line.
-        with tempfile.TemporaryDirectory(prefix="luma-vcvars-") as scratch:
-            wrapper = Path(scratch, "capture-env.cmd")
-            wrapper.write_text(f'@call "{vcvars}" >nul 2>&1\r\n@set\r\n', encoding="utf-8")
-            completed = subprocess.run(
-                [str(wrapper)],
-                env=self._env,
-                capture_output=True,
-                encoding="oem",
-                errors="replace",
-                check=False,
-            )
-        if completed.returncode != 0:
+        imported = self._capture_vcvars_environment(vcvars)
+        if imported is None:
             return False
-        for line in completed.stdout.splitlines():
-            match = _ENV_ASSIGNMENT.match(line)
-            if match:
-                self._env[match.group(1).upper()] = match.group(2)
+        for name, value in imported.items():
+            self._env[name.upper()] = value
         self._is_msvc_ready = True
         return True
 
-    def _ensure_compile_database(self) -> None:
-        """Emit ``build/compile_commands.json`` for clang-tidy when it is missing.
+    def _capture_vcvars_environment(self, vcvars: Path) -> dict[str, str] | None:
+        """Run *vcvars* under cmd.exe and return the environment it leaves behind.
 
-        The Visual Studio and Xcode generators do not write one, so configure a
-        database-capable generator (Ninja, else NMake / Unix Makefiles) into
-        ``build-compiledb/`` and copy the result into ``build/``. Best-effort: a
-        missing tool only leaves clang-tidy skipped by ``lint.py``.
+        A batch file can only run under cmd.exe. The generated wrapper is pure
+        ASCII: the vcvars and Python paths reach it through environment
+        variables, so a non-ASCII path survives whatever code page cmd.exe reads
+        the file in. The environment comes back as ASCII-only JSON from Python
+        rather than as ``set`` output, whose encoding follows the console code
+        page (and is garbled after ``chcp 65001``).
+
+        Returns:
+            The captured environment, or None when the wrapper failed.
+        """
+        environment = {
+            **self._env,
+            _VCVARS_VARIABLE: str(vcvars),
+            _ENV_PYTHON_VARIABLE: sys.executable,
+        }
+        script = (
+            f'@call "%{_VCVARS_VARIABLE}%" >nul 2>&1\r\n'
+            f'@"%{_ENV_PYTHON_VARIABLE}%" -c "{_ENV_DUMP_CODE}"\r\n'
+        )
+        with tempfile.TemporaryDirectory(prefix="luma-vcvars-") as scratch:
+            wrapper = Path(scratch, "capture-env.cmd")
+            wrapper.write_text(script, encoding="ascii", newline="")
+            try:
+                completed = subprocess.run(
+                    [str(wrapper)],
+                    env=environment,
+                    capture_output=True,
+                    check=False,
+                )
+            except OSError:
+                return None
+        if completed.returncode != 0:
+            return None
+        lines = completed.stdout.decode("utf-8", "replace").strip().splitlines()
+        try:
+            captured = json.loads(lines[-1]) if lines else None
+        except ValueError:
+            return None
+        if not isinstance(captured, dict):
+            return None
+        return {
+            str(name): str(value)
+            for name, value in captured.items()
+            if str(name).upper() not in (_VCVARS_VARIABLE, _ENV_PYTHON_VARIABLE)
+        }
+
+    def _cmake_inputs(self) -> list[Path]:
+        """Return the build-system files whose change can alter the compile database.
+
+        ``CMakeLists.txt`` and ``*.cmake`` files are listed through git, tracked
+        or untracked but not ignored, so build trees are never walked; without
+        git, only the root ``CMakeLists.txt`` counts.
+        """
+        inputs = [self.repo_root / "CMakeLists.txt"]
+        git = self._which("git")
+        if git is None:
+            return inputs
+        completed = self._capture(
+            [
+                git,
+                "-C",
+                str(self.repo_root),
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+                "--",
+                "*CMakeLists.txt",
+                "*.cmake",
+            ]
+        )
+        if completed.returncode != 0:
+            return inputs
+        listed = [self.repo_root / line for line in completed.stdout.splitlines() if line]
+        return inputs + listed
+
+    def _is_compile_database_current(self, build_db: Path) -> bool:
+        """True when *build_db* is newer than the last configure and every CMake input.
+
+        ``build/CMakeCache.txt`` is rewritten by every configure, which the gate
+        runs before each build, so after a configure the copied database counts
+        as stale and is regenerated; a new source picked up by a glob is never
+        missed.
+        """
+        if not build_db.is_file():
+            return False
+        built = build_db.stat().st_mtime
+        inputs = [self.repo_root / "build" / "CMakeCache.txt", *self._cmake_inputs()]
+        for path in inputs:
+            with contextlib.suppress(OSError):
+                if path.stat().st_mtime > built:
+                    return False
+        return True
+
+    def _is_compile_database_maintained_by_cmake(self) -> bool:
+        """True when ``build/`` uses a generator that writes the database on every configure.
+
+        Ninja and Makefile generators with ``CMAKE_EXPORT_COMPILE_COMMANDS``
+        refresh ``build/compile_commands.json`` as part of the gate's configure;
+        Visual Studio and Xcode never write one.
+        """
+        cache = self.repo_root / "build" / "CMakeCache.txt"
+        try:
+            lines = cache.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return False
+        values: dict[str, str] = {}
+        for line in lines:
+            key, separator, value = line.partition("=")
+            if separator:
+                values[key.split(":", 1)[0].strip()] = value.strip()
+        generator = values.get("CMAKE_GENERATOR", "")
+        is_exported = values.get("CMAKE_EXPORT_COMPILE_COMMANDS", "").upper() in (
+            _CMAKE_TRUE_VALUES
+        )
+        return is_exported and any(name in generator for name in _COMPILE_DATABASE_GENERATORS)
+
+    def _ensure_compile_database(self) -> None:
+        """Keep ``build/compile_commands.json`` current for clang-tidy.
+
+        ``lint.py`` runs clang-tidy only on sources listed in the database, so a
+        stale one silently skips every file a phase added. When ``build/``
+        uses a generator that maintains the database itself, the gate's
+        configure already refreshed it. Otherwise (Visual Studio, Xcode) a
+        missing or stale database — older than the last configure or any
+        ``CMakeLists.txt`` / ``*.cmake`` — is regenerated: a database-capable
+        generator (Ninja, else NMake / Unix Makefiles) is configured into
+        ``build-compiledb/`` and the result copied into ``build/``. Best-effort:
+        a missing tool only leaves clang-tidy skipped (or on the old database).
         """
         build_db = self.repo_root / "build" / "compile_commands.json"
-        if build_db.is_file() or not self._which("clang-tidy"):
+        if not self._which("clang-tidy"):
+            return
+        if build_db.is_file() and (
+            self._is_compile_database_maintained_by_cmake()
+            or self._is_compile_database_current(build_db)
+        ):
             return
         cmake = self._find_cmake()
         if cmake is None:
             self.console.warn(
                 "cmake not found; cannot generate compile_commands.json "
-                "(clang-tidy will be skipped)."
+                "(clang-tidy will be skipped or use an outdated database)."
             )
             return
         if self._which("ninja"):
@@ -1210,8 +1780,9 @@ class Pipeline:
         else:
             generator = "NMake Makefiles" if _IS_WINDOWS else "Unix Makefiles"
         db_dir = self.repo_root / "build-compiledb"
+        verb = "Refreshing" if build_db.is_file() else "Generating"
         self.console.line(
-            f'    Generating compile_commands.json for clang-tidy (cmake -G "{generator}")'
+            f'    {verb} compile_commands.json for clang-tidy (cmake -G "{generator}")'
         )
         configure = [
             cmake,
@@ -1227,16 +1798,19 @@ class Pipeline:
         ]
         if self._run(configure) != 0:
             self.console.warn(
-                "could not configure a compile database; clang-tidy will be skipped this run."
+                "could not configure a compile database; clang-tidy will be skipped "
+                "(or use an outdated database) this run."
             )
             return
         generated = db_dir / "compile_commands.json"
         if not generated.is_file():
             self.console.warn(
-                "configure produced no compile_commands.json; clang-tidy will be skipped."
+                "configure produced no compile_commands.json; clang-tidy will be skipped "
+                "(or use an outdated database)."
             )
             return
         build_db.parent.mkdir(parents=True, exist_ok=True)
+        # copyfile stamps the copy with the current time, which marks it current.
         shutil.copyfile(generated, build_db)
 
     # -- git -------------------------------------------------------------------
@@ -1251,7 +1825,7 @@ class Pipeline:
         Raises:
             PipelineError: When ``git status`` fails (e.g. not a git working tree).
         """
-        if self.dry_run:
+        if self.is_dry_run:
             self.console.dry(f"{render_command('git', ['status', '--porcelain'])} (assume clean)")
             return True
         completed = self._capture(self._git("status", "--porcelain"))
@@ -1264,15 +1838,59 @@ class Pipeline:
 
     def create_branch(self, name: str) -> bool:
         """Create branch *name* from HEAD and switch to it; True on success."""
-        if self.dry_run:
+        if self.is_dry_run:
             self.console.dry(render_command("git", ["switch", "-c", name]))
             return True
         return self._run(self._git("switch", "-c", name)) == 0
 
-    def revert_to_head(self, *, remove_untracked: bool, keep: Path | None = None) -> bool:
-        """Discard a failed phase's changes by resetting tracked files to HEAD.
+    def head_commit(self) -> str | None:
+        """Return the full SHA of HEAD, or None in a dry run.
+
+        Raises:
+            PipelineError: When git cannot resolve HEAD.
+        """
+        if self.is_dry_run:
+            return None
+        completed = self._capture(self._git("rev-parse", "--verify", "HEAD"))
+        sha = completed.stdout.strip()
+        if completed.returncode != 0 or not sha:
+            raise PipelineError(f"git rev-parse HEAD failed (exit {completed.returncode}).")
+        return sha
+
+    def short_sha(self, sha: str) -> str:
+        """Return git's abbreviation of *sha* (its first 7 characters if git fails)."""
+        completed = self._capture(self._git("rev-parse", "--short", sha))
+        short = completed.stdout.strip()
+        return short if completed.returncode == 0 and short else sha[:7]
+
+    def count_commits(self, base: str, head: str) -> int | None:
+        """Count the commits *head* adds on top of *base*.
+
+        Returns:
+            The count, or None when *base* is not an ancestor of *head* — the
+            history was rewritten (amended, rebased, or reset).
+        """
+        is_ancestor = self._run(
+            self._git("merge-base", "--is-ancestor", base, head), should_discard_output=True
+        )
+        if is_ancestor != 0:
+            return None
+        completed = self._capture(self._git("rev-list", "--count", f"{base}..{head}"))
+        try:
+            return int(completed.stdout.strip())
+        except ValueError:
+            return None
+
+    def revert_to(
+        self, target: str = "HEAD", *, remove_untracked: bool, keep: Path | None = None
+    ) -> bool:
+        """Discard a failed phase's changes by resetting the tree and branch to *target*.
+
+        Resetting to the commit the phase started from (rather than to HEAD)
+        also drops any commit the agent made during the phase.
 
         Args:
+            target: The commit to reset to — the phase's starting commit.
             remove_untracked: Also delete untracked files (``git clean -fd``), so
                 the next checkpoint's ``git add -A`` cannot commit files the
                 failed phase created. Ignored files always survive. Pass it only
@@ -1284,14 +1902,14 @@ class Pipeline:
         Returns:
             True when every git command succeeded.
         """
-        commands = [["reset", "--hard", "HEAD"]]
+        commands = [["reset", "--hard", target]]
         if remove_untracked:
             clean = ["clean", "-fd"]
             if keep is not None and is_within(keep, self.repo_root):
                 relative = keep.resolve().relative_to(self.repo_root.resolve()).as_posix()
                 clean += ["-e", f"/{relative}/"]
             commands.append(clean)
-        if self.dry_run:
+        if self.is_dry_run:
             for command in commands:
                 self.console.dry(render_command("git", command))
             return True
@@ -1320,7 +1938,7 @@ class Pipeline:
             artifact_root if artifact_root and is_within(artifact_root, self.repo_root) else None
         )
         commit = ["commit", "-m", subject, "-m", trailer]
-        if self.dry_run:
+        if self.is_dry_run:
             self.console.dry(render_command("git", ["add", "-A"]))
             if exclude is not None:
                 self.console.dry(render_command("git", ["reset", "-q", "--", str(exclude)]))
@@ -1330,7 +1948,14 @@ class Pipeline:
         if self._run(self._git("add", "-A")) != 0:
             raise CheckpointError("git add failed.")
         if exclude is not None:
-            self._run(self._git("reset", "-q", "--", str(exclude)), should_discard_output=True)
+            unstaged = self._run(
+                self._git("reset", "-q", "--", str(exclude)), should_discard_output=True
+            )
+            if unstaged != 0:
+                raise CheckpointError(
+                    f"could not unstage the artifact root '{exclude}' (git reset exit "
+                    f"{unstaged}); refusing to commit run artifacts."
+                )
         staged = self._run(self._git("diff", "--cached", "--quiet"))
         if staged == 0:
             self.console.dim("    No changes to commit for this phase.")
@@ -1351,8 +1976,13 @@ class Pipeline:
         Returns:
             The backup path, or None when there is nothing to protect (no root,
             or a root outside the working tree that ``git clean`` never sees).
+
+        Raises:
+            PipelineError: When a backup from an earlier run still exists — a
+                failed restore asked the user to recover it, so it is never
+                deleted or overwritten.
         """
-        if self.dry_run:
+        if self.is_dry_run:
             self.console.dry(f'move "{artifact_root}" aside into .git/ across the clean')
             return None
         if not artifact_root.is_dir() or not is_within(artifact_root, self.repo_root):
@@ -1363,13 +1993,16 @@ class Pipeline:
             return None
         backup = Path(git_dir, ARTIFACT_BACKUP_NAME)
         if backup.exists():
-            shutil.rmtree(backup, ignore_errors=True)
+            raise PipelineError(
+                f"an artifact backup from an earlier run still exists at '{backup}'. Recover "
+                f"anything you need from it into '{artifact_root}', delete it, and re-run."
+            )
         shutil.move(str(artifact_root), str(backup))
         return backup
 
     def restore_artifacts(self, backup: Path | None, artifact_root: Path) -> None:
         """Move a saved artifact root back, merging into any recreated root."""
-        if self.dry_run or backup is None or not backup.is_dir():
+        if self.is_dry_run or backup is None or not backup.is_dir():
             return
         if not artifact_root.exists():
             artifact_root.parent.mkdir(parents=True, exist_ok=True)
@@ -1388,7 +2021,7 @@ class Pipeline:
         while a file inside it is open). Afterwards — even on error — the root is
         restored and the transcripts are folded back into *log_dir*.
         """
-        if self.dry_run:
+        if self.is_dry_run:
             self.save_artifacts(artifact_root)
             yield log_dir
             return
@@ -1401,7 +2034,11 @@ class Pipeline:
             try:
                 self.restore_artifacts(backup, artifact_root)
             except OSError as err:
-                self.console.warn(f"failed to restore {artifact_root} (backup at {backup}): {err}")
+                self.console.warn(
+                    f"failed to restore {artifact_root}: {err}. Its contents are kept at "
+                    f"{backup}; move them back by hand (the next protected phase refuses to "
+                    "run until that backup is gone)."
+                )
             log_dir.mkdir(parents=True, exist_ok=True)
             for entry in temp_log_dir.iterdir():
                 _replace_with(entry, log_dir / entry.name)

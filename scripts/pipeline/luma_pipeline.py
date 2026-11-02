@@ -40,9 +40,11 @@ from pipeline_core import (
     Pipeline,
     PipelineError,
     Status,
+    TerminationRequested,
     find_repo_root,
     require_agent,
     should_abort,
+    termination_handlers,
 )
 
 # The pipeline is self-contained (it does not import scripts/_common.py), so it
@@ -78,8 +80,8 @@ class FixPhase:
 
     Attributes:
         input_report: Audit report file it consumes, if any.
-        gate: Run the build + test + lint gate after the phase.
-        commit: Checkpoint the phase when it leaves the tree green.
+        has_gate: Run the build + test + lint gate after the phase.
+        should_commit: Checkpoint the phase when it leaves the tree green.
         self_verifies: The prompt builds and tests exhaustively itself, so the
             script-side gate is skipped.
         limits_passes: The prompt loops; cap it at ``--convergence-max-passes``.
@@ -91,8 +93,8 @@ class FixPhase:
     name: str
     prompt: str
     input_report: str = ""
-    gate: bool = True
-    commit: bool = True
+    has_gate: bool = True
+    should_commit: bool = True
     self_verifies: bool = False
     limits_passes: bool = False
     cleans_ignored_files: bool = False
@@ -155,7 +157,7 @@ FIX_PHASES = (
         "iterative-improvement",
         "Iterative improvement (loop)",
         "iterative-improvement.prompt.md",
-        gate=False,
+        has_gate=False,
         self_verifies=True,
         limits_passes=True,
     ),
@@ -163,12 +165,12 @@ FIX_PHASES = (
         "release-verification",
         "Release verification (gate)",
         "release-verification.prompt.md",
-        gate=False,
-        commit=False,
+        has_gate=False,
+        should_commit=False,
         self_verifies=True,
         cleans_ignored_files=True,
     ),
-    FixPhase("update-learnings", "Update learnings", "update-learnings.prompt.md", gate=False),
+    FixPhase("update-learnings", "Update learnings", "update-learnings.prompt.md", has_gate=False),
 )
 
 _LINT_DIRECTIVE = (
@@ -320,7 +322,7 @@ class AuditOptions:
     scope: str = ""
     artifact_root: Path | None = None
     list_only: bool = False
-    dry_run: bool = False
+    is_dry_run: bool = False
 
     @classmethod
     def from_namespace(cls, namespace: argparse.Namespace) -> AuditOptions:
@@ -331,7 +333,7 @@ class AuditOptions:
             scope=namespace.scope,
             artifact_root=_absolute_or_none(namespace.artifact_root),
             list_only=namespace.list,
-            dry_run=namespace.dry_run,
+            is_dry_run=namespace.dry_run,
         )
 
 
@@ -358,7 +360,7 @@ class FixOptions:
     continue_on_failure: bool = False
     revert_on_failure: bool = False
     list_only: bool = False
-    dry_run: bool = False
+    is_dry_run: bool = False
 
     @classmethod
     def from_namespace(cls, namespace: argparse.Namespace) -> FixOptions:
@@ -380,7 +382,7 @@ class FixOptions:
             continue_on_failure=namespace.continue_on_failure,
             revert_on_failure=namespace.revert_on_failure,
             list_only=namespace.list,
-            dry_run=namespace.dry_run,
+            is_dry_run=namespace.dry_run,
         )
 
 
@@ -389,7 +391,7 @@ class AllOptions:
     """Settings for one ``all`` run; see ``luma_pipeline.py all --help``."""
 
     agent: AgentSettings
-    dry_run: bool = False
+    is_dry_run: bool = False
     skip_audit: bool = False
     skip_fix: bool = False
     audit_args: tuple[str, ...] = ()
@@ -404,7 +406,7 @@ class AllOptions:
             model = DEFAULT_ALL_MODELS[namespace.agent]
         return cls(
             agent=AgentSettings(namespace.agent, model, namespace.effort or ""),
-            dry_run=namespace.dry_run,
+            is_dry_run=namespace.dry_run,
             skip_audit=namespace.skip_audit,
             skip_fix=namespace.skip_fix,
             audit_args=tuple(namespace.audit_arg),
@@ -450,12 +452,12 @@ def _yes_no(flag: bool) -> str:
 
 def _make_pipeline(
     *,
-    dry_run: bool,
+    is_dry_run: bool,
     console: Console,
     model_cache: dict[tuple[str, str], str] | None,
 ) -> Pipeline:
     return Pipeline(
-        find_repo_root(SCRIPT_DIR), dry_run=dry_run, console=console, model_cache=model_cache
+        find_repo_root(SCRIPT_DIR), is_dry_run=is_dry_run, console=console, model_cache=model_cache
     )
 
 
@@ -499,9 +501,11 @@ def run_audit(
 
     phases = _select_or_fail(AUDIT_PHASES, options.phase_filters, "audit")
     agent = options.agent
-    if not options.dry_run:
+    if not options.is_dry_run:
         require_agent(agent.name)
-    pipeline = _make_pipeline(dry_run=options.dry_run, console=console, model_cache=model_cache)
+    pipeline = _make_pipeline(
+        is_dry_run=options.is_dry_run, console=console, model_cache=model_cache
+    )
     model = pipeline.resolve_copilot_model(agent.name, agent.model)
 
     repo_root = pipeline.repo_root
@@ -517,7 +521,7 @@ def run_audit(
     console.line(f"  Agent  : {agent.name}")
     console.line(f"  Model  : {model or '(agent default)'}")
     console.line(f"  Output : {run_dir}")
-    if options.dry_run:
+    if options.is_dry_run:
         console.note("  Mode   : DRY RUN (no agent invoked)")
 
     results: list[AuditResult] = []
@@ -543,7 +547,7 @@ def run_audit(
                 console.warn(f"phase '{phase.phase_id}' failed (agent exit {outcome.exit_code}).")
         results.append(AuditResult(order, phase, status))
 
-    if not options.dry_run:
+    if not options.is_dry_run:
         index_path = run_dir / "INDEX.md"
         pipeline.write_text(index_path, _audit_index(timestamp, repo_root, results))
         console.line()
@@ -595,19 +599,30 @@ class FixResult:
 
 @dataclass(frozen=True)
 class FixContext:
-    """Per-run state shared by every fix phase.
-
-    Attributes:
-        is_initially_clean: The working tree was clean when the run started, so
-            a revert may also delete untracked files.
-    """
+    """Per-run state shared by every fix phase."""
 
     options: FixOptions
     pipeline: Pipeline
     model: str
     artifact_root: Path
     log_dir: Path
-    is_initially_clean: bool
+
+
+@dataclass(frozen=True)
+class PhaseRun:
+    """What one fix phase did, before any revert.
+
+    Attributes:
+        status: The phase's outcome.
+        commit: Short SHA of the commit the phase ended on, ``-`` when it
+            created none.
+        start: Full SHA of HEAD when the phase started; None in a dry run or
+            when git could not resolve it.
+    """
+
+    status: Status
+    commit: str
+    start: str | None
 
 
 def _newest_report_dir(artifact_root: Path) -> Path | None:
@@ -656,32 +671,59 @@ def _run_fix_gate(context: FixContext, phase: FixPhase) -> Status:
     ):
         pipeline.console.warn(f"gate failed after '{phase.phase_id}'.")
         return Status.GATE_FAILED
-    # Lint after build + test so clang-tidy sees a fresh compile database and a
-    # broken build fails fast. Formatting changes fold into the phase's commit.
+    # Lint after build + test so a broken build fails fast. lint_and_format
+    # refreshes build/compile_commands.json when it is missing or older than the
+    # configure the gate just ran. Formatting changes fold into the phase's commit.
     if not options.skip_lint_format and not pipeline.lint_and_format(check_only=False):
         pipeline.console.warn(f"lint/format gate failed after '{phase.phase_id}'.")
         return Status.GATE_FAILED
     return Status.OK
 
 
-def _execute_fix_phase(
-    context: FixContext, phase: FixPhase, instruction: str
-) -> tuple[Status, str]:
-    """Run one fix phase end to end.
+def _check_agent_commits(context: FixContext, phase: FixPhase, start: str | None) -> Status:
+    """Report commits the agent made itself; fail the phase if it rewrote history.
 
-    Returns:
-        The phase status and its commit SHA (``-`` when it made no commit).
+    The prompts leave committing to the pipeline. Commits the agent adds anyway
+    are kept, gated with the phase, and discarded by a revert; a starting
+    commit that is no longer an ancestor of HEAD means history was rewritten,
+    which fails the phase.
     """
+    pipeline = context.pipeline
+    head = pipeline.head_commit()
+    if start is None or head is None or head == start:
+        return Status.OK
+    count = pipeline.count_commits(start, head)
+    span = f"{pipeline.short_sha(start)}..{pipeline.short_sha(head)}"
+    if count is None:
+        pipeline.console.warn(
+            f"the agent rewrote history during '{phase.phase_id}' ({span}): the phase's "
+            "starting commit is no longer an ancestor of HEAD. Failing the phase."
+        )
+        return Status.ERROR
+    pipeline.console.warn(
+        f"the agent made {count} commit(s) of its own during '{phase.phase_id}' ({span}). "
+        "They are gated with the phase; if it fails, --revert-on-failure discards them."
+    )
+    return Status.OK
+
+
+def _execute_fix_phase(context: FixContext, phase: FixPhase, instruction: str) -> PhaseRun:
+    """Run one fix phase end to end: agent, gate, then checkpoint."""
     options = context.options
-    console = context.pipeline.console
+    pipeline = context.pipeline
+    console = pipeline.console
     commit = "-"
+    start: str | None = None
     try:
+        start = pipeline.head_commit()
         status = _run_fix_agent(context, phase, instruction)
-        if status is Status.OK and phase.gate and not phase.self_verifies:
+        if status is Status.OK:
+            status = _check_agent_commits(context, phase, start)
+        if status is Status.OK and phase.has_gate and not phase.self_verifies:
             status = _run_fix_gate(context, phase)
-        if status is Status.OK and phase.commit and not options.no_commit:
+        if status is Status.OK and phase.should_commit and not options.no_commit:
             try:
-                sha = context.pipeline.git_checkpoint(
+                pipeline.git_checkpoint(
                     subject=f"chore(pipeline): {phase.phase_id}",
                     agent=options.agent.name,
                     artifact_root=context.artifact_root,
@@ -691,47 +733,61 @@ def _execute_fix_phase(
                 # re-stage it into every later checkpoint.
                 console.warn(f"checkpoint commit failed for '{phase.phase_id}': {err}")
                 status = Status.COMMIT_FAILED
-            else:
-                commit = sha or "-"
+        if status is Status.OK and start is not None:
+            # The checkpoint or the agent's own commits; either way, HEAD moved.
+            head = pipeline.head_commit()
+            if head is not None and head != start:
+                commit = pipeline.short_sha(head)
     except (PipelineError, OSError) as err:
         console.warn(f"phase '{phase.phase_id}' errored: {err}")
         status = Status.ERROR
-    return status, commit
+    return PhaseRun(status, commit, start)
 
 
-def _revert_failed_phase(context: FixContext) -> None:
-    """Reset the tree to the last checkpoint after a failed phase."""
+def _revert_failed_phase(context: FixContext, phase: FixPhase, start: str | None) -> bool:
+    """Reset the tree and branch to the commit the failed phase started from.
+
+    Returns:
+        True when the revert succeeded.
+    """
     pipeline = context.pipeline
-    pipeline.console.note("Reverting working tree to last checkpoint...")
+    console = pipeline.console
+    target = start or "HEAD"
+    console.note(f"Reverting the working tree to the start of '{phase.phase_id}'...")
     try:
-        is_reverted = pipeline.revert_to_head(
-            remove_untracked=context.is_initially_clean, keep=context.artifact_root
-        )
+        head = pipeline.head_commit()
+        if start is not None and head is not None and head != start:
+            console.warn(
+                f"discarding the commit(s) the agent made during '{phase.phase_id}'. They "
+                f"stay recoverable: git branch <name> {head}"
+            )
+        is_reverted = pipeline.revert_to(target, remove_untracked=True, keep=context.artifact_root)
     except PipelineError as err:
-        pipeline.console.warn(str(err))
+        console.warn(str(err))
         is_reverted = False
     if not is_reverted:
-        pipeline.console.warn("revert failed.")
+        console.warn(f"revert to {target} failed.")
+    return is_reverted
 
 
-def _abort_message(phase: FixPhase, status: Status, options: FixOptions) -> str:
+def _abort_message(
+    phase: FixPhase, run: PhaseRun, options: FixOptions, *, is_revert_failed: bool
+) -> str:
     """Explain why the run stops after *phase* and how to avoid it."""
-    if status is not Status.COMMIT_FAILED or not options.continue_on_failure:
-        return f"stopping after '{phase.phase_id}' (pass --continue-on-failure to keep going)."
-    reason = (
-        f"stopping after '{phase.phase_id}': the commit was rejected and cannot be skipped "
-        "(git add -A would re-stage it)."
-    )
-    if options.revert_on_failure:
-        # A clean start would have let the revert remove the phase's files.
+    if is_revert_failed:
+        target = run.start or "HEAD"
         return (
-            f"{reason} The run started with uncommitted changes, so the revert cannot remove "
-            "the phase's new files. Fix the blocker (e.g. the pre-commit hook) and re-run from "
-            "a clean tree."
+            f"stopping after '{phase.phase_id}': the revert failed, so the working tree may "
+            "still hold the failed phase's changes and later phases cannot run on a known "
+            f"state. Inspect it with 'git status' and reset it yourself (git reset --hard "
+            f"{target} && git clean -fd)."
         )
+    if run.status is not Status.COMMIT_FAILED or not options.continue_on_failure:
+        return f"stopping after '{phase.phase_id}' (pass --continue-on-failure to keep going)."
     return (
-        f"{reason} Fix the blocker (e.g. the pre-commit hook), or pass --revert-on-failure to "
-        "discard failed phases and keep going."
+        f"stopping after '{phase.phase_id}': the commit was rejected and cannot be skipped "
+        "(git add -A would re-stage it). Fix the blocker (e.g. the pre-commit hook), or pass "
+        "--revert-on-failure to discard failed phases and keep going."
     )
 
 
@@ -753,36 +809,25 @@ def _verify_baseline(options: FixOptions, pipeline: Pipeline) -> None:
         )
 
 
-def _check_fix_preconditions(options: FixOptions, pipeline: Pipeline, branch: str) -> bool:
+def _check_fix_preconditions(options: FixOptions, pipeline: Pipeline, branch: str) -> None:
     """Check the tree, create the run branch, and verify the baseline.
-
-    Returns:
-        True when the working tree was clean at the start.
 
     Raises:
         PipelineError: When a precondition fails.
     """
     console = pipeline.console
-    is_clean = pipeline.is_clean_working_tree()
-    if not is_clean:
-        if not options.allow_dirty:
-            raise PipelineError(
-                "working tree is not clean. Commit or stash your changes, or pass --allow-dirty."
-            )
-        if options.revert_on_failure:
-            console.note(
-                "The working tree has uncommitted changes, so --revert-on-failure resets only "
-                "tracked files: untracked files a failed phase creates are kept and would be "
-                "committed by a later checkpoint."
-            )
+    if not options.allow_dirty and not pipeline.is_clean_working_tree():
+        raise PipelineError(
+            "working tree is not clean. Commit or stash your changes, or pass --allow-dirty."
+        )
     is_on_run_branch = False
     if not options.no_branch:
         console.line(f"Creating branch: {branch}")
         if not pipeline.create_branch(branch):
             raise PipelineError(f"failed to create branch '{branch}'.")
-        is_on_run_branch = not pipeline.dry_run
+        is_on_run_branch = not pipeline.is_dry_run
     if options.skip_baseline:
-        return is_clean
+        return
     try:
         _verify_baseline(options, pipeline)
     except PipelineError as err:
@@ -793,7 +838,6 @@ def _check_fix_preconditions(options: FixOptions, pipeline: Pipeline, branch: st
             "to your previous branch.",
             exit_code=err.exit_code,
         ) from err
-    return is_clean
 
 
 def run_fix(
@@ -820,8 +864,8 @@ def run_fix(
                 str(order),
                 phase.phase_id,
                 phase.name,
-                _yes_no(phase.gate),
-                _yes_no(phase.commit),
+                _yes_no(phase.has_gate),
+                _yes_no(phase.should_commit),
                 _yes_no(phase.self_verifies),
                 phase.prompt,
             ]
@@ -832,9 +876,11 @@ def run_fix(
 
     phases = _select_or_fail(FIX_PHASES, options.phase_filters, "fix")
     agent = options.agent
-    if not options.dry_run:
+    if not options.is_dry_run:
         require_agent(agent.name)
-    pipeline = _make_pipeline(dry_run=options.dry_run, console=console, model_cache=model_cache)
+    pipeline = _make_pipeline(
+        is_dry_run=options.is_dry_run, console=console, model_cache=model_cache
+    )
     model = pipeline.resolve_copilot_model(agent.name, agent.model)
 
     repo_root = pipeline.repo_root
@@ -856,13 +902,13 @@ def run_fix(
     console.line(f"  Agent   : {agent.name}")
     console.line(f"  Model   : {model or '(agent default)'}")
     console.line(f"  Output  : {run_dir}")
-    if options.dry_run:
+    if options.is_dry_run:
         console.note("  Mode    : DRY RUN (nothing invoked, built, or committed)")
 
-    is_initially_clean = _check_fix_preconditions(options, pipeline, branch)
+    _check_fix_preconditions(options, pipeline, branch)
     pipeline.make_dirs(log_dir)
 
-    context = FixContext(options, pipeline, model, artifact_root, log_dir, is_initially_clean)
+    context = FixContext(options, pipeline, model, artifact_root, log_dir)
     results: list[FixResult] = []
     is_aborted = False
     for order, phase in enumerate(phases, start=1):
@@ -874,26 +920,31 @@ def run_fix(
         instruction = build_fix_instruction(
             phase,
             report_path=report_path,
-            enforce_lint=phase.gate and not phase.self_verifies and not options.skip_lint_format,
+            enforce_lint=phase.has_gate
+            and not phase.self_verifies
+            and not options.skip_lint_format,
             max_passes=options.max_passes,
         )
-        status, commit = _execute_fix_phase(context, phase, instruction)
+        run = _execute_fix_phase(context, phase, instruction)
+        results.append(FixResult(order, phase, run.status, run.commit))
+        if run.status is Status.OK:
+            continue
 
-        if status is not Status.OK:
-            if options.revert_on_failure:
-                _revert_failed_phase(context)
-            is_aborted = should_abort(
-                status,
-                continue_on_failure=options.continue_on_failure,
-                reverts_cleanly=options.revert_on_failure and is_initially_clean,
-            )
-        results.append(FixResult(order, phase, status, commit))
-
+        # --revert-on-failure implies a clean start (it is refused with
+        # --allow-dirty), so a successful revert leaves a clean tree.
+        is_revert_failed = options.revert_on_failure and not _revert_failed_phase(
+            context, phase, run.start
+        )
+        is_aborted = is_revert_failed or should_abort(
+            run.status,
+            continue_on_failure=options.continue_on_failure,
+            reverts_cleanly=options.revert_on_failure,
+        )
         if is_aborted:
-            console.warn(_abort_message(phase, status, options))
+            console.warn(_abort_message(phase, run, options, is_revert_failed=is_revert_failed))
             break
 
-    if not options.dry_run:
+    if not options.is_dry_run:
         summary_path = run_dir / "SUMMARY.md"
         summary = _fix_summary(
             timestamp,
@@ -908,7 +959,7 @@ def run_fix(
         console.ok(f"Summary written: {summary_path}")
 
     console.banner("Fix summary")
-    if not options.no_branch and not options.dry_run:
+    if not options.no_branch and not options.is_dry_run:
         console.line(f"Branch: {branch}")
     rows = [[str(r.order), r.phase.phase_id, r.status.value, r.commit] for r in results]
     _print_table(console, ["Order", "Id", "Status", "Commit"], rows)
@@ -990,7 +1041,7 @@ def run_all(
         common += ["--model", agent.model]
     if agent.effort:
         common += ["--effort", agent.effort]
-    if options.dry_run:
+    if options.is_dry_run:
         common.append("--dry-run")
 
     stages: list[tuple[str, str, Sequence[str]]] = []
@@ -1013,7 +1064,7 @@ def run_all(
         f"Agent: {agent.name}   Model: {agent.model or '(agent default)'}   "
         f"Effort: {agent.effort or '(agent default)'}",
     )
-    if options.dry_run:
+    if options.is_dry_run:
         console.note("  Mode : DRY RUN (nothing invoked, built, or committed)")
     if options.skip_audit:
         console.dim("Skipping audit stage (--skip-audit).")
@@ -1185,7 +1236,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     safety = fix.add_argument_group("safety overrides")
     safety.add_argument(
-        "--allow-dirty", action="store_true", help="do not require a clean working tree"
+        "--allow-dirty",
+        action="store_true",
+        help="do not require a clean working tree (cannot be combined with --revert-on-failure)",
     )
     safety.add_argument(
         "--skip-baseline", action="store_true", help="skip the initial green baseline"
@@ -1212,9 +1265,10 @@ def build_parser() -> argparse.ArgumentParser:
     safety.add_argument(
         "--revert-on-failure",
         action="store_true",
-        help="after a failed phase, reset tracked files to the last checkpoint and delete the "
-        "untracked files it created (kept when the run started with uncommitted changes); "
-        "with --no-commit this discards every phase's work",
+        help="after a failed phase, reset the branch and tree to the commit the phase started "
+        "from (dropping any commit the agent made) and delete the untracked files it created; "
+        "requires a clean start, so it cannot be combined with --allow-dirty; with --no-commit "
+        "this discards every phase's work",
     )
     fix.add_argument(
         "--dry-run",
@@ -1237,9 +1291,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_agent_options(
         run_both,
         model_help="model for every stage (default: claude-opus-4.6 for copilot, the agent's "
-        "own default for claude; pass '' to let the agent choose)",
+        "own default for claude; pass --model= to let the agent choose)",
         effort_help=f"reasoning effort for every stage (default: {DEFAULT_ALL_EFFORT}; "
-        "pass '' to omit)",
+        "pass --effort= to omit)",
     )
     run_both.set_defaults(effort=DEFAULT_ALL_EFFORT)
     run_both.add_argument("--dry-run", action="store_true", help="preview every stage")
@@ -1269,6 +1323,14 @@ def validate_options(parser: argparse.ArgumentParser, namespace: argparse.Namesp
         parser.error(f"invalid --effort '{effort}' for copilot (use {', '.join(COPILOT_EFFORTS)})")
     if namespace.command == "all" and namespace.skip_audit and namespace.skip_fix:
         parser.error("both --skip-audit and --skip-fix are set; nothing to do")
+    if namespace.command == "fix" and namespace.allow_dirty and namespace.revert_on_failure:
+        # The revert runs git reset --hard, which would destroy the very
+        # uncommitted changes --allow-dirty let the run start with.
+        parser.error(
+            "--revert-on-failure cannot be combined with --allow-dirty: the revert runs "
+            "'git reset --hard', which would destroy your uncommitted changes. Commit or stash "
+            "them first."
+        )
 
 
 def _split_all_argv(argv: Sequence[str]) -> tuple[list[str], list[str]]:
@@ -1323,17 +1385,23 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     console = Console()
     try:
-        if namespace.command == "audit":
-            return run_audit(AuditOptions.from_namespace(namespace), console)
-        if namespace.command == "fix":
-            return run_fix(FixOptions.from_namespace(namespace), console)
-        return run_all(AllOptions.from_namespace(namespace), passthrough, parser, console)
+        # SIGTERM / SIGHUP unwind like Ctrl+C, so the agent's process tree is
+        # killed and the artifact tree restored on the way out.
+        with termination_handlers():
+            if namespace.command == "audit":
+                return run_audit(AuditOptions.from_namespace(namespace), console)
+            if namespace.command == "fix":
+                return run_fix(FixOptions.from_namespace(namespace), console)
+            return run_all(AllOptions.from_namespace(namespace), passthrough, parser, console)
     except PipelineError as err:
         console.error(str(err))
         return err.exit_code
     except KeyboardInterrupt:
         console.error("interrupted.")
         return 130
+    except TerminationRequested as err:
+        console.error(f"terminated ({err}).")
+        return err.exit_code
 
 
 if __name__ == "__main__":
