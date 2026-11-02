@@ -96,9 +96,11 @@ LUMA_TEST(vm_number_overflow_throws) {
 }
 
 // Regression (review #19): `/` had no overflow check, so finite operands could
-// silently produce Infinity.
+// silently produce Infinity. The divisor is a normal number: glibc's strtod
+// reports a subnormal literal such as 1.0e-308 as out of range, so the lexer
+// would reject the program there before the division ever ran.
 LUMA_TEST(vm_number_division_overflow_throws) {
-    ASSERT_EVAL_THROWS("number x = 1.0e308\nnumber y = 1.0e-308\nx / y",
+    ASSERT_EVAL_THROWS("number x = 1.0e308\nnumber y = 1.0e-10\nx / y",
                        "number overflow in division");
 
     const auto result = eval("7 / 2");

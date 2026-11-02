@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <charconv>
 #include <cstdint>
 #include <format>
 #include <stdexcept>
@@ -14,6 +13,7 @@
 #include <string_view>
 #include <system_error>
 
+#include "common/parse_double.hpp"
 #include "common/resource_limits.hpp"
 #include "common/utf8.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -26,17 +26,16 @@ namespace {
 
 // Convert an already-validated JSON numeric token to a finite double. JSON
 // numbers outside the runtime's finite double domain must fail rather than
-// becoming infinity or a silently rounded underflow. std::from_chars is
-// locale-independent (unlike std::stod, which honours the global C locale's
-// decimal separator) and reports underflow/overflow precisely via
-// result_out_of_range, so a genuine "0" still parses while "1e-400" is rejected.
+// becoming infinity or a silently rounded underflow. parse_double (std::from_chars
+// where the standard library provides it) is locale-independent (unlike
+// std::stod, which honours the global C locale's decimal separator) and reports
+// underflow/overflow via result_out_of_range, so a genuine "0" still parses
+// while "1e-400" is rejected.
 [[nodiscard]] double parse_double_strict(const std::string& num_str) {
     double value = 0.0;
-    const char* const first = num_str.data();
-    const char* const last = first + num_str.size();
-    const auto [ptr, ec] = std::from_chars(first, last, value);
+    const auto [ptr, ec] = parse_double(num_str, value);
 
-    if (ec != std::errc{} || ptr != last) {
+    if (ec != std::errc{} || ptr != num_str.data() + num_str.size()) {
         throw std::out_of_range{std::format("JSON number out of range: {}", num_str)};
     }
 

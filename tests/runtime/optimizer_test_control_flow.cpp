@@ -326,21 +326,18 @@ static void test_inline_skips_call_that_is_jump_target() {
         static_cast<std::uint8_t>(Op::Return),
     })};
 
+    // clang-format off
     auto chunk = make_chunk({
-        static_cast<std::uint8_t>(Op::True), // 0
-        static_cast<std::uint8_t>(Op::JumpIfFalse),
+        static_cast<std::uint8_t>(Op::True),        // 0
+        static_cast<std::uint8_t>(Op::JumpIfFalse), // 1: → 10 (the Call)
+        0, 0, 0, 4,
+        static_cast<std::uint8_t>(Op::MakeClosure), // 6
+        0, 0, 0,
+        static_cast<std::uint8_t>(Op::Call),        // 10
         0,
-        0,
-        0,
-        4, // 1: → 10 (the Call)
-        static_cast<std::uint8_t>(Op::MakeClosure),
-        0,
-        0,
-        0, // 6
-        static_cast<std::uint8_t>(Op::Call),
-        0,                                     // 10
-        static_cast<std::uint8_t>(Op::Return), // 12
+        static_cast<std::uint8_t>(Op::Return),      // 12
     });
+    // clang-format on
     const auto before = chunk.code;
 
     const Optimizer opt{2};

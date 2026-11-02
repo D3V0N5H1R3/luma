@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <new>
 #include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
@@ -20,11 +21,14 @@ namespace detail {
 // the build itself — see ensure_built).  An install happens at most a few
 // times per index, so contention is negligible; striping keeps the per-object
 // cost at zero bytes instead of a std::mutex in every dictionary, record, and
-// set.  No other lock is ever taken while one is held.  Leaked on purpose so a
-// lookup during static destruction never touches a dead mutex.
+// set.  No other lock is ever taken while one is held.  Constructed in static
+// storage and never destroyed, so a lookup during static destruction never
+// touches a dead mutex (placement new cannot fail with bad_alloc).
 [[nodiscard]] inline std::mutex& lazy_index_build_mutex(const void* owner) noexcept {
     static constexpr std::size_t k_stripes{64};
-    static auto* const mutexes = new std::array<std::mutex, k_stripes>{};
+    using Stripes = std::array<std::mutex, k_stripes>;
+    alignas(Stripes) static std::array<std::byte, sizeof(Stripes)> storage{};
+    static auto* const mutexes = ::new (static_cast<void*>(storage.data())) Stripes{};
     const auto address = reinterpret_cast<std::uintptr_t>(owner);
 
     // Drop the low bits (allocation alignment) before picking a stripe.

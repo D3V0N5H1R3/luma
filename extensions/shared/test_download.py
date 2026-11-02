@@ -192,6 +192,36 @@ class SafeExtractTar(unittest.TestCase):
                 download._safe_extract_tar(archive, dest)
             self.assertFalse((tmp_path / "evil.txt").exists())
 
+    def test_interpreter_without_data_filter_extracts_by_hand(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            archive = tmp_path / "ok.tar.gz"
+            self._write_tar(archive, "sub/ok.txt", b"payload")
+
+            dest = tmp_path / "out"
+            dest.mkdir()
+            # A stand-in tarfile module lacking data_filter, as on older Pythons.
+            old_tarfile = SimpleNamespace(open=tarfile.open)
+            with mock.patch.object(download, "tarfile", old_tarfile):
+                download._safe_extract_tar(archive, dest)
+            self.assertEqual((dest / "sub" / "ok.txt").read_bytes(), b"payload")
+
+    def test_symlink_member_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            archive = tmp_path / "link.tar.gz"
+            with tarfile.open(archive, "w:gz") as tf:
+                info = tarfile.TarInfo(name="link")
+                info.type = tarfile.SYMTYPE
+                info.linkname = "/etc/passwd"
+                tf.addfile(info)
+
+            dest = tmp_path / "out"
+            dest.mkdir()
+            with self.assertRaises(ValueError):
+                download._safe_extract_tar(archive, dest)
+            self.assertFalse((dest / "link").exists())
+
 
 class RejectUnsafeMember(unittest.TestCase):
     """Direct coverage for the shared path-traversal guard both extractors use."""

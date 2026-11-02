@@ -582,11 +582,13 @@ void ExpressionTypeChecker::check_declared_function_args(
     };
 
     for (std::size_t i{0}; i < mapping.positional.size() && i < arg_types.size(); ++i) {
-        if (!mapping.positional[i]) {
+        const auto slot = mapping.positional[i];
+
+        if (!slot) {
             continue;
         }
 
-        const auto index = *mapping.positional[i];
+        const auto index = *slot;
         const auto param_type = param_type_at(index);
         const auto& arg_type = arg_types[i];
         const auto hint = type_mismatch_hint(param_type, arg_type);
@@ -603,11 +605,13 @@ void ExpressionTypeChecker::check_declared_function_args(
     }
 
     for (std::size_t k{0}; k < mapping.named.size() && k < named_arg_types.size(); ++k) {
-        if (!mapping.named[k]) {
+        const auto slot = mapping.named[k];
+
+        if (!slot) {
             continue;
         }
 
-        const auto index = *mapping.named[k];
+        const auto index = *slot;
         const auto param_type = param_type_at(index);
         const auto& [named_name, named_type] = named_arg_types[k];
         const auto& value = *expr.named_arguments[k].value;

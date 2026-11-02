@@ -66,7 +66,7 @@ read_file_bounded(const std::filesystem::path& path, std::uintmax_t max_bytes,
         result.data.reserve(static_cast<std::size_t>(size_hint));
     }
 
-    constexpr std::size_t k_chunk_size{64 * 1024};
+    constexpr std::size_t k_chunk_size{std::size_t{64} * 1024};
     std::string chunk(k_chunk_size, '\0');
 
     while (true) {

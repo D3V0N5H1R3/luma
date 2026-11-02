@@ -10,6 +10,7 @@
 
 #include "common/depth_guard.hpp"
 #include "common/escape.hpp"
+#include "common/parse_double.hpp"
 #include "common/resource_limits.hpp"
 #include "common/utf8.hpp"
 
@@ -375,7 +376,7 @@ bool JsonParser::parse_exponent_part() {
 
 JsonValue JsonParser::parse_double_literal(std::string_view num_str) const {
     double value{0.0};
-    auto [ptr, ec] = std::from_chars(num_str.data(), num_str.data() + num_str.size(), value);
+    auto [ptr, ec] = parse_double(num_str, value);
 
     if (ec == std::errc::result_out_of_range) {
         throw JsonParseError{pos_, k_number_out_of_range};

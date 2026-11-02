@@ -15,6 +15,20 @@
 #include "protocol/message_frame.hpp"
 #include "test_framework.hpp"
 
+// Platform headers must stay at file scope: declared inside the anonymous
+// namespace below, <windows.h>'s _Interlocked* intrinsics no longer match the
+// compiler's built-in declarations (a hard error on ARM64).
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 using luma::json::JsonValue;
 
 // ─── DAP-specific assertion ───────────────────────────────────────
@@ -85,11 +99,6 @@ std::string debug_examples_dir;
 }
 
 #ifdef _WIN32
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-
 class DapProcess {
 public:
     explicit DapProcess() {
@@ -270,10 +279,6 @@ private:
 
 #else
 // POSIX implementation using popen/pipes — simplified for Linux/macOS.
-#include <signal.h>
-#include <sys/wait.h>
-#include <unistd.h>
-
 class DapProcess {
 public:
     explicit DapProcess() {

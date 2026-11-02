@@ -846,7 +846,23 @@ std::string run_regex_on_worker_stack(const std::string& source) {
 
 } // namespace
 
+// AddressSanitizer pads every stack frame with redzones, so libstdc++'s
+// once-per-repetition regex recursion needs several times the native stack the
+// input limit is sized for. Under ASan the test lowers the limit to keep the
+// same "at the limit" scenario within the thread's stack.
+#if defined(__SANITIZE_ADDRESS__)
+#define LUMA_REGEX_TEST_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define LUMA_REGEX_TEST_ASAN 1
+#endif
+#endif
+
 static void test_regex_long_input_at_limit_is_handled_cleanly() {
+#if defined(LUMA_REGEX_TEST_ASAN)
+    const LimitGuard guard{ResourceLimits::max_regex_input_size,
+                           ResourceLimits::max_regex_input_size / 8};
+#endif
     const auto limit = std::to_string(ResourceLimits::max_regex_input_size);
     const auto text = "Result.unwrap(String.repeat(\"a\", " + limit + "))";
 

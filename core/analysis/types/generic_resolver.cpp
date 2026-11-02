@@ -230,15 +230,14 @@ void GenericResolver::infer_from_arguments(const FunctionDeclaration& func,
     }
 
     for (std::size_t i{0}; i < mapping.positional.size() && i < arg_types.size(); ++i) {
-        if (mapping.positional[i]) {
-            infer_param_from_arg(func.parameters[*mapping.positional[i]].type, arg_types[i]);
+        if (const auto slot = mapping.positional[i]) {
+            infer_param_from_arg(func.parameters[*slot].type, arg_types[i]);
         }
     }
 
     for (std::size_t k{0}; k < mapping.named.size() && k < named_arg_types.size(); ++k) {
-        if (mapping.named[k]) {
-            infer_param_from_arg(func.parameters[*mapping.named[k]].type,
-                                 named_arg_types[k].second);
+        if (const auto slot = mapping.named[k]) {
+            infer_param_from_arg(func.parameters[*slot].type, named_arg_types[k].second);
         }
     }
 }
@@ -319,15 +318,15 @@ TypeInfo GenericResolver::infer_call(const FunctionDeclaration& func, std::strin
     const TypeInfo return_type = services_->resolve_type(func.return_type);
 
     for (std::size_t i{0}; i < mapping.positional.size() && i < arg_types.size(); ++i) {
-        if (mapping.positional[i]) {
-            check_argument(func, fn_name, *mapping.positional[i], *expr.arguments[i], arg_types[i],
+        if (const auto slot = mapping.positional[i]) {
+            check_argument(func, fn_name, *slot, *expr.arguments[i], arg_types[i],
                            std::format("argument {}", i + 1));
         }
     }
 
     for (std::size_t k{0}; k < mapping.named.size() && k < named_arg_types.size(); ++k) {
-        if (mapping.named[k]) {
-            check_argument(func, fn_name, *mapping.named[k], *expr.named_arguments[k].value,
+        if (const auto slot = mapping.named[k]) {
+            check_argument(func, fn_name, *slot, *expr.named_arguments[k].value,
                            named_arg_types[k].second,
                            std::format("named argument '{}'", named_arg_types[k].first));
         }

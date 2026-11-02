@@ -381,10 +381,9 @@ StackEffect instruction_stack_effect(const std::vector<std::uint8_t>& code, std:
         case Op::MakeRecord: // u16 type name, u8 field count, field names.
             return {.pops = u8_operand(3), .pushes = 1};
 
-        case Op::RecordWith: // u8 override count, override names; also pops the base record.
-            return {.pops = u8_operand(1) + 1, .pushes = 1};
-
-        // The callee (below its arguments) is replaced by the result / task.
+        // RecordWith: u8 override count, override names; also pops the base record.
+        // Calls: the callee (below its arguments) is replaced by the result / task.
+        case Op::RecordWith:
         case Op::Call:
         case Op::TailCall:
         case Op::Spawn:

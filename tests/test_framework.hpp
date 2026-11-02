@@ -106,6 +106,56 @@ template <typename T> inline constexpr bool is_chrono_time_point_v = false;
 template <typename Clock, typename Duration>
 inline constexpr bool is_chrono_time_point_v<std::chrono::time_point<Clock, Duration>> = true;
 
+// 128-bit integers have no operator<< (libc++ uses __int128 as the tick type of
+// std::filesystem::file_time_type), so they are printed digit by digit.
+// __extension__ keeps -Wpedantic quiet about the non-standard type names.
+#ifdef __SIZEOF_INT128__
+__extension__ typedef __int128 Int128;
+__extension__ typedef unsigned __int128 UInt128;
+
+template <typename T>
+inline constexpr bool is_int128_v =
+    std::is_same_v<std::remove_cv_t<T>, Int128> || std::is_same_v<std::remove_cv_t<T>, UInt128>;
+
+template <typename T>
+inline constexpr bool is_unsigned_int128_v = std::is_same_v<std::remove_cv_t<T>, UInt128>;
+#else
+template <typename T> inline constexpr bool is_int128_v = false;
+
+template <typename T> inline constexpr bool is_unsigned_int128_v = false;
+#endif
+
+template <typename T> std::string int128_to_string(T value) {
+    bool negative = false;
+
+    if constexpr (!is_unsigned_int128_v<T>) {
+        negative = value < 0;
+    }
+
+    std::string digits;
+
+    do {
+        const auto digit = static_cast<int>(value % 10);
+        digits.push_back(static_cast<char>('0' + (negative ? -digit : digit)));
+        value /= 10;
+    } while (value != 0);
+
+    if (negative) {
+        digits.push_back('-');
+    }
+
+    return {digits.rbegin(), digits.rend()};
+}
+
+// A chrono tick count, by value, in a form that can be streamed.
+template <typename Rep> auto printable_count(Rep count) {
+    if constexpr (is_int128_v<Rep>) {
+        return int128_to_string(count);
+    } else {
+        return count;
+    }
+}
+
 // Format values for assertion messages. Enums print their underlying integer;
 // narrow character types print as int so byte/char assertions show readable
 // numbers instead of raw (possibly control) characters; std::chrono durations
@@ -121,9 +171,11 @@ template <typename T> decltype(auto) to_printable(const T& value) {
                          std::is_same_v<T, unsigned char>) {
         return static_cast<int>(value);
     } else if constexpr (is_chrono_duration_v<T>) {
-        return value.count();
+        return printable_count(value.count());
     } else if constexpr (is_chrono_time_point_v<T>) {
-        return value.time_since_epoch().count();
+        return printable_count(value.time_since_epoch().count());
+    } else if constexpr (is_int128_v<T>) {
+        return int128_to_string(value);
     } else if constexpr (std::ranges::input_range<T> && !Streamable<T>) {
         std::ostringstream text;
         text << "[";

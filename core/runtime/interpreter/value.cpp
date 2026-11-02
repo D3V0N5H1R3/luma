@@ -105,15 +105,21 @@ constexpr std::size_t k_max_inline_teardown_depth{32};
         return false;
     }
 
-    return std::visit(
-        [](const auto& alternative) noexcept {
-            if constexpr (is_shared_ptr_v<std::decay_t<decltype(alternative)>>) {
-                return alternative != nullptr && alternative.use_count() == 1;
-            } else {
-                return false;
-            }
-        },
-        data);
+    // std::visit throws only for a valueless variant, ruled out above; the
+    // handler keeps that unreachable path from escaping a noexcept function.
+    try {
+        return std::visit(
+            [](const auto& alternative) noexcept {
+                if constexpr (is_shared_ptr_v<std::decay_t<decltype(alternative)>>) {
+                    return alternative != nullptr && alternative.use_count() == 1;
+                } else {
+                    return false;
+                }
+            },
+            data);
+    } catch (...) {
+        return false;
+    }
 }
 
 } // namespace

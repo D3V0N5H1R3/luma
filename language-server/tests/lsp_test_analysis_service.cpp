@@ -1285,9 +1285,11 @@ void test_document_symbol_members_have_own_ranges() {
 
 [[nodiscard]] std::optional<luma::lsp::Location> definition_at(const AnalysisResult& result,
                                                                std::size_t token_idx) {
+    // DefinitionResolver keeps a reference to the URI, so it must outlive it.
+    const std::string uri = "file:///test/main.luma";
     const luma::StringMap<AnalysisResult> no_other_results;
     const luma::lsp::DefinitionResolver resolver(
-        "file:///test/main.luma", result, result.get_tokens(),
+        uri, result, result.get_tokens(),
         [](const std::string&) { return luma::lsp::optional_ref<const AnalysisResult>{}; },
         [](const std::vector<luma::Token>&, const luma::SourceLocation&) { return Range{}; },
         no_other_results);

@@ -5,10 +5,13 @@
 // conversion, and terminal (TTY) detection.  Header-only; all functions
 // are inline.
 
+#include <array>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <shared_mutex>
 #include <string>
@@ -34,9 +37,11 @@ namespace luma {
 // read (safe_getenv, Process.get_all_environment_variables) and every child
 // process launch (which copies the environment into the child) takes it
 // shared.  Never call safe_getenv while holding it — std::shared_mutex is not
-// recursive.  Leaked on purpose so it outlives static destruction.
+// recursive.  Constructed in static storage and never destroyed, so it outlives
+// static destruction (placement new cannot fail with bad_alloc).
 [[nodiscard]] inline std::shared_mutex& environment_mutex() noexcept {
-    static auto* const mutex = new std::shared_mutex{};
+    alignas(std::shared_mutex) static std::array<std::byte, sizeof(std::shared_mutex)> storage{};
+    static auto* const mutex = ::new (static_cast<void*>(storage.data())) std::shared_mutex{};
     return *mutex;
 }
 

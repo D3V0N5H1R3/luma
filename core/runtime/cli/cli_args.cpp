@@ -181,7 +181,9 @@ std::optional<ParsedArgs> parse_args(int argc, char* argv[]) {
         });
 
         if (it != k_flag_descriptors.end()) {
-            (*it->apply)(args);
+            if (const auto& apply = it->apply; apply.has_value()) {
+                (*apply)(args);
+            }
 
             continue;
         }

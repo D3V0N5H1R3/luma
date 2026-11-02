@@ -117,7 +117,7 @@ constexpr int k_status_not_modified{304};
 // An interim response precedes the final one on the same connection.  101
 // Switching Protocols is final: the connection stops speaking HTTP after it.
 [[nodiscard]] bool is_interim_status(std::optional<int> status) {
-    return is_informational(status) && *status != k_status_switching_protocols;
+    return status && is_informational(status) && *status != k_status_switching_protocols;
 }
 
 // RFC 9112 §6.3 rule 1: a response to HEAD, and any 1xx, 204, or 304 response,

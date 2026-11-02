@@ -29,6 +29,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import sys
 import tarfile
 import urllib.request
@@ -264,17 +265,39 @@ def _safe_extract_zip(archive_path: Path, dest_dir: Path) -> None:
 
 
 def _safe_extract_tar(archive_path: Path, dest_dir: Path) -> None:
-    """Extract a tar archive, rejecting entries with path-traversal components or unsafe links."""
+    """Extract a tar archive, rejecting entries with path-traversal components or unsafe links.
+
+    Every member is vetted first. Extraction then goes through tarfile's ``data`` filter
+    where the interpreter has it (Python 3.12, backported to 3.10.12 and 3.11.4); older
+    interpreters copy the vetted regular files and directories by hand instead of calling
+    an unfiltered ``extractall``.
+    """
     dest_real = dest_dir.resolve()
     with tarfile.open(archive_path, "r:gz") as tf:
+        vetted: list[tuple[tarfile.TarInfo, Path]] = []
         for member in tf.getmembers():
-            if member.issym() or member.islnk() or member.isdev() or member.isfifo():
+            if not (member.isfile() or member.isdir()):
                 raise ValueError(f"Unsafe archive member type ({member.type!r}) for: {member.name}")
-            _reject_unsafe_member((dest_dir / member.name).resolve(), dest_real, member.name)
+            target = (dest_dir / member.name).resolve()
+            _reject_unsafe_member(target, dest_real, member.name)
+            vetted.append((member, target))
+
         if hasattr(tarfile, "data_filter"):
             tf.extractall(dest_dir, filter="data")
-        else:
-            tf.extractall(dest_dir)
+            return
+
+        for member, target in vetted:
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = tf.extractfile(member)
+            if source is None:
+                raise ValueError(f"Cannot read archive member: {member.name}")
+            with source, target.open("wb") as out:
+                shutil.copyfileobj(source, out)
+            # Like the data filter: keep the permission bits, drop group/other write.
+            target.chmod(member.mode & 0o755)
 
 
 def extract_archive(archive_path: Path, dest_dir: Path) -> None:
