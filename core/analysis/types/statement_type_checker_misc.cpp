@@ -346,6 +346,23 @@ void StatementTypeChecker::visit_return(const ReturnStatement& stmt) {
         return;
     }
 
+    // An expression-bodied lambda's type is inferred from its body, and a
+    // branch that returns counts as leaving early, so it takes no part in that
+    // inference — the value it returns (or none) would escape the inferred
+    // `function(...) -> T`. Reject it, as '?' is rejected there.
+    if (ctx.in_inferred_expression_lambda) {
+        if (stmt.value) {
+            (void)tc_.infer_expression_type(*stmt.value);
+        }
+
+        tc_.error("'return' cannot be used in an expression-bodied lambda: its value would "
+                  "bypass the type inferred from the lambda's body",
+                  stmt.location,
+                  "make the branch produce the value directly, or use a block body with "
+                  "explicit returns, e.g. (integer x) -> { return ... }");
+        return;
+    }
+
     if (stmt.value) {
         tc_.context().has_value_return = true;
 

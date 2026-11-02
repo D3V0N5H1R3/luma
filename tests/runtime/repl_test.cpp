@@ -634,6 +634,29 @@ static void test_redefinition_with_different_type_rejected() {
     ASSERT_EQ(result.as_integer(), 20);
 }
 
+static void test_record_destructuring_redefinition_rejected() {
+    // `P { x } = p` redefines the global `x` just as `integer x = …` does, so a
+    // different type must be rejected there too.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "string x = \"hi\"").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "record P { integer x }").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "P p = P { x = 5 }").is_null());
+
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "P { x } = p"),
+                               "cannot redefine 'x' as 'integer': an earlier input defined it "
+                               "as 'string'");
+
+    const auto result = repl_eval(checker, vm, programs, "x");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_EQ(result.as_string(), std::string{"hi"});
+}
+
 static void test_rejected_line_defines_nothing() {
     // A line that fails type checking never ran, so its names stay undefined.
     const auto env = luma::test::make_std_env();
@@ -1230,6 +1253,7 @@ int main() {
     RUN(test_function_and_record_persist_across_lines);
     RUN(test_redefinition_with_same_type_replaces_earlier_line);
     RUN(test_redefinition_with_different_type_rejected);
+    RUN(test_record_destructuring_redefinition_rejected);
     RUN(test_rejected_line_defines_nothing);
     RUN(test_runtime_error_keeps_definitions_that_ran);
     RUN(test_rejected_line_does_not_consume_unique);

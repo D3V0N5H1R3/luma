@@ -962,6 +962,19 @@ static void test_generic_lookahead_is_bounded() {
                              "Box<integer> b = Box<integer> { value = 1 }\n"
                              "boolean lt = n < limit\n")
                     .empty());
+
+    // So do type argument lists split across lines: the bound stops only at a
+    // name that starts a line right after a token that ends a type.
+    ASSERT_TRUE(parse_errors("array<\n"
+                             "    integer\n"
+                             "> a = [1, 2]\n"
+                             "dictionary<array<\n"
+                             "    string>> names = {\"x\": [\"y\"]}\n"
+                             "Pair<integer, string> p = Pair<\n"
+                             "    integer,\n"
+                             "    string\n"
+                             "> { first = 1, second = \"x\" }\n")
+                    .empty());
 }
 
 int main() {

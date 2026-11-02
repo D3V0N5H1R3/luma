@@ -280,8 +280,13 @@ void bind_record_fields(TypeCheckingServices& tc, std::string_view record_type,
             continue;
         }
 
-        tc.context().current_scope->define(field_name, tc.resolve_type(field_it->type),
-                                           {.is_mutable = is_mutable}, location);
+        const auto field_type = tc.resolve_type(field_it->type);
+
+        // `P { x } = p` at a REPL input's top level redefines the global `x`
+        // like `integer x = …` does (a no-op anywhere else, e.g. in a match arm).
+        type_check_helpers::check_repl_redefinition(tc, field_name, field_type, location);
+        tc.context().current_scope->define(field_name, field_type, {.is_mutable = is_mutable},
+                                           location);
     }
 }
 

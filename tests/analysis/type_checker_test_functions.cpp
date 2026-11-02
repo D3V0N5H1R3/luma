@@ -803,6 +803,25 @@ static void test_propagation_in_expression_lambda_fails() {
         passes("function(string) -> integer g = (string s) -> String.parse_integer(s) ?? 0\n"));
 }
 
+static void test_return_in_expression_lambda_fails() {
+    // A returning arm takes no part in the inferred body type, so its value
+    // (here a string, or none for a bare return) would escape
+    // `function(integer) -> integer`.
+    ASSERT_TRUE(fails_with_message("function(integer) -> integer f = (integer x) -> match x {\n"
+                                   "    case 1 { return \"one\" }\n"
+                                   "    else { x * 2 }\n"
+                                   "}\n",
+                                   "'return' cannot be used in an expression-bodied lambda"));
+    ASSERT_TRUE(fails_with_message(
+        "function(integer) -> integer f = (integer x) -> if x == 1 { return } else { x * 2 }\n",
+        "'return' cannot be used in an expression-bodied lambda"));
+    // A block-bodied lambda nested inside may still return.
+    ASSERT_TRUE(passes("function(integer) -> function(integer) -> integer make = (integer n) -> "
+                       "(integer x) -> {\n"
+                       "    return x + n\n"
+                       "}\n"));
+}
+
 static void test_lambda_call_wrong_arg_type_fails() {
     ASSERT_TRUE(fails("function(integer) -> integer f = (integer x) -> x * 2\n"
                       "integer y = f(\"hi\")\n"));
@@ -1267,6 +1286,7 @@ int main() {
     RUN(test_zero_param_function_value_call_with_args_fails);
     RUN(test_builtin_call_arity);
     RUN(test_propagation_in_expression_lambda_fails);
+    RUN(test_return_in_expression_lambda_fails);
     RUN(test_lambda_call_wrong_arg_type_fails);
     RUN(test_lambda_undefined_variable_in_body_fails);
 

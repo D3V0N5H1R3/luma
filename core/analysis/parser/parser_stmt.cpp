@@ -168,8 +168,29 @@ constexpr int k_max_type_lookahead_tokens = 1024;
 
 bool Parser::type_lookahead_exceeded(int offset, int scanned, int angle_depth,
                                      int paren_depth) const {
-    return scanned > k_max_type_lookahead_tokens || angle_depth > ResourceLimits::max_parse_depth ||
-           (paren_depth == 0 && peek_at(offset).preceded_by_newline);
+    if (scanned > k_max_type_lookahead_tokens || angle_depth > ResourceLimits::max_parse_depth) {
+        return true;
+    }
+
+    // A line break inside `<…>` is fine (`array<\n    integer\n> a`), but a
+    // name that starts a line right after a token that ends a type cannot
+    // continue the type argument list — two type atoms are never adjacent
+    // there — so it begins the next statement (`X<X` on consecutive lines).
+    // Stopping there keeps such input linear without rejecting multi-line
+    // generic types.
+    if (paren_depth != 0 || !peek_at(offset).preceded_by_newline) {
+        return false;
+    }
+
+    const auto starts_type_atom = [this](TokenType type) {
+        return type == TokenType::Identifier || is_type_keyword(type);
+    };
+    const TokenType previous = token_type_at(offset - 1);
+    const bool previous_ends_type = starts_type_atom(previous) || previous == TokenType::Greater ||
+                                    previous == TokenType::GreaterGreater ||
+                                    previous == TokenType::RightParen;
+
+    return previous_ends_type && starts_type_atom(token_type_at(offset));
 }
 
 int Parser::skip_type_at(int offset, int depth) const {

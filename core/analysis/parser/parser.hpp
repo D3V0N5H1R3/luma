@@ -334,10 +334,12 @@ private:
     // Bounds a lookahead scan over a generic argument list (skip_type_at,
     // is_generic_record_creation).  True once the scan has looked at more
     // tokens than any real type spans, nests angle brackets deeper than
-    // max_parse_depth, or reaches a token that starts a new line outside
-    // parentheses (a type argument list never continues on the next line
-    // except inside a function type's parameter list).  Without it, input such
-    // as many lines of `X<X` rescans to end-of-file from every line.
+    // max_parse_depth, or reaches — outside parentheses — a name that starts
+    // a new line right after a token that ends a type (two type atoms are
+    // never adjacent in an argument list, so it begins the next statement).
+    // A type split across lines (`array<\n integer\n> a`) still scans.
+    // Without the bound, input such as many lines of `X<X` rescans to
+    // end-of-file from every line.
     [[nodiscard]] bool type_lookahead_exceeded(int offset, int scanned, int angle_depth,
                                                int paren_depth) const;
 

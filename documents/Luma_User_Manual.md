@@ -587,7 +587,7 @@ function optional<string> get_display_name(optional<User> user) {
 
 > `?` **requires the enclosing function to return** `result<T>`, `optional<T>`, or to be `@main`. Using `?` in a function that returns a plain type (e.g. `integer`) is a type error. On a `result`, the propagated error type must also fit the enclosing function's error type — see [§14 — Result and Optional](#14--result-and-optional).
 
-> `?` **cannot be used in an expression-bodied lambda** such as `(string s) -> String.parse_integer(s)?`. The lambda's type is inferred from its body, which `?` unwraps to `integer`, yet on a failure the lambda would return the failure itself — so callers expecting an `integer` would receive a `result`. Handle the value inside the lambda instead (`(string s) -> String.parse_integer(s) ?? 0`), or write a block body with explicit `return`s.
+> `?` **cannot be used in an expression-bodied lambda** such as `(string s) -> String.parse_integer(s)?`. The lambda's type is inferred from its body, which `?` unwraps to `integer`, yet on a failure the lambda would return the failure itself — so callers expecting an `integer` would receive a `result`. Handle the value inside the lambda instead (`(string s) -> String.parse_integer(s) ?? 0`), or write a block body with explicit `return`s. For the same reason, `return` cannot appear inside an expression-bodied lambda either: in `(integer x) -> match x { case 1 { return "one" } else { x * 2 } }` the returning arm takes no part in the inferred type, so its value would escape it.
 
 ### Truthiness
 
