@@ -155,6 +155,16 @@ add_subdirectory(core/runtime)      # luma_stdlib_*, luma_core, luma
 add_subdirectory(language-server)   # luma_lsp_lib, luma_lsp
 add_subdirectory(debugger)          # luma_dap_lib, luma_dap
 
+# ─────────── Windows file metadata ───────────
+# Version information and an application manifest for the shipped executables,
+# so antivirus heuristics do not treat them as anonymous binaries. No-op
+# elsewhere. See the module for details.
+
+include(cmake/LumaWindowsResources.cmake)
+luma_add_windows_metadata(luma     DESCRIPTION "Luma Programming Language Interpreter")
+luma_add_windows_metadata(luma_lsp DESCRIPTION "Luma Language Server")
+luma_add_windows_metadata(luma_dap DESCRIPTION "Luma Debug Adapter")
+
 # ─────────── Testing ───────────
 # enable_testing() is called once here so both the fuzz and unit-test trees can
 # register tests with CTest.

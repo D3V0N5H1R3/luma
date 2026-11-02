@@ -97,6 +97,46 @@ jobs:
         working-directory: build
         run: ctest --output-on-failure -C Release
 
+      # Authenticode-sign the Windows binaries before they are archived.
+      # Microsoft Defender and other antivirus engines readily flag unsigned,
+      # little-known executables as false positives; a signature (ideally from
+      # a certificate with established reputation) is the durable fix.
+      # Opt-in: the step is a no-op until both repository secrets are set
+      # (setup: CONTRIBUTING.md, "Optional Setup: Windows Code Signing") —
+      #   WINDOWS_SIGNING_CERTIFICATE  base64-encoded .pfx code-signing certificate
+      #   WINDOWS_SIGNING_PASSWORD     the .pfx password
+      - name: Sign Windows binaries
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SIGNING_CERTIFICATE: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE }}
+          SIGNING_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
+        run: |
+          if (-not $env:SIGNING_CERTIFICATE -or -not $env:SIGNING_PASSWORD) {
+            Write-Output "::notice::WINDOWS_SIGNING_CERTIFICATE/WINDOWS_SIGNING_PASSWORD not set; publishing unsigned Windows binaries."
+            exit 0
+          }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) {
+            Write-Output "::error::signtool.exe not found in the Windows SDK."
+            exit 1
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "luma-signing.pfx"
+          $binaries = @("luma", "luma_lsp", "luma_dap") | ForEach-Object { "build/Release/$_.exe" }
+          try {
+            [System.IO.File]::WriteAllBytes($pfx, [System.Convert]::FromBase64String($env:SIGNING_CERTIFICATE))
+            & $signtool.FullName sign /f $pfx /p $env:SIGNING_PASSWORD /fd SHA256 `
+              /tr http://timestamp.digicert.com /td SHA256 /d "Luma" `
+              /du "https://github.com/d3v0n5h1r3/luma" @binaries
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & $signtool.FullName verify /pa /v @binaries
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+          }
+
       # Package the full distribution bundle (luma-{os}-{arch}, all three
       # binaries) plus one archive per binary (luma_lsp, luma_dap) so each
       # editor extension downloads only what it needs. The {os}-{arch} suffix

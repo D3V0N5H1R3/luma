@@ -586,6 +586,17 @@ Configure it once (a repository **admin** with a Personal Access Token, or a Git
 
 > **Tip:** A classic PAT with the `repo` scope works too, but a fine-grained token limited to this repository with only `Contents: write` is the least-privilege choice.
 
+#### Optional Setup: Windows Code Signing
+
+Unsigned Windows executables are often quarantined by Microsoft Defender and other antivirus engines as false positives, and trigger the SmartScreen "Windows protected your PC" prompt. [`release.yml`](.github/workflows/release.yml) Authenticode-signs and timestamps `luma.exe`, `luma_lsp.exe`, and `luma_dap.exe` before packaging them, but only when both of these repository secrets are set; otherwise it logs a notice and publishes the binaries unsigned:
+
+| Secret                        | Value                                                    |
+| ----------------------------- | -------------------------------------------------------- |
+| `WINDOWS_SIGNING_CERTIFICATE` | The code-signing certificate as a base64-encoded `.pfx`. |
+| `WINDOWS_SIGNING_PASSWORD`    | The `.pfx` password.                                     |
+
+Encode the certificate with `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))` in PowerShell, then add both secrets under **Settings → Secrets and variables → Actions → New repository secret**. A signing failure fails the Windows build job, so a release is never published with a broken signature. Independently of signing, every Windows executable embeds version information and an application manifest ([`cmake/LumaWindowsResources.cmake`](cmake/LumaWindowsResources.cmake)).
+
 ---
 
 ## Code Style
