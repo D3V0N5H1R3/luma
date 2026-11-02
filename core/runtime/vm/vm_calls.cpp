@@ -148,16 +148,33 @@ void VM::init_call_fn() {
                                  const SourceLocation& /*loc*/) -> Value {
         auto saved_stack_size = stack_size();
 
+        // Built-ins invoke callbacks with a fixed argument list (e.g.
+        // Dictionary.map passes key and value, Array.reduce the accumulator
+        // and the element), and a closure may take fewer parameters than
+        // that: `Dictionary.each(d, (string k) -> print(k))`. Drop the
+        // trailing arguments it does not declare, so they never land in its
+        // local slots. Direct calls from bytecode still raise
+        // `too many arguments` in call_function().
+        auto arg_count = args.size();
+
+        if (callee.is_function()) {
+            const auto& compiled = callee.as_function()->compiled;
+
+            if (compiled != nullptr && std::cmp_greater(arg_count, compiled->arity)) {
+                arg_count = static_cast<std::size_t>(compiled->arity);
+            }
+        }
+
         push(callee);
-        for (auto& arg : args) {
-            push(std::move(arg));
+        for (std::size_t i = 0; i < arg_count; ++i) {
+            push(std::move(args[i]));
         }
 
         auto prev_base = base_depth_;
         base_depth_ = stack_.frames.size();
 
         try {
-            call_value(callee, static_cast<int>(args.size()));
+            call_value(callee, static_cast<int>(arg_count));
             auto result = run();
             base_depth_ = prev_base;
             return result;

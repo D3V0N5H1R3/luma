@@ -301,9 +301,10 @@ constexpr std::string_view await_consumed_task{"await called on an already-consu
 }
 
 // Raised by call_function and handle_tail_call when a user function receives
-// more arguments than it declares.  The type checker rejects this at the
-// source level, but a value-typed call through a `function()`-typed variable,
-// the REPL, or crafted bytecode can still reach the VM with extra arguments.
+// more arguments than it declares.  The type checker rejects this for calls in
+// the source, but the REPL and crafted bytecode can still reach the VM with
+// extra arguments.  Built-ins calling a callback drop the arguments it does
+// not declare instead (VM::init_call_fn), so they never raise this.
 [[nodiscard]] inline std::string too_many_arguments(int expected, int got) {
     return std::format("too many arguments: function expects {} but got {}", expected, got);
 }

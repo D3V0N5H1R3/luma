@@ -137,8 +137,9 @@ struct StringRepeatOutcome {
 
 /// Handles string repetition: "abc" * 3 or 3 * "abc".  Enforces the same
 /// limits as String.repeat — the repeat count (ResourceLimits::max_string_repeat)
-/// and the result size — and never iterates over the count itself, so
-/// `"" * 9223372036854775807` returns "" at once instead of spinning.
+/// and the result size — and never iterates over the count itself: a count
+/// above the limit (even for "") raises the repeat-count error, and an empty
+/// string within it returns "" at once instead of spinning.
 [[nodiscard]] StringRepeatOutcome try_string_repeat(const Value& a, const Value& b) {
     const std::string* str = nullptr;
     std::int64_t count = 0;

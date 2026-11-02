@@ -793,3 +793,16 @@ function void test_dictionary_find_callback_error() {
 
     assert(Result.is_failure(found))
 }
+
+@test
+function void test_dictionary_callback_may_omit_trailing_parameters() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    integer counted = Dictionary.reduce(entries, 0, (integer acc, string _key) -> acc + 1) ?? -1
+
+    assert(counted == 2, "a callback may ignore the value Dictionary.reduce passes")
+
+    integer elements = Array.reduce([1, 2, 3], 0, (integer acc) -> acc + 1) ?? -1
+
+    assert(elements == 3, "a callback may ignore the element Array.reduce passes")
+}

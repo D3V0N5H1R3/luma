@@ -571,9 +571,12 @@ LUMA_TEST(vm_native_bad_alloc_stays_plain_runtime_error) {
 //
 // call_function rejected too few arguments but not too many: the extra
 // arguments landed in the callee's first local slots, so a zero-parameter
-// lambda's first local read the caller's argument.  Every call path funnels
-// through call_function (Call, pipes, spawn, native callbacks), and tail calls
-// mirror the check.  eval() skips the type checker, so these reach the VM.
+// lambda's first local read the caller's argument.  Every bytecode call path
+// funnels through call_function (Call, pipes, spawn), and tail calls mirror
+// the check.  Built-ins calling a callback instead drop the arguments it does
+// not declare (VM::init_call_fn), because they pass a fixed argument list
+// (Dictionary.map passes key and value) to callbacks that may ignore the
+// trailing ones.  eval() skips the type checker, so these reach the VM.
 
 LUMA_TEST(vm_call_with_too_many_arguments_is_rejected) {
     ASSERT_EVAL_THROWS("function integer f() {\n"
@@ -596,16 +599,38 @@ LUMA_TEST(vm_pipe_call_with_too_many_arguments_is_rejected) {
                        "too many arguments: function expects 1 but got 2");
 }
 
-LUMA_TEST(vm_native_callback_with_too_many_arguments_is_rejected) {
+LUMA_TEST(vm_native_callback_drops_undeclared_arguments) {
     // Array.map invokes the closure with one argument; a zero-parameter
-    // closure must not silently receive it as its first local.  Array.map
-    // reports a failing callback as a failure result.
-    const auto result = luma::test::eval("Array.map([1, 2], () -> 7)");
+    // closure ignores it, and it must not land in the closure's first local.
+    const auto result = luma::test::eval("Array.map([1, 2], () -> {\n"
+                                         "    integer base = 40\n"
+                                         "    return base + 2\n"
+                                         "})");
 
     ASSERT_TRUE(result.is_result());
-    ASSERT_FALSE(result.as_result()->is_success);
-    ASSERT_NE(result.as_result()->owned_inner->as_string().find("too many arguments"),
-              std::string::npos);
+    ASSERT_TRUE(result.as_result()->is_success);
+    const auto& mapped = *result.as_result()->owned_inner->as_array()->elements;
+    ASSERT_EQ(mapped.size(), 2U);
+    ASSERT_EQ(mapped[0].as_integer(), 42);
+    ASSERT_EQ(mapped[1].as_integer(), 42);
+}
+
+LUMA_TEST(vm_native_callback_with_fewer_parameters_runs) {
+    // Dictionary.reduce passes (accumulator, key, value) and Array.reduce
+    // (accumulator, element); callbacks that ignore the trailing arguments ran
+    // before the arity check and must keep running.
+    const auto by_key = luma::test::eval(
+        "Dictionary.reduce({\"a\": 1, \"b\": 2}, 0, (integer acc, string _k) -> acc + 1)");
+
+    ASSERT_TRUE(by_key.is_result());
+    ASSERT_TRUE(by_key.as_result()->is_success);
+    ASSERT_EQ(by_key.as_result()->owned_inner->as_integer(), 2);
+
+    const auto counted = luma::test::eval("Array.reduce([1, 2, 3], 0, (integer acc) -> acc + 1)");
+
+    ASSERT_TRUE(counted.is_result());
+    ASSERT_TRUE(counted.as_result()->is_success);
+    ASSERT_EQ(counted.as_result()->owned_inner->as_integer(), 3);
 }
 
 LUMA_TEST(vm_tail_call_with_too_many_arguments_is_rejected) {
