@@ -197,9 +197,9 @@ Run a fuzzer with an optional corpus directory:
 | `LUMA_FEATURE_SANITIZERS` | `OFF`   | Enable ASan + UBSan (Clang/GCC only)              |
 | `LUMA_FEATURE_COVERAGE`   | `OFF`   | Enable code coverage instrumentation (Clang/GCC)  |
 | `LUMA_FEATURE_LTO`        | `OFF`   | Enable link-time optimisation for Release builds  |
-| `LUMA_PRIMARY_CONFIG`     | Release | Multi-config: configuration placed at build root  |
+| `LUMA_PRIMARY_CONFIG`     | (auto)  | Multi-config: configuration placed at build root  |
 
-`LUMA_PRIMARY_CONFIG` defaults to `CMAKE_DEFAULT_BUILD_TYPE`, else `CMAKE_BUILD_TYPE`, else Release, and must be one of `CMAKE_CONFIGURATION_TYPES`; single-config generators ignore it.
+`LUMA_PRIMARY_CONFIG` is empty by default, which chooses automatically on every configure: the first of `CMAKE_DEFAULT_BUILD_TYPE`, `CMAKE_BUILD_TYPE`, and Release that the generator provides, else its first configuration. An explicit value must be one of `CMAKE_CONFIGURATION_TYPES` (case-insensitive); single-config generators ignore it.
 
 ---
 

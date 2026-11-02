@@ -66,10 +66,11 @@ runs:
         BUILD_DIR: ${{ inputs.build-dir }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
       # The Visual Studio generator is multi-config, so CMAKE_BUILD_TYPE does
-      # not select the configuration (the Build step's --config does). It seeds
-      # LUMA_PRIMARY_CONFIG, the tree's primary configuration, whose binaries the
-      # root CMakeLists.txt places at the build-directory root, matching the Unix
-      # layout; the Build step passes the same value to --config.
+      # not select the configuration (the Build step's --config does). It does
+      # choose the tree's primary configuration (LUMA_PRIMARY_CONFIG left
+      # empty), whose binaries the root CMakeLists.txt places at the
+      # build-directory root, matching the Unix layout; the Build step passes
+      # the same value to --config.
       # Split EXTRA_ARGS on whitespace and splat so each token is a separate
       # argument (mirrors the Unix branch's word-splitting); a bare
       # "$env:EXTRA_ARGS" would pass all tokens to cmake as one argument.

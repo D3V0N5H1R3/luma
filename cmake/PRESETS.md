@@ -43,7 +43,7 @@ Each preset builds in its own directory, so configurations never clash: `default
 
 The executables — `luma`, `luma_lsp`, `luma_dap`, and the test executables — are placed at the root of that directory on every platform and generator: `build/luma`, or `build\luma.exe` on Windows.
 
-In a multi-config tree (`msvc`, `xcode`, `windows-arm64`, any Visual Studio build, or a Ninja Multi-Config build) the root holds the tree's *primary configuration* and any other configuration built in the same tree goes to `<build>/<Config>/`. The primary configuration is the `LUMA_PRIMARY_CONFIG` cache variable, which defaults to `CMAKE_DEFAULT_BUILD_TYPE`, else `CMAKE_BUILD_TYPE` (set by `default` and `debug`), else Release; set it at configure time to choose another, e.g. `-DLUMA_PRIMARY_CONFIG=Debug`.
+In a multi-config tree (`msvc`, `xcode`, `windows-arm64`, any Visual Studio build, or a Ninja Multi-Config build) the root holds the tree's *primary configuration* and any other configuration built in the same tree goes to `<build>/<Config>/`. The primary configuration is the `LUMA_PRIMARY_CONFIG` cache variable. Left empty (the default), it is chosen on every configure as the first of `CMAKE_DEFAULT_BUILD_TYPE`, `CMAKE_BUILD_TYPE` (set by `default` and `debug`), and Release that the generator provides, else the first configuration it has; set it at configure time to choose another, e.g. `-DLUMA_PRIMARY_CONFIG=Debug`, or back to empty (`-DLUMA_PRIMARY_CONFIG=`) to choose automatically again.
 
 The build presets always name the configuration, so `cmake --build --preset <name>` refreshes the root. Without a preset:
 

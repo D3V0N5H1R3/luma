@@ -172,8 +172,13 @@ message(STATUS "")
 #
 # Multi-config generators ignore CMAKE_BUILD_TYPE when building, and not every
 # preset sets it (msvc, xcode, and windows-arm64 do not), so LUMA_PRIMARY_CONFIG
-# is its own cache variable. It defaults to CMAKE_DEFAULT_BUILD_TYPE (Ninja
-# Multi-Config's default configuration), then CMAKE_BUILD_TYPE, then Release.
+# is its own cache variable. Left empty (the default), the primary
+# configuration is chosen on every configure as the first of
+# CMAKE_DEFAULT_BUILD_TYPE (Ninja Multi-Config's default configuration),
+# CMAKE_BUILD_TYPE, and Release that the generator actually provides, else the
+# first entry of CMAKE_CONFIGURATION_TYPES — so a tree without Release (e.g.
+# -DCMAKE_CONFIGURATION_TYPES=Debug) still configures, and the choice is never
+# frozen in the cache. Only an explicit LUMA_PRIMARY_CONFIG is validated.
 # Ninja Multi-Config is told to build that configuration by default, so a bare
 # `cmake --build <dir>` refreshes the root. Visual Studio and Xcode always
 # default to Debug, so pass `--config <primary>` (or use a build preset) there;
@@ -186,39 +191,66 @@ message(STATUS "")
 # and an output directory the including project has already chosen is respected.
 get_property(LUMA_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(LUMA_IS_MULTI_CONFIG)
-    if(CMAKE_DEFAULT_BUILD_TYPE)
-        set(_luma_primary_config_default "${CMAKE_DEFAULT_BUILD_TYPE}")
-    elseif(CMAKE_BUILD_TYPE)
-        set(_luma_primary_config_default "${CMAKE_BUILD_TYPE}")
+    set(LUMA_PRIMARY_CONFIG "" CACHE STRING
+        "Configuration whose executables a multi-config build places at the build-tree root (empty: automatic)")
+    set_property(CACHE LUMA_PRIMARY_CONFIG PROPERTY STRINGS "" ${CMAKE_CONFIGURATION_TYPES})
+
+    # Returns the CMAKE_CONFIGURATION_TYPES spelling of <config> (configuration
+    # names compare case-insensitively, as $<CONFIG:...> does), or "" if absent.
+    function(_luma_find_configuration config out_var)
+        string(TOUPPER "${config}" _wanted)
+        set(_found "")
+        foreach(_type IN LISTS CMAKE_CONFIGURATION_TYPES)
+            string(TOUPPER "${_type}" _type_upper)
+            if(_type_upper STREQUAL _wanted)
+                set(_found "${_type}")
+                break()
+            endif()
+        endforeach()
+        set(${out_var} "${_found}" PARENT_SCOPE)
+    endfunction()
+
+    if(LUMA_PRIMARY_CONFIG)
+        _luma_find_configuration("${LUMA_PRIMARY_CONFIG}" LUMA_PRIMARY_CONFIGURATION)
+        if(NOT LUMA_PRIMARY_CONFIGURATION)
+            message(FATAL_ERROR
+                "LUMA_PRIMARY_CONFIG is '${LUMA_PRIMARY_CONFIG}', which is not one of "
+                "CMAKE_CONFIGURATION_TYPES (${CMAKE_CONFIGURATION_TYPES}). Set it to one "
+                "of those, or to an empty value to choose automatically.")
+        endif()
     else()
-        set(_luma_primary_config_default "Release")
-    endif()
-    set(LUMA_PRIMARY_CONFIG "${_luma_primary_config_default}" CACHE STRING
-        "Configuration whose executables a multi-config build places at the build-tree root")
-    unset(_luma_primary_config_default)
-    set_property(CACHE LUMA_PRIMARY_CONFIG PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES})
-    if(NOT LUMA_PRIMARY_CONFIG IN_LIST CMAKE_CONFIGURATION_TYPES)
-        message(FATAL_ERROR
-            "LUMA_PRIMARY_CONFIG is '${LUMA_PRIMARY_CONFIG}', which is not one of "
-            "CMAKE_CONFIGURATION_TYPES (${CMAKE_CONFIGURATION_TYPES}).")
-    endif()
-    if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
-        if(NOT CMAKE_DEFAULT_BUILD_TYPE)
-            set(CMAKE_DEFAULT_BUILD_TYPE "${LUMA_PRIMARY_CONFIG}")
-        elseif(NOT CMAKE_DEFAULT_BUILD_TYPE STREQUAL LUMA_PRIMARY_CONFIG)
-            message(WARNING
-                "CMAKE_DEFAULT_BUILD_TYPE (${CMAKE_DEFAULT_BUILD_TYPE}) differs from "
-                "LUMA_PRIMARY_CONFIG (${LUMA_PRIMARY_CONFIG}): a build without --config "
-                "places its executables in ${PROJECT_BINARY_DIR}/${CMAKE_DEFAULT_BUILD_TYPE}/.")
+        set(LUMA_PRIMARY_CONFIGURATION "")
+        foreach(_candidate IN ITEMS "${CMAKE_DEFAULT_BUILD_TYPE}" "${CMAKE_BUILD_TYPE}" Release)
+            if(_candidate)
+                _luma_find_configuration("${_candidate}" LUMA_PRIMARY_CONFIGURATION)
+                if(LUMA_PRIMARY_CONFIGURATION)
+                    break()
+                endif()
+            endif()
+        endforeach()
+        if(NOT LUMA_PRIMARY_CONFIGURATION)
+            list(GET CMAKE_CONFIGURATION_TYPES 0 LUMA_PRIMARY_CONFIGURATION)
         endif()
     endif()
-    message(STATUS "Primary configuration (at the build-tree root): ${LUMA_PRIMARY_CONFIG}")
+
+    if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
+        if(NOT CMAKE_DEFAULT_BUILD_TYPE)
+            set(CMAKE_DEFAULT_BUILD_TYPE "${LUMA_PRIMARY_CONFIGURATION}")
+        elseif(NOT CMAKE_DEFAULT_BUILD_TYPE STREQUAL LUMA_PRIMARY_CONFIGURATION)
+            message(WARNING
+                "CMAKE_DEFAULT_BUILD_TYPE (${CMAKE_DEFAULT_BUILD_TYPE}) differs from the "
+                "primary configuration (${LUMA_PRIMARY_CONFIGURATION}): a build without "
+                "--config places its executables in "
+                "${PROJECT_BINARY_DIR}/${CMAKE_DEFAULT_BUILD_TYPE}/.")
+        endif()
+    endif()
+    message(STATUS "Primary configuration (at the build-tree root): ${LUMA_PRIMARY_CONFIGURATION}")
 endif()
 
 if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY)
     if(LUMA_IS_MULTI_CONFIG)
         set(CMAKE_RUNTIME_OUTPUT_DIRECTORY
-            "${PROJECT_BINARY_DIR}$<$<NOT:$<CONFIG:${LUMA_PRIMARY_CONFIG}>>:/$<CONFIG>>")
+            "${PROJECT_BINARY_DIR}$<$<NOT:$<CONFIG:${LUMA_PRIMARY_CONFIGURATION}>>:/$<CONFIG>>")
     else()
         set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
     endif()
