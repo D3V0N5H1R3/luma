@@ -149,6 +149,13 @@ IncludeResolver::resolve_include_file(const IncludeDeclaration& include_decl) {
         return std::nullopt;
     }
 
+    // Likewise an absolute path from REPL/stdin input, so it is reported as
+    // such rather than by whichever filesystem check trips first (on macOS the
+    // temp directory sits behind the /var symlink).
+    if (!reject_unanchored_absolute(include_fs_path, include_decl)) {
+        return std::nullopt;
+    }
+
     // Resolve against the including file's directory (or the working directory
     // for REPL/stdin input), then LUMA_PATH.
     const auto resolved_fs_path = resolve_path(include_fs_path, include_decl.location.file_id);
@@ -202,6 +209,22 @@ bool IncludeResolver::reject_traversal(const std::filesystem::path& include_path
     return false;
 }
 
+bool IncludeResolver::reject_unanchored_absolute(const std::filesystem::path& include_path,
+                                                 const IncludeDeclaration& include_decl) {
+    if (including_directory(include_decl.location.file_id).has_value() ||
+        (!include_path.is_absolute() && !include_path.has_root_path())) {
+        return true;
+    }
+
+    // Relative includes from REPL/stdin input resolve against the working
+    // directory, but an absolute path could reach anywhere on the filesystem.
+    emit_diagnostic(Severity::Error,
+                    std::format("include rejected: '{}' is an absolute path", include_decl.path),
+                    include_decl.location,
+                    "includes from the REPL or standard input must use relative paths");
+    return false;
+}
+
 bool IncludeResolver::reject_symlinks(const std::filesystem::path& resolved_path,
                                       const IncludeDeclaration& include_decl) {
     if (!is_symlink_or_contains_symlinks(resolved_path)) {
@@ -222,21 +245,10 @@ bool IncludeResolver::enforce_allowed_root(const std::filesystem::path& canonica
 
     if (!including_dir) {
         // No including file on disk (REPL/stdin) — there is no directory to
-        // anchor containment against. Relative includes still resolve against
-        // the working directory, but an absolute include path could reach
-        // anywhere on the filesystem, so reject those explicitly.
-        const auto raw = path_from_utf8(include_decl.path);
-
-        if (raw.is_absolute() || raw.has_root_path()) {
-            emit_diagnostic(
-                Severity::Error,
-                std::format("include rejected: '{}' is an absolute path", include_decl.path),
-                include_decl.location,
-                "includes from the REPL or standard input must use relative paths");
-            return false;
-        }
-
-        return true; // Relative include with no on-disk anchor — allowed.
+        // anchor containment against. Absolute paths were already rejected by
+        // reject_unanchored_absolute; relative ones resolve against the
+        // working directory.
+        return true;
     }
 
     const auto base_dir = canonicalize_or(*including_dir, {});

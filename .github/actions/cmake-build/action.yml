@@ -38,6 +38,28 @@ inputs:
 runs:
   using: composite
   steps:
+    # Xcode 16 (the default on the macos-15-intel image) ships a libc++ whose
+    # C++20 support is incomplete: std::jthread and std::stop_token are hidden
+    # behind -fexperimental-library. Switch to the newest installed stable
+    # Xcode 26 when the default is older; newer images are left untouched.
+    - name: Select Xcode (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        current="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
+        if [ "${current%%.*}" -ge 26 ]; then
+          echo "Using the default Xcode ${current}"
+          exit 0
+        fi
+        newest="$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' \
+          | grep -viE 'beta|release_candidate|_rc' | sort -V | tail -n 1 || true)"
+        if [ -z "${newest}" ]; then
+          echo "::error::Xcode ${current} lacks std::jthread and no Xcode 26 is installed"
+          exit 1
+        fi
+        sudo xcode-select -s "${newest}/Contents/Developer"
+        echo "Selected $(xcodebuild -version | head -n 1) (default was ${current})"
+
     - name: Configure (Unix)
       if: runner.os != 'Windows'
       shell: bash

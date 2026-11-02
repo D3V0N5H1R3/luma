@@ -148,6 +148,12 @@ private:
     [[nodiscard]] bool reject_traversal(const std::filesystem::path& include_path,
                                         const IncludeDeclaration& include_decl);
 
+    // Reject an absolute include path from input with no file on disk
+    // (REPL/stdin): there is no directory to anchor containment against.
+    // Emits a diagnostic and returns false on rejection.
+    [[nodiscard]] bool reject_unanchored_absolute(const std::filesystem::path& include_path,
+                                                  const IncludeDeclaration& include_decl);
+
     // Reject an include whose resolved path chain contains a symbolic link.
     // Emits a diagnostic and returns false on rejection.
     [[nodiscard]] bool reject_symlinks(const std::filesystem::path& resolved_path,

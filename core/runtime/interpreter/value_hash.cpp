@@ -13,6 +13,7 @@
 // ValueHash::operator() in value_type.hpp delegates to hash_value_structural()
 // declared here.
 
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -49,6 +50,27 @@ constexpr int k_max_hash_depth = CompileTimeLimits::max_hash_depth;
     return seed ^ (v + k_hash_mix + (seed << k_hash_shift_left) + (seed >> k_hash_shift_right));
 }
 
+// Hash a double by its canonical bit pattern. Values that compare equal must
+// hash equal: every NaN (ValueEqual treats them as equal) shares one pattern,
+// and -0.0 maps to +0.0. The zero test works on the bits rather than relying on
+// std::hash<double>'s own `x == 0.0 ? 0.0 : x`, which MSVC's ARM64 optimised
+// build turned back into `x`, so -0.0 and +0.0 hashed differently there.
+[[nodiscard]] std::size_t hash_double(double d) noexcept {
+    constexpr std::uint64_t k_sign_bit{std::uint64_t{1} << 63U};
+
+    if (std::isnan(d)) {
+        d = std::numeric_limits<double>::quiet_NaN();
+    }
+
+    auto bits = std::bit_cast<std::uint64_t>(d);
+
+    if ((bits & ~k_sign_bit) == 0) {
+        bits = 0;
+    }
+
+    return std::hash<std::uint64_t>{}(bits);
+}
+
 } // namespace
 
 // Implemented separately (not as a free function template) because
@@ -72,18 +94,10 @@ std::size_t hash_value_structural(const Value& v, int depth) noexcept {
         // an integer and the number equal to it promote to the same double.
         // Distinct integers above 2^53 that share a promoted value merely
         // collide into the same bucket, which is permitted.
-        return std::hash<double>{}(static_cast<double>(v.as_integer()));
+        return hash_double(static_cast<double>(v.as_integer()));
     }
     if (v.is_number()) {
-        const double d = v.as_number();
-        // All NaN values compare equal under ValueEqual (see value_equality.cpp),
-        // so they must hash identically to preserve the hash/equality contract.
-        // std::hash<double> may distinguish NaN bit patterns, so canonicalise
-        // every NaN to a single representative before hashing.
-        if (std::isnan(d)) {
-            return std::hash<double>{}(std::numeric_limits<double>::quiet_NaN());
-        }
-        return std::hash<double>{}(d);
+        return hash_double(v.as_number());
     }
     if (v.is_string()) {
         return std::hash<std::string>{}(v.as_string());

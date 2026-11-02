@@ -42,7 +42,7 @@ Installs the stable Rust toolchain with the `wasm32-wasip1` target, restores the
 
 ## `cmake-build`
 
-Hides Unix/Windows configure differences behind a single step. On Unix the compilers are selectable via `cc`/`cxx` inputs; on Windows the default MSVC toolchain is used. Builds with an explicit job count equal to the detected core count (a bare `--parallel` would mean unlimited `make -j`). A compiler launcher such as ccache is picked up from the `CMAKE_C_COMPILER_LAUNCHER`/`CMAKE_CXX_COMPILER_LAUNCHER` environment variables when the caller sets them (Unix generators only).
+Hides Unix/Windows configure differences behind a single step. On Unix the compilers are selectable via `cc`/`cxx` inputs; on Windows the default MSVC toolchain is used. Builds with an explicit job count equal to the detected core count (a bare `--parallel` would mean unlimited `make -j`). A compiler launcher such as ccache is picked up from the `CMAKE_C_COMPILER_LAUNCHER`/`CMAKE_CXX_COMPILER_LAUNCHER` environment variables when the caller sets them (Unix generators only). On macOS, when the runner's default Xcode is older than 26 (as on `macos-15-intel`, whose Xcode 16 libc++ hides `std::jthread` behind `-fexperimental-library`), it selects the newest installed stable Xcode 26 first.
 
 **Inputs:**
 
