@@ -106,9 +106,9 @@ jobs:
             compiler: msvc
             cc: cl
             cxx: cl
-            binary: build/Release/luma.exe
-            lsp_binary: build/Release/luma_lsp.exe
-            dap_binary: build/Release/luma_dap.exe
+            binary: build/luma.exe
+            lsp_binary: build/luma_lsp.exe
+            dap_binary: build/luma_dap.exe
 
           # Runtime-safety check (ASan + UBSan) — see the matrix note above; the
           # uploaded binary is instrumented, not for general use. GCC 13 matches
@@ -202,12 +202,12 @@ jobs:
         shell: pwsh
         run: |
           foreach ($b in "luma", "luma_lsp", "luma_dap") {
-            if (-not (Test-Path "build\Release\$b.exe")) {
-              Write-Error "build\Release\$b.exe not found"
+            if (-not (Test-Path "build\$b.exe")) {
+              Write-Error "build\$b.exe not found"
               exit 1
             }
           }
-          build\Release\luma.exe --version
+          build\luma.exe --version
 
       - name: Run tests
         working-directory: build

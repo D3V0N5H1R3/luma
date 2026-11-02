@@ -528,4 +528,4 @@ Each extension follows the error conventions of its host language and ecosystem:
 - [Standard Library Reference](Luma_Standard_Library_Reference.md) — the `result` / `optional`-returning functions across the library
 - [Software Architecture](Luma_Software_Architecture.md) — how the interpreter categorises and reports errors
 - [REPL Guide](Luma_REPL_Guide.md) — experiment with error handling interactively
-- [Contributing — Error Handling](../CONTRIBUTING.md#error-handling) — error-handling policy for interpreter contributions
+- [Contributing](../CONTRIBUTING.md) — the contribution workflow, including the pre-pull-request checklist

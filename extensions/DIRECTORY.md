@@ -36,4 +36,4 @@ Claude Code context file (auto-loaded when working on files under `extensions/`)
 - [Luma_Syntax_Highlighting.md](../documents/Luma_Syntax_Highlighting.md) — Grammar design and editor extension architecture.
 - [Luma_Language_Server.md](../documents/Luma_Language_Server.md) — LSP server that both extensions connect to.
 - [Luma_Debugger.md](../documents/Luma_Debugger.md) — DAP adapter that both extensions launch.
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — Editor integration setup for contributors.
+- [Development Environment](../documents/Luma_Development_Environment.md) — Editor integration setup for contributors.

@@ -131,17 +131,36 @@ message(STATUS "")
 # luma_shared    →  json, protocol transport (standalone OBJECT library)
 
 # ─────────── Output directories ───────────
-# Place every executable at the build-tree root so all consumers — CI, release
-# packaging, the editor configs (VS Code, Zed), the benchmark and test
-# harnesses, and the documentation — find them at one predictable location:
-#   single-config generators (Ninja, Makefiles):    <build>/luma
-#   multi-config generators (Visual Studio, Xcode):  <build>/<Config>/luma(.exe)
-# Targets are defined in subdirectories (e.g. core/runtime), which would
-# otherwise place their binaries under <build>/core/runtime/… where nothing
-# expects them. This is set before add_subdirectory so every target inherits it.
-# Only RUNTIME outputs (executables) are redirected; static libraries keep their
-# default per-directory locations.
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+# Place every executable at the build-tree root — <build>/luma, or
+# <build>/luma.exe on Windows — on every platform and generator, so all
+# consumers (CI, release packaging, the editor configs, the benchmark and test
+# harnesses, and the documentation) use one path. Targets are defined in
+# subdirectories (e.g. core/runtime), which would otherwise place their binaries
+# under <build>/core/runtime/… where nothing expects them.
+#
+# Multi-config generators (Visual Studio, Xcode, Ninja Multi-Config) would
+# append a per-configuration subdirectory. Instead, the tree's primary
+# configuration — CMAKE_BUILD_TYPE, which every preset sets, or Release when it
+# is unset — goes at the root, and any other configuration built in the same
+# tree goes to <build>/<Config>/. Sharing the root between configurations would
+# let one overwrite the other and fool MSBuild's up-to-date check into keeping
+# the wrong binary. A generator expression in the path suppresses the automatic
+# subdirectory.
+#
+# Set before add_subdirectory so every target inherits it. Only RUNTIME outputs
+# (executables) are redirected; static libraries keep their default locations.
+get_property(LUMA_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(LUMA_IS_MULTI_CONFIG)
+    if(CMAKE_BUILD_TYPE)
+        set(LUMA_PRIMARY_CONFIG "${CMAKE_BUILD_TYPE}")
+    else()
+        set(LUMA_PRIMARY_CONFIG "Release")
+    endif()
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY
+        "${CMAKE_BINARY_DIR}$<$<NOT:$<CONFIG:${LUMA_PRIMARY_CONFIG}>>:/$<CONFIG>>")
+else()
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
 
 # ─────────── Component subdirectories ───────────
 # Each subdirectory creates its targets via the luma_add_* helpers, which apply

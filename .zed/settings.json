@@ -6,8 +6,8 @@
         // on Linux and macOS). The Visual Studio generator that the default preset
         // uses on Windows emits no compilation database, and project settings take
         // precedence over user settings, so pinning a directory here would stop
-        // Windows users pointing clangd elsewhere. See CONTRIBUTING.md → Editor
-        // Integration → Zed.
+        // Windows users pointing clangd elsewhere. See
+        // documents/Luma_Development_Environment.md → Zed.
         //
         // luma_lsp has no binary.path override here: the Zed extension resolves
         // it (PATH or auto-download), keeping it portable across build layouts.
@@ -35,8 +35,8 @@
             // formatter: Zed auto-downloads the latest clangd, whose formatter can
             // differ from the clang-format 20 that CI enforces and reformat code
             // you did not touch. Workspace settings override user settings, so
-            // `clang-format` on PATH must be version 20; see CONTRIBUTING.md →
-            // Editor Integration → Zed → Formatting.
+            // `clang-format` on PATH must be version 20; see
+            // documents/Luma_Development_Environment.md → Zed → Formatting.
             "formatter": {
                 "external": {
                     "command": "clang-format",

@@ -223,7 +223,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel
 ```
 
-This produces `build/luma_lsp` on Linux and macOS, or `build\Release\luma_lsp.exe` on Windows with MSVC.
+This produces `build/luma_lsp` (`build\luma_lsp.exe` on Windows).
 
 ### Running
 
@@ -231,7 +231,7 @@ The server reads JSON-RPC messages from **stdin** and writes responses to **stdo
 
 ```bash
 build/luma_lsp              # Linux / macOS
-build\Release\luma_lsp.exe  # Windows (MSVC)
+build\luma_lsp.exe  # Windows
 ```
 
 The server blocks on stdin, waiting for LSP messages. Send an `initialize` request followed by `initialized` to begin a session. Send `shutdown` and then `exit` to stop the server.
@@ -1230,7 +1230,7 @@ This handling belongs to the shared stdio transport (`shared/protocol/`) and app
 
 ## See Also
 
-- [Contributing](../CONTRIBUTING.md) — configuring editors to launch the server
+- [Development Environment](Luma_Development_Environment.md) — configuring editors to launch and debug the server
 - [Syntax Highlighting](Luma_Syntax_Highlighting.md) — TextMate and Tree-sitter grammars
 - [Debugger](Luma_Debugger.md) — the companion DAP debug adapter
 - [Software Architecture](Luma_Software_Architecture.md) — how the language server fits into the interpreter

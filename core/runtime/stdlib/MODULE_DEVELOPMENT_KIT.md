@@ -241,5 +241,5 @@ cd build && ctest --output-on-failure -R stdlib
 To run a single test file directly:
 
 ```bash
-build/Release/luma tests/features/stdlib/widgets_functions.luma
+build/luma tests/features/stdlib/widgets_functions.luma
 ```

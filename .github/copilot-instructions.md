@@ -76,19 +76,18 @@ cmake --preset default
 cmake --build --preset default
 ctest --preset default
 
-# Built binaries are placed at the build-tree root, so the path depends on the generator:
-#   single-config (Ninja, Makefiles):    build/luma, build/luma_lsp, build/luma_dap
-#   multi-config  (Visual Studio, Xcode): build/Release/luma(.exe), build/Release/luma_lsp(.exe), ...
+# Built binaries are placed at the build-tree root on every platform and generator
+# (build/luma, build/luma_lsp, build/luma_dap; with .exe on Windows)
 
 # Run a Luma program
-build/Release/luma examples/language-features/hello.luma
+build/luma examples/language-features/hello.luma
 
 # Start the REPL
-build/Release/luma
+build/luma
 
 # Start the language server and DAP debugger (normally launched by the editor, not manually)
-build/Release/luma_lsp
-build/Release/luma_dap
+build/luma_lsp
+build/luma_dap
 ```
 
 > For build presets, sanitizers, coverage, and fuzz testing, see [instructions/build.instructions.md](../instructions/build.instructions.md).
@@ -101,7 +100,7 @@ Follow the detailed instructions in `instructions/`:
 - **Rust style:** `snake_case` for variables, functions, modules. `PascalCase` for types, traits, enum variants. `UPPER_CASE` for constants. See [instructions/rust.instructions.md](../instructions/rust.instructions.md).
 - **TypeScript style:** `camelCase` for variables, functions. `PascalCase` for types, classes, interfaces. `UPPER_CASE` for constants. See [instructions/typescript.instructions.md](../instructions/typescript.instructions.md).
 - **JavaScript style:** `camelCase` for variables, functions. `PascalCase` for classes. `UPPER_CASE` for constants. `kebab-case` for file names. `const` by default, `let` when needed, never `var`. Always use `===`/`!==`. See [instructions/javascript.instructions.md](../instructions/javascript.instructions.md).
-- **Python style:** `snake_case` for variables, functions, modules. `PascalCase` for classes. `UPPER_CASE` for constants. Type hints on all functions. `pytest` for testing. See [instructions/python.instructions.md](../instructions/python.instructions.md).
+- **Python style:** `snake_case` for variables, functions, modules. `PascalCase` for classes. `UPPER_CASE` for constants. Type hints on all functions. `unittest` (standard library) for testing. See [instructions/python.instructions.md](../instructions/python.instructions.md).
 - **Shell style:** `snake_case` for variables and functions. `UPPER_CASE` for constants. `set -euo pipefail`. Always quote variables. Portable across Linux and macOS. See [instructions/shell.instructions.md](../instructions/shell.instructions.md).
 - **PowerShell style:** `PascalCase` for variables, functions, parameters. Approved Verb-Noun cmdlet names. `[CmdletBinding()]` on functions. Full cmdlet names — no aliases. See [instructions/powershell.instructions.md](../instructions/powershell.instructions.md).
 - **Luma language:** Types, naming, mutability, error handling, pipes, and testing. See [instructions/luma.instructions.md](../instructions/luma.instructions.md).

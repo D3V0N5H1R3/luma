@@ -1788,7 +1788,7 @@ A quick reference for the terms introduced in this tutorial.
 - [User Manual](Luma_User_Manual.md) — the complete, precise reference for every language feature introduced here
 - [Standard Library Reference](Luma_Standard_Library_Reference.md) — the full catalogue of built-in modules and functions
 - [REPL Guide](Luma_REPL_Guide.md) — experiment with the language interactively as you learn
-- [Contributing](../CONTRIBUTING.md) — install and build Luma, and set up an editor
+- [Installation Guide](Luma_Installation_Guide.md) — install Luma and set up an editor
 - [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic style and conventions to grow into
 - [Error Handling](Luma_Error_Handling.md) — a deeper look at `result`, `optional`, and recovery
 - [Documentation Index](DIRECTORY.md) — index of all Luma documentation

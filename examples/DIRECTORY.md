@@ -132,7 +132,7 @@ Run any example with the interpreter:
 build/luma examples/language-features/<file>.luma
 ```
 
-> **Note:** On Windows with MSVC, the binary is at `build\Release\luma.exe`.
+> **Note:** On Windows with MSVC, the binary is at `build\luma.exe`.
 
 Use `applications/` when you want end-to-end samples, and the other directories when you want shorter, topic-specific references.
 

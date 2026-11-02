@@ -23,9 +23,9 @@ A comprehensive guide for manually testing the Luma Interpreter, Language Server
 
 | Prerequisite                | How to verify                                       |
 | --------------------------- | --------------------------------------------------- |
-| Luma interpreter built      | `build/Release/luma --version`                      |
-| Language server built       | `build/Release/luma_lsp --help`                     |
-| Debug adapter built         | `build/Release/luma_dap --help`                     |
+| Luma interpreter built      | `build/luma --version`                      |
+| Language server built       | `build/luma_lsp --help`                     |
+| Debug adapter built         | `build/luma_dap --help`                     |
 | VS Code extension installed | Extensions panel → search "Luma" → shows installed  |
 | Zed extension installed     | `zed: extensions` → search "Luma" → shows installed |
 

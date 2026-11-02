@@ -63,7 +63,7 @@ set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/d3v0n5h1r3/luma")
 # binaries actually built: a hand-written floor goes stale with every toolchain
 # bump (GCC 13+ binaries need far newer glibc and libstdc++ than any fixed value).
 # dpkg-shlibdeps only exists on Debian-family hosts and cannot resolve the
-# libraries of a foreign architecture (e.g. the arm64-cross preset), so in those
+# libraries of a foreign architecture (a cross-compiling toolchain), so in those
 # cases fall back to unversioned runtime dependencies — incomplete, but never wrong.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_program(LUMA_DPKG_SHLIBDEPS_EXE dpkg-shlibdeps)

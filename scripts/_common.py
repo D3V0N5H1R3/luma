@@ -62,21 +62,18 @@ def _explicit_or_env(explicit: str | None, env_var: str) -> Path | None:
 
 
 def find_luma_exe(explicit: str | None) -> Path:
-    """Resolve the luma executable path using platform-appropriate defaults.
+    """Resolve the luma executable path.
 
     Precedence: the *explicit* argument, then the ``LUMA_EXE`` environment
-    variable, then the platform's default build output under ``build/``.
+    variable, then the default build output, which is at the root of ``build/``
+    on every platform.
     """
     override = _explicit_or_env(explicit, "LUMA_EXE")
     if override is not None:
         return override
 
-    if sys.platform == "win32":
-        candidate = REPO_ROOT / "build" / "Release" / "luma.exe"
-    else:
-        candidate = REPO_ROOT / "build" / "luma"
-
-    return candidate.resolve()
+    name = "luma.exe" if sys.platform == "win32" else "luma"
+    return (REPO_ROOT / "build" / name).resolve()
 
 
 def resolve_dir(explicit: str | None, env_var: str, default_rel: str) -> Path:

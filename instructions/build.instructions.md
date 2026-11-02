@@ -44,6 +44,8 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
+The executables land at the root of the build directory on every platform: `build/luma`, `build/luma_lsp`, and `build/luma_dap` (with `.exe` on Windows), or `build-debug/…` for the `debug` preset.
+
 ---
 
 ## 2 — Manual Build Commands
@@ -82,32 +84,12 @@ cd build && ctest --output-on-failure -C Release
 
 ## 3 — CMake Presets
 
-`CMakePresets.json` defines ready-made configurations so common builds are a single command. Available presets:
-
-| Configure Preset   | Build Preset       | Purpose                               |
-| ------------------ | ------------------ | ------------------------------------- |
-| `default`          | `default`          | Release build (all platforms)         |
-| `debug`            | `debug`            | Debug build with full symbols         |
-| `msvc`             | `msvc-release`     | Visual Studio generator (Windows)     |
-| `msvc`             | `msvc-debug`       | Visual Studio debug build (Windows)   |
-| `xcode`            | `xcode-release`    | Xcode generator (macOS)               |
-| `xcode`            | `xcode-debug`      | Xcode debug build (macOS)             |
-| `sanitize`         | `sanitize`         | Debug + ASan + UBSan (Clang/GCC)      |
-| `relwithdebinfo`   | `relwithdebinfo`   | Optimised build with debug symbols    |
-| `coverage`         | `coverage`         | Debug + lcov coverage instrumentation |
-| `lto`              | `lto`              | Release + link-time optimisation      |
-| `ninja`            | `ninja`            | Ninja generator (Release)             |
-| `arm64-cross`      | `arm64-cross`      | ARM64 cross-compilation               |
-| `release-no-tests` | `release-no-tests` | Release build without tests           |
-| `windows-arm64`    | `windows-arm64`    | Windows ARM64 build                   |
-| `macos-universal`  | `macos-universal`  | macOS universal binary                |
-
-Usage pattern:
+`CMakePresets.json` defines ready-made configurations (`default`, `debug`, `relwithdebinfo`, `sanitize`, `coverage`, `lto`, `ninja`, and IDE- and platform-specific ones). [cmake/PRESETS.md](../cmake/PRESETS.md) is the single reference for what each preset does, its platforms, and its build directory; `python scripts/configure.py` lists the presets available on the current host.
 
 ```bash
-cmake --preset <configure-preset>
-cmake --build --preset <build-preset>
-ctest --preset <configure-preset>
+cmake --preset <name>
+cmake --build --preset <name>
+ctest --preset <name>
 ```
 
 ---
@@ -198,8 +180,9 @@ Run a fuzzer with an optional corpus directory:
 
 ## 8 — Cross-Platform Considerations
 
-- **Windows (MSVC)** — use the `msvc` / `msvc-release` presets with Visual Studio or VS Code. Always pass `--config Release` (or `Debug`) with `cmake --build` for multi-config generators.
-- **macOS (Xcode)** — use the `xcode` / `xcode-release` presets. The `--config` flag is required here too.
+- **Windows (MSVC)** — the `default` and `debug` presets use the newest installed Visual Studio generator; the `msvc` preset pins Visual Studio 2022 for use in the IDE. When building without a build preset, always pass `--config Release` (or `Debug`) with `cmake --build` for multi-config generators.
+- **macOS (Xcode)** — the `default` preset uses Makefiles; use the `xcode` / `xcode-release` presets to work in Xcode. The `--config` flag is required there too.
+- **Binary location** — every generator places the executables at the root of the build directory (`build/luma`, `build\luma.exe`); see [cmake/PRESETS.md](../cmake/PRESETS.md#build-directories-and-binaries).
 - **Linux** — GCC and Clang are both fully supported. The `default` preset works out of the box. The minimum is **GCC 13** (or Clang 15): Luma uses `std::format` and `std::chrono::clock_cast`, which libstdc++ ships only from GCC 13, so GCC 12 and earlier — such as the default `g++` on Raspberry Pi OS and Debian 12 "bookworm" — cannot build the project. Install GCC 13+ and pass `-DCMAKE_CXX_COMPILER=g++-13` when configuring.
 
 ---
@@ -222,6 +205,6 @@ Run a fuzzer with an optional corpus directory:
 - [ ] The project configures cleanly from a fresh build directory.
 - [ ] `cmake --build` completes with no errors.
 - [ ] `ctest --output-on-failure` reports zero failures.
-- [ ] Luma feature tests pass: `build/Release/luma --test tests/features/language/<file>.luma`.
+- [ ] Luma feature tests pass: `build/luma --strict --test tests/features/language/<file>.luma`.
 - [ ] Multi-config generators use the `--config` flag.
 - [ ] Sanitizer or coverage builds use the appropriate preset or flags.

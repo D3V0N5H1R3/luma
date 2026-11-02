@@ -209,6 +209,6 @@ core
 core.[0-9]*
 
 # ── Prompt-pipeline artifacts ──
-# Reports, logs, and transcripts produced by scripts/pipeline/*.ps1. These are
-# generated audit/fix run outputs, never source.
+# Reports, logs, and transcripts produced by scripts/pipeline/luma_pipeline.py.
+# These are generated audit/fix run outputs, never source.
 pipeline-artifacts/

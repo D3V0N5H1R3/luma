@@ -87,6 +87,18 @@ Section-level table of contents for the reference documents in this directory. U
 | 23 — Future Extensions       | 814–820 |
 | See Also                     | 824–830 |
 
+## Luma_Development_Environment.md
+
+| Section                                           | Lines   |
+| ------------------------------------------------- | ------- |
+| Table of Contents                                 | 5–12    |
+| 1 — Overview                                      | 16–20   |
+| 2 — Visual Studio Code                            | 24–90   |
+| 3 — Zed                                           | 94–128  |
+| 4 — Debugging the C++ Interpreter from a Terminal | 132–147 |
+| 5 — Keeping Editor Configurations in Sync         | 151–159 |
+| 6 — See Also                                      | 163–169 |
+
 ## Luma_Error_Handling.md
 
 | Section                                | Lines   |
@@ -129,7 +141,7 @@ Section-level table of contents for the reference documents in this directory. U
 | 9 — Verify the Installation           | 288–327 |
 | 10 — Building from Source             | 331–341 |
 | 11 — Troubleshooting                  | 345–361 |
-| See Also                              | 365–374 |
+| See Also                              | 365–375 |
 
 ## Luma_Language_Server.md
 

@@ -86,10 +86,10 @@ You can also select tests by name with `-R`, for example `ctest --preset default
 ### Running a Single Feature Suite Directly
 
 ```bash
-build/Release/luma --strict --test tests/features/language/arrays.luma
+build/luma --strict --test tests/features/language/arrays.luma
 ```
 
-On Windows the executable is `build\Release\luma.exe`.
+On Windows the executable is `build\luma.exe`.
 
 ### Running All Feature Suites Without CMake
 

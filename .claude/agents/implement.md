@@ -53,7 +53,7 @@ Build and test with the CMake presets in the [Build and Test](../../.github/copi
 python scripts/run_luma_tests.py
 
 # Type-check a file without executing it
-build/Release/luma --check --strict <file.luma>
+build/luma --check --strict <file.luma>
 ```
 
 ## Workflow

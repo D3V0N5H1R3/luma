@@ -306,7 +306,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel
 ```
 
-This produces `build/luma_dap` on Linux and macOS, or `build\Release\luma_dap.exe` on Windows with MSVC.
+This produces `build/luma_dap` (`build\luma_dap.exe` on Windows).
 
 ### Running
 
@@ -318,7 +318,7 @@ Editors start the debugger automatically via launch configurations. For manual t
 
 ```bash
 build/luma_dap              # Linux / macOS
-build\Release\luma_dap.exe  # Windows (MSVC)
+build\luma_dap.exe  # Windows
 ```
 
 The debugger blocks on stdin, waiting for DAP messages. Send an `initialize` request followed by a `launch` request to begin a session. Send `disconnect` to stop.
@@ -362,7 +362,7 @@ The existing VS Code extension (`extensions/vscode/`) gains a debug adapter cont
 }
 ```
 
-A concrete `launch.json` example that uses these attributes is maintained in [CONTRIBUTING.md](../CONTRIBUTING.md#editor-integration), the canonical reference for editor configuration.
+A concrete `launch.json` example that uses these attributes is maintained in the [Development Environment](Luma_Development_Environment.md#2--visual-studio-code) guide, the canonical reference for editor configuration.
 
 ### Zed
 
@@ -824,7 +824,7 @@ Once the current implementation is stable, the following features could be added
 ## See Also
 
 - [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels
-- [Contributing](../CONTRIBUTING.md) — configuring editors to launch the debugger
+- [Development Environment](Luma_Development_Environment.md) — configuring editors to launch the debugger
 - [Language Server](Luma_Language_Server.md) — the companion LSP language server
 - [Software Architecture](Luma_Software_Architecture.md) — how the debug adapter fits into the interpreter
 - [Manual Tests](Luma_Manual_Tests.md) — manual test plan covering the debugger in VS Code and Zed

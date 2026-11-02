@@ -22,7 +22,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 #   libclang-rt-18-dev ...... compiler-rt runtimes (fuzzer/ASan) the fuzzers link
 #   clang-format-20 ......... C++ formatting gate (Formatting job in ci.yml)
 #   clang-tidy-18 ........... C++ static-analysis gate (Static Analysis job)
-#   gdb ..................... native debugging of the interpreter (CONTRIBUTING.md §Debugging the C++ Interpreter)
+#   gdb ..................... native debugging of the interpreter (documents/Luma_Development_Environment.md §4)
 #   lcov ................... the coverage preset (LUMA_FEATURE_COVERAGE)
 #   xvfb ................... headless X server for the VS Code extension's Electron integration tests
 #   shellcheck ............. shell lint gate (ci-shell.yml; instructions/shell.instructions.md §18)

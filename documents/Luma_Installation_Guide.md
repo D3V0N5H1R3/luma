@@ -338,7 +338,7 @@ cmake --build --preset default
 ctest --preset default          # optional: run the test suite
 ```
 
-This produces `luma`, `luma_lsp`, and `luma_dap` in the `build/` directory (or `build\Release\` on Windows with the Visual Studio generator).
+This produces `luma`, `luma_lsp`, and `luma_dap` in the `build/` directory (with an `.exe` extension on Windows).
 
 ---
 
@@ -372,3 +372,4 @@ This produces `luma`, `luma_lsp`, and `luma_dap` in the `build/` directory (or `
 - [Language Server](Luma_Language_Server.md) — language server features and architecture
 - [Syntax Highlighting](Luma_Syntax_Highlighting.md) — editor extension design and grammars
 - [Contributing](../CONTRIBUTING.md) — building from source and the contribution workflow
+- [Development Environment](Luma_Development_Environment.md) — setting up VS Code or Zed to work on Luma itself

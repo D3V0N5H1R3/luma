@@ -28,3 +28,14 @@ generate_prelude_asset\.mjs
 external/gui-framework
 LumaWebView\.cmake
 stylelint\.config\.mjs
+
+# Executables moved to the build-directory root on every generator (2026-11):
+# build/luma(.exe), never the old per-configuration build/Release/ subdirectory.
+build[/\\]Release[/\\]
+
+# The PowerShell + bash prompt-pipeline runners and the Pester harness were
+# replaced by scripts/pipeline/luma_pipeline.py (2026-11).
+Invoke-Luma(All|Audit|Fix)\.ps1
+LumaPipeline\.(psm1|Tests\.ps1)
+luma-(all|audit|fix|pipeline)\.sh
+run_pester\.ps1

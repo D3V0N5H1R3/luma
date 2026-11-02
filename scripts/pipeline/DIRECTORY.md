@@ -1,402 +1,302 @@
-# Prompt Pipeline Runners
+# Prompt Pipeline Runner
 
 Tooling that drives the repository's improvement prompts
 (`.github/prompts/*.prompt.md`) through an agentic CLI — the
 [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference) (default) or the
 [Claude Code CLI](https://code.claude.com/docs/en/cli-reference) — in a
-repeatable, safe order. The pipeline is split by risk into two runners, each
-provided for both **PowerShell** (Windows) and **bash** (macOS/Linux):
+repeatable, safe order. One cross-platform Python CLI,
+[`luma_pipeline.py`](luma_pipeline.py), provides three subcommands split by risk:
 
-| Role  | PowerShell                                     | Shell (macOS/Linux)              | Agent mode | Risk    |
-| ----- | ---------------------------------------------- | -------------------------------- | ---------- | ------- |
-| Audit | [`Invoke-LumaAudit.ps1`](Invoke-LumaAudit.ps1) | [`luma-audit.sh`](luma-audit.sh) | **plan**   | None    |
-| Fix   | [`Invoke-LumaFix.ps1`](Invoke-LumaFix.ps1)     | [`luma-fix.sh`](luma-fix.sh)     | **agent**  | Mutates |
+| Subcommand | Agent mode | Risk    | What it does                                                                 |
+| ---------- | ---------- | ------- | ---------------------------------------------------------------------------- |
+| `audit`    | **plan**   | None    | Runs the read-only audits and saves the ranked report each prompt produces. |
+| `fix`      | **agent**  | Mutates | Applies the fixer prompts, gating each phase on build + test + lint with git checkpoints. |
+| `all`      | both       | Mutates | Runs `audit`, then `fix`, with shared agent settings.                        |
 
-The **audit** runner performs read-only analysis and saves the ranked report
-each prompt produces. The **fix** runner applies the fixer prompts, gating each
-phase on build + test with git checkpoints.
+| File                                               | Purpose                                                                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [`luma_pipeline.py`](luma_pipeline.py)             | The CLI: phase tables, agent instructions, and the `audit` / `fix` / `all` orchestration.                  |
+| [`pipeline_core.py`](pipeline_core.py)             | Every side effect — agent, `cmake`, `ctest`, lint, `git`, artifact moves — behind one uniform dry-run path. |
+| [`test_luma_pipeline.py`](test_luma_pipeline.py)   | `unittest` suite pinning the gate and agent contracts with fake `cmake` / `ctest` / `python` / agent tools. |
 
-A convenience wrapper —
-[`Invoke-LumaAll.ps1`](Invoke-LumaAll.ps1) /
-[`luma-all.sh`](luma-all.sh) — runs the audit and then the
-fix in a single command, defaulting to the **Copilot CLI** driving **Claude Opus
-4.6** at **medium** reasoning effort. See
-[Both stages in one command](#both-stages-in-one-command).
+Every side effect flows through `pipeline_core.Pipeline`, so `--dry-run` prints
+the exact agent, `cmake`, `ctest`, and `git` commands each phase would run
+without spawning anything. Run the tests with
+`python -m unittest discover -s scripts/pipeline -p "test_*.py"`; CI runs them in
+[`ci-python.yml`](../../.github/workflows/ci-python.yml).
 
-Each language pair shares one helper module — PowerShell through
-[`LumaPipeline.psm1`](LumaPipeline.psm1), bash through
-[`luma-pipeline.sh`](luma-pipeline.sh) — so every side effect (invoking the
-agent, building, testing, committing) flows through one place and has a uniform
-dry-run path (`-DryRun` / `--dry-run`). The two implementations are kept
-behaviourally in lock-step.
-
-[`LumaPipeline.Tests.ps1`](LumaPipeline.Tests.ps1) pins the PowerShell module's
-gate and agent result contracts with fake `cmake` / `ctest` / `python` / agent
-tools. Run it with `pwsh -File scripts/run_pester.ps1`; CI runs it in
-[`ci-powershell.yml`](../../.github/workflows/ci-powershell.yml).
-
-> **Why two scripts?** Audits are safe to run unattended and produce artifacts a
-> human triages. Fixes change source and must be gated, checkpointed, and
-> reversible. Keeping them separate keeps a human decision point between
-> *finding* problems and *changing* code.
+> **Why separate audit and fix?** Audits are safe to run unattended and produce
+> artifacts a human triages. Fixes change source and must be gated,
+> checkpointed, and reversible. Keeping them separate keeps a human decision
+> point between *finding* problems and *changing* code.
 
 ## Prerequisites
 
-Common to both variants:
-
-- **An agent CLI** on `PATH` and authenticated — either the **GitHub Copilot
-  CLI** (`copilot`; the default) or the **Claude Code CLI** (`claude`). Run your
-  chosen tool once interactively to sign in, and select it per run with
-  `-Agent` / `--agent` (see [Choosing an agent](#choosing-an-agent)).
-- **CMake + CTest** on `PATH` for the fix gate (the `default` preset from [`CMakePresets.json`](../../CMakePresets.json)).
+- **Python 3.10+** (standard library only; Windows, macOS, and Linux).
+- **An agent CLI** on `PATH` and authenticated — the **GitHub Copilot CLI**
+  (`copilot`, the default) or the **Claude Code CLI** (`claude`). Run it once
+  interactively to sign in. Override the executable name or path with the
+  `LUMA_COPILOT` / `LUMA_CLAUDE` environment variables. An npm-installed
+  Copilot shim (`copilot.cmd` on Windows) also needs `node` on `PATH`.
+- **CMake + CTest** on `PATH` for the fix gate (the `default` preset from
+  [`CMakePresets.json`](../../CMakePresets.json)). On Windows, a Visual
+  Studio-bundled or standalone CMake is found automatically when it is not on
+  `PATH`.
 - **Git** on `PATH`.
-- **A JSON tool** (`python3`, `python`, or `node`) on `PATH` **when auditing with
-  Copilot** — the audit runner reduces Copilot's `--output-format json` event
-  stream to each phase's final report with it (`node` ships with a
-  Copilot CLI installed via npm, so this is usually already satisfied). Without
-  one, the audit still runs but saves the raw JSONL transcript and warns. The
-  PowerShell runner uses its built-in `ConvertFrom-Json`, and the Claude backend
-  needs no JSON tool.
 
-Then, for your platform:
-
-- **PowerShell 7.2+** (`pwsh`) for the `*.ps1` runners (earlier hosts turn a
-  native command's redirected stderr into a terminating error under
-  `$ErrorActionPreference = 'Stop'`, which would abort agent phases), or
-- **bash 3.2+** for the `*.sh` runners (the stock macOS `/bin/bash` works; no extra packages needed). Invoke them as `bash scripts/pipeline/luma-*.sh …`, or `chmod +x` them once to run directly.
-
-Run everything from the repository root.
+Run everything from the repository root. A missing agent CLI is reported once,
+up front, with exit code `127` (skipped for `--dry-run` and `--list`).
 
 ## Choosing an agent
 
-Both runners target the **GitHub Copilot CLI** by default and can instead drive
-the **Claude Code CLI**. Select the backend per run — `-Agent copilot` (default)
-or `-Agent claude` in PowerShell, `--agent copilot` / `--agent claude` in shell:
-
-```powershell
-pwsh -File scripts/pipeline/Invoke-LumaAudit.ps1 -Agent claude -DryRun
-```
+Select the backend per run with `--agent copilot` (default) or `--agent claude`:
 
 ```bash
-bash scripts/pipeline/luma-fix.sh --agent claude --dry-run
+python scripts/pipeline/luma_pipeline.py audit --agent claude --dry-run
 ```
 
 The runner maps each pipeline concept to that CLI's own flags:
 
-| Pipeline concept       | Copilot (`copilot`)             | Claude Code (`claude`)                                          |
-| ---------------------- | ------------------------------- | -------------------------------------------------------------- |
-| Headless prompt        | piped on **stdin** (no `-p`)    | `-p "<instruction>" --output-format text`                      |
-| Read-only audit (plan) | `--output-format json --available-tools=view,grep,glob` | `--permission-mode plan`                    |
-| Mutating fix (agent)   | `--allow-all-tools`             | `--permission-mode acceptEdits --allowedTools Bash Edit Write` |
-| Deny `git push`        | `--deny-tool="shell(git push)"` | `--disallowedTools "Bash(git push *)"`                         |
-| Model override         | `--model=<name>`                | `--model <name>`                                               |
-| Reasoning effort       | `--effort=<level>` (omitted for `auto`) | `--effort <level>`                                     |
+| Pipeline concept       | Copilot (`copilot`)                                      | Claude Code (`claude`)                                          |
+| ---------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
+| Headless prompt        | piped on **stdin** (no `-p`)                             | `-p "<instruction>" --output-format text` (prompt on stdin through a `.cmd` shim) |
+| Read-only audit (plan) | `--output-format=json --available-tools=view,grep,glob` | `--permission-mode plan`                                       |
+| Mutating fix (agent)   | `--allow-all-tools`                                      | `--permission-mode acceptEdits --allowedTools Bash Edit Write` |
+| Deny `git push`        | `--deny-tool=shell(git push)`                            | `--disallowedTools "Bash(git push *)"`                         |
+| Model override         | `--model=<name>`                                         | `--model <name>`                                               |
+| Reasoning effort       | `--effort=<level>` (omitted for `auto` / no model)       | `--effort <level>`                                             |
+| Agent logs             | `--log-dir=<run>/logs`                                   | *(none — Claude keeps its own transcripts)*                    |
 
-The Copilot prompt is delivered on **stdin**, not as a `-p "<instruction>"`
-argument. A multi-line prompt passed on the command line is mangled whenever the
-CLI is launched across a boundary that cannot carry newlines in an argv element —
-an npm `copilot.cmd` shim (cmd.exe re-splits `%*`) or the WSL↔Windows interop
-layer — which splits the prompt's paragraphs into stray positional arguments and
-makes Copilot abort with *"Invalid command format … the extra words were treated
-as separate arguments"*. Piping the prompt on stdin (with `-p` omitted entirely)
-carries it verbatim through every such boundary while still running
-non-interactively, because stdin is not a TTY. `--effort` is omitted whenever the
-effective model is `auto` (including after the fallback below), since Copilot
-rejects reasoning-effort configuration for `auto`.
+The Copilot prompt is delivered on **stdin**, not as a `-p` argument: a
+multi-line argument is mangled whenever the CLI is launched across a boundary
+that cannot carry newlines (an npm `copilot.cmd` shim, the WSL↔Windows interop
+layer), which makes Copilot abort with *"Invalid command format"*. For the same
+reason, when `claude` resolves to a Windows `.cmd` / `.bat` shim its prompt is
+piped to `claude -p` on stdin instead of passed as an argument. `--effort` is
+omitted whenever the effective Copilot model is `auto` (including after the
+fallback below), because Copilot rejects reasoning effort for `auto`.
 
 Both backends are held **read-only** during audits and are **denied `git push`**
-during fixes, so the safety model is identical either way. During audits, Claude's
-plan mode grants no edit tools, and Copilot is restricted to the read/search tools
-with `--available-tools=view,grep,glob`, so it cannot modify, create, or run
-anything. (Copilot's interactive `--plan` mode is *not* used non-interactively: it
-delivers its result through the `exit_plan_mode` tool / a `plan.md` file rather
-than stdout, so under `--output-format json` it would produce an empty report.)
-Override the
-executable name or full path with the `LUMA_COPILOT` / `LUMA_CLAUDE` environment
-variables. Model names and `--effort` values differ between the two CLIs — check
-each tool's own reference. `--effort` is validated client-side only for copilot
-(against `low`…`max`); for claude the value is passed straight through and
-validated by the CLI itself. Copilot's `--log-dir` has no Claude equivalent
-(Claude keeps its own transcripts), so it is emitted only for Copilot.
+during fixes. Copilot's interactive `--plan` mode is deliberately *not* used: it
+delivers its result through `exit_plan_mode` / `plan.md` rather than stdout, so it
+would produce an empty report. Instead Copilot is restricted to the
+read/search tools, and its JSONL event stream is reduced to the last assistant
+message — the final report — since text mode interleaves narration and parallel
+sub-agent transcripts. A phase that produces no extractable report keeps the raw
+transcript (or, with no output at all, a diagnostic with the captured stderr)
+and is marked failed, so an audit never records a hollow success.
 
-Fix-runner checkpoints are attributed to whichever agent did the work: the
-commit carries `Co-authored-by: Copilot …` under `copilot` and
-`Co-authored-by: Claude …` under `claude`.
+`--effort` is validated client-side only for Copilot (`low`, `medium`, `high`,
+`xhigh`, `max`); for Claude it is passed through to the CLI. Fix checkpoints are
+attributed to the agent that did the work: `Co-authored-by: Copilot …` or
+`Co-authored-by: Claude …`.
 
-## Quick start
-
-**PowerShell (Windows):**
-
-```powershell
-# 1. See what each stage will do — no agent, no build, nothing invoked.
-pwsh -File scripts/pipeline/Invoke-LumaAudit.ps1 -List
-pwsh -File scripts/pipeline/Invoke-LumaAudit.ps1 -DryRun
-pwsh -File scripts/pipeline/Invoke-LumaFix.ps1   -List
-pwsh -File scripts/pipeline/Invoke-LumaFix.ps1   -DryRun
-
-# 2. Generate the audit reports (read-only).
-pwsh -File scripts/pipeline/Invoke-LumaAudit.ps1
-
-# 3. Triage the reports under pipeline-artifacts/audit-<timestamp>/reports/.
-
-# 4. Apply fixes on a dedicated branch, gated on build + test.
-pwsh -File scripts/pipeline/Invoke-LumaFix.ps1
-```
-
-**Shell (macOS/Linux):**
-
-```bash
-# 1. See what each stage will do — no agent, no build, nothing invoked.
-bash scripts/pipeline/luma-audit.sh --list
-bash scripts/pipeline/luma-audit.sh --dry-run
-bash scripts/pipeline/luma-fix.sh   --list
-bash scripts/pipeline/luma-fix.sh   --dry-run
-
-# 2. Generate the audit reports (read-only).
-bash scripts/pipeline/luma-audit.sh
-
-# 3. Triage the reports under pipeline-artifacts/audit-<timestamp>/reports/.
-
-# 4. Apply fixes on a dedicated branch, gated on build + test.
-bash scripts/pipeline/luma-fix.sh
-```
-
-Start with `-DryRun` / `--dry-run` every time you change flags: it prints the
-exact agent, `cmake`, `ctest`, and `git` commands each phase would run without
-touching anything.
-
-### Both stages in one command
-
-To chain the audit and the fix in one invocation — using the **Copilot CLI** with
-**Claude Opus 4.6** at **medium** reasoning effort (the built-in defaults) — use the
-combined runner. It runs the audit first, then the fix, forwarding the agent flags
-to both stages and skipping the fix if the audit exits non-zero:
-
-```powershell
-# Preview first — nothing invoked, built, or committed.
-pwsh -File scripts/pipeline/Invoke-LumaAll.ps1 -DryRun
-
-# Run for real: audit → fix, Copilot CLI + Claude Opus 4.6 + max effort.
-pwsh -File scripts/pipeline/Invoke-LumaAll.ps1
-```
-
-```bash
-# Preview first.
-bash scripts/pipeline/luma-all.sh --dry-run
-
-# Run for real.
-bash scripts/pipeline/luma-all.sh
-```
-
-The three agent knobs default to `-Agent copilot`, `-Model claude-opus-4.6`, and
-`-Effort medium`; override any of them per run (e.g. `-Model gpt-5.4`, `-Effort high`,
-or `-Agent claude`). Run only one stage with `-SkipFix` / `--skip-fix` or
-`-SkipAudit` / `--skip-audit`, and forward extra flags to a specific stage with
-`-AuditArgs` / `--audit-arg` and `-FixArgs` / `--fix-arg` (for example
-`-FixArgs '-RevertOnFailure'`).
-
-> **Heads-up:** running the mutating fixer straight after the audit **skips the
-> manual triage step** the two-runner split is designed to preserve. Prefer the
-> separate runners when you want to review the reports before any code changes.
+Copilot exits `0` even after printing *"You have exceeded your monthly quota"*
+without doing any work; the fix runner detects that in the transcript and fails
+the phase.
 
 ### Copilot CLI model availability
 
-The GitHub Copilot **CLI** validates `--model` against the model catalogue *its
-own client* is entitled to, which can differ from what the VS Code Copilot Chat
-client sees for the same account. On org- or enterprise-managed accounts the CLI
-may be served a catalogue in which **no model is picker-enabled** — the CLI then
-logs `Successfully listed 0 models` and rejects **every** explicit `--model`
-(not just uncommon ones), so `--model claude-opus-4.6` fails with
-`Model "claude-opus-4.6" ... is not available` even though that model is enabled
-for the account in VS Code. In that state only `--model auto` runs (it resolves
-to whatever default the CLI is allowed, e.g. a Haiku model).
-
-Because a rejected `--model` makes the agent abort at model resolution — which
-would otherwise fail every phase — each runner **probes the requested model once
-and falls back to `auto` with a warning** when the CLI cannot select it
-(`luma_resolve_copilot_model` / `Resolve-CopilotModel`). Both runners bound the
-probe to 90 seconds, so a slow model turn cannot stall the run. To actually use
-Opus in the CLI, an org/enterprise Copilot admin must enable model access (the
-model picker / "Copilot in the CLI") for those models; individual users cannot
-override the server-side entitlement. Verify with:
+The Copilot **CLI** validates `--model` against the catalogue *its own client* is
+entitled to, which can differ from what VS Code Copilot Chat sees for the same
+account. On some org- or enterprise-managed accounts the CLI logs
+`Successfully listed 0 models` and rejects **every** explicit `--model`, so only
+`--model auto` runs. To keep that from failing every phase, the runner probes
+the requested model once per run (bounded to 90 seconds, killing the whole
+process tree on timeout) and **falls back to `auto` with a warning** when the CLI
+reports it is not available. A timed-out probe keeps the requested model. To use
+the model in the CLI, an org/enterprise Copilot admin must enable it; verify with:
 
 ```bash
 copilot -p "reply ok" --model claude-opus-4.6 --allow-all-tools --no-ask-user
 ```
 
-If it replies instead of printing `... is not available`, the model is selectable
-and the runners will use it.
+## Quick start
+
+```bash
+# 1. See what each stage will do — no agent, no build, nothing invoked.
+python scripts/pipeline/luma_pipeline.py audit --list
+python scripts/pipeline/luma_pipeline.py audit --dry-run
+python scripts/pipeline/luma_pipeline.py fix --list
+python scripts/pipeline/luma_pipeline.py fix --dry-run
+
+# 2. Generate the audit reports (read-only).
+python scripts/pipeline/luma_pipeline.py audit
+
+# 3. Triage the reports under pipeline-artifacts/audit-<timestamp>/reports/.
+
+# 4. Apply fixes on a dedicated branch, gated on build + test + lint.
+python scripts/pipeline/luma_pipeline.py fix
+```
+
+Start with `--dry-run` every time you change flags.
+
+### Both stages in one command
+
+`all` runs the audit and then the fix, forwarding the agent flags to both and
+skipping the fix when the audit exits non-zero. It defaults to the **Copilot
+CLI** driving **Claude Opus 4.6** (`claude-opus-4.6`) at **medium** effort; with
+`--agent claude` the model defaults to the Claude CLI's own choice.
+
+```bash
+python scripts/pipeline/luma_pipeline.py all --dry-run    # preview
+python scripts/pipeline/luma_pipeline.py all              # audit → fix
+python scripts/pipeline/luma_pipeline.py all --fix-arg --revert-on-failure
+python scripts/pipeline/luma_pipeline.py all -- --phase refactor   # to every stage
+```
+
+Every stage's arguments are parsed before anything runs, so a typo in
+`--fix-arg` fails immediately rather than after a long audit.
+
+> **Heads-up:** `all` **skips the manual triage step** the audit/fix split is
+> designed to preserve. Prefer separate `audit` and `fix` runs when you want to
+> review the reports before any code changes.
 
 ## Pipeline order
 
-The stages encode a single governing principle — **audit before you execute**,
-progressing correctness → consistency → structure → speed → polish → converge →
-gate → capture. The audit runner runs the read-only column; the reports feed the
-fix runner, which runs the mutating column.
+The stages encode one principle — **audit before you execute** — progressing
+correctness → consistency → structure → speed → polish → converge → gate →
+capture. `audit` runs the left column; its reports feed `fix`, which runs the
+right column.
 
-| # | Audit phase (report)        | → | Fix phase (executor)      | Notes                                                    |
-| - | --------------------------- | - | ------------------------- | -------------------------------------------------------- |
-| 1 | `01-bug-search-core`        | → | `bug-fix-core`            | Interpreter + stdlib correctness.                        |
-| 2 | `02-bug-search-debugger`    | → | `bug-fix-debugger`        | DAP debugger.                                            |
-| 3 | `03-bug-search-language-server` | → | `bug-fix-language-server` | LSP language server.                                 |
-| 4 | `04-bug-search-editor-extension` | → | `bug-fix-editor-extension` | VS Code / Zed extensions.                          |
-| 5 | `05-consistency-check`      |   | *(via executors)*         | Naming/structure drift; fixed as bugs/refactors flow through. |
-| 6 | `06-code-review`            |   | *(via executors)*         | Deep net catching what the targeted hunts missed.        |
-| 7 | `07-ux-audit`               | → | `ux-improve`              | UX, usability, and visual-design fixes.                  |
-| 8 | `08-refactor-audit`         | → | `refactor`                | Structural improvements.                                 |
-| 9 | `09-performance-audit`      | → | `optimize`                | Hotspots and algorithmic wins.                           |
-|   |                             |   | `iterative-improvement`   | Convergence loop (capped); re-runs consistency + review internally. |
-|   |                             |   | `release-verification`    | Clean-room build/test/lint gate.                         |
-|   |                             |   | `update-learnings`        | Captures new pitfalls into `instructions/learnings.instructions.md`, last. |
+| # | Audit phase (report)             | → | Fix phase (executor)       | Notes                                                    |
+| - | -------------------------------- | - | -------------------------- | -------------------------------------------------------- |
+| 1 | `01-bug-search-core`             | → | `bug-fix-core`             | Interpreter + stdlib correctness.                        |
+| 2 | `02-bug-search-debugger`         | → | `bug-fix-debugger`         | DAP debugger.                                            |
+| 3 | `03-bug-search-language-server`  | → | `bug-fix-language-server`  | LSP language server.                                     |
+| 4 | `04-bug-search-editor-extension` | → | `bug-fix-editor-extension` | VS Code / Zed extensions.                                |
+| 5 | `05-consistency-check`           |   | *(via executors)*          | Naming/structure drift; fixed as bugs/refactors flow through. |
+| 6 | `06-code-review`                 |   | *(via executors)*          | Deep net catching what the targeted hunts missed.        |
+| 7 | `07-ux-audit`                    | → | `ux-improve`               | UX, usability, and visual-design fixes.                  |
+| 8 | `08-refactor-audit`              | → | `refactor`                 | Structural improvements.                                 |
+| 9 | `09-performance-audit`           | → | `optimize`                 | Hotspots and algorithmic wins.                           |
+|   |                                  |   | `iterative-improvement`    | Convergence loop (capped); re-runs consistency + review internally. |
+|   |                                  |   | `release-verification`     | Clean-room build/test/lint gate.                         |
+|   |                                  |   | `update-learnings`         | Captures new pitfalls into `instructions/learnings.instructions.md`, last. |
 
 **Consistency and code-review findings have no dedicated fixer prompt by
-design.** They are audits whose findings are resolved *through* the executor
-prompts (`bug-fix`, `refactor`, `optimize`) and the `iterative-improvement`
-loop, which itself re-runs consistency and code-review passes. UX is the
-exception: its `07-ux-audit` report feeds the dedicated `ux-improve` executor,
-which runs in the polish band (after `optimize`, before `iterative-improvement`)
-rather than in audit-number order. This mirrors the prompt pairing in the
-project's own prompt set: discovery prompts produce reports, execute prompts
-consume them.
+design.** They are resolved *through* the executor prompts and the
+`iterative-improvement` loop, which re-runs consistency and code-review passes
+itself. UX is the exception: `07-ux-audit` feeds the dedicated `ux-improve`
+executor, which runs in the polish band (after `optimize`).
 
-## Safety model (fix runner)
+## Safety model (`fix`)
 
 The fix runner never touches your current branch or an unverified tree unless
-you tell it to (PowerShell flag / shell flag shown together):
+you tell it to:
 
-1. **Clean tree required** — refuses to start on a dirty working tree (override with `-AllowDirty` / `--allow-dirty`).
-2. **Dedicated branch** — creates `pipeline/fix-<timestamp>` and works there (override with `-NoBranch` / `--no-branch`).
-3. **Green baseline** — verifies `cmake --build` + `ctest` pass *and* that the tree is already lint-clean *before* any change (override with `-SkipBaseline` / `--skip-baseline`, or skip just the lint check with `-SkipLintFormat` / `--skip-lint-format`).
-4. **Per-phase gate** — after each mutating phase re-runs the build + test gate, then applies the formatters and runs the lint checks (`scripts/format.py`, then `scripts/lint.py`, including clang-tidy); the phase must be both green and lint-clean to pass (override the lint/format half with `-SkipLintFormat` / `--skip-lint-format`). Because `lint.py` also runs detect-only tools that no formatter auto-fixes (clang-tidy, shellcheck, cmakelint, `tsc`, clippy), every lint-gated phase's agent instruction now tells the agent to run `format.py` + `lint.py` and **fix every finding** before finishing, so the gate verifies work the agent has already done rather than merely rejecting it.
-5. **Checkpoint on green** — commits only when the gate is green, with a `chore(pipeline):` subject and a `Co-authored-by` trailer naming the agent that ran (`Copilot` or `Claude`) (override with `-NoCommit` / `--no-commit`). Any formatting the gate applied is folded into that phase's commit.
-6. **Stop on red** — halts at the first failed gate (override with `-ContinueOnFailure` / `--continue-on-failure`; optionally `-RevertOnFailure` / `--revert-on-failure` to hard-reset tracked changes to the last checkpoint — untracked files a failed phase created are left in place, so run `git clean` yourself if you need a full reset; with `-NoCommit` / `--no-commit` there are no checkpoints, so the revert resets to the branch's starting point and discards every phase's work so far).
-7. **No remote writes** — `git push` is denied to the agent, so nothing leaves the machine.
+1. **Clean tree required** — refuses to start on a dirty working tree (`--allow-dirty` overrides).
+2. **Dedicated branch** — creates `pipeline/fix-<timestamp>` and works there (`--no-branch` overrides).
+3. **Green baseline** — verifies `cmake --build` + `ctest` pass *and* that `scripts/lint.py` is already clean before any change (`--skip-baseline`; `--skip-lint-format` skips just the lint check). If it fails after the run branch was created, the error says so and how to switch back (`git switch -`).
+4. **Per-phase gate** — after each mutating phase re-runs configure + build + test, then `scripts/format.py` (apply) and `scripts/lint.py` (verify, including clang-tidy); the phase must be green and lint-clean to pass (`--skip-build`, `--skip-test`, `--skip-lint-format` drop parts of it). Configure (`cmake --preset <preset>`) runs before **every** build: the Visual Studio generator never re-runs CMake by itself, so a phase that adds a file to a `CMakeLists.txt` would otherwise be gated on stale project files. Because `lint.py` also runs detect-only tools no formatter fixes (clang-tidy, shellcheck, cmakelint, `tsc`, clippy), every lint-gated phase's instruction tells the agent to run both scripts and **fix every finding** before finishing; the gate is the deterministic backstop.
+5. **Checkpoint on green** — commits only a green tree, as `chore(pipeline): <phase>` with a `Co-authored-by` trailer for the agent (`--no-commit` overrides). Formatting the gate applied is folded into that commit.
+6. **Stop on red** — halts at the first failed phase (`--continue-on-failure` keeps going). `--revert-on-failure` resets tracked files to the last checkpoint and, when the run started from a clean tree, deletes the untracked files the failed phase created (`git clean -fd`; ignored files and the artifact root survive), so they cannot slip into a later checkpoint. A run started with `--allow-dirty` on a dirty tree keeps untracked files, because they may be yours. With `--no-commit` the revert discards every phase's work so far.
+7. **No remote writes** — `git push` is denied to the agent; nothing leaves the machine.
 
 Phases whose prompt already builds, tests, and lints exhaustively
-(`iterative-improvement`, `release-verification`) are marked *self-verifying*:
-the script skips its own redundant gate for them but still checkpoints where
+(`iterative-improvement`, `release-verification`) are *self-verifying*: the
+runner skips its own redundant gate for them but still checkpoints where
 appropriate.
 
-A rejected checkpoint commit — for example when a pre-commit hook blocks it — is
-recorded with the `commit-failed` status and handled like any other failed phase
-(revert and/or stop), instead of silently leaving the change staged for the next
-phase to re-stage over. A `commit-failed` is treated as **systemic**: because a
-hook or git keeps rejecting the commit and `git add -A` re-stages the
-un-committable change into every later checkpoint, moving on cannot make it
-succeed — so it **stops the run even under** `-ContinueOnFailure` /
-`--continue-on-failure`, unless `-RevertOnFailure` / `--revert-on-failure` is also
-set (which resets the tree clean, making it safe to carry on). Per-file failures
-(`agent-failed`, `gate-failed`) still skip forward under `-ContinueOnFailure` as
-before. The runner **exits non-zero** whenever it stops early or finishes with any
-non-`ok` phase — including `commit-failed` — even under `-ContinueOnFailure` /
-`--continue-on-failure`, so `Invoke-LumaAll.ps1` / `luma-all.sh` and CI observe
-the failure instead of reading an aborted run as a clean pass.
+Phase statuses are `ok`, `agent-failed`, `gate-failed`, `commit-failed`, and
+`error` (an infrastructure failure such as a missing tool). A **`commit-failed`**
+— e.g. a pre-commit hook rejecting the checkpoint — is systemic: `git add -A`
+would re-stage the un-committable change into every later checkpoint, so it
+**stops the run even under `--continue-on-failure`**, unless
+`--revert-on-failure` resets a run that started clean back to a clean tree. The
+runner exits non-zero whenever
+it stops early or any phase is not `ok`, so `all` and CI never read a failed run
+as a pass.
 
-The lint/format gate runs **`format.py` (apply) then `lint.py` (verify)**:
-`format.py` is the mutating step — and it already orders each language's
-`lint --fix` before its formatter internally — while `lint.py` is the read-only
-verification, so it always runs last and is the authority for whether the gate
-passes. clang-tidy is included by default; it needs `build/compile_commands.json`,
-which the Ninja and Makefile generators emit but the Visual Studio and Xcode
-generators do not. To keep clang-tidy enforced everywhere — Windows included — the
-gate **emits the compile database on demand**: when `build/compile_commands.json`
-is missing it runs a configure-only pass with a database-capable generator (Ninja,
-else NMake / Unix Makefiles) into a dedicated `build-compiledb/` directory and
-copies the result into `build/`. On Windows this is wrapped in the MSVC developer
-environment (located via `vswhere`) so `cl.exe` and the standard-library headers
-resolve for both the configure and the clang-tidy run. Emitting the database is
-best-effort: if Ninja, CMake, clang-tidy, or the MSVC environment is unavailable,
-`lint.py` simply skips clang-tidy as before rather than failing the gate. A gate
-whose tool is not installed is likewise skipped, so the gate enforces exactly the
-toolchain you have locally, the same way CI does. Pass `-SkipLintFormat` /
-`--skip-lint-format` to opt out of the gate entirely.
+The runner works on its own copy of the environment: the CMake it discovers on
+Windows (via `vswhere` or a standalone install) and the MSVC developer
+environment are added to that copy, which every child process receives, and
+never to the caller's process environment. When a phase is stopped — by an error
+or Ctrl+C — the agent's whole process tree is killed (it runs in its own process
+group on Linux and macOS).
 
-`format.py` mechanically fixes the auto-fixable linters (ruff, ESLint,
-markdownlint) alongside the formatters, so those findings never reach `lint.py`.
-The detect-only tools it cannot auto-fix — clang-tidy, shellcheck, cmakelint,
-`tsc`, clippy, and the warning-sync consistency check — are what the agent is
-instructed to fix during the phase: the runner appends a directive telling it to
-run both scripts and correct the underlying code (not suppress the warnings) until
-`lint.py` is clean. The gate is then the deterministic backstop that catches
-anything the agent missed. Self-verifying phases already lint exhaustively, so the
-directive is omitted for them.
+The lint gate needs `build/compile_commands.json` for clang-tidy, which the
+Visual Studio and Xcode generators do not emit. When it is missing and
+clang-tidy is installed, the gate runs a configure-only pass with a
+database-capable generator (Ninja, else NMake / Unix Makefiles) into
+`build-compiledb/` and copies the database into `build/`; on Windows it first
+imports the MSVC developer environment (located via `vswhere`) so headers
+resolve. All of this is best-effort: a missing tool only leaves clang-tidy
+skipped by `lint.py`, which also skips any gate whose tool is not installed.
 
 ## After the run
 
-The fixer produces **exactly one branch** — `pipeline/fix-<timestamp>`, created
-once before the first phase (unless you pass `-NoBranch` / `--no-branch`) — with
-**one commit per green phase** (phases marked no-commit, such as
-`release-verification`, add none). It performs **no merge and no push**:
-`git push` is denied to the agent, and the runner never merges the branch or
-touches your base branch. Reviewing and merging `pipeline/fix-<timestamp>` back
-into `main` — with `git merge` or by opening a pull request from it — is left to
-you. The run ends with a summary printing the branch name and a per-phase
-status/commit table to pick up from.
+`fix` produces **exactly one branch** — `pipeline/fix-<timestamp>` (unless
+`--no-branch`) — with **one commit per green phase** (no-commit phases such as
+`release-verification` add none). It performs **no merge and no push**; review
+and merge the branch yourself, by `git merge` or a pull request. The run ends
+with the branch name and a per-phase status/commit table.
+
+## Exit codes
+
+| Code  | Meaning                                                                                 |
+| ----- | --------------------------------------------------------------------------------------- |
+| `0`   | Every selected phase is `ok` (or `--list` / `--help` / a successful `--dry-run`).        |
+| `1`   | A phase failed, the fix run stopped early, or a safety check (clean tree, branch, baseline) failed. |
+| `2`   | Usage error: bad option or value, no phase matched `--phase`, `all` with both stages skipped. |
+| `127` | The agent CLI (or the `node` its npm shim needs) was not found.                         |
+| `130` | Interrupted with Ctrl+C.                                                                 |
+
+`all` exits with the audit's code when the audit fails (the fix is skipped),
+otherwise with the fix's code.
 
 ## Options
 
-The tables below use the PowerShell flag names. The shell runners take the same
-options in `--kebab-case` form (`-Phase` → `--phase`, `-DryRun` → `--dry-run`,
-`-ConvergenceMaxPasses` → `--convergence-max-passes`, and so on) and add
-`-h` / `--help`. Run `bash scripts/pipeline/luma-audit.sh --help` or
-`bash scripts/pipeline/luma-fix.sh --help` for the authoritative shell list.
+Run `python scripts/pipeline/luma_pipeline.py <subcommand> --help` for the
+authoritative list. Long options also accept the `--option=value` form.
 
-### `Invoke-LumaAudit.ps1`
+### `audit` and `fix`
 
-| Flag             | Purpose                                                                 |
-| ---------------- | ----------------------------------------------------------------------- |
-| `-List`          | Print the audit phases in order and exit.                               |
-| `-DryRun`        | Print the agent command each phase would run; invoke nothing.           |
-| `-Phase <a,b>`   | Run only phases whose Id or Name contains a filter (e.g. `bug-search`). |
-| `-Scope <path>`  | Restrict every phase to a scope (e.g. `core/runtime/vm/`).              |
-| `-ArtifactRoot <dir>` | Where run artifacts go (default `pipeline-artifacts/`).             |
-| `-Agent <name>`  | Agent CLI backend: `copilot` (default) or `claude`.                     |
-| `-Model <name>`  | Model override for the chosen agent.                                    |
-| `-Effort <lvl>`  | Reasoning effort (`low`…`max`).                                         |
+| Option                  | Purpose                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `--list`                | Print the phases in order and exit.                                           |
+| `--dry-run`             | Print every command each phase would run; invoke, build, and commit nothing. |
+| `--phase <filter>`      | Run only phases whose id or name contains the filter (case-insensitive; repeatable; comma-separated values accepted). |
+| `--artifact-root <dir>` | Where run artifacts go (default `pipeline-artifacts/`).                       |
+| `--agent <name>`        | Agent CLI backend: `copilot` (default) or `claude`.                           |
+| `--model <name>`        | Model override (omit to let the agent choose).                                |
+| `--effort <level>`      | Reasoning effort (`low`…`max` for Copilot; passed through for Claude).        |
 
-### `Invoke-LumaFix.ps1`
+### `audit` only
 
-| Flag                        | Purpose                                                           |
-| --------------------------- | ---------------------------------------------------------------- |
-| `-List` / `-DryRun`         | Same as above (prints agent / `cmake` / `ctest` / `git`).        |
-| `-Phase <a,b>`              | Run only matching fix phases (e.g. `bug-fix`, `refactor`).       |
-| `-ReportDir <dir>`          | Audit `reports/` folder to consume (default: newest `audit-*` run). |
-| `-ArtifactRoot <dir>`       | Where run artifacts go (default `pipeline-artifacts/`).          |
-| `-Preset <name>`            | CMake preset for the gate (default `default`).                   |
-| `-ConvergenceMaxPasses <n>` | Cap for `iterative-improvement` (default 3).                     |
-| `-AllowDirty`               | Do not require a clean working tree.                             |
-| `-SkipBaseline`             | Skip the initial green baseline check.                           |
-| `-SkipBuild` / `-SkipTest`  | Drop the build or test half of every gate.                       |
-| `-SkipLintFormat`           | Skip the lint/format gate (`format.py` + `lint.py`, incl. clang-tidy). |
-| `-NoBranch`                 | Work on the current branch instead of a new one.                |
-| `-NoCommit`                 | Do not checkpoint after green phases.                            |
-| `-ContinueOnFailure`        | Keep going past a red gate instead of stopping.                  |
-| `-RevertOnFailure`          | Hard-reset tracked changes to the last checkpoint on a red gate (leaves untracked files; with `-NoCommit` resets to the branch start). |
-| `-Agent <name>`             | Agent CLI backend: `copilot` (default) or `claude`.             |
-| `-Model` / `-Effort`        | Agent model/effort overrides, as above.                         |
+| Option           | Purpose                                                       |
+| ---------------- | ------------------------------------------------------------- |
+| `--scope <path>` | Restrict every phase to a scope (e.g. `core/runtime/vm/`), overriding each phase's default. |
 
-### `Invoke-LumaAll.ps1`
+### `fix` only
 
-Runs `Invoke-LumaAudit.ps1` and then `Invoke-LumaFix.ps1` in sequence, forwarding
-the agent flags to both. Defaults to the Copilot CLI driving **Claude Opus 4.6**
-(`claude-opus-4.6`) at **medium** effort. Skips the fix if the audit exits
-non-zero, and exits with the last stage's exit code.
+| Option                         | Purpose                                                              |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `--report-dir <dir>`           | Audit `reports/` folder to consume (default: newest `audit-*` run that has one). |
+| `--preset <name>`              | CMake preset for the gate (default `default`).                       |
+| `--convergence-max-passes <n>` | Cap for `iterative-improvement` (1–10, default 3).                   |
+| `--allow-dirty`                | Do not require a clean working tree.                                 |
+| `--skip-baseline`              | Skip the initial green baseline check.                               |
+| `--skip-build` / `--skip-test` | Drop the configure + build, or the test, step of every gate.         |
+| `--skip-lint-format`           | Skip the `format.py` + `lint.py` gate (including clang-tidy).         |
+| `--no-branch`                  | Work on the current branch instead of a new one.                     |
+| `--no-commit`                  | Do not checkpoint after green phases.                                |
+| `--continue-on-failure`        | Keep going past a failed phase (a `commit-failed` still stops unless reverted from a clean start). |
+| `--revert-on-failure`          | After a failed phase, reset to the last checkpoint and delete its new untracked files (kept when the run started dirty). |
 
-| Flag              | Purpose                                                                          |
-| ----------------- | ------------------------------------------------------------------------------- |
-| `-Agent <name>`   | Backend forwarded to every stage: `copilot` (default) or `claude`.              |
-| `-Model <name>`   | Model for every stage (default `claude-opus-4.6`; falls back to `auto` when the CLI cannot select it; pass `''` to let the agent choose). |
-| `-Effort <lvl>`   | Reasoning effort for every stage (default `medium`; pass `''` to omit).            |
-| `-DryRun`         | Preview every stage; invoke nothing.                                            |
-| `-SkipAudit`      | Skip the audit stage.                                                           |
-| `-SkipFix`        | Skip the fix stage.                                                             |
-| `-AuditArgs <args>` | Extra arguments forwarded verbatim to `Invoke-LumaAudit.ps1`.                |
-| `-FixArgs <args>` | Extra arguments forwarded verbatim to `Invoke-LumaFix.ps1`.                     |
+### `all`
 
-The shell counterpart `luma-all.sh` takes the same options in
-`--kebab-case` (`--agent`, `--model`, `--effort`, `--dry-run`, `--skip-audit`,
-`--skip-fix`), forwards per-stage extras with the repeatable `--audit-arg` /
-`--fix-arg`, and sends anything after a literal `--` to every stage.
+| Option              | Purpose                                                                          |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `--agent <name>`    | Backend for every stage: `copilot` (default) or `claude`.                        |
+| `--model <name>`    | Model for every stage (default `claude-opus-4.6` for Copilot, the CLI default for Claude; pass `''` to let the agent choose). |
+| `--effort <level>`  | Reasoning effort for every stage (default `medium`; pass `''` to omit).          |
+| `--dry-run`         | Preview every stage; invoke nothing.                                             |
+| `--skip-audit`      | Skip the audit stage.                                                            |
+| `--skip-fix`        | Skip the fix stage.                                                              |
+| `--audit-arg <arg>` | Extra argument for the audit stage (repeatable; option-like values are fine).    |
+| `--fix-arg <arg>`   | Extra argument for the fix stage (repeatable), e.g. `--fix-arg --no-commit`.     |
+| `-- <args…>`        | Everything after a literal `--` is forwarded to every stage.                     |
 
 ## Artifacts
 
@@ -410,62 +310,40 @@ pipeline-artifacts/
     reports/<phase>.md    # one ranked report per audit phase
     logs/                 # agent logs (Copilot --log-dir)
   fix-<timestamp>/
-    SUMMARY.md            # table of each phase's status, commit, and log link
+    SUMMARY.md            # each phase's status, commit, and log link
     logs/<phase>.log      # per-phase agent transcript
 ```
 
-The fix runner auto-detects the newest `audit-*` run and feeds each report to
-the matching fixer; pass `-ReportDir` / `--report-dir` to pin a specific run.
+`fix` auto-detects the newest `audit-*` run with a `reports/` folder and feeds
+each report to the matching fixer; pass `--report-dir` to pin a specific run. If
+a report is absent, that phase self-discovers findings from its prompt.
 
-The default `pipeline-artifacts/` root is git-ignored, so checkpoints never pick
-up run artifacts. If you point `-ArtifactRoot` / `--artifact-root` at a custom
-location **inside** the working tree that is not git-ignored, the fix runner
-unstages that directory before each checkpoint so artifacts are still kept out of
-the commit; an artifact root outside the repository needs no special handling.
+If you point `--artifact-root` at a location **inside** the working tree that is
+not git-ignored, the fix runner unstages it before each checkpoint, so artifacts
+never land in a commit.
 
-The `release-verification` phase performs a destructive clean-room wipe
-(`git clean -Xdf`) that removes git-ignored files. Because the default
-`pipeline-artifacts/` root is git-ignored, the
-[release-verification prompt](../../.github/prompts/release-verification.prompt.md)
-sets that directory aside inside `.git/` across the wipe and restores it
-afterwards, so every prior phase's logs and reports survive the rebuild.
-Artifact roots outside the repository — and custom in-tree roots that are not
-git-ignored — are left untouched by the clean and need no special handling.
-
-The fix runners (`luma-fix.sh` / `Invoke-LumaFix.ps1`) do not rely on the agent
-honouring that prompt step. For the `release-verification` phase they apply the
-same protection deterministically: before launching the agent they move the
-artifact root into `.git/_pipeline-artifacts.pipeline.bak` (a name distinct from
-the prompt's `_pipeline-artifacts.bak`, so the two never collide — during a
-pipeline run the runner's set-aside wins and the agent's move-aside simply
-no-ops), and they restore it in a `finally`/post-invoke block that runs even if
-the phase errors. Crucially, they also stream that one phase's transcript to a
-temporary directory **outside** the artifact tree and fold it back into
-`logs/` afterwards: on Windows a directory cannot be moved while a file inside
-it is held open, and each runner keeps the live phase log open under
-`pipeline-artifacts/`, so without this redirection the set-aside would fail and
-the wipe would still delete the run's artifacts. This safeguard is skipped for
-`--dry-run` / `-DryRun` and for artifact roots outside the working tree.
+The `release-verification` phase wipes git-ignored files (`git clean -Xdf`). The
+runner protects the artifact tree deterministically rather than relying on the
+agent: before that phase it moves an in-tree artifact root into
+`.git/_pipeline-artifacts.pipeline.bak` (a name distinct from the
+[prompt's own](../../.github/prompts/release-verification.prompt.md)
+`_pipeline-artifacts.bak`), streams the phase's transcript to a temporary
+directory outside the tree (on Windows a directory cannot be moved while a file
+in it is open), and restores both afterwards — even if the phase errors or is
+interrupted. Roots outside the working tree need no protection.
 
 ## Handoff: audit → fix
 
-1. The audit runner writes `reports/01-bug-search-core.md`, `…/08-refactor-audit.md`, and so on.
+1. `audit` writes `reports/01-bug-search-core.md`, `…/08-refactor-audit.md`, and so on.
 2. You read them and decide what is worth fixing.
-3. The fix runner reads each report as the fixer's input; if a report is absent, that phase self-discovers findings from the prompt instead.
+3. `fix` reads each report as the fixer's input.
 
-Keeping the reports on disk between the two steps is the human triage gate — the
-fixer is never launched automatically from the audit.
-
-Neither runner is wired into CI, a git hook, or any scheduler — every runner in
-this directory is developer-invoked from the repository root, and nothing
-triggers them automatically. Once you launch a runner it works through its
-selected phases on its own, but starting each run is always a deliberate, manual
-step.
+Nothing in this directory is wired into a git hook or scheduler; every run is a
+deliberate, manual step from the repository root. (CI runs only the unit tests.)
 
 ## Related documentation
 
 - [`scripts/DIRECTORY.md`](../DIRECTORY.md) — the wider maintenance-script catalogue.
-- [`instructions/powershell.instructions.md`](../../instructions/powershell.instructions.md) — the PowerShell style the `*.ps1` runners follow.
-- [`instructions/shell.instructions.md`](../../instructions/shell.instructions.md) — the shell style the `*.sh` runners follow.
+- [`instructions/python.instructions.md`](../../instructions/python.instructions.md) — the Python style this code follows.
 - [`.github/prompts/`](../../.github/prompts) — the prompt definitions the pipeline invokes.
 - [`CONTRIBUTING.md`](../../CONTRIBUTING.md) — contributor workflow and commit conventions.

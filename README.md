@@ -80,7 +80,7 @@ build/luma examples/language-features/hello.luma
 build/luma
 ```
 
-> **Note:** On Windows, the binary is at `build\Release\luma.exe`.
+> **Note:** On Windows, the binary is at `build\luma.exe`.
 
 ## Prerequisites
 
@@ -120,7 +120,7 @@ ctest --preset default
 Binary locations:
 
 - Linux and macOS: `build/luma`
-- Windows: `build\Release\luma.exe`
+- Windows: `build\luma.exe`
 
 ## Usage
 
@@ -154,7 +154,7 @@ List every command-line option:
 build/luma --help
 ```
 
-On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands above.
+On Windows, replace `build/luma` with `build\luma.exe` in the commands above.
 
 ## Documentation
 

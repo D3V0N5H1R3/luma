@@ -245,14 +245,14 @@ function void test_<feature_b>() {
 
 ```bash
 # Run a single test suite
-build/Release/luma --test tests/features/language/arrays.luma
+build/luma --test tests/features/language/arrays.luma
 ```
 
 ```powershell
 # Run all test suites (PowerShell)
 foreach ($f in Get-ChildItem tests\features\*\*.luma) {
     Write-Host "── $($f.Name) ──"
-    & build/Release/luma.exe --test $f.FullName
+    & build/luma.exe --test $f.FullName
 }
 ```
 
@@ -287,7 +287,7 @@ test1
 
 | Command                                                         | What it runs                      |
 | --------------------------------------------------------------- | --------------------------------- |
-| `build/Release/luma --test tests/features/language/<file>.luma` | A single Luma feature test suite. |
+| `build/luma --test tests/features/language/<file>.luma` | A single Luma feature test suite. |
 | `ctest --preset default`                                        | All C++ unit tests via CTest.     |
 
 Always run both C++ and Luma tests before submitting changes. CTest must report zero failures, and all Luma test suites must pass.
@@ -419,7 +419,7 @@ Before submitting any change that touches the interpreter, standard library, or 
 - [ ] Interpreter or stdlib behaviour changes are covered by **both** a C++ unit test and a Luma `@test` feature test where applicable.
 - [ ] Test and `@test` function names follow the conventions in §4 (descriptive `test_*` names, no `test1`).
 - [ ] `ctest --preset default` reports zero failures.
-- [ ] All affected Luma feature suites pass via `build/Release/luma --test <file>.luma`.
+- [ ] All affected Luma feature suites pass via `build/luma --test <file>.luma`.
 - [ ] New or modified stdlib modules update the sandbox tests (§6) at both the C++ and Luma layers.
 - [ ] New resource limits add a C++ test that triggers the limit and verifies the error (§6).
 - [ ] New language features add a minimal seed file to the appropriate `fuzz/corpus/` subdirectory (§7).

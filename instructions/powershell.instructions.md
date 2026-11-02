@@ -530,6 +530,14 @@ Invoke-Expression $UserInput
 - Use `Should` assertions: `-Be`, `-BeExactly`, `-BeNullOrEmpty`, `-Throw`, `-HaveCount`.
 - Mock external dependencies with `Mock` to isolate units.
 
+> **In this repository:** no Pester tests exist today, and the PowerShell CI
+> gate ([`ci-powershell.yml`](../.github/workflows/ci-powershell.yml)) runs only
+> PSScriptAnalyzer. Tooling with enough logic to need tests is written in Python
+> instead (for example the prompt pipeline in [`scripts/pipeline/`](../scripts/pipeline),
+> tested with `unittest`). If you add the first `*.Tests.ps1`, also add a runner
+> script, a CI job that runs it, and a Pester pin in
+> [`.devcontainer/devcontainer.json`](../.devcontainer/devcontainer.json).
+
 ```powershell
 # Build-Project.Tests.ps1
 Describe 'Build-Project' {
@@ -620,6 +628,6 @@ foreach ($Id in $TargetIds) {
 - [ ] No array `+=` in loops. `[List[T]]` or pipeline collection used.
 - [ ] Paths constructed with `Join-Path`. `$PSScriptRoot` for relative paths.
 - [ ] No `Invoke-Expression` on untrusted input. `-LiteralPath` for external paths.
-- [ ] Pester tests cover the primary success and failure paths.
+- [ ] Pester tests (run in CI) cover the primary success and failure paths of non-trivial logic.
 - [ ] Names follow the conventions in §2. Approved verbs used.
 - [ ] Files end with a single trailing newline.

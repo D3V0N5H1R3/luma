@@ -67,22 +67,12 @@
         ]
     },
     {
-        "label": "Luma: Run Current File (Windows)",
-        "command": "$ZED_WORKTREE_ROOT/build/Release/luma.exe",
-        "args": ["$ZED_FILE"]
-    },
-    {
-        "label": "Luma: Run Current File (Unix)",
+        "label": "Luma: Run Current File",
         "command": "$ZED_WORKTREE_ROOT/build/luma",
         "args": ["$ZED_FILE"]
     },
     {
-        "label": "Luma: Test Current File (Windows)",
-        "command": "$ZED_WORKTREE_ROOT/build/Release/luma.exe",
-        "args": ["--strict", "--test", "$ZED_FILE"]
-    },
-    {
-        "label": "Luma: Test Current File (Unix)",
+        "label": "Luma: Test Current File",
         "command": "$ZED_WORKTREE_ROOT/build/luma",
         "args": ["--strict", "--test", "$ZED_FILE"]
     },

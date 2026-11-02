@@ -62,8 +62,13 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       env:
+        BUILD_TYPE: ${{ inputs.build-type }}
         BUILD_DIR: ${{ inputs.build-dir }}
         EXTRA_ARGS: ${{ inputs.extra-args }}
+      # The Visual Studio generator is multi-config, so CMAKE_BUILD_TYPE does
+      # not select the configuration (the Build step's --config does). It names
+      # the tree's primary configuration, whose binaries the root CMakeLists.txt
+      # places at the build-directory root, matching the Unix layout.
       # Split EXTRA_ARGS on whitespace and splat so each token is a separate
       # argument (mirrors the Unix branch's word-splitting); a bare
       # "$env:EXTRA_ARGS" would pass all tokens to cmake as one argument.
@@ -74,7 +79,7 @@ runs:
       run: |
         $extra = "$env:EXTRA_ARGS".Split(
           [char[]]@(" ", "`t"), [System.StringSplitOptions]::RemoveEmptyEntries)
-        cmake -B "$env:BUILD_DIR" @extra
+        cmake -B "$env:BUILD_DIR" "-DCMAKE_BUILD_TYPE=$env:BUILD_TYPE" @extra
 
     - name: Build
       shell: bash

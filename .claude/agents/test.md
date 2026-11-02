@@ -47,10 +47,10 @@ Build and run the full suite with the CMake presets in the [Build and Test](../.
 python scripts/run_luma_tests.py
 
 # Run a single Luma test file (as CTest does)
-build/Release/luma --strict --test tests/features/language/<file>.luma
+build/luma --strict --test tests/features/language/<file>.luma
 
 # Run a single C++ test binary
-build/Release/<test_name>
+build/<test_name>
 ```
 
 ## Workflow

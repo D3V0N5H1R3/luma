@@ -39,12 +39,13 @@ Index of the design, reference, and guide documents for the Luma programming lan
 
 ## 3 — Tooling
 
-| Document                                           | Description                                                           |
-| -------------------------------------------------- | --------------------------------------------------------------------- |
-| [Debugger](Luma_Debugger.md)                       | Debug Adapter Protocol (DAP) debug adapter design and implementation. |
-| [Language Server](Luma_Language_Server.md)         | Language Server Protocol (LSP) server design and implementation.      |
-| [Syntax Highlighting](Luma_Syntax_Highlighting.md) | Editor grammars and the Visual Studio Code and Zed extensions.        |
-| [Manual Tests](Luma_Manual_Tests.md)               | Manual test plan for the interpreter, tooling, and editor extensions. |
+| Document                                                   | Description                                                                   |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Debugger](Luma_Debugger.md)                               | Debug Adapter Protocol (DAP) debug adapter design and implementation.         |
+| [Development Environment](Luma_Development_Environment.md) | Editor setup for contributors: building and debugging Luma in VS Code or Zed. |
+| [Language Server](Luma_Language_Server.md)                 | Language Server Protocol (LSP) server design and implementation.              |
+| [Syntax Highlighting](Luma_Syntax_Highlighting.md)         | Editor grammars and the Visual Studio Code and Zed extensions.                |
+| [Manual Tests](Luma_Manual_Tests.md)                       | Manual test plan for the interpreter, tooling, and editor extensions.         |
 
 ---
 
@@ -72,7 +73,7 @@ Companion documents at the repository root that sit alongside this set.
 | Document                           | Description                                                                    |
 | ---------------------------------- | ------------------------------------------------------------------------------ |
 | [Project README](../README.md)     | Project overview, quick start, build commands, and feature highlights.         |
-| [Contributing](../CONTRIBUTING.md) | Build setup, branch naming, commit conventions, and the pull request workflow. |
+| [Contributing](../CONTRIBUTING.md) | Prerequisites, first build, pre-pull-request checks, and commit conventions.   |
 | [Security Policy](../SECURITY.md)  | Supported versions and how to report vulnerabilities privately.                |
 
 ---

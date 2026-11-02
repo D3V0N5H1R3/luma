@@ -65,7 +65,7 @@ Fix any failures or warnings. The runner invokes the interpreter with `--strict`
 Run the benchmark suite to verify all benchmarks execute without errors:
 
 ```bash
-build/Release/luma benchmarks/suite.luma
+build/luma benchmarks/suite.luma
 ```
 
 Fix any runtime errors. Do not optimise for performance — just ensure correctness.
@@ -77,13 +77,13 @@ Build (parse and type-check) all example programs in `examples/` in strict mode 
 On Linux/macOS (bash):
 
 ```bash
-find examples -name '*.luma' -print0 | xargs -0 -n1 build/Release/luma --check --strict
+find examples -name '*.luma' -print0 | xargs -0 -n1 build/luma --check --strict
 ```
 
 On Windows (PowerShell):
 
 ```powershell
-Get-ChildItem -Path examples -Filter *.luma | ForEach-Object { build/Release/luma.exe --check --strict $_.FullName }
+Get-ChildItem -Path examples -Filter *.luma | ForEach-Object { build/luma.exe --check --strict $_.FullName }
 ```
 
 Fix any type errors, syntax errors, or references to deprecated/removed API.

@@ -102,7 +102,7 @@ jobs:
       # little-known executables as false positives; a signature (ideally from
       # a certificate with established reputation) is the durable fix.
       # Opt-in: the step is a no-op until both repository secrets are set
-      # (setup: CONTRIBUTING.md, "Optional Setup: Windows Code Signing") —
+      # (setup: .github/workflows/DIRECTORY.md, "Optional Setup: Windows Code Signing") —
       #   WINDOWS_SIGNING_CERTIFICATE  base64-encoded .pfx code-signing certificate
       #   WINDOWS_SIGNING_PASSWORD     the .pfx password
       - name: Sign Windows binaries
@@ -123,7 +123,7 @@ jobs:
             exit 1
           }
           $pfx = Join-Path $env:RUNNER_TEMP "luma-signing.pfx"
-          $binaries = @("luma", "luma_lsp", "luma_dap") | ForEach-Object { "build/Release/$_.exe" }
+          $binaries = @("luma", "luma_lsp", "luma_dap") | ForEach-Object { "build/$_.exe" }
           try {
             [System.IO.File]::WriteAllBytes($pfx, [System.Convert]::FromBase64String($env:SIGNING_CERTIFICATE))
             & $signtool.FullName sign /f $pfx /p $env:SIGNING_PASSWORD /fd SHA256 `

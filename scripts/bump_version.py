@@ -10,7 +10,7 @@ Updates the version number in:
 
 Also updates version references in documentation:
   - instructions/learnings.instructions.md           ("Alpha (X.Y)" status line)
-  - CONTRIBUTING.md                                  (version bump examples)
+  - .github/workflows/DIRECTORY.md                   (release tag examples)
   - SECURITY.md                                      (supported-versions table)
   - documents/Luma_Tutorial.md                       ("Luma X.Y.Z" / "Luma X.Y")
   - documents/Luma_Installation_Guide.md             (luma-language-X.Y.Z.vsix)
@@ -126,7 +126,7 @@ def render_zed_cargo_lock(new_version: str) -> str | None:
 
 DOC_VERSION_FILES: list[Path] = [
     REPO_ROOT / "instructions" / "learnings.instructions.md",
-    REPO_ROOT / "CONTRIBUTING.md",
+    REPO_ROOT / ".github" / "workflows" / "DIRECTORY.md",
     REPO_ROOT / "SECURITY.md",
     REPO_ROOT / "documents" / "Luma_Tutorial.md",
     REPO_ROOT / "documents" / "Luma_Installation_Guide.md",

@@ -66,8 +66,8 @@
 
         # §3 — consistent spacing around braces, parentheses, pipes, and
         # parameters. CheckOperator and CheckSeparator stay off because the
-        # guide's own examples (§6, §10) and the pipeline scripts align
-        # hashtable `=` signs and tabular `;`-separated rows into columns.
+        # guide's own examples (§6, §10) align hashtable `=` signs and
+        # tabular `;`-separated rows into columns.
         PSUseConsistentWhitespace                 = @{
             Enable                          = $true
             CheckInnerBrace                 = $true
@@ -83,7 +83,8 @@
         # Not enabled, deliberately:
         # - PSAvoidLongLines: §3 sets a 100-character limit, but ~100 existing
         #   lines exceed it; enable once the scripts are rewrapped.
-        # - PSUseCorrectCasing: misreports Pester parameters (e.g. `It -Name`)
-        #   as wrongly cased.
+        # - PSUseCorrectCasing: misreported Pester parameters (e.g. `It -Name`)
+        #   as wrongly cased while the repo had Pester tests (now removed);
+        #   re-evaluate against the remaining scripts before enabling.
     }
 }

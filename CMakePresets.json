@@ -128,35 +128,6 @@
             "binaryDir": "${sourceDir}/build-ninja"
         },
         {
-            "name": "arm64-cross",
-            "displayName": "ARM64 Cross-compilation",
-            "description": "Cross-compile for ARM64 (aarch64-linux-gnu)",
-            "inherits": "_base",
-            "binaryDir": "${sourceDir}/build-arm64",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_SYSTEM_NAME": "Linux",
-                "CMAKE_SYSTEM_PROCESSOR": "aarch64",
-                "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
-                "CMAKE_CXX_COMPILER": "aarch64-linux-gnu-g++"
-            },
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Linux"
-            }
-        },
-        {
-            "name": "release-no-tests",
-            "displayName": "Release (no tests)",
-            "description": "Release build with tests disabled for production deployment",
-            "inherits": "default",
-            "binaryDir": "${sourceDir}/build-release-no-tests",
-            "cacheVariables": {
-                "LUMA_BUILD_TESTS": "OFF"
-            }
-        },
-        {
             "name": "windows-arm64",
             "displayName": "Windows ARM64",
             "description": "MSVC build targeting ARM64 on Windows",
@@ -168,22 +139,6 @@
                 "type": "equals",
                 "lhs": "${hostSystemName}",
                 "rhs": "Windows"
-            }
-        },
-        {
-            "name": "macos-universal",
-            "displayName": "macOS Universal Binary",
-            "description": "Xcode build producing a universal binary (x86_64 + arm64)",
-            "inherits": "_base",
-            "binaryDir": "${sourceDir}/build-macos-universal",
-            "generator": "Xcode",
-            "cacheVariables": {
-                "CMAKE_OSX_ARCHITECTURES": "x86_64;arm64"
-            },
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Darwin"
             }
         }
     ],
@@ -260,27 +215,9 @@
             "configuration": "Release"
         },
         {
-            "name": "arm64-cross",
-            "inherits": "_base-build",
-            "configurePreset": "arm64-cross",
-            "configuration": "Release"
-        },
-        {
-            "name": "release-no-tests",
-            "inherits": "_base-build",
-            "configurePreset": "release-no-tests",
-            "configuration": "Release"
-        },
-        {
             "name": "windows-arm64",
             "inherits": "_base-build",
             "configurePreset": "windows-arm64",
-            "configuration": "Release"
-        },
-        {
-            "name": "macos-universal",
-            "inherits": "_base-build",
-            "configurePreset": "macos-universal",
             "configuration": "Release"
         }
     ],

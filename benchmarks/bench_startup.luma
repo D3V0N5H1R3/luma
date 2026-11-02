@@ -1,20 +1,13 @@
 # Compilation / startup benchmarks: measures process launch + compile + run overhead.
 #
-# The luma binary lives at different paths locally and on CI, so probe the known
-# build-output locations and use the first that exists. Each case runs a real
-# (tiny) program written to a temporary, process-unique file. If no binary is
-# found, the startup benchmarks are skipped rather than reporting misleading
+# The build places the luma binary at the root of the build directory on every
+# platform; probe both spellings and use the first that exists. Each case runs a
+# real (tiny) program written to a temporary, process-unique file. If no binary
+# is found, the startup benchmarks are skipped rather than reporting misleading
 # timings.
 
 function optional<string> bench_resolve_luma_binary() {
-    array<string> candidates = [
-        "build/luma",
-        "build/luma.exe",
-        "build/Release/luma.exe",
-        "build/core/runtime/luma",
-        "build/core/runtime/luma.exe",
-        "build/core/runtime/Release/luma.exe"
-    ]
+    array<string> candidates = ["build/luma", "build/luma.exe"]
 
     for candidate in candidates {
         if Result.unwrap_or(FileSystem.exists(candidate), false) {

@@ -178,7 +178,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel
 ```
 
-This produces `build/luma_dap` on Linux and macOS, or `build\Release\luma_dap.exe` on Windows with MSVC.
+This produces `build/luma_dap` (`build\luma_dap.exe` on Windows).
 
 ## Usage
 

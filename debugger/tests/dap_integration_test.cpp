@@ -2663,7 +2663,7 @@ int main(int /*argc*/, char* argv[]) {
     }
 
     // Find examples/debug/ directory.
-    auto workspace_root = exe_dir.parent_path(); // build/Release -> build -> workspace
+    auto workspace_root = exe_dir.parent_path(); // build -> workspace (or build/<Config> -> build)
 
     // Try a few possible locations.
     for (const auto& candidate :

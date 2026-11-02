@@ -66,7 +66,7 @@ A language feature touches every pipeline phase. Verify incrementally rather tha
 | Each pipeline phase (step 6)       | `cmake --build --preset default` (compile only)                             | Catches signature errors before the next phase builds on them       |
 | Lexer + Parser + Type Checker done | `ctest -R "lexer_test\|parser_test\|type_checker_test"`                     | Confirms front-end accepts/rejects correctly before wiring bytecode |
 | Compiler + VM done                 | `ctest -R "compiler_test\|vm_test\|integration_test"`                       | Confirms end-to-end runtime behaviour                               |
-| All C++ tests pass                 | `build/Release/luma --strict --test tests/features/language/<feature>.luma` | Validates the user-facing semantics and catches lint warnings       |
+| All C++ tests pass                 | `build/luma --strict --test tests/features/language/<feature>.luma` | Validates the user-facing semantics and catches lint warnings       |
 | Feature tests pass                 | [full-test-sweep.prompt.md](full-test-sweep.prompt.md)                      | Exercises fuzz seeds, benchmarks, and examples                      |
 
 If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.

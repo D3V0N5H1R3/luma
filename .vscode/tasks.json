@@ -123,9 +123,6 @@
             "type": "shell",
             "command": "${workspaceFolder}/build/luma",
             "args": ["${file}"],
-            "windows": {
-                "command": "${workspaceFolder}/build/Release/luma.exe"
-            },
             "group": "none",
             "dependsOn": "CMake: Build",
             "problemMatcher": ["$luma"]
@@ -135,9 +132,6 @@
             "type": "shell",
             "command": "${workspaceFolder}/build/luma",
             "args": ["--strict", "--test", "${file}"],
-            "windows": {
-                "command": "${workspaceFolder}/build/Release/luma.exe"
-            },
             "group": "test",
             "dependsOn": "CMake: Build",
             "problemMatcher": ["$luma-test"]

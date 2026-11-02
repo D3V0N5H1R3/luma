@@ -2,9 +2,10 @@
 # Luma — Python Lint, Format & Test Workflow
 #
 # Runs Ruff (lint + format check) over the project's Python tooling,
-# the extension tooling unit tests, the agent hook unit tests, and the
-# Git hook regression tests on every push and PR targeting main that
-# touches Python sources, the Git hooks, or the Ruff configuration.
+# the extension tooling unit tests, the agent hook unit tests, the
+# Git hook regression tests, and the prompt pipeline unit tests on
+# every push and PR targeting main that touches Python sources, the
+# Git hooks, or the Ruff configuration.
 # Rule configuration lives in ruff.toml.
 # ─────────────────────────────────────────────────────────────
 
@@ -64,3 +65,6 @@ jobs:
 
       - name: Run Git hook regression tests
         run: python -m unittest discover -s scripts -p "test_git_hooks.py"
+
+      - name: Run prompt pipeline unit tests
+        run: python -m unittest discover -s scripts/pipeline -p "test_*.py"

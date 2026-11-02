@@ -757,6 +757,6 @@ To stay consistent with the grammar scopes in [§1](#token-categories):
 
 ## See Also
 
-- [Contributing](../CONTRIBUTING.md) — installing the editor extensions
+- [Development Environment](Luma_Development_Environment.md) — working on the editor extensions in VS Code and Zed
 - [Language Server](Luma_Language_Server.md) — semantic editor features (diagnostics, hover, completion, semantic tokens)
 - [Manual Tests](Luma_Manual_Tests.md) — manual test plan covering the VS Code and Zed extensions

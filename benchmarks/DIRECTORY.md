@@ -10,7 +10,7 @@ Run the full suite from the repository root:
 build/luma benchmarks/suite.luma
 ```
 
-> **Note:** On Windows the binary is `build\Release\luma.exe`; substitute it for `build/luma` in every command below.
+> **Note:** On Windows the binary is `build\luma.exe`; substitute it for `build/luma` in every command below.
 
 Individual `bench_*.luma` files are library modules included by `suite.luma` — they cannot be run standalone.
 

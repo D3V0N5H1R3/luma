@@ -37,7 +37,7 @@
     // to its own bundled build — whose version may differ from the clang-format
     // 20 that CI enforces and reformat untouched code. Install clang-format 20 on
     // PATH, or point C_Cpp.clang_format_path at it in your user settings (see
-    // CONTRIBUTING.md → Editor Integration → Visual Studio Code).
+    // documents/Luma_Development_Environment.md → Visual Studio Code).
     "[cpp]": {
         "editor.defaultFormatter": "ms-vscode.cpptools",
         "editor.formatOnSave": true
@@ -76,8 +76,8 @@
     },
     // Keep Format Document in step with the PSScriptAnalyzerSettings.psd1 rules
     // (the extension's formatter does not read that file's rule settings).
-    // whitespaceAfterSeparator is off so formatting does not collapse the
-    // column-aligned phase table in scripts/pipeline/LumaPipeline.psm1.
+    // whitespaceAfterSeparator is off to match CheckSeparator = $false in
+    // PSScriptAnalyzerSettings.psd1, so formatting keeps column-aligned rows.
     "powershell.codeFormatting.pipelineIndentationStyle": "IncreaseIndentationForFirstPipeline",
     "powershell.codeFormatting.avoidSemicolonsAsLineTerminators": true,
     "powershell.codeFormatting.useConstantStrings": true,
@@ -96,10 +96,9 @@
     "powershell.scriptAnalysis.settingsPath": "PSScriptAnalyzerSettings.psd1",
 
     // luma.lsp.path / luma.path / luma.dap.path are intentionally unset so the
-    // extension resolves these binaries (bundled download or PATH). This keeps
-    // the workspace portable across multi-config Windows (build/Release/luma*.exe)
-    // and single-config Unix (build/luma*) layouts. To use a local build, set the
-    // matching path in your user settings to the binary for your platform.
+    // extension resolves these binaries (bundled download or PATH). To use a
+    // local build, set the matching path in your user settings to the binary at
+    // the root of the build directory (build/luma*, or build\luma*.exe on Windows).
 
     "chat.instructionsFilesLocations": {
         "instructions": true
