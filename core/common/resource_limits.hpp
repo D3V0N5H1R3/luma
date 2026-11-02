@@ -139,7 +139,12 @@ struct ResourceLimits {
     static inline std::size_t max_regex_pattern_size = 10'000;
 
     // Maximum byte length of the input string for a regex operation.
-    static inline std::size_t max_regex_input_size = CompileTimeLimits::k_one_megabyte;
+    // std::regex is a backtracking engine: libstdc++ recurses once per
+    // repetition (so `^a*$` over a long input overflows the native stack of a
+    // task worker) and MSVC gives up with regex_error(error_stack).  32 KiB
+    // keeps matching within a 1 MiB worker stack; raise it with
+    // LUMA_LIMIT_MAX_REGEX_INPUT_SIZE only on platforms with larger stacks.
+    static inline std::size_t max_regex_input_size = std::size_t{32} * 1024; // 32 KiB
 
     // ── JSON limits ──
 

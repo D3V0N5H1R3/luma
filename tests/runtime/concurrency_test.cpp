@@ -22,6 +22,7 @@
 #include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/runtime_exceptions.hpp"
 #include "runtime/interpreter/value.hpp"
+#include "shared_eval.hpp"
 #include "test_framework.hpp"
 
 using luma::CancellationToken;
@@ -878,6 +879,531 @@ static void test_channel_receive_is_cancellable() {
     canceller.join();
 }
 
+// Review R4: the timeout waits used a plain wait_for with no cancellation
+// token, so a cancelled task stayed blocked for the whole timeout.  They now
+// poll the token like the blocking waits do.
+static void test_channel_receive_timeout_is_cancellable() {
+    Channel channel;
+    CancellationToken token;
+
+    GuardedThread canceller{[&token] {
+        std::this_thread::sleep_for(std::chrono::milliseconds{20});
+        token.cancel();
+    }};
+
+    const auto started = std::chrono::steady_clock::now();
+    ASSERT_THROWS_AS((void)channel.receive_timeout(std::chrono::hours{1}, &token),
+                     CancelledException);
+    canceller.join();
+
+    ASSERT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - started)
+                  .count(),
+              10'000);
+}
+
+static void test_channel_send_timeout_is_cancellable() {
+    Channel channel{1};
+    channel.send(Value{1});
+    CancellationToken token;
+
+    GuardedThread canceller{[&token] {
+        std::this_thread::sleep_for(std::chrono::milliseconds{20});
+        token.cancel();
+    }};
+
+    const auto started = std::chrono::steady_clock::now();
+    ASSERT_THROWS_AS((void)channel.send_timeout(Value{2}, std::chrono::hours{1}, &token),
+                     CancelledException);
+    canceller.join();
+
+    ASSERT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - started)
+                  .count(),
+              10'000);
+}
+
+// Review R6: a huge timeout must not overflow the clock arithmetic into an
+// immediate timeout.
+static void test_channel_receive_timeout_with_huge_timeout_waits() {
+    Channel channel;
+
+    GuardedThread sender{[&channel] {
+        std::this_thread::sleep_for(std::chrono::milliseconds{20});
+        channel.send(Value{7});
+    }};
+
+    const auto outcome = channel.receive_timeout(std::chrono::milliseconds::max());
+    sender.join();
+
+    ASSERT_FALSE(outcome.timed_out);
+    ASSERT_TRUE(outcome.value.has_value());
+    ASSERT_EQ(outcome.value->as_integer(), 7);
+}
+
+// Review R9: compensation is capped.  With every worker waiting on other pool
+// tasks, work queued, and the cap reached, a further task wait can never
+// finish; the pool used to hang silently.  The BlockingRegion now reports it.
+// Pool: one base worker, at most one compensating worker.
+//   A (base worker) queues B and waits for it  -> a compensating worker runs B
+//   B queues C and waits for it                 -> no worker left: error
+namespace {
+
+// Short deadlock grace for pools built by these tests.
+constexpr std::chrono::milliseconds k_test_deadlock_grace{50};
+
+// Poll `region` the way a waiting VM/stdlib loop does, for `duration`.
+void poll_verify(ThreadPool::BlockingRegion& region, std::chrono::milliseconds duration) {
+    const auto deadline = std::chrono::steady_clock::now() + duration;
+
+    while (std::chrono::steady_clock::now() < deadline) {
+        region.verify_not_deadlocked();
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+}
+
+} // namespace
+
+static void test_thread_pool_reports_nested_blocking_beyond_cap() {
+    std::promise<std::string> outcome;
+    auto outcome_future = outcome.get_future();
+    std::promise<void> a_done;
+    auto a_finished = a_done.get_future();
+
+    ThreadPool pool{1, 1, k_test_deadlock_grace};
+
+    pool.enqueue([&pool, &outcome, &a_done] {
+        auto b_done = std::make_shared<std::promise<void>>();
+        auto b_finished = b_done->get_future();
+
+        pool.enqueue([&pool, &outcome, b_done] {
+            pool.enqueue([] {}); // C: queued, with no worker left to run it.
+
+            try {
+                ThreadPool::BlockingRegion blocking;
+                poll_verify(blocking, std::chrono::seconds{10});
+                outcome.set_value("no error");
+            } catch (const luma::RuntimeError& error) {
+                outcome.set_value(error.what());
+            }
+
+            b_done->set_value();
+        });
+
+        {
+            const ThreadPool::BlockingRegion blocking;
+            b_finished.wait();
+        }
+
+        a_done.set_value();
+    });
+
+    ASSERT_EQ(outcome_future.wait_for(std::chrono::seconds{10}), std::future_status::ready);
+    ASSERT_EQ(a_finished.wait_for(std::chrono::seconds{10}), std::future_status::ready);
+
+    const auto message = outcome_future.get();
+    ASSERT_NE(message.find("too many nested blocking tasks (limit 1)"), std::string::npos);
+    ASSERT_EQ(pool.worker_count(), 2);
+
+    // The compensating worker stays alive and is reused: a second one-level
+    // nesting completes without starting another worker.
+    std::promise<void> second_done;
+    auto second_finished = second_done.get_future();
+
+    pool.enqueue([&pool, &second_done] {
+        auto inner_done = std::make_shared<std::promise<void>>();
+        auto inner_finished = inner_done->get_future();
+
+        pool.enqueue([inner_done] { inner_done->set_value(); });
+
+        {
+            const ThreadPool::BlockingRegion blocking;
+            inner_finished.wait();
+        }
+
+        second_done.set_value();
+    });
+
+    ASSERT_EQ(second_finished.wait_for(std::chrono::seconds{10}), std::future_status::ready);
+    ASSERT_EQ(pool.worker_count(), 2);
+}
+
+// External waits (channels, sleeps, timeouts, I/O) can be ended from outside
+// the pool, so reaching the cap there is not an error.
+static void test_thread_pool_external_wait_at_cap_does_not_throw() {
+    std::promise<bool> threw;
+    auto threw_future = threw.get_future();
+
+    ThreadPool pool{1, 0};
+
+    pool.enqueue([&pool, &threw] {
+        pool.enqueue([] {}); // Queued while the only worker "blocks".
+
+        try {
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
+            threw.set_value(false);
+        } catch (const luma::RuntimeError&) {
+            threw.set_value(true);
+        }
+    });
+
+    ASSERT_EQ(threw_future.wait_for(std::chrono::seconds{10}), std::future_status::ready);
+    ASSERT_FALSE(threw_future.get());
+}
+
+// Regions nest on one thread (Task.map holds one while its callback awaits).
+// The worker is still one blocked worker: counting it twice made the pool
+// think every worker was blocked while another was running, and at the cap
+// raised a false "too many nested blocking tasks".
+// Pool: two base workers, no compensation.  Worker 1 runs a gate task that
+// blocks without a region (busy, not blocked); worker 2 nests two regions
+// while a task is queued.
+static void test_thread_pool_nested_regions_count_one_worker() {
+    std::promise<void> open_gate;
+    const auto gate_opened = open_gate.get_future().share();
+    std::promise<void> gate_running;
+    auto gate_started = gate_running.get_future();
+    std::promise<bool> threw;
+    auto threw_future = threw.get_future();
+
+    ThreadPool pool{2, 0, k_test_deadlock_grace};
+
+    pool.enqueue([gate_opened, &gate_running] {
+        gate_running.set_value();
+        gate_opened.wait();
+    });
+
+    ASSERT_EQ(gate_started.wait_for(std::chrono::seconds{10}), std::future_status::ready);
+
+    pool.enqueue([&pool, &threw, &open_gate] {
+        pool.enqueue([] {}); // Queued: the other worker is busy with the gate.
+
+        try {
+            ThreadPool::BlockingRegion outer;
+            ThreadPool::BlockingRegion inner;
+            // Several grace periods: a double-counted worker would report.
+            poll_verify(inner, 4 * k_test_deadlock_grace);
+            poll_verify(outer, 4 * k_test_deadlock_grace);
+            threw.set_value(false);
+        } catch (const luma::RuntimeError&) {
+            threw.set_value(true);
+        }
+
+        open_gate.set_value();
+    });
+
+    ASSERT_EQ(threw_future.wait_for(std::chrono::seconds{10}), std::future_status::ready);
+    ASSERT_FALSE(threw_future.get());
+}
+
+// ─── Waits at the compensation cap that would not block (review follow-up) ───
+//
+// The nested-blocking check must only fire for a wait that actually blocks.
+// Each test runs Luma code on the only worker of a ThreadPool{1, 0} (no
+// compensation possible) while another task sits queued — the exact state in
+// which a blocking pool-task wait raises "too many nested blocking tasks".
+namespace {
+
+// Evaluate `source` on the sole worker of a saturated pool; returns the result
+// as text or "throw:<message>".
+std::string eval_on_saturated_worker(const std::string& source) {
+    std::promise<std::string> outcome;
+    auto outcome_future = outcome.get_future();
+
+    {
+        ThreadPool pool{1, 0};
+
+        pool.enqueue([&pool, &outcome, &source] {
+            pool.enqueue([] {}); // Queued: no worker is free to run it.
+
+            try {
+                outcome.set_value(luma::test::eval(source).to_string());
+            } catch (const std::exception& error) {
+                outcome.set_value(std::string{"throw:"} + error.what());
+            }
+        });
+
+        if (outcome_future.wait_for(std::chrono::seconds{30}) != std::future_status::ready) {
+            return "timeout";
+        }
+    }
+
+    return outcome_future.get();
+}
+
+} // namespace
+
+static void test_await_of_finished_task_at_cap_does_not_throw() {
+    ASSERT_EQ(eval_on_saturated_worker("function integer f() {\n"
+                                       "    return await Task.completed(5)\n"
+                                       "}\n"
+                                       "f()"),
+              "5");
+}
+
+static void test_task_all_of_finished_tasks_at_cap_does_not_throw() {
+    ASSERT_EQ(eval_on_saturated_worker(
+                  "Task.all([Task.completed(1), Task.completed(2)]) |> Result.unwrap()"),
+              "[1, 2]");
+}
+
+static void test_task_map_with_slow_callback_at_cap_does_not_throw() {
+    // The callback is work, not a blocked worker: no region may be held while
+    // it runs, and the finished task needs no wait at all.
+    ASSERT_EQ(eval_on_saturated_worker("Task.map(Task.completed(2), (integer x) -> {\n"
+                                       "    mutable integer i = 0\n"
+                                       "    while i < 200000 { i += 1 }\n"
+                                       "    return x * 21\n"
+                                       "}) |> Result.unwrap()"),
+              "42");
+}
+
+// A scope join that would block forever at the cap reports the error but keeps
+// its children; the teardown join (after cancel_all) then resolves the child
+// that never started as cancelled — no worker needed — so nothing is left
+// unjoined and the join returns.
+static void test_task_scope_teardown_joins_unstarted_children_at_cap() {
+    std::promise<std::string> outcome;
+    auto outcome_future = outcome.get_future();
+
+    // The child: a task that was "enqueued" but never started, with the same
+    // abandon handler the VM's spawn installs.
+    const auto promise = std::make_shared<std::promise<Value>>();
+    const auto completion = std::make_shared<TaskCompletion>();
+    completion->set_abandon_handler([promise] {
+        promise->set_exception(std::make_exception_ptr(CancelledException{"task cancelled"}));
+    });
+    auto child_future = promise->get_future().share();
+
+    {
+        ThreadPool pool{1, 0, k_test_deadlock_grace};
+
+        pool.enqueue([&pool, &outcome, child_future, completion] {
+            pool.enqueue([] {}); // Queued: no worker is free to run it.
+
+            TaskScope scope;
+            scope.add_child(std::make_shared<TaskValue>(child_future, scope.token(), completion));
+            std::string report;
+
+            try {
+                (void)scope.join_all();
+                report = "joined";
+            } catch (const luma::RuntimeError& error) {
+                report = error.what();
+            }
+
+            scope.cancel_all();
+            const auto results = scope.join_all(TaskScope::JoinMode::Teardown);
+            report += results.size() == 1 && results[0].is_null() ? " | torn down" : " | ?";
+            outcome.set_value(report);
+        });
+
+        ASSERT_EQ(outcome_future.wait_for(std::chrono::seconds{10}), std::future_status::ready);
+    }
+
+    const auto report = outcome_future.get();
+    ASSERT_NE(report.find("too many nested blocking tasks"), std::string::npos);
+    ASSERT_NE(report.find(" | torn down"), std::string::npos);
+
+    // A worker that dequeues the abandoned task later must not run it.
+    ASSERT_FALSE(completion->claim_start());
+}
+
+static void test_task_completion_claim_and_abandon_are_exclusive() {
+    TaskCompletion started;
+    ASSERT_TRUE(started.claim_start());
+    ASSERT_FALSE(started.abandon_if_not_started());
+
+    bool abandoned_ran = false;
+    TaskCompletion abandoned;
+    abandoned.set_abandon_handler([&abandoned_ran] { abandoned_ran = true; });
+    ASSERT_TRUE(abandoned.abandon_if_not_started());
+    ASSERT_TRUE(abandoned_ran);
+    ASSERT_FALSE(abandoned.claim_start());
+}
+
+// ─── Cancelled joins and lagging blocked counts (second review follow-up) ───
+
+namespace {
+
+// A pool task modelled the way the VM's spawn builds one: a promise, a
+// completion carrying the abandon handler, and its own token chained to
+// `parent` (the enclosing scope's token).
+struct FakeTask {
+    std::shared_ptr<std::promise<Value>> promise{std::make_shared<std::promise<Value>>()};
+    std::shared_ptr<TaskCompletion> completion{std::make_shared<TaskCompletion>()};
+    std::shared_ptr<CancellationToken> token;
+    std::shared_ptr<TaskValue> handle;
+};
+
+FakeTask make_fake_task(std::shared_ptr<const CancellationToken> parent) {
+    FakeTask task;
+    task.token = std::make_shared<CancellationToken>(std::move(parent));
+    task.completion->set_abandon_handler([promise = task.promise] {
+        promise->set_exception(std::make_exception_ptr(CancelledException{"task cancelled"}));
+    });
+    task.handle = std::make_shared<TaskValue>(task.promise->get_future().share(), task.token,
+                                              task.completion);
+    return task;
+}
+
+// Enqueue `body` as the task's work; skipped when the task was abandoned
+// first, exactly like the VM's spawn lambda.
+template <typename Body> void enqueue_fake_task(ThreadPool& pool, const FakeTask& task, Body body) {
+    pool.enqueue([task, body = std::move(body)]() mutable {
+        if (!task.completion->claim_start()) {
+            return;
+        }
+
+        try {
+            task.promise->set_value(body());
+        } catch (...) {
+            task.promise->set_exception(std::current_exception());
+        }
+
+        task.completion->mark_complete();
+    });
+}
+
+// Join `scope` as handle_task_scope_end does: a failed join is followed by
+// cancel_all() and a teardown join.  Returns the failed join's message, or ""
+// when the join succeeded.
+std::string join_like_scope_end(TaskScope& scope) {
+    try {
+        (void)scope.join_all();
+        return "";
+    } catch (const std::exception& error) {
+        scope.cancel_all();
+
+        try {
+            (void)scope.join_all(TaskScope::JoinMode::Teardown);
+        } catch (...) { // NOLINT(bugprone-empty-catch)
+            // Children's own failures are secondary here, as in the VM.
+        }
+
+        return error.what();
+    }
+}
+
+} // namespace
+
+// Pool: two workers, no compensation.  W1 runs A (a scope; spawns C, later D).
+// W2 starts C (a scope; spawns G, which stays queued) and C waits in its own
+// join.  A then joins with G and D queued and both workers waiting: the stall
+// is reported, A's teardown abandons D and waits for C.  C's join used to
+// ignore cancellation and keep waiting for G (cancelled, but with no worker to
+// run it), so A's teardown hung forever.  C's join now notices its cancelled
+// scope and resolves G without running it.
+static void test_teardown_join_completes_when_child_waits_in_its_own_join() {
+    struct Reports {
+        std::promise<std::string> a;
+        std::promise<std::string> c;
+        std::promise<void> c_joining;
+    };
+
+    const auto reports = std::make_shared<Reports>();
+    auto a_report = reports->a.get_future();
+    auto c_report = reports->c.get_future();
+    const auto c_joining = reports->c_joining.get_future().share();
+
+    // Heap-allocated so that a regression (a hang) can leak it instead of
+    // blocking the whole suite in its joining destructor.
+    auto* const pool = new ThreadPool{2, 0, k_test_deadlock_grace};
+
+    pool->enqueue([pool, reports, c_joining] {
+        TaskScope scope_a;
+        const auto c = make_fake_task(scope_a.token());
+        scope_a.add_child(c.handle);
+
+        enqueue_fake_task(*pool, c, [pool, reports, c_token = c.token]() -> Value {
+            TaskScope scope_c{nullptr, c_token};
+            const auto g = make_fake_task(scope_c.token());
+            scope_c.add_child(g.handle);
+            enqueue_fake_task(*pool, g, [] { return Value{1}; });
+
+            reports->c_joining.set_value();
+            reports->c.set_value(join_like_scope_end(scope_c));
+            return Value{2};
+        });
+
+        c_joining.wait();
+        std::this_thread::sleep_for(std::chrono::milliseconds{20}); // C enters its wait.
+
+        const auto d = make_fake_task(scope_a.token());
+        scope_a.add_child(d.handle);
+        enqueue_fake_task(*pool, d, [] { return Value{3}; });
+
+        reports->a.set_value(join_like_scope_end(scope_a));
+    });
+
+    const bool finished =
+        a_report.wait_for(std::chrono::seconds{20}) == std::future_status::ready &&
+        c_report.wait_for(std::chrono::seconds{20}) == std::future_status::ready;
+
+    if (!finished) {
+        ASSERT_TRUE(finished); // Leaks `pool`: its workers are stuck.
+        return;
+    }
+
+    delete pool;
+
+    // Whichever join first saw the stall persist reports it; both complete.
+    const auto combined = a_report.get() + " | " + c_report.get();
+    ASSERT_NE(combined.find("too many nested blocking tasks"), std::string::npos);
+}
+
+// A worker whose awaited task has just finished stays counted as blocked
+// until it is scheduled and leaves its region.  Sampled in that window, the
+// pool looked stalled (every worker "waiting", work queued, cap reached) and
+// the error fired although that worker was about to run the queued work.
+// The stall must now persist for the grace period before it is reported.
+static void test_lagging_blocked_count_is_not_reported_as_stall() {
+    std::promise<void> awaited_done;
+    const auto awaited_ready = awaited_done.get_future().share();
+    std::promise<void> first_waiting;
+    const auto first_in_region = first_waiting.get_future().share();
+    std::promise<bool> threw;
+    auto threw_future = threw.get_future();
+
+    {
+        ThreadPool pool{2, 0}; // Default grace.
+
+        pool.enqueue([awaited_ready, &first_waiting] {
+            const ThreadPool::BlockingRegion blocking;
+            first_waiting.set_value();
+            awaited_ready.wait();
+            // Runnable again but "not yet scheduled": still counted blocked.
+            std::this_thread::sleep_for(std::chrono::milliseconds{150});
+        });
+
+        pool.enqueue([&pool, &awaited_done, &threw, first_in_region] {
+            first_in_region.wait();
+            awaited_done.set_value(); // The first worker's wait is now over.
+
+            auto queued_done = std::make_shared<std::promise<void>>();
+            auto queued_ready = queued_done->get_future();
+            pool.enqueue([queued_done] { queued_done->set_value(); });
+
+            try {
+                ThreadPool::BlockingRegion blocking;
+
+                while (queued_ready.wait_for(std::chrono::milliseconds{5}) !=
+                       std::future_status::ready) {
+                    blocking.verify_not_deadlocked();
+                }
+
+                threw.set_value(false);
+            } catch (const luma::RuntimeError&) {
+                threw.set_value(true);
+            }
+        });
+
+        ASSERT_EQ(threw_future.wait_for(std::chrono::seconds{10}), std::future_status::ready);
+    }
+
+    ASSERT_FALSE(threw_future.get());
+}
+
 int main() {
     // Channel tests
     RUN(test_channel_send_receive);
@@ -943,5 +1469,18 @@ int main() {
     RUN(test_task_scope_cancelled_child_is_not_a_failure);
     RUN(test_task_scope_fail_fast_in_completion_order);
     RUN(test_channel_receive_is_cancellable);
+    RUN(test_channel_receive_timeout_is_cancellable);
+    RUN(test_channel_send_timeout_is_cancellable);
+    RUN(test_channel_receive_timeout_with_huge_timeout_waits);
+    RUN(test_thread_pool_reports_nested_blocking_beyond_cap);
+    RUN(test_thread_pool_external_wait_at_cap_does_not_throw);
+    RUN(test_thread_pool_nested_regions_count_one_worker);
+    RUN(test_await_of_finished_task_at_cap_does_not_throw);
+    RUN(test_task_all_of_finished_tasks_at_cap_does_not_throw);
+    RUN(test_task_map_with_slow_callback_at_cap_does_not_throw);
+    RUN(test_task_scope_teardown_joins_unstarted_children_at_cap);
+    RUN(test_task_completion_claim_and_abandon_are_exclusive);
+    RUN(test_teardown_join_completes_when_child_waits_in_its_own_join);
+    RUN(test_lagging_blocked_count_is_not_reported_as_stall);
     return SUMMARY();
 }

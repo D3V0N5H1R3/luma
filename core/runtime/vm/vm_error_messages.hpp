@@ -131,6 +131,11 @@ constexpr std::string_view string_concat_exceeds_max{
     "string concatenation exceeds maximum string size"};
 constexpr std::string_view string_repetition_exceeds_max{
     "string repetition exceeds maximum string size"};
+// Same wording as String.repeat ("count exceeds maximum") and the type
+// checker's literal-count check ("string repeat count exceeds maximum").
+constexpr std::string_view string_repeat_count_exceeds_max{"string repeat count exceeds maximum"};
+constexpr std::string_view hint_reduce_repeat_count{
+    "reduce the repeat count (limit: LUMA_LIMIT_MAX_STRING_REPEAT)"};
 constexpr std::string_view string_interpolation_exceeds_max{
     "string interpolation exceeds maximum string size"};
 
@@ -295,8 +300,12 @@ constexpr std::string_view await_consumed_task{"await called on an already-consu
     return std::format("await requires a task value, got '{}'", type);
 }
 
-[[nodiscard]] inline std::string tail_call_arity_mismatch(int expected, int got) {
-    return std::format("tail call arity mismatch: expected {} arguments, got {}", expected, got);
+// Raised by call_function and handle_tail_call when a user function receives
+// more arguments than it declares.  The type checker rejects this at the
+// source level, but a value-typed call through a `function()`-typed variable,
+// the REPL, or crafted bytecode can still reach the VM with extra arguments.
+[[nodiscard]] inline std::string too_many_arguments(int expected, int got) {
+    return std::format("too many arguments: function expects {} but got {}", expected, got);
 }
 
 [[nodiscard]] inline std::string unknown_named_argument(std::string_view name) {

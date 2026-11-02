@@ -14,6 +14,7 @@
 
 #include "analysis/source/source_location.hpp"
 #include "common/resource_limits.hpp"
+#include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
@@ -490,6 +491,7 @@ struct OpenTcpResult {
     }
 
     TcpConnectFailure failure{};
+    const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
     result.sock = tcp_connect_any(info.get(), timeout_ms, &failure);
 
     if (result.sock == invalid_socket_handle) {
@@ -794,6 +796,7 @@ static void register_socket_server(const EnvPtr& env) {
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             const SocketHandle client = platform_socket::accept_socket(
                 sv->handle.load(), reinterpret_cast<struct sockaddr*>(&addr), &addr_len);
 
@@ -833,6 +836,7 @@ static void register_socket_io(const EnvPtr& env) {
 
             const auto& data = args[1].as_string();
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             const auto sent =
                 ::send(sv->handle.load(), data.c_str(),
                        static_cast<platform_socket::io_length_t>(data.size()), MSG_NOSIGNAL);
@@ -859,6 +863,7 @@ static void register_socket_io(const EnvPtr& env) {
 
             const auto& data = args[1].as_string();
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             const auto sent =
                 ::send(sv->handle.load(), data.c_str(),
                        static_cast<platform_socket::io_length_t>(data.size()), MSG_NOSIGNAL);
@@ -887,6 +892,7 @@ static void register_socket_io(const EnvPtr& env) {
                 return *err;
             }
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             const auto received =
                 ::recv(sv->handle.load(), buffer.data(),
                        static_cast<platform_socket::io_length_t>(buffer.size()), 0);
@@ -923,6 +929,7 @@ static void register_socket_io(const EnvPtr& env) {
 
             std::string buffer(buf_size, '\0');
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             const auto received =
                 ::recv(sv->handle.load(), buffer.data(),
                        static_cast<platform_socket::io_length_t>(buffer.size()), 0);
@@ -951,6 +958,7 @@ static void register_socket_io(const EnvPtr& env) {
 
             const auto& data = args[1].as_string();
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             if (!send_all(sv->handle.load(), data.data(), data.size())) {
                 return socket_failure("send");
             }
@@ -974,6 +982,7 @@ static void register_socket_io(const EnvPtr& env) {
 
             const auto& data = args[1].as_string();
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             if (!send_all(sv->handle.load(), data.data(), data.size())) {
                 return socket_error_failure_from_last();
             }
@@ -996,6 +1005,8 @@ static void register_socket_io(const EnvPtr& env) {
             std::array<char, 4096> buffer{};
 
             while (true) {
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 const auto received =
                     ::recv(sv->handle.load(), buffer.data(),
                            static_cast<platform_socket::io_length_t>(buffer.size()), 0);
@@ -1037,6 +1048,8 @@ static void register_socket_io(const EnvPtr& env) {
             while (true) {
                 char ch{};
 
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 const auto received =
                     ::recv(sv->handle.load(), &ch, static_cast<platform_socket::io_length_t>(1), 0);
 
@@ -1097,6 +1110,7 @@ static void register_socket_io(const EnvPtr& env) {
                 buffer += static_cast<char>(static_cast<std::uint8_t>(byte));
             }
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             if (!send_all(sv->handle.load(), buffer.data(), buffer.size())) {
                 return socket_failure("send");
             }
@@ -1123,6 +1137,7 @@ static void register_socket_io(const EnvPtr& env) {
                 return *err;
             }
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             const auto received =
                 ::recv(sv->handle.load(), buffer.data(),
                        static_cast<platform_socket::io_length_t>(buffer.size()), 0);
@@ -1375,6 +1390,7 @@ static void register_socket_udp(const EnvPtr& env) {
                 return resolve_host_failure(host);
             }
 
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             const auto sent =
                 ::sendto(sv->handle.load(), data.c_str(),
                          static_cast<platform_socket::io_length_t>(data.size()), 0, info->ai_addr,

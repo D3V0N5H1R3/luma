@@ -558,3 +558,41 @@ function void test_channel_consume_fails_when_callback_throws() {
     assert(String.contains(Result.error(consumed_count), "consumer rejected 20"),
         "the failure carries the callback's error")
 }
+
+# ─── Huge and cancellable timeouts ───────────────────────
+
+function integer wait_an_hour_for(channel<integer> never_fed) {
+    result<integer> _received = Channel.receive_timeout(never_fed, 3600000)
+    return 1
+}
+
+function integer send_later(channel<integer> target) {
+    Task.delay(30)
+    boolean _sent = Channel.send(target, 5)
+    return 1
+}
+
+@test
+function void test_channel_receive_timeout_with_huge_timeout_waits() {
+    channel<integer> integer_channel = Channel.new()
+
+    task_scope {
+        task<integer> _sender = spawn send_later(integer_channel)
+        result<integer> received = Channel.receive_timeout(integer_channel, 9223372036854775807)
+
+        assert(received == success(5), "a huge timeout must not expire immediately")
+    }
+}
+
+@test
+function void test_channel_receive_timeout_is_cancellable() {
+    channel<integer> never_fed = Channel.new()
+
+    task_scope {
+        task<integer> waiter = spawn wait_an_hour_for(never_fed)
+        Task.delay(50)
+
+        assert(Task.cancel(waiter), "a spawned task can be cancelled")
+    }
+    # Reaching this point means the cancelled waiter stopped waiting promptly.
+}

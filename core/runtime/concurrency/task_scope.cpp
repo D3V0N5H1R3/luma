@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <exception>
 #include <future>
+#include <optional>
 
 #include "runtime/concurrency/task_completion.hpp"
 #include "runtime/concurrency/thread_pool.hpp"
@@ -34,7 +35,7 @@ void TaskScope::add_child(std::shared_ptr<TaskValue> task) {
 // it have finished — and that error is re-thrown after all children have
 // completed or been cancelled.  A cancelled child yields `none` and is not a
 // failure: Task.cancel(t) on one child must not fail or cancel the scope.
-std::vector<Value> TaskScope::join_all() {
+std::vector<Value> TaskScope::join_all(JoinMode mode) {
     // Move children out under the lock — join_all() is terminal and no more
     // children will be added after this point.
     std::vector<std::shared_ptr<TaskValue>> snapshot;
@@ -45,10 +46,37 @@ std::vector<Value> TaskScope::join_all() {
         snapshot = std::move(children_);
     }
 
+    // Teardown: the scope's token is already cancelled; the loop below
+    // resolves children that never started as cancelled (see abandoned).
     std::vector<Value> results(snapshot.size());
     std::vector<bool> collected(snapshot.size(), false);
     std::size_t remaining = snapshot.size();
     std::exception_ptr first_error;
+
+    // Once the scope is cancelled (Teardown, a failed child's fail-fast
+    // cancel_all, or cancellation of the task running this join — the scope
+    // token chains to it), a child that no worker has started is resolved as
+    // cancelled right here: it would only have observed its cancelled token
+    // and stopped.  The join then depends only on started children, which are
+    // cancelled too and reach a cancellation point — never on a free worker,
+    // which there may not be when every worker is blocked.  Checked on every
+    // poll, so a join nested inside a task that gets cancelled stops waiting
+    // for its queued children (otherwise a teardown waiting on that task hung).
+    bool abandoned = false;
+
+    const auto abandon_unstarted_if_cancelled = [&] {
+        if (abandoned || (mode != JoinMode::Teardown && !token_->is_cancelled())) {
+            return;
+        }
+
+        abandoned = true;
+
+        for (std::size_t i{0}; i < snapshot.size(); ++i) {
+            if (!collected[i] && snapshot[i]->completion) {
+                (void)snapshot[i]->completion->abandon_if_not_started();
+            }
+        }
+    };
 
     std::vector<std::shared_ptr<TaskCompletion>> completions;
     completions.reserve(snapshot.size());
@@ -62,10 +90,14 @@ std::vector<Value> TaskScope::join_all() {
     const CompletionSubscription subscription{std::move(completions)};
 
     // Joining blocks on other pool work; let the pool compensate if this is a
-    // worker thread (a task that opened its own task_scope).
-    const ThreadPool::BlockingRegion blocking;
+    // worker thread (a task that opened its own task_scope).  The region is
+    // entered only once the join actually has to wait, so joining children
+    // that are already done never trips the pool's nested-blocking check.
+    std::optional<ThreadPool::BlockingRegion> blocking;
 
     while (remaining > 0) {
+        abandon_unstarted_if_cancelled();
+
         bool progressed = false;
 
         for (std::size_t i{0}; i < snapshot.size(); ++i) {
@@ -103,6 +135,29 @@ std::vector<Value> TaskScope::join_all() {
         }
 
         if (remaining > 0 && !progressed) {
+            if (!blocking) {
+                // A cancelled scope waits only for started, cancelled children,
+                // which something will finish: no stall check for that wait.
+                if (abandoned) {
+                    blocking.emplace(ThreadPool::BlockingRegion::Wait::External);
+                } else {
+                    blocking.emplace();
+                }
+            }
+
+            if (!abandoned) {
+                try {
+                    blocking->verify_not_deadlocked();
+                } catch (...) {
+                    // Nested-blocking error: nothing could ever run the queued
+                    // children.  Hand them back so the caller's teardown join
+                    // (after cancel_all) still joins them.
+                    const std::scoped_lock lock{mutex_};
+                    children_ = std::move(snapshot);
+                    throw;
+                }
+            }
+
             subscription.wait_for(k_join_poll_interval);
         }
     }

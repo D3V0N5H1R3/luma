@@ -10,6 +10,7 @@
 #include <format>
 #include <limits>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -421,9 +422,16 @@ void ensure_not_batch_script(const std::vector<std::string>& argv) {
 
     PROCESS_INFORMATION pi{};
 
-    const BOOL ok = CreateProcessW(nullptr, cmdline->data(), nullptr, nullptr, TRUE,
-                                   CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT | extra_flags,
-                                   nullptr, nullptr, &si.StartupInfo, &pi);
+    // The child inherits a copy of this process's environment block; hold the
+    // environment lock shared so a concurrent Process.set_environment_variable
+    // cannot modify it mid-copy.
+    const BOOL ok = [&] {
+        const std::shared_lock lock{environment_mutex()};
+
+        return CreateProcessW(nullptr, cmdline->data(), nullptr, nullptr, TRUE,
+                              CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT | extra_flags,
+                              nullptr, nullptr, &si.StartupInfo, &pi);
+    }();
 
     if (ok == FALSE) {
         error_out = GetLastError();
@@ -785,11 +793,15 @@ int set_environment_variable(const std::string& name, const std::string& value) 
         return EINVAL;
     }
 
+    const std::unique_lock lock{environment_mutex()};
+
     return _wputenv_s(wide_name->c_str(), wide_value->c_str());
 }
 
 std::optional<std::vector<std::pair<std::string, std::string>>> all_environment_variables() {
     std::vector<std::pair<std::string, std::string>> result;
+
+    const std::shared_lock lock{environment_mutex()};
 
     auto* const env_block = GetEnvironmentStringsW();
 

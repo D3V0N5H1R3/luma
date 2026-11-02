@@ -420,7 +420,7 @@ void VM::handle_tail_call(const std::uint8_t*& code_start, const std::uint8_t*& 
         }
 
         if (arg_count != compiled->arity) [[unlikely]] {
-            runtime_error(vm_errors::tail_call_arity_mismatch(compiled->arity, arg_count));
+            runtime_error(vm_errors::too_many_arguments(compiled->arity, arg_count));
         }
 
         auto base = cf.slot_offset;

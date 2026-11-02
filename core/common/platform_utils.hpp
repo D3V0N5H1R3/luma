@@ -8,7 +8,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 
 #ifdef _WIN32
@@ -25,6 +27,18 @@
 #endif
 
 namespace luma {
+
+// Process-wide lock for the environment block.  The C and Win32 environment
+// APIs are not safe against a concurrent writer, and Luma tasks run on several
+// threads: Process.set_environment_variable takes it exclusively, while every
+// read (safe_getenv, Process.get_all_environment_variables) and every child
+// process launch (which copies the environment into the child) takes it
+// shared.  Never call safe_getenv while holding it — std::shared_mutex is not
+// recursive.  Leaked on purpose so it outlives static destruction.
+[[nodiscard]] inline std::shared_mutex& environment_mutex() noexcept {
+    static auto* const mutex = new std::shared_mutex{};
+    return *mutex;
+}
 
 #ifdef _WIN32
 // Convert a wide string to UTF-8 using the Win32 API.
@@ -49,6 +63,10 @@ namespace luma {
 // the ANSI code page instead.  Elsewhere it uses std::getenv, whose bytes are
 // already UTF-8 on the platforms Luma supports.
 [[nodiscard]] inline std::optional<std::string> safe_getenv(const char* name) {
+    // Process.set_environment_variable can run on another task thread, and
+    // neither getenv nor _wdupenv_s is safe against a concurrent setenv.
+    const std::shared_lock lock{environment_mutex()};
+
 #ifdef _MSC_VER
     // Environment variable names are ASCII in practice; widen byte-by-byte.
     std::wstring wide_name;
@@ -67,7 +85,7 @@ namespace luma {
     }
     return std::nullopt;
 #else
-    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative; read at startup only.
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): serialised against setenv by environment_mutex().
     const char* val = std::getenv(name);
 
     if (val) {

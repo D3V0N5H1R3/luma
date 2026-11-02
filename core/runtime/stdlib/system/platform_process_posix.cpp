@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <limits>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -27,6 +28,7 @@
 #include <sys/prctl.h>
 #endif
 
+#include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/stdlib/system/platform_process.hpp"
 #include "runtime/stdlib/system/process_module.hpp"
@@ -272,6 +274,25 @@ void kill_child(pid_t pid, bool process_group) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 }
 
+// fork() while holding the environment lock shared, so the child (whose
+// execvp reads `environ`, including PATH) never snapshots an environment that
+// another task thread is half-way through modifying with setenv.  Only the
+// parent releases the lock: the child's copy of the lock dies with exec, and
+// unlocking is not async-signal-safe between fork and exec.
+[[nodiscard]] pid_t fork_with_stable_environment() {
+    auto& mutex = environment_mutex();
+
+    mutex.lock_shared();
+
+    const pid_t pid = ::fork();
+
+    if (pid != 0) {
+        mutex.unlock_shared();
+    }
+
+    return pid;
+}
+
 } // namespace
 
 // POSIX implementation: fork + execvp with one pipe shared by stdout/stderr.
@@ -294,7 +315,7 @@ std::pair<int, std::string> execute_command(std::string_view cmd) {
         return {-1, ""};
     }
 
-    const pid_t pid = ::fork();
+    const pid_t pid = fork_with_stable_environment();
 
     if (pid == -1) {
         return {-1, ""};
@@ -410,7 +431,7 @@ CapturedOutput execute_argv_captured_impl(std::vector<std::string> argv_strings,
     }
 
     const pid_t parent_pid = ::getpid();
-    const pid_t pid = ::fork();
+    const pid_t pid = fork_with_stable_environment();
 
     if (pid == -1) {
         return {};
@@ -659,12 +680,16 @@ bool send_signal(std::int64_t pid, SignalKind signal) {
 }
 
 int set_environment_variable(const std::string& name, const std::string& value) {
-    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative for setenv.
+    const std::unique_lock lock{environment_mutex()};
+
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): serialised by environment_mutex().
     return setenv(name.c_str(), value.c_str(), 1);
 }
 
 std::optional<std::vector<std::pair<std::string, std::string>>> all_environment_variables() {
     std::vector<std::pair<std::string, std::string>> result;
+
+    const std::shared_lock lock{environment_mutex()};
 
     for (char** ep = environ; ep && *ep; ++ep) {
         const std::string entry{*ep};

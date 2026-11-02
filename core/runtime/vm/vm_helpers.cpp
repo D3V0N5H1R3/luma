@@ -59,6 +59,15 @@ void VM::call_function(const FunctionValue& func, int arg_count) {
             arg_count = arity;
         }
 
+        // Too many arguments would land in the callee's first local slots
+        // (and shift its frame), silently aliasing locals with caller values.
+        // Every call path — Call, CallNamed, pipes, spawn, and native callbacks
+        // such as Array.map invoking a closure — funnels through here, so this
+        // is the one place to reject it (handle_tail_call mirrors it).
+        if (arg_count != arity) [[unlikely]] {
+            runtime_error(vm_errors::too_many_arguments(arity, arg_count));
+        }
+
         // Compiled function — collect args and run bytecode.
         // Arguments are already on the stack. Set up a new call frame.
         // The stack currently has: [callee] [arg0] [arg1] ... [argN]

@@ -419,3 +419,67 @@ function void test_task_retry_with_backoff_invalid_n_throws() {
 
     assert(has_thrown, "retry_with_backoff throws when n <= 0")
 }
+
+# ─── Huge timeouts and cancellable sleeps ───
+#
+# Timeouts above INT_MAX milliseconds used to overflow the clock arithmetic and
+# expire immediately, and Task.delay / the retry backoff slept without
+# observing cancellation (a cancelled task stayed asleep for the full delay).
+
+function integer sleep_for_an_hour() {
+    Task.delay(3600000)
+    return 1
+}
+
+function result<integer> always_fails() {
+    return failure("not yet")
+}
+
+function integer retry_with_huge_backoff() {
+    result<integer> _outcome = Task.retry_with_backoff(
+        2, 9223372036854775807, () -> always_fails()
+    )
+    return 1
+}
+
+@test
+function void test_task_timeout_with_huge_timeout_waits() {
+    task_scope {
+        task<integer> slow_task = spawn slow_identity(7)
+        result<integer> timeout_result = Task.timeout(slow_task, 9223372036854775807)
+
+        assert(timeout_result == success(7), "a huge timeout must not expire immediately")
+    }
+}
+
+@test
+function void test_task_timeout_or_with_huge_timeout_waits() {
+    task_scope {
+        task<integer> slow_task = spawn slow_identity(7)
+        integer value = Task.timeout_or(slow_task, 9223372036854775807, -1)
+
+        assert(value == 7, "a huge timeout_or must not fall back immediately")
+    }
+}
+
+@test
+function void test_task_delay_is_cancellable() {
+    task_scope {
+        task<integer> sleeper = spawn sleep_for_an_hour()
+        Task.delay(50)
+
+        assert(Task.cancel(sleeper), "a spawned task can be cancelled")
+    }
+    # Reaching this point means the scope joined the cancelled sleeper promptly.
+}
+
+@test
+function void test_task_retry_with_backoff_huge_delay_is_cancellable() {
+    task_scope {
+        task<integer> retrier = spawn retry_with_huge_backoff()
+        Task.delay(50)
+
+        assert(Task.cancel(retrier), "a spawned task can be cancelled")
+    }
+    # The saturated backoff delay is a cancellable sleep, not an overflow.
+}

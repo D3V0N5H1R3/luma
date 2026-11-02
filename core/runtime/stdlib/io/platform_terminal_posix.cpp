@@ -84,34 +84,23 @@ std::string_view disable_mouse() {
 }
 
 bool supports_color() {
-    // Check TERM and COLORTERM env vars.  std::getenv has no thread-safe std
-    // alternative; these read at startup with no concurrent setenv, so it is safe.
-    // NOLINTBEGIN(concurrency-mt-unsafe)
-    const char* term = std::getenv("TERM");
-    const char* colorterm = std::getenv("COLORTERM");
-    // NOLINTEND(concurrency-mt-unsafe)
-
-    if (colorterm != nullptr) {
+    // Read through safe_getenv: a task thread may call
+    // Process.set_environment_variable concurrently, which would invalidate a
+    // raw getenv pointer.
+    if (safe_getenv("COLORTERM").has_value()) {
         return true;
     }
 
-    if (term != nullptr) {
-        const std::string_view t{term};
-
-        return t != "dumb";
+    if (const auto term = safe_getenv("TERM")) {
+        return *term != "dumb";
     }
 
     return false;
 }
 
 bool supports_true_color() {
-    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative; read at startup only.
-    const char* colorterm = std::getenv("COLORTERM");
-
-    if (colorterm != nullptr) {
-        const std::string_view ct{colorterm};
-
-        return ct == "truecolor" || ct == "24bit";
+    if (const auto colorterm = safe_getenv("COLORTERM")) {
+        return *colorterm == "truecolor" || *colorterm == "24bit";
     }
 
     return false;

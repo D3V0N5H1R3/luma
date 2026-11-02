@@ -17,6 +17,7 @@
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/string_utils.hpp"
+#include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/io/http_module_connection.hpp"
@@ -435,6 +436,10 @@ struct RawHttpOutcome {
 perform_http(const std::string& method, const std::string& url, const std::string& body,
              const std::vector<std::pair<std::string, std::string>>& extra_headers,
              int timeout_ms) {
+    // Network I/O blocks this thread for up to the timeout: let the thread
+    // pool start a compensating worker if it runs on one.
+    const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
+
     const auto parsed = parse_url(url);
 
     const bool is_https = (parsed.scheme == "https");

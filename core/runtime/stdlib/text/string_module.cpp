@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
+#include "common/string_utils.hpp"
 #include "common/utf8.hpp"
 #include "common/utf8_iterator.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -762,14 +763,7 @@ void register_string_ns(const EnvPtr& env) {
                         error_msg("String", "repeat", "result exceeds maximum string size"));
                 }
 
-                std::string result{};
-                result.reserve(result_size);
-
-                for (std::int64_t i{0}; i < n; ++i) {
-                    result += s;
-                }
-
-                return make_success_value(Value{std::move(result)});
+                return make_success_value(Value{repeat_string(s, static_cast<std::size_t>(n))});
             });
 
     register_string_search(env);

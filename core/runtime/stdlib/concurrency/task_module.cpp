@@ -1,10 +1,12 @@
 #include "runtime/stdlib/concurrency/task_module.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <exception>
 #include <format>
 #include <future>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -14,12 +16,14 @@
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
+#include "common/overflow.hpp"
 #include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/task_completion.hpp"
 #include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
+#include "runtime/stdlib/concurrency/concurrency_constants.hpp"
 
 namespace luma {
 
@@ -134,6 +138,77 @@ constexpr auto k_completion_poll_interval = std::chrono::milliseconds{50};
     return Value{std::make_shared<TaskValue>(promise.get_future().share(), nullptr)};
 }
 
+// Wait up to `timeout` (already clamped) for `task` to complete.  Returns true
+// once it is ready.  Inside a spawned task the wait is a cancellation point: it
+// re-checks the waiting task's own token every k_cancel_poll_interval and
+// throws CancelledException once it is cancelled.
+[[nodiscard]] bool wait_for_task(const TaskValue& task, std::chrono::milliseconds timeout) {
+    const auto* cancel = active_task_token();
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+
+    while (true) {
+        if (cancel != nullptr) {
+            cancel->throw_if_cancelled();
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        const auto remaining = now < deadline ? deadline - now : std::chrono::nanoseconds{0};
+        const auto step =
+            cancel != nullptr
+                ? std::min<std::chrono::steady_clock::duration>(remaining, k_cancel_poll_interval)
+                : std::chrono::steady_clock::duration{remaining};
+
+        if (task.future.wait_for(step) == std::future_status::ready) {
+            return true;
+        }
+
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+    }
+}
+
+// Delay before retry attempt `attempt + 1` of Task.retry_with_backoff:
+// base_delay_ms * 2^attempt, saturating instead of overflowing (the shift is
+// capped and the product checked), then clamped like every user timeout.
+[[nodiscard]] std::chrono::milliseconds backoff_delay(std::int64_t base_delay_ms,
+                                                      std::int64_t attempt) {
+    constexpr std::int64_t k_max_shift{62};
+    const auto factor = static_cast<std::int64_t>(1) << std::min(attempt, k_max_shift);
+
+    if (would_overflow_mul(base_delay_ms, factor)) {
+        return clamp_timeout_ms(std::numeric_limits<std::int64_t>::max());
+    }
+
+    return clamp_timeout_ms(base_delay_ms * factor);
+}
+
+// Block until `task` completes and return its value (rethrowing its error).
+// The Wait::OnPoolTasks region is entered only when the task has not finished
+// yet, so collecting finished tasks never trips the pool's nested-blocking
+// check, and callers hold no region while user callbacks run (Task.map's
+// callback is work, not a blocked worker).
+[[nodiscard]] Value await_task(const TaskValue& task) {
+    if (task.future.wait_for(std::chrono::seconds{0}) != std::future_status::ready) {
+        ThreadPool::BlockingRegion blocking;
+        const auto* cancel = active_task_token();
+
+        // Poll like VM await: inside a spawned task the wait is a cancellation
+        // point (a cancelled Task.all/sequence/map… must not wait forever for
+        // a cancelled child that may never get a worker), and a persistent
+        // pool stall is reported instead of hanging.
+        while (task.future.wait_for(k_cancel_poll_interval) != std::future_status::ready) {
+            if (cancel != nullptr) {
+                cancel->throw_if_cancelled();
+            }
+
+            blocking.verify_not_deadlocked();
+        }
+    }
+
+    return task.future.get();
+}
+
 } // namespace
 
 void register_task_ns(const EnvPtr& env) {
@@ -141,9 +216,6 @@ void register_task_ns(const EnvPtr& env) {
         // Await all tasks and return their results in order.
         .func("all", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
-
             const auto& arr = expect_array(args[0], "Task.all", loc);
 
             auto results = std::make_shared<ArrayValue>();
@@ -163,7 +235,7 @@ void register_task_ns(const EnvPtr& env) {
 
                 if (auto failure = collect_awaited(
                         error_msg("Task", "all", "a task was cancelled"),
-                        [&] { results->elements->push_back(task->future.get()); },
+                        [&] { results->elements->push_back(await_task(*task)); },
                         [&] { cancel_remaining_tasks(*arr->elements, i + 1); })) {
                     return std::move(*failure);
                 }
@@ -175,8 +247,8 @@ void register_task_ns(const EnvPtr& env) {
         // Return the result of the first task to complete.
         .func("race", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
+            // Waits on other tasks: entered (below) only once a wait actually blocks.
+            std::optional<ThreadPool::BlockingRegion> blocking;
 
             const auto& arr = expect_array(args[0], "Task.race", loc);
 
@@ -207,6 +279,17 @@ void register_task_ns(const EnvPtr& env) {
                     }
                 }
 
+                if (!blocking) {
+                    blocking.emplace();
+                }
+
+                // A cancelled task stops waiting; a persistent pool stall is
+                // reported instead of hanging.
+                if (const auto* cancel = active_task_token()) {
+                    cancel->throw_if_cancelled();
+                }
+
+                blocking->verify_not_deadlocked();
                 subscription.wait_for(k_completion_poll_interval);
             }
         })
@@ -216,14 +299,13 @@ void register_task_ns(const EnvPtr& env) {
         .func("timeout", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
 
             const auto& task = expect_task(args[0], "Task.timeout", loc);
 
             const auto ms = expect_integer(args[1], "Task.timeout", loc);
-            const auto status = task->future.wait_for(std::chrono::milliseconds{ms});
 
-            if (status == std::future_status::ready) {
+            if (wait_for_task(*task, clamp_timeout_ms(ms))) {
                 return await_to_result(error_msg("Task", "timeout", "task was cancelled"),
                                        [&] { return make_success_value(task->future.get()); });
             }
@@ -244,7 +326,9 @@ void register_task_ns(const EnvPtr& env) {
                                             std::future_status::ready});
         })
         // Task.delay(integer milliseconds) -> null
-        // Sleep for the specified number of milliseconds.
+        // Sleep for the specified number of milliseconds (clamped to INT_MAX).
+        // Inside a spawned task the sleep is a cancellation point, and it holds
+        // a BlockingRegion so the pool can run other tasks meanwhile.
         .func("delay", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto ms = expect_integer(args[0], "Task.delay", loc);
@@ -254,7 +338,8 @@ void register_task_ns(const EnvPtr& env) {
                                    "use 0 or a positive number of milliseconds"};
             }
 
-            std::this_thread::sleep_for(std::chrono::milliseconds{ms});
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
+            cancellable_sleep(clamp_timeout_ms(ms), active_task_token());
 
             return NullValue{};
         })
@@ -262,16 +347,13 @@ void register_task_ns(const EnvPtr& env) {
         // Await t, apply f to its value, and return the transformed result.
         .func("map", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
-
             const auto& task = expect_task(args[0], "Task.map", loc);
 
             expect_callable(args[1], "Task.map", loc);
 
             // Await the task and apply the function synchronously.
             return await_to_result(error_msg("Task", "map", "task was cancelled"), [&] {
-                auto val = task->future.get();
+                auto val = await_task(*task);
                 std::vector<Value> fn_args{std::move(val)};
 
                 return make_success_value(invoke_callable(args[1], fn_args, loc));
@@ -281,15 +363,12 @@ void register_task_ns(const EnvPtr& env) {
         // Apply f to the result of t (f must return a task), then await it.
         .func("flat_map", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
-
             const auto& task = expect_task(args[0], "Task.flat_map", loc);
 
             expect_callable(args[1], "Task.flat_map", loc);
 
             return await_to_result(error_msg("Task", "flat_map", "task was cancelled"), [&] {
-                auto val = task->future.get();
+                auto val = await_task(*task);
                 std::vector<Value> fn_args{std::move(val)};
 
                 const auto inner = invoke_callable(args[1], fn_args, loc);
@@ -301,16 +380,13 @@ void register_task_ns(const EnvPtr& env) {
                                               inner.display_type_name())));
                 }
 
-                return make_success_value(inner.as_task()->future.get());
+                return make_success_value(await_task(*inner.as_task()));
             });
         })
         // Task.map_n(array<task<T>> tasks, fn(T) -> U) -> result<array<U>>
         // Await all tasks and apply f to each result.
         .func("map_n", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
-
             const auto& arr = expect_array(args[0], "Task.map_n", loc);
 
             expect_callable(args[1], "Task.map_n", loc);
@@ -332,7 +408,7 @@ void register_task_ns(const EnvPtr& env) {
                 if (auto failure = collect_awaited(
                         error_msg("Task", "map_n", "a task was cancelled"),
                         [&] {
-                            auto val = task->future.get();
+                            auto val = await_task(*task);
                             std::vector<Value> fn_args{std::move(val)};
 
                             results->elements->push_back(invoke_callable(args[1], fn_args, loc));
@@ -412,8 +488,8 @@ void register_task_ns(const EnvPtr& env) {
         // If all tasks fail, returns the last failure message.
         .func("any", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
+            // Waits on other tasks: entered (below) only once a wait actually blocks.
+            std::optional<ThreadPool::BlockingRegion> blocking;
 
             const auto& arr = expect_array(args[0], "Task.any", loc);
 
@@ -461,6 +537,15 @@ void register_task_ns(const EnvPtr& env) {
                 }
 
                 if (done_count < arr->elements->size()) {
+                    if (!blocking) {
+                        blocking.emplace();
+                    }
+
+                    if (const auto* cancel = active_task_token()) {
+                        cancel->throw_if_cancelled();
+                    }
+
+                    blocking->verify_not_deadlocked();
                     subscription.wait_for(k_completion_poll_interval);
                 }
             }
@@ -472,9 +557,6 @@ void register_task_ns(const EnvPtr& env) {
         // Awaits each task in order, collecting results. Cancels remaining on failure.
         .func("sequence", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
-
             const auto& arr = expect_array(args[0], "Task.sequence", loc);
             auto results = std::make_shared<ArrayValue>();
 
@@ -490,7 +572,7 @@ void register_task_ns(const EnvPtr& env) {
 
                 if (auto failure = collect_awaited(
                         error_msg("Task", "sequence", "a task was cancelled"),
-                        [&] { results->elements->push_back(task->future.get()); },
+                        [&] { results->elements->push_back(await_task(*task)); },
                         [&] { cancel_remaining_tasks(*arr->elements, i + 1); })) {
                     return std::move(*failure);
                 }
@@ -504,9 +586,6 @@ void register_task_ns(const EnvPtr& env) {
         // element carries that task's own success or failure.
         .func("all_settled", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
-
             const auto& arr = expect_array(args[0], "Task.all_settled", loc);
 
             auto results = std::make_shared<ArrayValue>();
@@ -525,7 +604,7 @@ void register_task_ns(const EnvPtr& env) {
                 // a failure never aborts the loop (unlike Task.all).
                 results->elements->push_back(
                     await_to_result(error_msg("Task", "all_settled", "a task was cancelled"),
-                                    [&] { return make_success_value(task->future.get()); }));
+                                    [&] { return make_success_value(await_task(*task)); }));
             }
 
             return Value{std::move(results)};
@@ -566,13 +645,12 @@ void register_task_ns(const EnvPtr& env) {
                 }
 
                 // Sleep with exponential backoff before the next attempt; skip
-                // after the final one.  Cap the shift to avoid undefined
-                // behaviour / absurd sleeps on large attempt counts.
+                // after the final one.  backoff_delay saturates instead of
+                // overflowing on large attempt counts or base delays.
                 if (i + 1 < n) {
-                    const auto shift = std::min<std::int64_t>(i, 62);
-                    const auto delay_ms = base_delay_ms * (static_cast<std::int64_t>(1) << shift);
-
-                    std::this_thread::sleep_for(std::chrono::milliseconds{delay_ms});
+                    const ThreadPool::BlockingRegion blocking{
+                        ThreadPool::BlockingRegion::Wait::External};
+                    cancellable_sleep(backoff_delay(base_delay_ms, i), active_task_token());
                 }
             }
 
@@ -607,14 +685,13 @@ void register_task_ns(const EnvPtr& env) {
         .func("timeout_or", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             // Waits on other tasks: let the pool compensate if this is a worker.
-            const ThreadPool::BlockingRegion blocking;
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
 
             const auto& task = expect_task(args[0], "Task.timeout_or", loc);
 
             const auto ms = expect_integer(args[1], "Task.timeout_or", loc);
-            const auto status = task->future.wait_for(std::chrono::milliseconds{ms});
 
-            if (status == std::future_status::ready) {
+            if (wait_for_task(*task, clamp_timeout_ms(ms))) {
                 // Completed in time: return its value, or fall back to default
                 // if the task failed or was cancelled (mirrors unwrap_or).
                 try {

@@ -32,14 +32,7 @@ namespace {
                            loc, "use 0 for no timeout or a positive number of milliseconds"};
     }
 
-    return std::chrono::milliseconds{ms};
-}
-
-// Cancellation token of the spawned task running on this thread (nullptr on the
-// main thread), so blocking channel waits inside a cancelled task give up
-// instead of blocking forever.
-[[nodiscard]] const CancellationToken* active_task_token() noexcept {
-    return detail::active_cancel_token != nullptr ? detail::active_cancel_token->get() : nullptr;
+    return clamp_timeout_ms(ms);
 }
 
 } // namespace
@@ -79,7 +72,8 @@ void register_channel_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& ch = expect_channel(args[0], "Channel.send", loc)->channel;
             try {
-                const ThreadPool::BlockingRegion blocking;
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 ch->send(args[1].deep_copy(), active_task_token());
                 return Value{true};
             } catch (const ChannelClosedError&) {
@@ -122,7 +116,9 @@ void register_channel_ns(const EnvPtr& env) {
             const auto& ch = cv->channel;
 
             try {
-                auto result = ch->send_timeout(args[1].deep_copy(), timeout);
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
+                auto result = ch->send_timeout(args[1].deep_copy(), timeout, active_task_token());
 
                 if (result.timed_out) {
                     return failure_msg("Channel", "send_timeout", "timeout", error_codes::timeout);
@@ -140,7 +136,8 @@ void register_channel_ns(const EnvPtr& env) {
             const auto& ch = expect_channel(args[0], "Channel.receive", loc)->channel;
 
             try {
-                const ThreadPool::BlockingRegion blocking;
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 auto val = ch->receive(active_task_token());
                 return make_success_value(std::move(val));
             } catch (const ChannelClosedError&) {
@@ -175,7 +172,9 @@ void register_channel_ns(const EnvPtr& env) {
             const auto& ch = cv->channel;
 
             try {
-                auto result = ch->receive_timeout(timeout);
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
+                auto result = ch->receive_timeout(timeout, active_task_token());
 
                 if (result.timed_out) {
                     return failure_msg("Channel", "receive_timeout", "timeout",
@@ -263,7 +262,7 @@ void register_channel_ns(const EnvPtr& env) {
             const auto& arr = expect_array(args[1], "Channel.send_all", loc);
 
             std::int64_t sent{0};
-            const ThreadPool::BlockingRegion blocking;
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             for (const auto& elem : *arr->elements) {
                 try {
                     ch->send(elem.deep_copy(), active_task_token());
@@ -298,7 +297,8 @@ void register_channel_ns(const EnvPtr& env) {
                 std::vector<Value> call_args(1);
                 while (true) {
                     try {
-                        const ThreadPool::BlockingRegion blocking;
+                        const ThreadPool::BlockingRegion blocking{
+                            ThreadPool::BlockingRegion::Wait::External};
                         call_args[0] = ch->receive(active_task_token());
                     } catch (const ChannelClosedError&) {
                         break; // closed and drained
@@ -322,7 +322,7 @@ void register_channel_ns(const EnvPtr& env) {
             }
 
             BackoffTimer backoff;
-            const ThreadPool::BlockingRegion blocking;
+            const ThreadPool::BlockingRegion blocking{ThreadPool::BlockingRegion::Wait::External};
             const auto* cancel = active_task_token();
 
             while (true) {

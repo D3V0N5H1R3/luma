@@ -191,6 +191,17 @@ auto VM::create_spawn_callable(
         // promise before this wakes waiters such as Task.race.
         const ScopeGuard notify_completion{[&completion] { completion->mark_complete(); }};
 
+        if (!completion->claim_start()) {
+            // Its cancelled task_scope already resolved this task as cancelled
+            // without running it (TaskCompletion::abandon_if_not_started);
+            // keep the exit notification the cancelled early-out path gives.
+            if (debug_cbs.task_exit_hook) {
+                debug_cbs.task_exit_hook(task_id);
+            }
+
+            return;
+        }
+
         // The thread-local "current task_scope" belongs to whatever ran on
         // this worker before; a task starts outside any scope and must leave
         // the thread as it found it.
@@ -280,6 +291,15 @@ void VM::handle_spawn() {
 
     auto cancel_token = std::make_shared<CancellationToken>(std::move(parent_token));
     auto completion = std::make_shared<TaskCompletion>();
+    // A scope tearing down after cancelling this task may resolve it before
+    // any worker starts it (see TaskScope::join_all's teardown mode).
+    completion->set_abandon_handler([promise] {
+        try {
+            promise->set_exception(std::make_exception_ptr(CancelledException{"task cancelled"}));
+        } catch (const std::future_error&) { // NOLINT(bugprone-empty-catch)
+            // Already satisfied: nothing to resolve.
+        }
+    });
     auto task_id = VMTaskManager::next_task_id.fetch_add(1, std::memory_order_relaxed);
 
     // THREAD_SAFETY: Captures a consistent snapshot of debug callbacks under
@@ -319,12 +339,20 @@ void VM::handle_await() {
     }
 
     // Waiting blocks on other pool work: let the pool compensate if this VM
-    // runs on a worker.  A cancelled task stops waiting at its next poll.
-    const ThreadPool::BlockingRegion blocking;
+    // runs on a worker.  Only a wait that actually blocks counts — awaiting a
+    // finished task must never trip the pool's nested-blocking check.  A
+    // cancelled task stops waiting at its next poll.
+    if (task->future.wait_for(std::chrono::seconds{0}) != std::future_status::ready) {
+        ThreadPool::BlockingRegion blocking;
 
-    if (cancel_token_ != nullptr) {
+        // Poll so the wait can observe this task's cancellation and report a
+        // persistent pool stall (every worker waiting, none free).
         while (task->future.wait_for(k_await_cancel_poll_interval) != std::future_status::ready) {
-            check_cancellation();
+            if (cancel_token_ != nullptr) {
+                check_cancellation();
+            }
+
+            blocking.verify_not_deadlocked();
         }
     }
 
@@ -346,10 +374,15 @@ void VM::retire_task_scope(TaskScope* scope) {
     // unwind: cancel children, wait for them to observe it, restore the parent
     // as current, then pop.  Keeping this in one place means the two paths can
     // never diverge (e.g. joining before cancelling on one of them).
+    //
+    // The teardown join never leaves a child behind: children that have not
+    // started are resolved as cancelled on the spot (no worker needed), and
+    // started ones are waited for without the pool's nested-blocking check —
+    // they are cancelled, so they reach their next cancellation point and end.
     scope->cancel_all();
 
     try {
-        (void)scope->join_all();
+        (void)scope->join_all(TaskScope::JoinMode::Teardown);
     } catch (...) { // NOLINT(bugprone-empty-catch)
         // Suppress secondary failures from children during teardown; any
         // exception already in flight is the one that propagates.

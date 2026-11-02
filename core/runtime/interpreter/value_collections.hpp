@@ -214,10 +214,12 @@ private:
 // may use the shared pointer directly without cloning.
 //
 // ── Thread safety ──
-// ArrayValue is not thread-safe.  The Luma runtime gives each task its own
-// independent copy of all values: when an array is sent across a Channel the
-// channel performs a deep copy, so the sender and receiver always hold
-// distinct shared_ptrs that will never alias each other across OS threads.
+// Compound values are shared read-only between task threads: a spawned task's
+// global snapshot is shared by its siblings, and values also cross threads via
+// Reference.get and task results (channels deep-copy).  Concurrent reads of
+// one ArrayValue are therefore normal; writes happen only after
+// ensure_unique() / Value::make_exclusive() has given the writer the sole
+// reference, so no other thread can observe the mutation.
 struct ArrayValue {
     // COW: multiple ArrayValue instances can share the same storage.
     // Mutation must call ensure_unique() first.
@@ -228,26 +230,16 @@ struct ArrayValue {
     // Ensure this instance has exclusive ownership before mutating.
     //
     // ── Threading model ──
-    // The Luma runtime uses a single-threaded ownership model for values.
-    // Each task (green thread) owns its own copy of every value; values
-    // are never shared mutably across OS threads.  When an array is sent
-    // to another task via a Channel, the channel performs a deep copy, so
-    // the sender and receiver always hold independent shared_ptrs.
+    // Values are shared read-only across task threads but are only mutated
+    // through a reference the writer holds exclusively.  use_count() == 1 is
+    // therefore a reliable "nobody else can see this" answer: while this
+    // thread holds the only reference, no other thread can obtain a new one
+    // (it would need a reference to copy from).  A count above one may be
+    // stale (another thread may be dropping its reference concurrently), but
+    // that only costs an unnecessary copy, never a visible mutation.
     //
-    // Because of this single-threaded ownership guarantee, the
-    // std::shared_ptr::use_count() check here is safe: only one thread
-    // can observe or modify the reference count at any given time.
-    // use_count() would be unreliable under concurrent access (it is
-    // specified as "approximate" in C++20), but that situation cannot
-    // arise under the current threading model.
-    //
-    // ── Limitations ──
-    // If multi-threaded mutable sharing of ArrayValue were ever
-    // introduced (e.g. shared-memory concurrency), this COW strategy
-    // would need to be replaced with either atomic reference counting
-    // plus a mutex, or a different copy/snapshot mechanism.
-    // Note: COW is single-threaded only. If arrays are shared across tasks
-    // via ReferenceValue, the caller must hold an external lock.
+    // Note: ReferenceValue cells are the one shared-mutable exception; their
+    // get()/set() serialise on the cell's own mutex and hand out copies.
     void ensure_unique() {
         if (elements.use_count() > 1) {
             elements = std::make_shared<std::vector<Value>>(*elements);
@@ -276,6 +268,7 @@ struct EntryIndex {
     static constexpr std::size_t linear_scan_threshold = 8;
 
     // Look up `key`, lazily (re)building the index over `entries` if stale.
+    // Safe to call concurrently from several threads on a shared owner.
     [[nodiscard]] const Value* find(const Entries& entries, std::string_view key) const {
         // For a small, not-yet-indexed container a linear scan avoids building
         // (and heap-allocating) the hash index entirely.  An already-built
@@ -300,6 +293,7 @@ struct EntryIndex {
     }
 
     // Insert or overwrite `key`, keeping the index consistent.
+    // Precondition: the owner is exclusively held (see LazyHashIndex).
     void set(Entries& entries, const std::string& key, Value val) {
         if (index_.is_built()) {
             auto& map = index_.raw();
@@ -353,9 +347,11 @@ private:
 // (find, iteration, formatting) may work on the shared pointer directly.
 //
 // ── Thread safety ──
-// Not thread-safe.  Each task receives its own deep copy of captured values
-// when spawned or when values are sent across a Channel, ensuring no
-// DictionaryValue is ever mutated concurrently by two OS threads.
+// Shared read-only between task threads (see ArrayValue): concurrent find()
+// calls are safe — the lazy hash index is built under a lock and published
+// with release/acquire ordering (LazyHashIndex).  set()/erase()/rebuild_index()
+// and direct writes to `entries` require exclusive ownership (make_exclusive /
+// clone_dict), which guarantees no other thread can observe them.
 struct DictionaryValue {
     // Insertion-ordered key-value pairs. Iteration always visits keys in
     // insertion order. Direct mutation of this vector must be followed by
@@ -457,9 +453,10 @@ struct ResultValue {
 // (find_field, iteration, formatting) may use the shared pointer directly.
 //
 // ── Thread safety ──
-// Not thread-safe.  Tasks that receive a record value via a Channel receive a
-// deep copy, ensuring the fields vector is never mutated by two threads
-// concurrently.
+// Shared read-only between task threads (see ArrayValue): concurrent
+// find_field() calls are safe — the lazy index is built under a lock and
+// published with release/acquire ordering (LazyHashIndex).  Field writes
+// require exclusive ownership (make_exclusive / clone_record).
 struct RecordValue {
     std::string type_name;
     std::vector<std::pair<std::string, Value>> fields;

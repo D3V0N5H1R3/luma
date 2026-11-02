@@ -2,7 +2,10 @@
 
 #include <array>
 #include <cstddef>
+#include <exception>
 #include <string>
+#include <string_view>
+#include <thread>
 
 #include "common/resource_limits.hpp"
 #include "runtime/stdlib/text/regularexpression_module.hpp"
@@ -806,7 +809,75 @@ static void test_regex_replace_matches_std_semantics() {
     ASSERT_EQ(unwrap(R"(RegularExpression.replace_all("none", "[0-9]", "#"))"), "none");
 }
 
+// Review R5: std::regex backtracks recursively.  libstdc++ recursed once per
+// repetition, so `^a*$` over a 500,000-character input overflowed the native
+// stack (a crash nothing could catch), and MSVC threw regex_error(error_stack),
+// which surfaced as an opaque engine message.  The default input limit is now
+// small enough for a task worker's stack, and the engine's resource errors
+// become a clear failure on every entry point.
+namespace {
+
+// Run `source` on a fresh thread (a 1 MiB stack on Windows, like a task
+// worker) and describe the result: "ok:<value>", "fail:<message>", or
+// "throw:<message>".
+std::string run_regex_on_worker_stack(const std::string& source) {
+    std::string outcome;
+
+    {
+        std::jthread worker{[&outcome, &source] {
+            try {
+                const auto value = eval(source);
+
+                if (!value.is_result()) {
+                    outcome = "not a result";
+                } else if (value.as_result()->is_success) {
+                    outcome = "ok:" + value.as_result()->owned_inner->to_string();
+                } else {
+                    outcome = "fail:" + value.as_result()->owned_inner->as_string();
+                }
+            } catch (const std::exception& error) {
+                outcome = std::string{"throw:"} + error.what();
+            }
+        }};
+    }
+
+    return outcome;
+}
+
+} // namespace
+
+static void test_regex_long_input_at_limit_is_handled_cleanly() {
+    const auto limit = std::to_string(ResourceLimits::max_regex_input_size);
+    const auto text = "Result.unwrap(String.repeat(\"a\", " + limit + "))";
+
+    for (const auto* const call : {"matches", "find", "count", "replace_all", "split"}) {
+        const std::string extra = std::string_view{call} == "replace_all" ? ", \"b\"" : "";
+        const auto outcome = run_regex_on_worker_stack("RegularExpression." + std::string{call} +
+                                                       "(" + text + ", \"^a*$\"" + extra + ")");
+
+        // Either the engine matched, or it declined with the clean message —
+        // never a crash, a thrown error, or the raw regex_error text.
+        const bool matched = outcome.starts_with("ok:");
+        const bool declined =
+            outcome.starts_with("fail:") &&
+            outcome.find("too complex for the regular expression engine") != std::string::npos;
+
+        ASSERT_TRUE(matched || declined);
+    }
+}
+
+static void test_regex_input_over_limit_fails() {
+    const auto over = std::to_string(ResourceLimits::max_regex_input_size + 1);
+    const auto outcome = run_regex_on_worker_stack(
+        "RegularExpression.matches(Result.unwrap(String.repeat(\"a\", " + over + ")), \"^a*$\")");
+
+    ASSERT_TRUE(outcome.starts_with("fail:"));
+    ASSERT_NE(outcome.find("input string exceeds maximum size"), std::string::npos);
+}
+
 int main() {
+    RUN(test_regex_long_input_at_limit_is_handled_cleanly);
+    RUN(test_regex_input_over_limit_fails);
     RUN(test_regex_redos_guard_bypasses_closed);
     RUN(test_regex_replace_caps_output_size);
     RUN(test_regex_replace_matches_std_semantics);

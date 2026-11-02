@@ -5,16 +5,22 @@
 // find/set/erase semantics, lazy index build, and rebuild-after-direct-mutation)
 // so the shared EntryIndex extraction can be verified as behaviour-preserving.
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <latch>
 #include <memory>
 #include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
 using luma::DictionaryValue;
 using luma::RecordValue;
+using luma::SetValue;
 using luma::Value;
 
 // ─── DictionaryValue::set / find ───
@@ -402,6 +408,297 @@ static void test_dict_deep_copy_is_independent() {
     ASSERT_EQ(src_n->as_integer(), 1);
 }
 
+// ─── Concurrent lookups on a shared container (review R1) ───
+//
+// Dictionaries, records, and sets are shared read-only between task threads
+// (a spawned task's global snapshot is shared by its siblings).  The first
+// lookup on a container larger than the linear-scan threshold builds its lazy
+// hash index; that build used to write a plain `bool` and the map with no
+// synchronisation, so two tasks indexing the same 9-entry global raced.  Run
+// many rounds so each fresh container's first build is contended.
+
+static void test_concurrent_lookups_on_shared_containers() {
+    constexpr int k_rounds = 200;
+    constexpr int k_threads = 8;
+    constexpr int k_entries = 24; // Above EntryIndex::linear_scan_threshold.
+
+    std::atomic<int> failures{0};
+
+    for (int round = 0; round < k_rounds; ++round) {
+        auto dict = std::make_shared<DictionaryValue>();
+        auto record = std::make_shared<RecordValue>();
+        auto set = std::make_shared<SetValue>();
+
+        for (int i = 0; i < k_entries; ++i) {
+            dict->set("k" + std::to_string(i), Value{i});
+            record->fields.emplace_back("f" + std::to_string(i), Value{i});
+            set->elements.emplace_back(Value{static_cast<std::int64_t>(i)});
+        }
+
+        std::latch start{k_threads};
+
+        {
+            std::vector<std::jthread> threads;
+            threads.reserve(k_threads);
+
+            for (int t = 0; t < k_threads; ++t) {
+                threads.emplace_back([&, t] {
+                    start.arrive_and_wait();
+
+                    for (int i = 0; i < k_entries; ++i) {
+                        const int key = (i + t) % k_entries;
+                        const auto* const value =
+                            std::as_const(*dict).find("k" + std::to_string(key));
+                        const auto* const field =
+                            std::as_const(*record).find_field("f" + std::to_string(key));
+
+                        if (value == nullptr || !value->is_integer() ||
+                            value->as_integer() != key) {
+                            failures.fetch_add(1);
+                        }
+
+                        if (field == nullptr || !field->is_integer() ||
+                            field->as_integer() != key) {
+                            failures.fetch_add(1);
+                        }
+
+                        if (!set->contains(Value{static_cast<std::int64_t>(key)})) {
+                            failures.fetch_add(1);
+                        }
+                    }
+                });
+            }
+        } // jthreads join here.
+    }
+
+    ASSERT_EQ(failures.load(), 0);
+}
+
+// A copy starts with an unbuilt index (copying the map would race with a
+// concurrent build of the shared source) but must still answer lookups.
+static void test_copied_container_rebuilds_its_own_index() {
+    DictionaryValue source;
+
+    for (int i = 0; i < 20; ++i) {
+        source.set("k" + std::to_string(i), Value{i});
+    }
+
+    ASSERT_NE(source.find("k3"), nullptr); // Builds the source's index.
+
+    DictionaryValue copy{source};
+    copy.set("extra", Value{100});
+
+    const auto* const copied = copy.find("k17");
+    ASSERT_NE(copied, nullptr);
+    ASSERT_EQ(copied->as_integer(), 17);
+    ASSERT_NE(copy.find("extra"), nullptr);
+    ASSERT_EQ(source.find("extra"), nullptr);
+
+    DictionaryValue moved{std::move(copy)};
+    const auto* const after_move = moved.find("k5");
+    ASSERT_NE(after_move, nullptr);
+    ASSERT_EQ(after_move->as_integer(), 5);
+}
+
+// ─── Iterative teardown of deep values (review R2) ───
+//
+// Dropping the last reference to a long recursive value destroyed one level
+// per native stack frame chain, so a 1,000,000-node list crashed with a stack
+// overflow (0xC00000FD).  Each test builds the chain on a fresh thread (a
+// 1 MiB stack on Windows) with a sentinel at the bottom and checks that the
+// whole chain is freed.
+
+namespace {
+
+constexpr int k_deep_chain_length = 1'000'000;
+
+// Build a chain of `length` levels on top of a sentinel, drop it, and return
+// whether the sentinel was freed.  `wrap` turns the current chain into the
+// next, deeper level.
+template <typename Wrap> bool drop_deep_chain(Wrap wrap) {
+    std::weak_ptr<luma::DecimalValue> sentinel_alive;
+
+    {
+        std::jthread worker{[&sentinel_alive, &wrap] {
+            auto sentinel = std::make_shared<luma::DecimalValue>();
+            sentinel_alive = sentinel;
+            Value chain{std::move(sentinel)};
+
+            for (int i = 0; i < k_deep_chain_length; ++i) {
+                chain = wrap(std::move(chain), i);
+            }
+        }};
+    }
+
+    return sentinel_alive.expired();
+}
+
+} // namespace
+
+static void test_dropping_deep_choice_chain_does_not_overflow() {
+    ASSERT_TRUE(drop_deep_chain([](Value tail, int i) {
+        auto node = std::make_shared<luma::ChoiceValue>();
+        node->type_name = "IntList";
+        node->variant = "Node";
+        node->fields.emplace_back(static_cast<std::int64_t>(i));
+        node->fields.push_back(std::move(tail));
+        return Value{std::move(node)};
+    }));
+}
+
+static void test_dropping_deep_array_chain_does_not_overflow() {
+    ASSERT_TRUE(drop_deep_chain([](Value inner, int /*i*/) {
+        auto array = std::make_shared<luma::ArrayValue>();
+        array->elements->push_back(std::move(inner));
+        return Value{std::move(array)};
+    }));
+}
+
+static void test_dropping_deep_result_and_record_chain_does_not_overflow() {
+    ASSERT_TRUE(drop_deep_chain([](Value inner, int i) {
+        if (i % 2 == 0) {
+            return Value{luma::ResultValue::success(std::move(inner))};
+        }
+
+        auto record = std::make_shared<RecordValue>();
+        record->type_name = "Box";
+        record->fields.emplace_back("value", std::move(inner));
+        return Value{std::move(record)};
+    }));
+}
+
+static void test_dropping_deep_closure_chain_does_not_overflow() {
+    ASSERT_TRUE(drop_deep_chain([](Value inner, int /*i*/) {
+        auto closure = std::make_shared<luma::FunctionValue>();
+        closure->upvalues.push_back(std::move(inner));
+        closure->upvalue_cells.emplace_back();
+        return Value{std::move(closure)};
+    }));
+}
+
+// A subtree still referenced elsewhere must survive the teardown of one owner
+// and be freed (iteratively) with the last one.
+static void test_shared_subtree_survives_partial_teardown() {
+    std::weak_ptr<luma::DecimalValue> sentinel_alive;
+    Value shared_tail;
+
+    {
+        auto sentinel = std::make_shared<luma::DecimalValue>();
+        sentinel_alive = sentinel;
+        Value chain{std::move(sentinel)};
+
+        for (int i = 0; i < k_deep_chain_length; ++i) {
+            auto array = std::make_shared<luma::ArrayValue>();
+            array->elements->push_back(std::move(chain));
+            chain = Value{std::move(array)};
+
+            if (i == k_deep_chain_length / 2) {
+                shared_tail = chain;
+            }
+        }
+    } // The outer half is destroyed; the inner half is still owned.
+
+    ASSERT_FALSE(sentinel_alive.expired());
+    ASSERT_TRUE(shared_tail.is_array());
+
+    shared_tail = Value{};
+
+    ASSERT_TRUE(sentinel_alive.expired());
+}
+
+// ─── Index builds of containers keyed by containers (review follow-up) ───
+//
+// Building a set's index hashes and compares its elements; comparing two
+// sets (or two dictionaries with more than 8 keys) looks up the other one,
+// which builds *its* index.  The build used to run under a striped lock, so
+// that nested build took a second stripe lock while the first was held — a
+// self-deadlock (MSVC: "resource deadlock would occur") when both mapped to
+// the same stripe, and a lock-order inversion between threads.  Equal-content
+// duplicates guarantee that the outer build compares elements.
+
+namespace {
+
+Value make_int_set(std::int64_t a, std::int64_t b) {
+    auto set = std::make_shared<SetValue>();
+    set->elements.emplace_back(a);
+    set->elements.emplace_back(b);
+    return Value{std::move(set)};
+}
+
+Value make_large_dict(std::int64_t seed) {
+    auto dict = std::make_shared<DictionaryValue>();
+
+    for (std::int64_t i = 0; i < 12; ++i) { // Above the linear-scan threshold.
+        dict->set("k" + std::to_string(i), Value{seed + i});
+    }
+
+    return Value{std::move(dict)};
+}
+
+// A set whose elements come in equal-content pairs (distinct objects), so
+// building its index must compare elements with each other.
+std::shared_ptr<SetValue> make_outer_set(bool of_dictionaries, std::int64_t pairs) {
+    auto outer = std::make_shared<SetValue>();
+
+    for (std::int64_t i = 0; i < pairs; ++i) {
+        for (int copy = 0; copy < 2; ++copy) {
+            outer->elements.push_back(of_dictionaries ? make_large_dict(i * 100)
+                                                      : make_int_set(i, i + 100'000));
+        }
+    }
+
+    return outer;
+}
+
+} // namespace
+
+static void test_set_of_sets_index_build_does_not_deadlock() {
+    const auto outer = make_outer_set(false, 400);
+
+    ASSERT_TRUE(outer->contains(make_int_set(5, 100'005)));
+    ASSERT_FALSE(outer->contains(make_int_set(5, 6)));
+}
+
+static void test_set_of_large_dictionaries_index_build_does_not_deadlock() {
+    const auto outer = make_outer_set(true, 400);
+
+    ASSERT_TRUE(outer->contains(make_large_dict(700)));
+    ASSERT_FALSE(outer->contains(make_large_dict(701)));
+}
+
+static void test_concurrent_index_builds_of_nested_containers() {
+    constexpr int k_rounds = 20;
+    constexpr int k_threads = 8;
+
+    std::atomic<int> failures{0};
+
+    for (int round = 0; round < k_rounds; ++round) {
+        const auto sets = make_outer_set(false, 100);
+        const auto dicts = make_outer_set(true, 100);
+        std::latch start{k_threads};
+
+        {
+            std::vector<std::jthread> threads;
+            threads.reserve(k_threads);
+
+            for (int t = 0; t < k_threads; ++t) {
+                threads.emplace_back([&, t] {
+                    start.arrive_and_wait();
+
+                    for (std::int64_t i = t; i < 100; i += 7) {
+                        if (!sets->contains(make_int_set(i, i + 100'000)) ||
+                            !dicts->contains(make_large_dict(i * 100))) {
+                            failures.fetch_add(1);
+                        }
+                    }
+                });
+            }
+        } // jthreads join here.
+    }
+
+    ASSERT_EQ(failures.load(), 0);
+}
+
 // ─── Main ───
 
 int main() {
@@ -431,6 +728,19 @@ int main() {
 
     RUN(test_dict_deep_copy_preserves_order_and_values);
     RUN(test_dict_deep_copy_is_independent);
+
+    RUN(test_concurrent_lookups_on_shared_containers);
+    RUN(test_copied_container_rebuilds_its_own_index);
+
+    RUN(test_dropping_deep_choice_chain_does_not_overflow);
+    RUN(test_dropping_deep_array_chain_does_not_overflow);
+    RUN(test_dropping_deep_result_and_record_chain_does_not_overflow);
+    RUN(test_dropping_deep_closure_chain_does_not_overflow);
+    RUN(test_shared_subtree_survives_partial_teardown);
+
+    RUN(test_set_of_sets_index_build_does_not_deadlock);
+    RUN(test_set_of_large_dictionaries_index_build_does_not_deadlock);
+    RUN(test_concurrent_index_builds_of_nested_containers);
 
     return SUMMARY();
 }

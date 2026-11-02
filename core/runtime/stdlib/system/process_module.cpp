@@ -1,4 +1,4 @@
-﻿#include "runtime/stdlib/system/process_module.hpp"
+#include "runtime/stdlib/system/process_module.hpp"
 
 #include <cctype>
 #include <cerrno>
@@ -18,6 +18,7 @@
 #include "common/path_utils.hpp"
 #include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
+#include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/control_flow.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -516,6 +517,9 @@ void register_process_ns(const EnvPtr& env) {
             }
 
             try {
+                // The child runs to completion: let the thread pool compensate.
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 const auto [exit_code, output] = platform_process::execute_command(cmd);
 
                 if (exit_code < 0) {
@@ -541,6 +545,9 @@ void register_process_ns(const EnvPtr& env) {
             }
 
             try {
+                // The child runs to completion: let the thread pool compensate.
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 auto captured = platform_process::execute_command_captured(cmd);
 
                 if (captured.exit_code < 0) {
@@ -591,6 +598,9 @@ void register_process_ns(const EnvPtr& env) {
             }
 
             try {
+                // The child runs to completion: let the thread pool compensate.
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 auto captured = platform_process::execute_argv_captured(std::move(argv));
 
                 if (captured.exit_code < 0) {
@@ -632,6 +642,9 @@ void register_process_ns(const EnvPtr& env) {
 #endif
 
             try {
+                // The child runs to completion: let the thread pool compensate.
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 auto captured = platform_process::execute_argv_captured(std::move(argv));
 
                 if (captured.exit_code < 0) {
@@ -679,6 +692,9 @@ void register_process_ns(const EnvPtr& env) {
             }
 
             try {
+                // The child runs to completion: let the thread pool compensate.
+                const ThreadPool::BlockingRegion blocking{
+                    ThreadPool::BlockingRegion::Wait::External};
                 auto captured =
                     platform_process::execute_argv_captured_timeout(std::move(argv), timeout_ms);
 

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "analysis/errors/error.hpp"
+#include "common/resource_limits.hpp"
 #include "runtime/compiler/compiled_function.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -564,6 +565,153 @@ LUMA_TEST(vm_native_logic_error_becomes_internal_error) {
 
 LUMA_TEST(vm_native_bad_alloc_stays_plain_runtime_error) {
     ASSERT_EQ(raise_from_native(std::bad_alloc{}), SurfacedAs::runtime_error);
+}
+
+// ─── Call arity (too many arguments) ───
+//
+// call_function rejected too few arguments but not too many: the extra
+// arguments landed in the callee's first local slots, so a zero-parameter
+// lambda's first local read the caller's argument.  Every call path funnels
+// through call_function (Call, pipes, spawn, native callbacks), and tail calls
+// mirror the check.  eval() skips the type checker, so these reach the VM.
+
+LUMA_TEST(vm_call_with_too_many_arguments_is_rejected) {
+    ASSERT_EVAL_THROWS("function integer f() {\n"
+                       "    integer base = 40\n"
+                       "    return base + 2\n"
+                       "}\n"
+                       "f(\"surprise\")",
+                       "too many arguments: function expects 0 but got 1");
+}
+
+LUMA_TEST(vm_lambda_call_with_too_many_arguments_is_rejected) {
+    ASSERT_EVAL_THROWS("function() -> integer g = () -> 1\n"
+                       "g(1, 2)",
+                       "too many arguments: function expects 0 but got 2");
+}
+
+LUMA_TEST(vm_pipe_call_with_too_many_arguments_is_rejected) {
+    ASSERT_EVAL_THROWS("function integer twice(integer x) { return x * 2 }\n"
+                       "3 |> twice(4)",
+                       "too many arguments: function expects 1 but got 2");
+}
+
+LUMA_TEST(vm_native_callback_with_too_many_arguments_is_rejected) {
+    // Array.map invokes the closure with one argument; a zero-parameter
+    // closure must not silently receive it as its first local.  Array.map
+    // reports a failing callback as a failure result.
+    const auto result = luma::test::eval("Array.map([1, 2], () -> 7)");
+
+    ASSERT_TRUE(result.is_result());
+    ASSERT_FALSE(result.as_result()->is_success);
+    ASSERT_NE(result.as_result()->owned_inner->as_string().find("too many arguments"),
+              std::string::npos);
+}
+
+LUMA_TEST(vm_tail_call_with_too_many_arguments_is_rejected) {
+    ASSERT_EVAL_THROWS("function integer zero() { return 0 }\n"
+                       "function integer f(integer n) { return zero(n) }\n"
+                       "f(1)",
+                       "too many arguments: function expects 0 but got 1");
+}
+
+LUMA_TEST(vm_call_with_optional_parameters_still_pads) {
+    const auto result = luma::test::eval("function integer f(integer a, integer b = 5) {\n"
+                                         "    return a + b\n"
+                                         "}\n"
+                                         "f(1)");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 6);
+}
+
+// ─── String repetition limits ───
+//
+// The `*` operator skipped ResourceLimits::max_string_repeat and looped
+// `count` times even for an empty string, so `"" * 9223372036854775807`
+// spun for centuries.
+
+LUMA_TEST(vm_string_repeat_of_empty_string_returns_immediately) {
+    // At the maximum allowed count the empty string must not iterate `count`
+    // times; past it the count limit applies, exactly as for String.repeat.
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_string_repeat,
+                                       std::int64_t{1'000'000'000}};
+
+    const auto result = luma::test::eval("\"\" * 1000000000");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_TRUE(result.as_string().empty());
+
+    ASSERT_EVAL_THROWS("\"\" * 9223372036854775807", "string repeat count exceeds maximum");
+}
+
+LUMA_TEST(vm_string_repeat_enforces_max_string_repeat) {
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_string_repeat,
+                                       std::int64_t{1'000}};
+
+    ASSERT_EVAL_THROWS("\"ab\" * 1001", "string repeat count exceeds maximum");
+    ASSERT_EVAL_THROWS("1001 * \"ab\"", "string repeat count exceeds maximum");
+}
+
+LUMA_TEST(vm_string_repeat_builds_expected_result) {
+    const auto result = luma::test::eval("\"abc\" * 5");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_EQ(result.as_string(), std::string{"abcabcabcabcabc"});
+
+    const auto odd = luma::test::eval("7 * \"xy\"");
+
+    ASSERT_EQ(odd.as_string(), std::string{"xyxyxyxyxyxyxy"});
+}
+
+LUMA_TEST(vm_string_repeat_enforces_max_string_size) {
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_string_size, std::size_t{1'000}};
+
+    ASSERT_EVAL_THROWS("\"abcd\" * 251", "string repetition exceeds maximum string size");
+}
+
+// ─── Dictionary index assignment limit ───
+//
+// `d[key] = value` inserted new keys without the max_dictionary_size check
+// that Dictionary.set performs.
+
+LUMA_TEST(vm_dictionary_index_assignment_enforces_max_dictionary_size) {
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_dictionary_size, std::size_t{2}};
+
+    ASSERT_EVAL_THROWS("function integer f() {\n"
+                       "    mutable dictionary<integer> d = {\"z\": 0}\n"
+                       "    d[\"a\"] = 1\n"
+                       "    d[\"b\"] = 2\n"
+                       "    d[\"c\"] = 3\n"
+                       "    return 0\n"
+                       "}\n"
+                       "f()",
+                       "Dictionary index assignment: result exceeds maximum dictionary size");
+}
+
+LUMA_TEST(vm_dictionary_index_assignment_overwrite_at_limit_is_allowed) {
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_dictionary_size, std::size_t{3}};
+
+    const auto result = luma::test::eval("function integer f() {\n"
+                                         "    mutable dictionary<integer> d = {\"z\": 0}\n"
+                                         "    d[\"a\"] = 1\n"
+                                         "    d[\"b\"] = 2\n"
+                                         "    d[\"b\"] = 5\n"
+                                         "    return d[\"b\"]\n"
+                                         "}\n"
+                                         "f()");
+
+    ASSERT_EQ(result.as_integer(), 5);
+}
+
+LUMA_TEST(vm_collection_literals_enforce_configured_limits) {
+    const luma::test::LimitGuard array_guard{luma::ResourceLimits::max_array_size, std::size_t{2}};
+    const luma::test::LimitGuard dict_guard{luma::ResourceLimits::max_dictionary_size,
+                                            std::size_t{1}};
+
+    ASSERT_EVAL_THROWS("[1, 2, 3]", "array literal: result exceeds maximum array size");
+    ASSERT_EVAL_THROWS("{\"a\": 1, \"b\": 2}",
+                       "dictionary literal: result exceeds maximum dictionary size");
 }
 
 // ─── Main ───

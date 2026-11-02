@@ -433,7 +433,7 @@ The `//` operator always returns an `integer` and requires both operands to be `
 
 Use `//` when you explicitly need an integer quotient and want to document that intent.
 
-String repeat (`text * count`) clamps a negative count computed at run time to zero, giving `""`. A negative literal count such as `"ab" * -3` is always a mistake, so it is a compile-time error.
+String repeat (`text * count`) clamps a negative count computed at run time to zero, giving `""`. A negative literal count such as `"ab" * -3` is always a mistake, so it is a compile-time error. Like `String.repeat`, the operator is bounded by the resource limits: a count above `LUMA_LIMIT_MAX_STRING_REPEAT` (default 10,000,000) raises `string repeat count exceeds maximum`, and a result larger than the maximum string size raises `string repetition exceeds maximum string size`. Repeating the empty string returns `""` at once for any allowed count.
 
 ### Bit Manipulation
 

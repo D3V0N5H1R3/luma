@@ -454,3 +454,30 @@ function void test_set_any_callback_failure() {
 
     assert(Result.is_failure(found), "any predicate exception should propagate as failure")
 }
+
+
+# ─── Sets of sets (lazy index build re-entrancy) ───
+#
+# Building a set's hash index compares elements; comparing two sets looks up
+# the other set, which builds its own index.  That nested build used to run
+# under a shared lock and deadlocked ("resource deadlock would occur").
+
+@test
+function void test_set_of_sets_filter_and_contains() {
+    mutable array<set<integer>> inner = []
+
+    for i in 0..3000 {
+        inner = Array.push(inner, Set.from_array([i, i + 100000]))
+    }
+
+    set<set<integer>> outer = Set.from_array(inner)
+
+    for m in 2..12 {
+        set<set<integer>> kept = Set.filter(
+            outer, (set<integer> s) -> (Set.to_array(s)[0] % m) != 0
+        ) |> Result.unwrap()
+
+        assert(Set.contains(kept, Set.from_array([5, 100005])) == (5 % m != 0),
+            "a set of sets finds its element by value")
+    }
+}

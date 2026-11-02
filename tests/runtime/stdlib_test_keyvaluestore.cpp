@@ -745,12 +745,16 @@ static void test_keyvaluestore_set_caps_new_keys() {
 static void test_keyvaluestore_set_many_caps_size() {
     const LimitGuard guard{ResourceLimits::max_dictionary_size, static_cast<std::size_t>(2)};
 
-    // A single set_many whose distinct keys exceed the cap must fail, matching
-    // the entry-count guard parse_store enforces on the persisted file.
+    // A set_many whose distinct keys push the store past the cap must fail,
+    // matching the entry-count guard parse_store enforces on the persisted
+    // file.  The argument itself stays within the cap: a dictionary literal
+    // larger than max_dictionary_size is rejected before set_many runs.
     ASSERT_EVAL_THROWS(R"(
         KeyValueStore.open("test_kv_cpp_cap_setmany.kv")
         |> Result.unwrap()
-        |> KeyValueStore.set_many({"a": "1", "b": "2", "c": "3"})
+        |> KeyValueStore.set("a", "1")
+        |> Result.unwrap()
+        |> KeyValueStore.set_many({"b": "2", "c": "3"})
     )",
                        "KeyValueStore exceeds maximum entry count");
 }

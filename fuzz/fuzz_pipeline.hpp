@@ -39,6 +39,10 @@ namespace luma::fuzz {
 inline constexpr int k_fuzz_max_call_depth = 64;
 inline constexpr std::size_t k_fuzz_max_container_size = 10'000;
 inline constexpr std::size_t k_fuzz_max_string_size = 65'536;
+// Regex inputs stay at the stack-safe production default (32 KiB): the
+// backtracking engine's recursion depth grows with the input, so a larger
+// fuzz value would only find the stack overflow the default exists to avoid.
+inline constexpr std::size_t k_fuzz_max_regex_input_size = 32'768;
 inline constexpr std::int64_t k_fuzz_max_string_repeat = 1'000;
 inline constexpr std::int64_t k_fuzz_max_levenshtein_input = 256;
 inline constexpr std::size_t k_fuzz_max_task_queue_size = 1'000;
@@ -64,7 +68,7 @@ inline void apply_fuzz_resource_limits() {
 
     ResourceLimits::max_string_size = k_fuzz_max_string_size;
     ResourceLimits::max_pad_width = k_fuzz_max_string_size;
-    ResourceLimits::max_regex_input_size = k_fuzz_max_string_size;
+    ResourceLimits::max_regex_input_size = k_fuzz_max_regex_input_size;
     ResourceLimits::max_string_repeat = k_fuzz_max_string_repeat;
     ResourceLimits::max_levenshtein_input = k_fuzz_max_levenshtein_input;
 

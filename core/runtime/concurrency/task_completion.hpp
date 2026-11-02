@@ -1,9 +1,11 @@
 #ifndef LUMA_CONCURRENCY_TASK_COMPLETION_HPP
 #define LUMA_CONCURRENCY_TASK_COMPLETION_HPP
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -44,12 +46,53 @@ private:
 // that task (deep copies included).  The producer calls mark_complete() after
 // it has satisfied the task's promise, so a woken subscriber always finds the
 // task's future ready.
+//
+// It also arbitrates who resolves the task: the worker that dequeues it
+// (claim_start) or a task_scope tearing down after cancelling it
+// (abandon_if_not_started).  Abandoning resolves a task that has not started
+// as cancelled without needing a worker, so a scope can always be joined —
+// even when every pool worker is blocked and the queued child could never run.
 class TaskCompletion {
 public:
     TaskCompletion() = default;
 
     TaskCompletion(const TaskCompletion&) = delete;
     TaskCompletion& operator=(const TaskCompletion&) = delete;
+
+    // Install the action that resolves the task as cancelled without running
+    // it (sets the promise's exception).  Called once, before the task is
+    // enqueued.
+    void set_abandon_handler(std::function<void()> handler) {
+        const std::scoped_lock lock{mutex_};
+        abandon_ = std::move(handler);
+    }
+
+    // Called by the worker before running the task.  Returns false if the
+    // task was abandoned first; the worker must then not touch its promise.
+    [[nodiscard]] bool claim_start() {
+        if (started_.exchange(true, std::memory_order_acq_rel)) {
+            return false;
+        }
+
+        drop_abandon_handler();
+        return true;
+    }
+
+    // Resolve a task that has not started yet as cancelled, without running
+    // it.  Returns true if this call resolved it; false if a worker already
+    // started it (it is running and will observe its cancelled token).
+    bool abandon_if_not_started() {
+        if (started_.exchange(true, std::memory_order_acq_rel)) {
+            return false;
+        }
+
+        if (auto handler = drop_abandon_handler()) {
+            handler();
+        }
+
+        mark_complete();
+        return true;
+    }
 
     void mark_complete() {
         std::vector<std::shared_ptr<CompletionSignal>> subscribers;
@@ -94,8 +137,19 @@ public:
     }
 
 private:
+    // Take the abandon handler out (so its captures — the task's promise — are
+    // released as soon as the task starts or is abandoned).
+    std::function<void()> drop_abandon_handler() {
+        std::function<void()> handler;
+        const std::scoped_lock lock{mutex_};
+        handler.swap(abandon_);
+        return handler;
+    }
+
     mutable std::mutex mutex_;
     std::vector<std::shared_ptr<CompletionSignal>> subscribers_;
+    std::function<void()> abandon_;
+    std::atomic<bool> started_{false};
     bool complete_{false};
 };
 

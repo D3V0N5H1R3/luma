@@ -13,10 +13,12 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "common/comparison_ops.hpp"
 #include "common/overflow.hpp"
 #include "common/resource_limits.hpp"
+#include "common/string_utils.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/vm/vm.hpp"
@@ -124,9 +126,20 @@ template <typename DblOp>
     return is_numeric(a) && is_numeric(b);
 }
 
-/// Handles string repetition: "abc" * 3 or 3 * "abc".
-/// Returns nullopt if the operands are not a string/integer pair.
-[[nodiscard]] std::optional<Value> try_string_repeat(const Value& a, const Value& b) {
+/// Outcome of a string repetition attempt: `value` on success, otherwise the
+/// error to raise.  `applies` is false when the operands are not a
+/// string/integer pair (so the caller reports a type error instead).
+struct StringRepeatOutcome {
+    bool applies{false};
+    Value value;
+    std::string_view error;
+};
+
+/// Handles string repetition: "abc" * 3 or 3 * "abc".  Enforces the same
+/// limits as String.repeat — the repeat count (ResourceLimits::max_string_repeat)
+/// and the result size — and never iterates over the count itself, so
+/// `"" * 9223372036854775807` returns "" at once instead of spinning.
+[[nodiscard]] StringRepeatOutcome try_string_repeat(const Value& a, const Value& b) {
     const std::string* str = nullptr;
     std::int64_t count = 0;
 
@@ -139,32 +152,25 @@ template <typename DblOp>
     }
 
     if (str == nullptr) {
-        return std::nullopt;
+        return {};
     }
 
     if (count <= 0) {
-        return Value{std::string{}};
+        return {.applies = true, .value = Value{std::string{}}, .error = {}};
+    }
+
+    if (count > ResourceLimits::max_string_repeat) {
+        return {.applies = true, .value = {}, .error = vm_errors::string_repeat_count_exceeds_max};
     }
 
     if (!str->empty() &&
         static_cast<std::size_t>(count) > ResourceLimits::max_string_size / str->size()) {
-        return std::nullopt; // Sentinel — caller reports overflow.
+        return {.applies = true, .value = {}, .error = vm_errors::string_repetition_exceeds_max};
     }
 
-    const auto total = str->size() * static_cast<std::size_t>(count);
-
-    if (total > ResourceLimits::max_string_size) {
-        return std::nullopt; // Sentinel — caller reports overflow.
-    }
-
-    std::string repeated;
-    repeated.reserve(total);
-
-    for (std::size_t i = 0; i < static_cast<std::size_t>(count); ++i) {
-        repeated.append(*str);
-    }
-
-    return Value{std::move(repeated)};
+    return {.applies = true,
+            .value = Value{repeat_string(*str, static_cast<std::size_t>(count))},
+            .error = {}};
 }
 
 /// Maps an arithmetic Op to its verb for error messages.
@@ -249,13 +255,12 @@ Value VM::numeric_binary_op(const Value& a, const Value& b, Op op) const {
                 return result;
             }
 
-            if (auto repeated = try_string_repeat(a, b)) {
-                return *repeated;
-            }
+            if (auto repeated = try_string_repeat(a, b); repeated.applies) {
+                if (!repeated.error.empty()) [[unlikely]] {
+                    runtime_error(repeated.error, vm_errors::hint_reduce_repeat_count);
+                }
 
-            // String repetition was attempted but exceeded size limit.
-            if (a.is_string() || b.is_string()) [[unlikely]] {
-                runtime_error(vm_errors::string_repetition_exceeds_max);
+                return std::move(repeated.value);
             }
 
             if (both_numeric(a, b)) [[unlikely]] {

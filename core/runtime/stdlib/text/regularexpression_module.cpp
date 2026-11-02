@@ -604,7 +604,10 @@ make_match_record(const std::smatch& match,
 // split) propagates so the limit aborts the call rather than being reported as
 // a recoverable failure; any other std::exception (notably std::regex_error
 // from an invalid pattern) becomes a failure result prefixed with the operation
-// name, mirroring wrap_result_operation.
+// name, mirroring wrap_result_operation.  Every matching entry point runs its
+// engine calls inside this wrapper, so the engine's own resource errors —
+// regex_error(error_stack) / regex_error(error_complexity), which MSVC raises
+// on long inputs instead of recursing — become a clear failure too.
 template <typename Func>
     requires std::invocable<Func>
 [[nodiscard]] Value run_regex_collection(std::string_view function, Func fn) {
@@ -612,6 +615,16 @@ template <typename Func>
         return fn();
     } catch (const RuntimeError&) {
         throw;
+    } catch (const std::regex_error& e) {
+        if (e.code() == std::regex_constants::error_stack ||
+            e.code() == std::regex_constants::error_complexity) {
+            return make_failure_value(std::format(
+                "RegularExpression.{}: input is too complex for the regular expression engine "
+                "(use a shorter input or a simpler pattern)",
+                function));
+        }
+
+        return make_failure_value(std::format("RegularExpression.{}: {}", function, e.what()));
     } catch (const std::exception& e) {
         return make_failure_value(std::format("RegularExpression.{}: {}", function, e.what()));
     }
@@ -876,7 +889,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            return wrap_result_operation("RegularExpression", "matches", [&]() -> Value {
+            return run_regex_collection("matches", [&]() -> Value {
                 const auto re =
                     get_compiled_regex(parse_named_capture_groups(args[1].as_string()).cleaned);
                 const bool matched = std::regex_search(args[0].as_string(), *re);
@@ -896,7 +909,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            return wrap_result_operation("RegularExpression", "count", [&]() -> Value {
+            return run_regex_collection("count", [&]() -> Value {
                 const auto re =
                     get_compiled_regex(parse_named_capture_groups(args[1].as_string()).cleaned);
                 const auto& s = args[0].as_string();
@@ -1064,7 +1077,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            return wrap_result_operation("RegularExpression", "matches_with", [&]() -> Value {
+            return run_regex_collection("matches_with", [&]() -> Value {
                 const auto prepared = prepare_regex(args[1].as_string(), opts);
 
                 return make_success_value(

@@ -25,6 +25,7 @@
 #include "common/utf8.hpp"
 #include "common/utf8_iterator.hpp"
 #include "runtime/interpreter/value.hpp"
+#include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_error_messages.hpp"
 
@@ -188,12 +189,17 @@ void VM::handle_index_set() {
                               vm_errors::hint_convert_index);
             }
             const auto& key = index_val.as_string();
-            auto* existing = container.as_dictionary()->find(key);
+            auto& dict = *container.as_dictionary();
+            auto* existing = dict.find(key);
 
             if (existing) {
                 *existing = std::move(value);
             } else {
-                container.as_dictionary()->set(key, std::move(value));
+                // A new key grows the dictionary: enforce the same limit (and
+                // message) as Dictionary.set.
+                ensure_dictionary_capacity(dict.entries.size(), 1, "Dictionary index assignment",
+                                           current_location());
+                dict.set(key, std::move(value));
             }
         },
         error, error);

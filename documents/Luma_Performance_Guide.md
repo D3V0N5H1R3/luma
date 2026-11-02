@@ -92,12 +92,13 @@ This is the canonical reference for Luma's resource limits; the defaults below m
 | Max dictionary size       | 10,000,000   | 1,000,000,000     | `LUMA_LIMIT_MAX_DICTIONARY_SIZE`       |
 | Max string size           | 256 MB       | 4 GiB             | `LUMA_LIMIT_MAX_STRING_SIZE`           |
 | Max regex pattern size    | 10,000 bytes | 1,000,000 bytes   | `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`    |
+| Max regex input size      | 32 KiB       | 1 GiB             | `LUMA_LIMIT_MAX_REGEX_INPUT_SIZE`      |
 | Max while iterations      | 10,000,000   | 1,000,000,000,000 | `LUMA_LIMIT_MAX_WHILE_ITERATIONS`      |
 | Max total loop iterations | 10^18 (off)  | 10^18             | `LUMA_LIMIT_MAX_TOTAL_LOOP_ITERATIONS` |
 | Max open sockets          | 1,000        | 65,536            | `LUMA_LIMIT_MAX_OPEN_SOCKETS`          |
 | Max task queue size       | 100,000      | 100,000,000       | `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`       |
 
-The effective call depth is also capped by the VM's fixed frame limit of 256 (see [§4](#4--recursion-limits)). The remaining limits — for example the queue, stack, set, channel, HTTP, and process-output sizes — follow the same `LUMA_LIMIT_<NAME>` pattern; their defaults and ceilings are listed in `core/common/resource_limits.hpp`.
+The effective call depth is also capped by the VM's fixed frame limit of 256 (see [§4](#4--recursion-limits)). The regex input limit is also a native-stack bound: `std::regex` backtracks recursively, so raising it far above the default can overflow a task worker's stack on Linux. The remaining limits — for example the queue, stack, set, channel, HTTP, and process-output sizes — follow the same `LUMA_LIMIT_<NAME>` pattern; their defaults and ceilings are listed in `core/common/resource_limits.hpp`.
 
 ## 7 — Interpreter Optimisations
 
