@@ -5,7 +5,9 @@
 // LintRuleRegistry (find_by_id / find_by_name / find_by_code), which are
 // otherwise only exercised indirectly through the default registries.
 
+#include <algorithm>
 #include <memory>
+#include <string_view>
 
 #include "analysis/diagnostics/diagnostic_codes.hpp"
 #include "analysis/linter/builtin_plugins.hpp"
@@ -13,13 +15,19 @@
 #include "analysis/linter/lint_rule.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::builtin_lint_rules;
+using luma::DiagnosticCode;
+using luma::DivisionByZeroPlugin;
+using luma::FloatingPointEqualityPlugin;
+using luma::lint_rule_registry;
+using luma::LintPlugin;
+using luma::LintPluginRegistry;
 
 // ─── Helpers ───
 
 // Builds an isolated registry with two known built-in plugins so tests never
 // mutate the shared global registry via set_enabled().
-static LintPluginRegistry make_plugin_registry() {
+[[nodiscard]] static LintPluginRegistry make_plugin_registry() {
     LintPluginRegistry reg;
     reg.register_plugin(std::make_unique<DivisionByZeroPlugin>());        // W0014
     reg.register_plugin(std::make_unique<FloatingPointEqualityPlugin>()); // W0009
@@ -33,14 +41,14 @@ static void test_plugin_find_by_id_known() {
 
     const auto* plugin = reg.find_by_id("W0014");
 
-    ASSERT_TRUE(plugin != nullptr);
+    ASSERT_NE(plugin, nullptr);
     ASSERT_EQ(plugin->rule_info().id, std::string_view{"W0014"});
 }
 
 static void test_plugin_find_by_id_unknown_returns_null() {
     const auto reg = make_plugin_registry();
 
-    ASSERT_TRUE(reg.find_by_id("W9999") == nullptr);
+    ASSERT_EQ(reg.find_by_id("W9999"), nullptr);
 }
 
 // ─── LintPluginRegistry: is_enabled / set_enabled ───
@@ -61,7 +69,7 @@ static void test_plugin_is_enabled_unknown_returns_false() {
 static void test_plugin_set_enabled_disables_rule() {
     auto reg = make_plugin_registry();
 
-    const bool changed = reg.set_enabled("W0014", false);
+    const bool changed = reg.set_enabled("W0014", /*enabled=*/false);
 
     ASSERT_TRUE(changed);
     ASSERT_FALSE(reg.is_enabled("W0014"));
@@ -72,8 +80,8 @@ static void test_plugin_set_enabled_disables_rule() {
 static void test_plugin_set_enabled_reenables_rule() {
     auto reg = make_plugin_registry();
 
-    (void)reg.set_enabled("W0014", false);
-    const bool changed = reg.set_enabled("W0014", true);
+    ASSERT_TRUE(reg.set_enabled("W0014", /*enabled=*/false));
+    const bool changed = reg.set_enabled("W0014", /*enabled=*/true);
 
     ASSERT_TRUE(changed);
     ASSERT_TRUE(reg.is_enabled("W0014"));
@@ -82,18 +90,24 @@ static void test_plugin_set_enabled_reenables_rule() {
 static void test_plugin_set_enabled_unknown_returns_false() {
     auto reg = make_plugin_registry();
 
-    ASSERT_FALSE(reg.set_enabled("W9999", false));
+    ASSERT_FALSE(reg.set_enabled("W9999", /*enabled=*/false));
 }
 
 static void test_plugin_disabled_rule_excluded_from_enabled() {
     auto reg = make_plugin_registry();
 
-    (void)reg.set_enabled("W0014", false);
+    ASSERT_TRUE(reg.set_enabled("W0014", /*enabled=*/false));
 
-    // The disabled plugin must not appear in the enabled-plugins span.
-    for (const auto* plugin : reg.enabled_plugins()) {
-        ASSERT_NE(plugin->rule_info().id, std::string_view{"W0014"});
-    }
+    // The disabled plugin must not appear in the enabled-plugins span; the
+    // other plugin must still be there.
+    const auto enabled = reg.enabled_plugins();
+    const auto has_id = [](std::string_view id) {
+        return [id](const LintPlugin* plugin) { return plugin->rule_info().id == id; };
+    };
+
+    ASSERT_EQ(enabled.size(), 1);
+    ASSERT_TRUE(std::ranges::none_of(enabled, has_id("W0014")));
+    ASSERT_TRUE(std::ranges::any_of(enabled, has_id("W0009")));
 }
 
 // ─── LintRuleRegistry: find_by_id / find_by_name ───
@@ -103,14 +117,14 @@ static void test_rule_find_by_id_known() {
 
     const auto* rule = reg.find_by_id("W0001");
 
-    ASSERT_TRUE(rule != nullptr);
+    ASSERT_NE(rule, nullptr);
     ASSERT_EQ(rule->name, std::string_view{"unused-variable"});
 }
 
 static void test_rule_find_by_id_unknown_returns_null() {
     const auto& reg = lint_rule_registry();
 
-    ASSERT_TRUE(reg.find_by_id("W9999") == nullptr);
+    ASSERT_EQ(reg.find_by_id("W9999"), nullptr);
 }
 
 static void test_rule_find_by_name_known() {
@@ -118,7 +132,7 @@ static void test_rule_find_by_name_known() {
 
     const auto* rule = reg.find_by_name("unused-variable");
 
-    ASSERT_TRUE(rule != nullptr);
+    ASSERT_NE(rule, nullptr);
     ASSERT_EQ(rule->id, std::string_view{"W0001"});
 }
 
@@ -129,7 +143,7 @@ static void test_rule_find_by_code_first() {
 
     const auto* rule = reg.find_by_code(DiagnosticCode::UnusedVariable);
 
-    ASSERT_TRUE(rule != nullptr);
+    ASSERT_NE(rule, nullptr);
     ASSERT_EQ(rule->id, std::string_view{"W0001"});
 }
 
@@ -140,7 +154,7 @@ static void test_rule_find_by_code_last() {
 
     const auto* rule = reg.find_by_code(DiagnosticCode::BooleanLiteralComparison);
 
-    ASSERT_TRUE(rule != nullptr);
+    ASSERT_NE(rule, nullptr);
     ASSERT_EQ(rule->id, std::string_view{"W0017"});
     ASSERT_EQ(rule->name, std::string_view{"boolean-literal-comparison"});
 }
@@ -149,9 +163,11 @@ static void test_rule_find_by_code_all_builtins_indexable() {
     // Every built-in lint rule must be reachable through the O(1) code index.
     const auto& reg = lint_rule_registry();
 
+    ASSERT_FALSE(builtin_lint_rules().empty());
+
     for (const auto& rule : builtin_lint_rules()) {
         const auto* found = reg.find_by_code(rule.code);
-        ASSERT_TRUE(found != nullptr);
+        ASSERT_NE(found, nullptr);
         ASSERT_EQ(found->id, rule.id);
     }
 }
@@ -160,7 +176,7 @@ static void test_rule_find_by_code_out_of_range_returns_null() {
     const auto& reg = lint_rule_registry();
 
     // DiagnosticCode::None (0) is far below the lint range and must not resolve.
-    ASSERT_TRUE(reg.find_by_code(DiagnosticCode::None) == nullptr);
+    ASSERT_EQ(reg.find_by_code(DiagnosticCode::None), nullptr);
 }
 
 // ─── main ───

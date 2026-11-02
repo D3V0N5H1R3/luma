@@ -1,6 +1,12 @@
 // Pipeline unit tests.
 
+#include <algorithm>
+#include <cstddef>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/diagnostics/diagnostic.hpp"
@@ -8,7 +14,17 @@
 #include "analysis/pipeline/pipeline.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::merge_new_diagnostics;
+using luma::Pass;
+using luma::Pipeline;
+using luma::PipelineResult;
+using luma::Program;
+using luma::Severity;
+using luma::SourceLocation;
+
+namespace diag = luma::diag;
 
 // ─── Test passes ───
 
@@ -124,7 +140,7 @@ public:
 static void test_empty_pipeline() {
     auto pipeline = Pipeline::builder().build();
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_FALSE(result.has_errors());
     ASSERT_EQ(result.diagnostics.size(), static_cast<std::size_t>(0));
@@ -133,7 +149,7 @@ static void test_empty_pipeline() {
 static void test_single_success_pass() {
     auto pipeline = Pipeline::builder().add<SuccessPass>().build();
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_FALSE(result.has_errors());
 }
@@ -141,7 +157,7 @@ static void test_single_success_pass() {
 static void test_single_fail_pass() {
     auto pipeline = Pipeline::builder().add<FailPass>().build();
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_TRUE(result.has_errors());
     ASSERT_EQ(result.error_count(), static_cast<std::size_t>(1));
@@ -153,10 +169,15 @@ static void test_fail_stops_pipeline() {
         Pipeline::builder().add<SuccessPass>().add<FailPass>().add<SuccessPass>().build();
 
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_TRUE(result.has_errors());
     ASSERT_EQ(result.error_count(), static_cast<std::size_t>(1));
+
+    // Only the passes that ran record a timing: the trailing SuccessPass did not.
+    ASSERT_EQ(result.timings.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(result.timings[0].name, "SuccessPass");
+    ASSERT_EQ(result.timings[1].name, "FailPass");
 }
 
 static void test_dependent_runs_after_required_failed() {
@@ -168,22 +189,22 @@ static void test_dependent_runs_after_required_failed() {
     auto pipeline = Pipeline::builder().add<FailPass>().add<DependentAfterFailurePass>().build();
 
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_TRUE(result.has_errors());
     // Exactly one error (FailPass's), not an extra spurious internal error.
     ASSERT_EQ(result.error_count(), static_cast<std::size_t>(1));
 
-    for (const auto& d : result.diagnostics) {
-        ASSERT_TRUE(d.message.find("internal error") == std::string::npos);
-    }
+    ASSERT_TRUE(std::ranges::none_of(result.diagnostics, [](const Diagnostic& d) {
+        return d.message.find("internal error") != std::string::npos;
+    }));
 }
 
 static void test_warnings_dont_stop() {
     auto pipeline = Pipeline::builder().add<WarnPass>().add<SuccessPass>().build();
 
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_FALSE(result.has_errors());
     ASSERT_TRUE(result.has_warnings());
@@ -197,28 +218,29 @@ static void test_execution_order() {
         Pipeline::builder().add<CountingPass>(1).add<CountingPass>(2).add<CountingPass>(3).build();
 
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_FALSE(result.has_errors());
     ASSERT_EQ(pass_counter, 3);
 }
 
 static void test_add_if_true() {
-    auto pipeline = Pipeline::builder().add_if<WarnPass>(true).build();
+    auto pipeline = Pipeline::builder().add_if<WarnPass>(/*condition=*/true).build();
 
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_TRUE(result.has_warnings());
 }
 
 static void test_add_if_false() {
-    auto pipeline = Pipeline::builder().add_if<WarnPass>(false).build();
+    auto pipeline = Pipeline::builder().add_if<WarnPass>(/*condition=*/false).build();
 
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_FALSE(result.has_warnings());
+    ASSERT_TRUE(result.timings.empty());
 }
 
 static void test_pipeline_result_counts() {
@@ -254,13 +276,13 @@ static void test_pass_timings() {
     auto pipeline = Pipeline::builder().add<SuccessPass>().add<WarnPass>().build();
 
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_EQ(result.timings.size(), static_cast<std::size_t>(2));
     ASSERT_EQ(result.timings[0].name, "SuccessPass");
     ASSERT_EQ(result.timings[1].name, "WarnPass");
-    ASSERT_TRUE(result.timings[0].duration.count() >= 0);
-    ASSERT_TRUE(result.timings[1].duration.count() >= 0);
+    ASSERT_GE(result.timings[0].duration.count(), 0);
+    ASSERT_GE(result.timings[1].duration.count(), 0);
 }
 
 static void test_internal_error_has_no_span() {
@@ -272,14 +294,14 @@ static void test_internal_error_has_no_span() {
     auto pipeline = Pipeline::builder().add<ThrowingPass>().build();
 
     Program program;
-    auto result = pipeline.run(program);
+    const auto result = pipeline.run(program);
 
     ASSERT_TRUE(result.has_errors());
     ASSERT_EQ(result.error_count(), static_cast<std::size_t>(1));
 
     const auto& diagnostic = result.diagnostics.front();
     ASSERT_TRUE(diagnostic.spans.empty());
-    ASSERT_TRUE(diagnostic.message.find("internal error") != std::string::npos);
+    ASSERT_NE(diagnostic.message.find("internal error: boom"), std::string::npos);
 }
 
 // Rules checked by both the type checker and the linter (e.g. W0009) must be

@@ -24,8 +24,41 @@
 #include "protocol/uri_utils.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::protocol;
 using luma::json::JsonValue;
+using luma::protocol::BufferedTransport;
+using luma::protocol::byte_offset_to_utf16_column;
+using luma::protocol::canonicalize_uri;
+using luma::protocol::classify_read_error;
+using luma::protocol::ConnectionClosed;
+using luma::protocol::ErrorRecoveryState;
+using luma::protocol::ErrorSeverity;
+using luma::protocol::HandlerRegistry;
+using luma::protocol::is_supplementary_sequence;
+using luma::protocol::k_default_max_consecutive_errors;
+using luma::protocol::k_default_max_header_length;
+using luma::protocol::k_default_max_message_bytes;
+using luma::protocol::k_default_max_resync_iterations;
+using luma::protocol::k_json_rpc_internal_error;
+using luma::protocol::k_json_rpc_invalid_params;
+using luma::protocol::k_json_rpc_invalid_request;
+using luma::protocol::k_json_rpc_method_not_found;
+using luma::protocol::k_json_rpc_parse_error;
+using luma::protocol::k_json_rpc_request_cancelled;
+using luma::protocol::k_json_rpc_server_not_initialized;
+using luma::protocol::k_read_buffer_size;
+using luma::protocol::ParseError;
+using luma::protocol::path_to_uri;
+using luma::protocol::percent_decode;
+using luma::protocol::percent_encode_path;
+using luma::protocol::RecoveryAction;
+using luma::protocol::ResyncError;
+using luma::protocol::Transport;
+using luma::protocol::TransportError;
+using luma::protocol::TransportLimits;
+using luma::protocol::try_parse_content_length;
+using luma::protocol::uri_to_path;
+using luma::protocol::utf16_column_to_byte_offset;
+using luma::protocol::write_framed_message;
 
 // ═══════════════════════════════════════════════════════════
 // error_codes.hpp — verify constants have expected values
@@ -70,7 +103,7 @@ static void test_error_codes_are_all_negative() {
 }
 
 static void test_error_codes_no_duplicates() {
-    std::set<int> codes{
+    const std::set<int> codes{
         k_json_rpc_parse_error,       k_json_rpc_invalid_request, k_json_rpc_method_not_found,
         k_json_rpc_invalid_params,    k_json_rpc_internal_error,  k_json_rpc_server_not_initialized,
         k_json_rpc_request_cancelled,
@@ -113,7 +146,7 @@ static void test_registry_register_and_find() {
     ASSERT_EQ(registry.size(), 1u);
 
     const auto* handler = registry.find("test/method");
-    ASSERT_TRUE(handler != nullptr);
+    ASSERT_NE(handler, nullptr);
     ASSERT_EQ((*handler)(), 42);
 }
 
@@ -122,7 +155,7 @@ static void test_registry_find_unknown_returns_null() {
     registry.register_handler("known", []() { return 1; });
 
     const auto* handler = registry.find("unknown");
-    ASSERT_TRUE(handler == nullptr);
+    ASSERT_EQ(handler, nullptr);
 }
 
 static void test_registry_multiple_handlers() {
@@ -136,9 +169,9 @@ static void test_registry_multiple_handlers() {
     const auto* a = registry.find("a");
     const auto* b = registry.find("b");
     const auto* c = registry.find("c");
-    ASSERT_TRUE(a != nullptr);
-    ASSERT_TRUE(b != nullptr);
-    ASSERT_TRUE(c != nullptr);
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+    ASSERT_NE(c, nullptr);
     ASSERT_EQ((*a)(), std::string{"alpha"});
     ASSERT_EQ((*b)(), std::string{"beta"});
     ASSERT_EQ((*c)(), std::string{"gamma"});
@@ -148,7 +181,8 @@ static void test_registry_duplicate_throws() {
     HandlerRegistry<std::function<int()>> registry;
     registry.register_handler("method", []() { return 1; });
 
-    ASSERT_THROWS(registry.register_handler("method", []() { return 2; }));
+    ASSERT_THROWS_WITH_MESSAGE(registry.register_handler("method", []() { return 2; }),
+                               "duplicate handler registration");
 
     ASSERT_EQ(registry.size(), 1u);
 }
@@ -160,10 +194,10 @@ static void test_registry_with_json_handler() {
     registry.register_handler("echo", [](const JsonValue& params) -> JsonValue { return params; });
 
     const auto* handler = registry.find("echo");
-    ASSERT_TRUE(handler != nullptr);
+    ASSERT_NE(handler, nullptr);
 
-    auto input = JsonValue::parse(R"({"key": "value"})");
-    auto result = (*handler)(input);
+    const auto input = JsonValue::parse(R"({"key": "value"})");
+    const auto result = (*handler)(input);
     ASSERT_TRUE(result.is_object());
     ASSERT_EQ(result["key"].as_string(), std::string{"value"});
 }
@@ -176,7 +210,7 @@ static void test_registry_with_void_handler() {
     registry.register_handler("notify", [&call_count](const std::string&) { ++call_count; });
 
     const auto* handler = registry.find("notify");
-    ASSERT_TRUE(handler != nullptr);
+    ASSERT_NE(handler, nullptr);
     (*handler)("test");
     ASSERT_EQ(call_count, 1);
 }
@@ -186,56 +220,56 @@ static void test_registry_with_void_handler() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_parse_content_length_valid() {
-    auto result = try_parse_content_length("Content-Length: 42");
+    const auto result = try_parse_content_length("Content-Length: 42");
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(*result, 42u);
 }
 
 static void test_parse_content_length_zero() {
-    auto result = try_parse_content_length("Content-Length: 0");
+    const auto result = try_parse_content_length("Content-Length: 0");
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(*result, 0u);
 }
 
 static void test_parse_content_length_large() {
-    auto result = try_parse_content_length("Content-Length: 1048576");
+    const auto result = try_parse_content_length("Content-Length: 1048576");
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(*result, 1048576u);
 }
 
 static void test_parse_content_length_case_insensitive() {
-    auto result = try_parse_content_length("content-length: 100");
+    const auto result = try_parse_content_length("content-length: 100");
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(*result, 100u);
 }
 
 static void test_parse_content_length_not_content_length() {
-    auto result = try_parse_content_length("Content-Type: application/json");
+    const auto result = try_parse_content_length("Content-Type: application/json");
     ASSERT_FALSE(result.has_value());
 }
 
 static void test_parse_content_length_empty_value() {
-    auto result = try_parse_content_length("Content-Length: ");
+    const auto result = try_parse_content_length("Content-Length: ");
     ASSERT_FALSE(result.has_value());
 }
 
 static void test_parse_content_length_non_numeric() {
-    auto result = try_parse_content_length("Content-Length: abc");
+    const auto result = try_parse_content_length("Content-Length: abc");
     ASSERT_FALSE(result.has_value());
 }
 
 static void test_parse_content_length_negative() {
-    auto result = try_parse_content_length("Content-Length: -1");
+    const auto result = try_parse_content_length("Content-Length: -1");
     ASSERT_FALSE(result.has_value());
 }
 
 static void test_parse_content_length_unrelated_header() {
-    auto result = try_parse_content_length("X-Custom-Header: 999");
+    const auto result = try_parse_content_length("X-Custom-Header: 999");
     ASSERT_FALSE(result.has_value());
 }
 
 static void test_parse_content_length_empty_string() {
-    auto result = try_parse_content_length("");
+    const auto result = try_parse_content_length("");
     ASSERT_FALSE(result.has_value());
 }
 
@@ -243,20 +277,20 @@ static void test_format_protocol_message() {
     JsonValue::ObjectType obj;
     obj["jsonrpc"] = JsonValue{std::string{"2.0"}};
     obj["method"] = JsonValue{std::string{"test"}};
-    JsonValue msg{std::move(obj)};
+    const JsonValue msg{std::move(obj)};
 
-    auto formatted = write_framed_message(msg.to_string());
+    const auto formatted = write_framed_message(msg.to_string());
 
     // Should start with Content-Length header.
-    ASSERT_TRUE(formatted.find("Content-Length: ") == 0);
+    ASSERT_TRUE(formatted.starts_with("Content-Length: "));
 
     // Should contain the \r\n\r\n separator.
-    auto sep_pos = formatted.find("\r\n\r\n");
-    ASSERT_TRUE(sep_pos != std::string::npos);
+    const auto sep_pos = formatted.find("\r\n\r\n");
+    ASSERT_NE(sep_pos, std::string::npos);
 
     // Body after separator should be valid JSON.
-    auto body = formatted.substr(sep_pos + 4);
-    auto parsed = JsonValue::parse(body);
+    const auto body = formatted.substr(sep_pos + 4);
+    const auto parsed = JsonValue::parse(body);
     ASSERT_TRUE(parsed.is_object());
     ASSERT_EQ(parsed["method"].as_string(), std::string{"test"});
 }
@@ -264,19 +298,19 @@ static void test_format_protocol_message() {
 static void test_format_protocol_message_content_length_matches_body() {
     JsonValue::ObjectType obj;
     obj["id"] = JsonValue{static_cast<int64_t>(1)};
-    JsonValue msg{std::move(obj)};
+    const JsonValue msg{std::move(obj)};
 
-    auto formatted = write_framed_message(msg.to_string());
+    const auto formatted = write_framed_message(msg.to_string());
 
     // Extract the Content-Length value.
-    auto colon_pos = formatted.find(": ");
-    auto crlf_pos = formatted.find("\r\n");
-    auto length_str = formatted.substr(colon_pos + 2, crlf_pos - colon_pos - 2);
-    auto expected_length = std::stoull(length_str);
+    const auto colon_pos = formatted.find(": ");
+    const auto crlf_pos = formatted.find("\r\n");
+    const auto length_str = formatted.substr(colon_pos + 2, crlf_pos - colon_pos - 2);
+    const auto expected_length = std::stoull(length_str);
 
     // Extract the body.
-    auto sep_pos = formatted.find("\r\n\r\n");
-    auto body = formatted.substr(sep_pos + 4);
+    const auto sep_pos = formatted.find("\r\n\r\n");
+    const auto body = formatted.substr(sep_pos + 4);
 
     ASSERT_EQ(body.size(), expected_length);
 }
@@ -337,7 +371,7 @@ static void test_transport_read_message_basic() {
     transport.queue_line(""); // blank line ends headers
     transport.queue_exact(R"({"id":"test"})");
 
-    auto msg = transport.read_message();
+    const auto msg = transport.read_message();
     ASSERT_TRUE(msg.has_value());
     ASSERT_TRUE(msg->is_object());
     ASSERT_EQ((*msg)["id"].as_string(), std::string{"test"});
@@ -346,7 +380,7 @@ static void test_transport_read_message_basic() {
 static void test_transport_read_message_eof() {
     MockTransport transport;
     // No lines queued — immediate EOF.
-    auto msg = transport.read_message();
+    const auto msg = transport.read_message();
     ASSERT_FALSE(msg.has_value());
 }
 
@@ -357,7 +391,7 @@ static void test_transport_read_message_ignores_other_headers() {
     transport.queue_line(""); // blank line ends headers
     transport.queue_exact(R"({"id":"test"})");
 
-    auto msg = transport.read_message();
+    const auto msg = transport.read_message();
     ASSERT_TRUE(msg.has_value());
 }
 
@@ -371,7 +405,7 @@ static void test_transport_rejects_oversized_message() {
     transport.queue_line("Content-Length: 100");
     transport.queue_line(""); // blank line ends headers
     // After the parse error, resync will try to read lines and hit EOF.
-    auto msg = transport.read_message();
+    const auto msg = transport.read_message();
     ASSERT_FALSE(msg.has_value());
 }
 
@@ -385,9 +419,9 @@ static void test_transport_error_callback() {
     transport.queue_line("");
     transport.queue_exact("{x}"); // invalid JSON
 
-    auto msg = transport.read_message();
+    const auto msg = transport.read_message();
     ASSERT_FALSE(msg.has_value());
-    ASSERT_TRUE(!captured_error.empty());
+    ASSERT_FALSE(captured_error.empty());
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -474,7 +508,7 @@ static void test_buffered_transport_skips_oversized_message_and_reads_next() {
     const auto skipped = transport.read_message();
     ASSERT_FALSE(skipped.has_value());
     ASSERT_TRUE(transport.had_recoverable_read_error());
-    ASSERT_TRUE(reported.find("exceeds limit") != std::string::npos);
+    ASSERT_NE(reported.find("exceeds limit"), std::string::npos);
 
     const auto next = transport.read_message();
     ASSERT_TRUE(next.has_value());
@@ -516,35 +550,23 @@ static void test_buffered_transport_resync_skips_over_long_line() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_parse_error_base() {
-    luma::ParseError err("test error");
+    const luma::ParseError err("test error");
     ASSERT_EQ(std::string{err.what()}, std::string{"test error"});
     ASSERT_EQ(err.offset(), -1);
 }
 
 static void test_json_parse_error() {
-    luma::JsonParseError err(42, "unexpected token");
+    const luma::JsonParseError err(42, "unexpected token");
     ASSERT_EQ(err.position(), 42u);
-    ASSERT_TRUE(std::string{err.what()}.find("42") != std::string::npos);
+    ASSERT_NE(std::string{err.what()}.find("42"), std::string::npos);
 }
 
 static void test_transport_exceptions_hierarchy() {
-    // Verify ConnectionClosed is catchable as TransportError.
-    bool caught_as_transport = false;
-    try {
-        throw ConnectionClosed("connection lost");
-    } catch (const TransportError&) {
-        caught_as_transport = true;
-    }
-    ASSERT_TRUE(caught_as_transport);
+    // ConnectionClosed is catchable as TransportError.
+    ASSERT_THROWS_AS(throw ConnectionClosed("connection lost"), TransportError);
 
-    // Verify protocol::ParseError is catchable as luma::ParseError.
-    bool caught_as_parse = false;
-    try {
-        throw luma::protocol::ParseError("bad header");
-    } catch (const luma::ParseError&) {
-        caught_as_parse = true;
-    }
-    ASSERT_TRUE(caught_as_parse);
+    // protocol::ParseError is catchable as luma::ParseError.
+    ASSERT_THROWS_AS(throw luma::protocol::ParseError("bad header"), luma::ParseError);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -573,8 +595,8 @@ static void test_percent_encode_path_plain() {
 }
 
 static void test_percent_encode_path_space() {
-    auto result = percent_encode_path("/path/my file");
-    ASSERT_TRUE(result.find("%20") != std::string::npos);
+    const auto result = percent_encode_path("/path/my file");
+    ASSERT_NE(result.find("%20"), std::string::npos);
 }
 
 static void test_percent_decode_encode_roundtrip() {
@@ -586,12 +608,12 @@ static void test_percent_decode_encode_roundtrip() {
 }
 
 static void test_uri_to_path_non_file_uri() {
-    auto result = uri_to_path("https://example.com/file.txt");
+    const auto result = uri_to_path("https://example.com/file.txt");
     ASSERT_FALSE(result.has_value());
 }
 
 static void test_uri_to_path_empty_string() {
-    auto result = uri_to_path("");
+    const auto result = uri_to_path("");
     ASSERT_FALSE(result.has_value());
 }
 
@@ -602,25 +624,25 @@ static void test_path_to_uri_roundtrip() {
 #else
     const std::string path = "/home/test/file.txt";
 #endif
-    auto uri = path_to_uri(path);
+    const auto uri = path_to_uri(path);
     ASSERT_TRUE(uri.starts_with("file://"));
 
-    auto back = uri_to_path(uri);
+    const auto back = uri_to_path(uri);
     ASSERT_TRUE(back.has_value());
 }
 
 static void test_canonicalize_uri_lowercase_drive() {
-    auto result = canonicalize_uri("file:///C:/Users/test");
+    const auto result = canonicalize_uri("file:///C:/Users/test");
     ASSERT_EQ(result, std::string{"file:///c:/Users/test"});
 }
 
 static void test_canonicalize_uri_already_lowercase() {
-    auto result = canonicalize_uri("file:///c:/Users/test");
+    const auto result = canonicalize_uri("file:///c:/Users/test");
     ASSERT_EQ(result, std::string{"file:///c:/Users/test"});
 }
 
 static void test_canonicalize_uri_unix_path() {
-    auto result = canonicalize_uri("file:///home/user/file.txt");
+    const auto result = canonicalize_uri("file:///home/user/file.txt");
     ASSERT_EQ(result, std::string{"file:///home/user/file.txt"});
 }
 
@@ -654,7 +676,7 @@ static void test_uri_to_path_drive_in_authority_is_local() {
     ASSERT_TRUE(path.has_value());
 
     const auto normalized = std::filesystem::path{*path}.generic_string();
-    ASSERT_TRUE(normalized.find("C:/luma_dir/x.luma") != std::string::npos);
+    ASSERT_NE(normalized.find("C:/luma_dir/x.luma"), std::string::npos);
     ASSERT_FALSE(normalized.starts_with("//"));
 }
 
@@ -674,7 +696,7 @@ static void test_uri_to_path_preserves_utf8() {
     // unchanged as UTF-8 text, not re-encoded through the ANSI code page.
     const auto path = uri_to_path("file:///nonexistent_luma_dir/caf%C3%A9.luma");
     ASSERT_TRUE(path.has_value());
-    ASSERT_TRUE(path->find("caf\xC3\xA9.luma") != std::string::npos);
+    ASSERT_NE(path->find("caf\xC3\xA9.luma"), std::string::npos);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -759,12 +781,12 @@ static void test_utf16_byte_offset_roundtrip_mixed() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_classify_connection_closed_is_fatal() {
-    ConnectionClosed e{"pipe gone"};
+    const ConnectionClosed e{"pipe gone"};
     ASSERT_EQ(classify_read_error(e), ErrorSeverity::Fatal);
 }
 
 static void test_classify_parse_error_is_transient() {
-    ParseError e{"bad header"};
+    const ParseError e{"bad header"};
     ASSERT_EQ(classify_read_error(e), ErrorSeverity::Transient);
 }
 
@@ -772,17 +794,17 @@ static void test_classify_resync_error_is_fatal() {
     // A ResyncError means the resync scan was exhausted without finding a
     // header — the stream is unrecoverably corrupt, so it must be fatal even
     // though it derives from the (transient) protocol::ParseError.
-    ResyncError e{"Resync failed: no Content-Length header found"};
+    const ResyncError e{"Resync failed: no Content-Length header found"};
     ASSERT_EQ(classify_read_error(e), ErrorSeverity::Fatal);
 }
 
 static void test_classify_transport_error_is_fatal() {
-    TransportError e{"io failure"};
+    const TransportError e{"io failure"};
     ASSERT_EQ(classify_read_error(e), ErrorSeverity::Fatal);
 }
 
 static void test_classify_unknown_exception_is_transient() {
-    std::runtime_error e{"something else"};
+    const std::runtime_error e{"something else"};
     ASSERT_EQ(classify_read_error(e), ErrorSeverity::Transient);
 }
 
@@ -820,7 +842,7 @@ static void test_recovery_state_success_resets_counter() {
 }
 
 static void test_recovery_state_default_threshold() {
-    ErrorRecoveryState recovery;
+    const ErrorRecoveryState recovery;
     ASSERT_EQ(recovery.max_consecutive_errors(), k_default_max_consecutive_errors);
 }
 
@@ -847,7 +869,7 @@ static void test_transport_resync_recovers_after_missing_content_length() {
     ASSERT_TRUE(transport.had_recoverable_read_error());
 
     // Second read succeeds using the header buffered during resync.
-    auto second = transport.read_message();
+    const auto second = transport.read_message();
     ASSERT_TRUE(second.has_value());
     ASSERT_EQ((*second)["id"].as_string(), std::string{"ok"});
 }
@@ -867,12 +889,12 @@ static void test_transport_skips_invalid_json_without_resync() {
     transport.queue_exact(R"({"id":"ok"})");
 
     // First read reports the error and skips the message.
-    auto first = transport.read_message();
+    const auto first = transport.read_message();
     ASSERT_FALSE(first.has_value());
     ASSERT_TRUE(transport.had_recoverable_read_error());
 
     // Second read succeeds without losing the next frame.
-    auto second = transport.read_message();
+    const auto second = transport.read_message();
     ASSERT_TRUE(second.has_value());
     ASSERT_EQ((*second)["id"].as_string(), std::string{"ok"});
 }

@@ -10,7 +10,8 @@
 #include "common/platform_utils.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::safe_getenv;
+using luma::test::ScopedEnv;
 
 // ═══════════════════════════════════════════════════════════
 // safe_getenv
@@ -33,20 +34,15 @@ static void test_safe_getenv_returns_utf8() {
     // so non-ASCII text (e.g. a LUMA_PATH entry) was not UTF-8.
     const std::string utf8_value = "caf\xC3\xA9-\xE2\x82\xAC";
 #ifdef _WIN32
-    // Set through the wide API so the test does not depend on the code page.
-    ASSERT_TRUE(_wputenv_s(L"LUMA_TEST_UTF8_VALUE", L"caf\u00E9-\u20AC") == 0);
+    // ScopedEnv removes the variable again on exit. The value itself is then set
+    // through the wide API so the test does not depend on the ANSI code page.
+    const ScopedEnv cleanup{"LUMA_TEST_UTF8_VALUE", "placeholder"};
+    ASSERT_EQ(_wputenv_s(L"LUMA_TEST_UTF8_VALUE", L"caf\u00E9-\u20AC"), 0);
 #else
-    ASSERT_TRUE(setenv("LUMA_TEST_UTF8_VALUE", utf8_value.c_str(), 1) ==
-                0); // NOLINT(concurrency-mt-unsafe)
+    const ScopedEnv env{"LUMA_TEST_UTF8_VALUE", utf8_value};
 #endif
 
     const auto result = safe_getenv("LUMA_TEST_UTF8_VALUE");
-
-#ifdef _WIN32
-    (void)_wputenv_s(L"LUMA_TEST_UTF8_VALUE", L"");
-#else
-    (void)unsetenv("LUMA_TEST_UTF8_VALUE"); // NOLINT(concurrency-mt-unsafe)
-#endif
 
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(*result, utf8_value);

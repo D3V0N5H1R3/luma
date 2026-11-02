@@ -1,5 +1,10 @@
 // Standard library tests: Terminal.
 
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <iostream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -8,18 +13,101 @@
 #include "runtime/stdlib/io/terminal_module_internal.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::SourceLocation;
+using luma::Value;
+using luma::test::CapturedStream;
+using luma::test::eval;
+
+namespace terminal_detail = luma::terminal_detail;
+
+namespace {
+
+// The value a program produced and the text it wrote to std::cout (where the
+// Terminal module emits its escape sequences outside a test_start session).
+struct CapturedEval {
+    Value value;
+    std::string output;
+};
+
+// Evaluate `source` with std::cout captured, so the emitted escape sequences can
+// be asserted on instead of leaking into the test log.
+[[nodiscard]] CapturedEval eval_capturing_stdout(const std::string& source) {
+    const CapturedStream captured{std::cout};
+    const Value value = eval(source);
+
+    return CapturedEval{value, captured.str()};
+}
+
+// Sets the process-global Terminal escape timeout for a scope and restores the
+// previous value on destruction, so a failed assertion cannot leak the setting
+// into later tests.
+class ScopedEscapeTimeout {
+public:
+    explicit ScopedEscapeTimeout(std::int64_t timeout_ms)
+        : previous_ms_{eval("Terminal.get_escape_timeout()").as_integer()} {
+        set(timeout_ms);
+    }
+
+    ScopedEscapeTimeout(const ScopedEscapeTimeout&) = delete;
+    ScopedEscapeTimeout& operator=(const ScopedEscapeTimeout&) = delete;
+    ScopedEscapeTimeout(ScopedEscapeTimeout&&) = delete;
+    ScopedEscapeTimeout& operator=(ScopedEscapeTimeout&&) = delete;
+
+    ~ScopedEscapeTimeout() noexcept {
+        try {
+            set(previous_ms_);
+        } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+            // An exception must not escape a destructor.
+        }
+    }
+
+private:
+    static void set(std::int64_t timeout_ms) {
+        const auto source = "Terminal.set_escape_timeout(" + std::to_string(timeout_ms) + ")";
+
+        if (!eval(source).is_null()) {
+            throw std::runtime_error{"ScopedEscapeTimeout: unexpected result from " + source};
+        }
+    }
+
+    std::int64_t previous_ms_;
+};
+
+// Stops the process-global Terminal test harness (Terminal.test_stop) on scope
+// exit, so a failed assertion cannot leave scripted input, raw mode, mouse
+// reporting, or output capture active for later tests.
+class HarnessStopGuard {
+public:
+    HarnessStopGuard() = default;
+
+    HarnessStopGuard(const HarnessStopGuard&) = delete;
+    HarnessStopGuard& operator=(const HarnessStopGuard&) = delete;
+    HarnessStopGuard(HarnessStopGuard&&) = delete;
+    HarnessStopGuard& operator=(HarnessStopGuard&&) = delete;
+
+    ~HarnessStopGuard() noexcept {
+        try {
+            (void)eval("Terminal.test_stop()");
+        } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+            // An exception must not escape a destructor.
+        }
+    }
+};
+
+} // namespace
+
 static void test_terminal_bold() {
     const auto v = eval("Terminal.bold(\"hello\")");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().find("hello") != std::string::npos);
+    ASSERT_NE(v.as_string().find("hello"), std::string::npos);
 }
 
 static void test_terminal_color() {
     const auto v = eval("Terminal.color(\"red\", \"warning\")");
 
     ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("warning") != std::string::npos);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("warning"), std::string::npos);
 }
 
 static void test_terminal_color_invalid() {
@@ -36,8 +124,8 @@ static void test_terminal_color_choice() {
 
     const auto& out = v.as_result()->owned_inner->as_string();
 
-    ASSERT_TRUE(out.find("warning") != std::string::npos);
-    ASSERT_TRUE(out.find("\033[31m") != std::string::npos);
+    ASSERT_NE(out.find("warning"), std::string::npos);
+    ASSERT_NE(out.find("\033[31m"), std::string::npos);
 }
 
 static void test_terminal_color_choice_bright() {
@@ -45,7 +133,7 @@ static void test_terminal_color_choice_bright() {
     const auto v = eval("Terminal.color(Terminal.Color.BrightBlack, \"dim\")");
 
     ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("\033[90m") != std::string::npos);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("\033[90m"), std::string::npos);
 }
 
 static void test_terminal_color_choice_matches_string() {
@@ -90,10 +178,10 @@ static void test_terminal_styled_bold() {
 
     const auto& out = v.as_string();
 
-    ASSERT_TRUE(out.find("\033[1m") != std::string::npos);
-    ASSERT_TRUE(out.find("hi") != std::string::npos);
+    ASSERT_NE(out.find("\033[1m"), std::string::npos);
+    ASSERT_NE(out.find("hi"), std::string::npos);
     // A single trailing reset closes the whole sequence.
-    ASSERT_TRUE(out.rfind("\033[0m") == out.size() - 4);
+    ASSERT_EQ(out.rfind("\033[0m"), out.size() - 4);
 }
 
 static void test_terminal_styled_composes_color_and_attributes() {
@@ -107,28 +195,29 @@ static void test_terminal_styled_composes_color_and_attributes() {
 
     const auto& out = v.as_string();
 
-    ASSERT_TRUE(out.find("\033[1m") != std::string::npos);  // bold
-    ASSERT_TRUE(out.find("\033[31m") != std::string::npos); // red foreground
-    ASSERT_TRUE(out.find("\033[47m") != std::string::npos); // white background
-    ASSERT_TRUE(out.find("x") != std::string::npos);
-    ASSERT_TRUE(out.rfind("\033[0m") == out.size() - 4);
+    ASSERT_NE(out.find("\033[1m"), std::string::npos);  // bold
+    ASSERT_NE(out.find("\033[31m"), std::string::npos); // red foreground
+    ASSERT_NE(out.find("\033[47m"), std::string::npos); // white background
+    ASSERT_NE(out.find("x"), std::string::npos);
+    ASSERT_EQ(out.rfind("\033[0m"), out.size() - 4);
 }
 
 static void test_terminal_color_rejects_non_color_arg() {
     // A non-string, non-choice colour argument is a programmer error and throws.
-    ASSERT_TRUE(luma::test::eval_throws("Terminal.color(123, \"text\")"));
+    ASSERT_EVAL_THROWS("Terminal.color(123, \"text\")",
+                       "Terminal.color: colour must be a Terminal.Color or a colour-name string");
 }
 
 static void test_terminal_columns_rows() {
-    auto v = eval("Terminal.columns()");
+    const auto columns = eval("Terminal.columns()");
 
-    ASSERT_TRUE(v.is_integer());
-    ASSERT_TRUE(v.as_integer() > 0);
+    ASSERT_TRUE(columns.is_integer());
+    ASSERT_GT(columns.as_integer(), 0);
 
-    v = eval("Terminal.rows()");
+    const auto rows = eval("Terminal.rows()");
 
-    ASSERT_TRUE(v.is_integer());
-    ASSERT_TRUE(v.as_integer() > 0);
+    ASSERT_TRUE(rows.is_integer());
+    ASSERT_GT(rows.as_integer(), 0);
 }
 
 static void test_terminal_is_mouse() {
@@ -156,7 +245,7 @@ static void test_terminal_link() {
     const auto v = eval("Terminal.link(\"https://example.com\", \"click\")");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().find("click") != std::string::npos);
+    ASSERT_NE(v.as_string().find("click"), std::string::npos);
 }
 
 static void test_terminal_module() {
@@ -226,10 +315,11 @@ static void test_terminal_module() {
 }
 
 static void test_terminal_move_to_row() {
-    // Valid row should return result<null> success.
-    const auto v = eval("Terminal.move_to_row(5)");
+    // A valid row emits the VPA sequence and returns result<null> success.
+    const auto run = eval_capturing_stdout("Terminal.move_to_row(5)");
 
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_RESULT_SUCCESS(run.value);
+    ASSERT_EQ(run.output, "\033[5d");
 }
 
 static void test_terminal_move_to_row_invalid() {
@@ -240,7 +330,7 @@ static void test_terminal_rgb_color() {
     const auto v = eval("Terminal.rgb_color(255, 0, 128, \"pink\")");
 
     ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("pink") != std::string::npos);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("pink"), std::string::npos);
 }
 
 static void test_terminal_rgb_color_invalid() {
@@ -248,12 +338,17 @@ static void test_terminal_rgb_color_invalid() {
 }
 
 static void test_terminal_scroll_region() {
-    // set_scroll_region now returns result<null>.
-    const auto v = eval("Terminal.set_scroll_region(1, 10)");
+    // set_scroll_region emits DECSTBM and returns result<null>.
+    const auto set = eval_capturing_stdout("Terminal.set_scroll_region(1, 10)");
 
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_RESULT_SUCCESS(set.value);
+    ASSERT_EQ(set.output, "\033[1;10r");
 
-    eval("Terminal.reset_scroll_region()");
+    // reset_scroll_region emits a parameterless DECSTBM and returns none.
+    const auto reset = eval_capturing_stdout("Terminal.reset_scroll_region()");
+
+    ASSERT_TRUE(reset.value.is_null());
+    ASSERT_EQ(reset.output, "\033[r");
 }
 
 static void test_terminal_scroll_region_invalid() {
@@ -267,8 +362,8 @@ static void test_terminal_text_styles() {
         const auto v = eval(std::string{"Terminal."} + style + "(\"data\")");
 
         ASSERT_TRUE(v.is_string());
-        ASSERT_TRUE(v.as_string().find("data") != std::string::npos);
-        ASSERT_TRUE(v.as_string().find("\x1b[") != std::string::npos);
+        ASSERT_NE(v.as_string().find("data"), std::string::npos);
+        ASSERT_NE(v.as_string().find("\x1b["), std::string::npos);
     }
 }
 
@@ -276,7 +371,7 @@ static void test_terminal_background_color() {
     const auto v = eval("Terminal.background_color(\"yellow\", \"warn\")");
 
     ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("warn") != std::string::npos);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("warn"), std::string::npos);
 }
 
 static void test_terminal_background_color_invalid() {
@@ -291,15 +386,15 @@ static void test_terminal_background_color_choice() {
 
     const auto& out = v.as_result()->owned_inner->as_string();
 
-    ASSERT_TRUE(out.find("warn") != std::string::npos);
-    ASSERT_TRUE(out.find("\033[43m") != std::string::npos);
+    ASSERT_NE(out.find("warn"), std::string::npos);
+    ASSERT_NE(out.find("\033[43m"), std::string::npos);
 }
 
 static void test_terminal_rgb_background_color() {
     const auto v = eval("Terminal.rgb_background_color(0, 0, 128, \"navy\")");
 
     ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("navy") != std::string::npos);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("navy"), std::string::npos);
 }
 
 static void test_terminal_rgb_background_color_invalid() {
@@ -312,9 +407,10 @@ static void test_terminal_rgb_color_negative() {
 }
 
 static void test_terminal_move_to() {
-    const auto v = eval("Terminal.move_to(1, 1)");
+    const auto run = eval_capturing_stdout("Terminal.move_to(1, 1)");
 
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_RESULT_SUCCESS(run.value);
+    ASSERT_EQ(run.output, "\033[1;1H");
 }
 
 static void test_terminal_move_to_invalid() {
@@ -322,9 +418,10 @@ static void test_terminal_move_to_invalid() {
 }
 
 static void test_terminal_move_to_column() {
-    const auto v = eval("Terminal.move_to_column(3)");
+    const auto run = eval_capturing_stdout("Terminal.move_to_column(3)");
 
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_RESULT_SUCCESS(run.value);
+    ASSERT_EQ(run.output, "\033[3G");
 }
 
 static void test_terminal_move_to_column_invalid() {
@@ -332,21 +429,21 @@ static void test_terminal_move_to_column_invalid() {
 }
 
 static void test_terminal_escape_timeout_roundtrip() {
-    eval("Terminal.set_escape_timeout(100)");
+    // The guard restores the previous timeout so later tests are unaffected.
+    const ScopedEscapeTimeout timeout{100};
 
     const auto v = eval("Terminal.get_escape_timeout()");
 
     ASSERT_TRUE(v.is_integer());
     ASSERT_EQ(v.as_integer(), 100);
-
-    // Restore the default so later tests observing the timeout are unaffected.
-    eval("Terminal.set_escape_timeout(50)");
 }
 
 static void test_terminal_set_escape_timeout_out_of_range() {
     // Out-of-range timeouts throw rather than returning a result.
-    ASSERT_THROWS(eval("Terminal.set_escape_timeout(0)"));
-    ASSERT_THROWS(eval("Terminal.set_escape_timeout(5001)"));
+    ASSERT_EVAL_THROWS("Terminal.set_escape_timeout(0)",
+                       "Terminal.set_escape_timeout: timeout must be between 1 and 5000 ms");
+    ASSERT_EVAL_THROWS("Terminal.set_escape_timeout(5001)",
+                       "Terminal.set_escape_timeout: timeout must be between 1 and 5000 ms");
 }
 
 static void test_terminal_supports_color_returns_bool() {
@@ -380,7 +477,8 @@ static void test_terminal_enable_mouse_requires_raw_mode() {
 
 static void test_terminal_write_requires_argument() {
     // write is variadic with a one-argument minimum.
-    ASSERT_THROWS(eval("Terminal.write()"));
+    ASSERT_EVAL_THROWS("Terminal.write()",
+                       "Terminal.write: expected at least 1 argument(s), got 0");
 }
 
 static void test_terminal_mouse_button_names() {
@@ -392,14 +490,19 @@ static void test_terminal_mouse_button_names() {
 
 static void test_terminal_mouse_event_format() {
     // Format is "mouse:<button>_<action>:<row>:<col>".
-    ASSERT_EQ(terminal_detail::format_mouse_event(0, 5, 10, false), "mouse:left_press:10:5");
-    ASSERT_EQ(terminal_detail::format_mouse_event(2, 5, 10, true), "mouse:right_release:10:5");
-    ASSERT_EQ(terminal_detail::format_mouse_event(1, 3, 4, false, true), "mouse:middle_drag:4:3");
+    ASSERT_EQ(terminal_detail::format_mouse_event(0, 5, 10, /*is_release=*/false),
+              "mouse:left_press:10:5");
+    ASSERT_EQ(terminal_detail::format_mouse_event(2, 5, 10, /*is_release=*/true),
+              "mouse:right_release:10:5");
+    ASSERT_EQ(terminal_detail::format_mouse_event(1, 3, 4, /*is_release=*/false, /*is_drag=*/true),
+              "mouse:middle_drag:4:3");
 }
 
 static void test_terminal_mouse_wheel_format() {
-    ASSERT_EQ(terminal_detail::format_mouse_event(64, 1, 2, false), "mouse:wheel_up:2:1");
-    ASSERT_EQ(terminal_detail::format_mouse_event(65, 1, 2, false), "mouse:wheel_down:2:1");
+    ASSERT_EQ(terminal_detail::format_mouse_event(64, 1, 2, /*is_release=*/false),
+              "mouse:wheel_up:2:1");
+    ASSERT_EQ(terminal_detail::format_mouse_event(65, 1, 2, /*is_release=*/false),
+              "mouse:wheel_down:2:1");
 }
 
 // ── Terminal.MouseEvent (typed decode of "mouse:<kind>:ROW:COL") ──────────────
@@ -468,7 +571,7 @@ static void test_terminal_parse_mouse_event_kinds() {
 static void test_terminal_parse_mouse_event_roundtrip() {
     // Feeding format_mouse_event's own output back through the parser recovers the
     // event — the decoder is the exact inverse of the encoder the backends use.
-    const std::string raw = terminal_detail::format_mouse_event(2, 5, 10, true);
+    const std::string raw = terminal_detail::format_mouse_event(2, 5, 10, /*is_release=*/true);
     const auto v = eval("Terminal.parse_mouse_event(\"" + raw + "\")");
 
     ASSERT_TRUE(v.is_record());
@@ -562,7 +665,7 @@ static void test_terminal_parse_key_character() {
 
 // Build a byte_reader that yields each byte of `rest` (as an unsigned value),
 // then -1 once exhausted — mirroring read_byte_timeout() at end of input.
-static terminal_detail::byte_reader make_byte_reader(std::string rest) {
+[[nodiscard]] static terminal_detail::byte_reader make_byte_reader(std::string rest) {
     std::size_t idx{0};
 
     return [rest = std::move(rest), idx]() mutable -> int {
@@ -576,7 +679,8 @@ static terminal_detail::byte_reader make_byte_reader(std::string rest) {
 
 // Decode a full key press: `first` is the initial byte, `rest` the subsequent
 // bytes available before the (simulated) escape timeout.
-static std::string decode_seq(int first, const std::string& rest = "", bool mouse_mode = false) {
+[[nodiscard]] static std::string decode_seq(int first, const std::string& rest = "",
+                                            bool mouse_mode = false) {
     return terminal_detail::decode_key(first, make_byte_reader(rest), mouse_mode);
 }
 
@@ -653,18 +757,18 @@ static void test_terminal_decode_csi_modifiers() {
 
 static void test_terminal_decode_mouse() {
     // SGR mouse: ESC [ < button ; col ; row M/m. Output is "mouse:<x>:<row>:<col>".
-    ASSERT_EQ(decode_seq(27, "[<0;5;10M", true), "mouse:left_press:10:5");
-    ASSERT_EQ(decode_seq(27, "[<0;5;10m", true), "mouse:left_release:10:5");
-    ASSERT_EQ(decode_seq(27, "[<2;3;4M", true), "mouse:right_press:4:3");
+    ASSERT_EQ(decode_seq(27, "[<0;5;10M", /*mouse_mode=*/true), "mouse:left_press:10:5");
+    ASSERT_EQ(decode_seq(27, "[<0;5;10m", /*mouse_mode=*/true), "mouse:left_release:10:5");
+    ASSERT_EQ(decode_seq(27, "[<2;3;4M", /*mouse_mode=*/true), "mouse:right_press:4:3");
     // Motion events set bit 5 (button += 32) and decode as a drag.
-    ASSERT_EQ(decode_seq(27, "[<32;1;1M", true), "mouse:left_drag:1:1");
+    ASSERT_EQ(decode_seq(27, "[<32;1;1M", /*mouse_mode=*/true), "mouse:left_drag:1:1");
     // Wheel events use button codes 64/65.
-    ASSERT_EQ(decode_seq(27, "[<64;1;1M", true), "mouse:wheel_up:1:1");
-    ASSERT_EQ(decode_seq(27, "[<65;2;2M", true), "mouse:wheel_down:2:2");
+    ASSERT_EQ(decode_seq(27, "[<64;1;1M", /*mouse_mode=*/true), "mouse:wheel_up:1:1");
+    ASSERT_EQ(decode_seq(27, "[<65;2;2M", /*mouse_mode=*/true), "mouse:wheel_down:2:2");
     // With mouse mode disabled the same sequence is not decoded as a mouse event.
-    ASSERT_EQ(decode_seq(27, "[<0;5;10M", false), "unknown");
+    ASSERT_EQ(decode_seq(27, "[<0;5;10M", /*mouse_mode=*/false), "unknown");
     // A truncated SGR sequence (no terminator) decodes gracefully.
-    ASSERT_EQ(decode_seq(27, "[<0;5;10", true), "unknown");
+    ASSERT_EQ(decode_seq(27, "[<0;5;10", /*mouse_mode=*/true), "unknown");
 }
 
 static void test_terminal_decode_utf8() {
@@ -686,15 +790,18 @@ static void test_terminal_size() {
 
     ASSERT_TRUE(v.is_record());
     ASSERT_EQ(v.as_record()->type_name, "Size");
-    ASSERT_TRUE(v.as_record()->find_field("columns") != nullptr);
-    ASSERT_TRUE(v.as_record()->find_field("rows") != nullptr);
+    ASSERT_NE(v.as_record()->find_field("columns"), nullptr);
+    ASSERT_NE(v.as_record()->find_field("rows"), nullptr);
 }
 
 // ── Terminal headless interaction-testing harness (Terminal.test_*) ──
-// Each program is self-contained: it calls test_start(...) and test_stop() so
-// the process-global harness state is reset before the next test runs.
+// Each program calls test_start(...) and test_stop() itself; a HarnessStopGuard
+// also stops the process-global harness if the program fails part-way, so a
+// failure cannot leave scripted input or output capture active for later tests.
 
 static void test_terminal_test_harness_reads_scripted_keys() {
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start(["a", "b", "enter"])
         mutable string out = ""
@@ -715,6 +822,8 @@ static void test_terminal_test_harness_reads_scripted_keys() {
 
 static void test_terminal_test_harness_drains_to_failure() {
     // An empty scripted queue makes read_key report end-of-input immediately.
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start([])
         boolean failed = match Terminal.read_key() {
@@ -731,6 +840,8 @@ static void test_terminal_test_harness_drains_to_failure() {
 
 static void test_terminal_test_harness_captures_output() {
     // write / overwrite_line / bell are all routed into the capture buffer.
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start([])
         Terminal.write("hello")
@@ -740,12 +851,14 @@ static void test_terminal_test_harness_captures_output() {
     )");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().find("hello") != std::string::npos);
-    ASSERT_TRUE(v.as_string().find('\a') != std::string::npos);
-    ASSERT_TRUE(v.as_string().find('X') != std::string::npos);
+    ASSERT_NE(v.as_string().find("hello"), std::string::npos);
+    ASSERT_NE(v.as_string().find('\a'), std::string::npos);
+    ASSERT_NE(v.as_string().find('X'), std::string::npos);
 }
 
 static void test_terminal_test_output_reads_mid_session() {
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start([])
         Terminal.write("AB")
@@ -760,6 +873,8 @@ static void test_terminal_test_output_reads_mid_session() {
 }
 
 static void test_terminal_test_get_input_parses_modifiers() {
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start(["ctrl+c"])
         string r = match Terminal.get_input() {
@@ -776,6 +891,8 @@ static void test_terminal_test_get_input_parses_modifiers() {
 
 static void test_terminal_test_remaining_and_feed() {
     // start with 2 keys, consume 1 (remaining 1), feed 1 more (remaining 2).
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start(["a", "b"])
         Terminal.read_key()
@@ -793,6 +910,8 @@ static void test_terminal_test_remaining_and_feed() {
 static void test_terminal_test_session_reports_as_terminal() {
     // Inside a session is_terminal() and is_in_raw_mode() both report true so the
     // program under test runs its real loop; after test_stop() they reset.
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start(["x"])
         boolean term = Terminal.is_terminal()
@@ -807,6 +926,8 @@ static void test_terminal_test_session_reports_as_terminal() {
 }
 
 static void test_terminal_test_read_key_timeout_drains_to_timeout() {
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start(["a"])
         string first = match Terminal.read_key_timeout(50) {
@@ -836,9 +957,9 @@ static void test_terminal_blink_wraps_text() {
 
     const auto& out = v.as_string();
 
-    ASSERT_TRUE(out.find("\033[5m") != std::string::npos);
-    ASSERT_TRUE(out.find("hi") != std::string::npos);
-    ASSERT_TRUE(out.rfind("\033[0m") == out.size() - 4);
+    ASSERT_NE(out.find("\033[5m"), std::string::npos);
+    ASSERT_NE(out.find("hi"), std::string::npos);
+    ASSERT_EQ(out.rfind("\033[0m"), out.size() - 4);
 }
 
 static void test_terminal_flush_returns_result() {
@@ -847,8 +968,15 @@ static void test_terminal_flush_returns_result() {
 }
 
 static void test_terminal_insert_delete_line() {
-    ASSERT_RESULT_SUCCESS(eval("Terminal.insert_line(2)"));
-    ASSERT_RESULT_SUCCESS(eval("Terminal.delete_line(1)"));
+    const auto inserted = eval_capturing_stdout("Terminal.insert_line(2)");
+
+    ASSERT_RESULT_SUCCESS(inserted.value);
+    ASSERT_EQ(inserted.output, "\033[2L");
+
+    const auto deleted = eval_capturing_stdout("Terminal.delete_line(1)");
+
+    ASSERT_RESULT_SUCCESS(deleted.value);
+    ASSERT_EQ(deleted.output, "\033[1M");
 }
 
 static void test_terminal_insert_delete_line_invalid() {
@@ -857,17 +985,31 @@ static void test_terminal_insert_delete_line_invalid() {
 }
 
 static void test_terminal_clear_to_start_of_line() {
-    ASSERT_RESULT_SUCCESS(eval("Terminal.clear_to_start_of_line()"));
+    const auto run = eval_capturing_stdout("Terminal.clear_to_start_of_line()");
+
+    ASSERT_RESULT_SUCCESS(run.value);
+    ASSERT_EQ(run.output, "\033[1K");
 }
 
 static void test_terminal_set_cursor_style() {
     // A Terminal.CursorStyle variant emits its DECSCUSR escape and returns success.
-    ASSERT_RESULT_SUCCESS(eval("Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)"));
-    ASSERT_RESULT_SUCCESS(eval("Terminal.set_cursor_style(Terminal.CursorStyle.BlinkingBlock)"));
+    const auto bar =
+        eval_capturing_stdout("Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)");
+
+    ASSERT_RESULT_SUCCESS(bar.value);
+    ASSERT_EQ(bar.output, "\033[6 q");
+
+    const auto block =
+        eval_capturing_stdout("Terminal.set_cursor_style(Terminal.CursorStyle.BlinkingBlock)");
+
+    ASSERT_RESULT_SUCCESS(block.value);
+    ASSERT_EQ(block.output, "\033[1 q");
 }
 
 static void test_terminal_set_cursor_style_emits_decscusr() {
     // SteadyBar is DECSCUSR parameter 6 ("\x1b[6 q").
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start([])
         Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)
@@ -875,7 +1017,7 @@ static void test_terminal_set_cursor_style_emits_decscusr() {
     )");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().find("\033[6 q") != std::string::npos);
+    ASSERT_NE(v.as_string().find("\033[6 q"), std::string::npos);
 }
 
 static void test_terminal_cursor_style_variants_exist() {
@@ -896,6 +1038,8 @@ static void test_terminal_supports_unicode_returns_bool() {
 static void test_terminal_read_line_reads_scripted_input() {
     // read_line echoes printable keys, handles backspace, and submits on Enter.
     // Scripted keys: h i x <backspace> <enter> → "hi".
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start(["h", "i", "x", "backspace", "enter"])
         string line = match Terminal.read_line("> ") {
@@ -912,6 +1056,8 @@ static void test_terminal_read_line_reads_scripted_input() {
 
 static void test_terminal_read_line_drains_to_failure() {
     // An exhausted scripted queue makes read_line fail (EOF).
+    const HarnessStopGuard harness;
+
     const auto v = eval(R"(
         Terminal.test_start([])
         boolean failed = match Terminal.read_line("> ") {
@@ -932,7 +1078,7 @@ static void test_terminal_sandbox_withholds_console_input() {
     // --box promises no reads from the interactive console: the input and
     // input-mode functions are withheld, while the output-only surface, the
     // state queries and the always-safe disable_* restores remain.
-    const auto env = luma::test::make_std_env(/*sandbox=*/true);
+    const auto env = luma::test::make_sandboxed_std_env();
 
     for (const char* const name :
          {"Terminal.enable_raw_mode", "Terminal.enable_mouse", "Terminal.read_key",
@@ -958,11 +1104,13 @@ static void test_terminal_sandbox_withholds_console_input() {
 static void test_terminal_restore_state_leaves_raw_and_mouse_mode() {
     // restore_terminal_state is the std::atexit hook registered by
     // enable_raw_mode; it must clear raw mode and mouse reporting.
-    (void)eval(R"(
+    const HarnessStopGuard harness;
+
+    ASSERT_RESULT_SUCCESS(eval(R"(
         Terminal.test_start([])
         Terminal.enable_raw_mode()
         Terminal.enable_mouse()
-    )");
+    )"));
 
     ASSERT_TRUE(eval("Terminal.is_in_raw_mode()").as_bool());
     ASSERT_TRUE(eval("Terminal.is_mouse_enabled()").as_bool());
@@ -971,8 +1119,6 @@ static void test_terminal_restore_state_leaves_raw_and_mouse_mode() {
 
     ASSERT_FALSE(eval("Terminal.is_in_raw_mode()").as_bool());
     ASSERT_FALSE(eval("Terminal.is_mouse_enabled()").as_bool());
-
-    (void)eval("Terminal.test_stop()");
 }
 
 int main() {

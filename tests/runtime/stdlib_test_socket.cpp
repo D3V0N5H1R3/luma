@@ -1,10 +1,109 @@
 // Standard library tests: Socket.
 
+#include <array>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 
 #include "runtime/stdlib/io/socket_io.hpp"
 #include "runtime/stdlib/io/winsock_init.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ensure_winsock;
+using luma::invalid_socket_handle;
+using luma::SocketHandle;
+using luma::tcp_connect_any;
+using luma::TcpConnectFailure;
+using luma::test::eval;
+
+namespace platform_socket = luma::platform_socket;
+
+namespace {
+
+// Move-only owner of a raw socket handle. The destructor closes the handle with
+// platform_socket::close, so a failed assertion cannot leak the socket.
+class ScopedSocket {
+public:
+    explicit ScopedSocket(SocketHandle handle) noexcept : handle_{handle} {}
+
+    ScopedSocket(const ScopedSocket&) = delete;
+    ScopedSocket& operator=(const ScopedSocket&) = delete;
+
+    ScopedSocket(ScopedSocket&& other) noexcept
+        : handle_{std::exchange(other.handle_, invalid_socket_handle)} {}
+
+    ScopedSocket& operator=(ScopedSocket&& other) noexcept {
+        if (this != &other) {
+            reset();
+            handle_ = std::exchange(other.handle_, invalid_socket_handle);
+        }
+
+        return *this;
+    }
+
+    ~ScopedSocket() noexcept {
+        reset();
+    }
+
+    [[nodiscard]] SocketHandle get() const noexcept {
+        return handle_;
+    }
+
+    [[nodiscard]] bool is_valid() const noexcept {
+        return handle_ != invalid_socket_handle;
+    }
+
+    // Close the socket now (if it is open).
+    void reset() noexcept {
+        if (is_valid()) {
+            platform_socket::close(handle_);
+            handle_ = invalid_socket_handle;
+        }
+    }
+
+private:
+    SocketHandle handle_;
+};
+
+// The BSD sockets API takes the generic sockaddr*; this is the only place the
+// file reinterprets a concrete IPv4 address as one.
+[[nodiscard]] sockaddr* as_sockaddr(sockaddr_in& address) noexcept {
+    return reinterpret_cast<sockaddr*>(&address); // NOLINT(*-reinterpret-cast)
+}
+
+// Bind a TCP socket to an ephemeral loopback port; returns the socket and fills
+// `address` with the bound address (including the kernel-chosen port). Throws
+// if the socket cannot be created, bound, or queried.
+[[nodiscard]] ScopedSocket bind_loopback(sockaddr_in& address) {
+    ScopedSocket sock{platform_socket::create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)};
+
+    if (!sock.is_valid()) {
+        throw std::runtime_error{"bind_loopback: socket() failed: " +
+                                 platform_socket::last_error()};
+    }
+
+    address = sockaddr_in{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = 0;
+
+    if (::bind(sock.get(), as_sockaddr(address),
+               static_cast<platform_socket::addr_length_t>(sizeof(address))) != 0) {
+        throw std::runtime_error{"bind_loopback: bind() failed: " + platform_socket::last_error()};
+    }
+
+    socklen_t length{sizeof(address)};
+
+    if (::getsockname(sock.get(), as_sockaddr(address), &length) != 0) {
+        throw std::runtime_error{"bind_loopback: getsockname() failed: " +
+                                 platform_socket::last_error()};
+    }
+
+    return sock;
+}
+
+} // namespace
 
 static void test_socket_connect_invalid_host() {
     // Connecting to invalid host should return a fail result.
@@ -14,10 +113,6 @@ static void test_socket_connect_invalid_host() {
 static void test_socket_connect_invalid_port() {
     // Port out of range should return a fail result.
     ASSERT_EVAL_FAILURE("Socket.connect(\"127.0.0.1\", 99999)");
-}
-
-static void test_socket_is_connected_non_socket_throws() {
-    ASSERT_THROWS(eval("Socket.is_connected(42)"));
 }
 
 static void test_socket_listen_and_close() {
@@ -101,7 +196,8 @@ static void test_socket_parse_ip_invalid_fails() {
 }
 
 static void test_socket_ip_to_string_rejects_non_choice() {
-    ASSERT_THROWS(eval("Socket.ip_to_string(42)"));
+    ASSERT_EVAL_THROWS("Socket.ip_to_string(42)",
+                       "Socket.ip_to_string: expected a Socket.IpAddress");
 }
 
 static void test_socket_udp_create() {
@@ -139,8 +235,8 @@ static void test_socket_local_address_after_listen() {
                         "Result.unwrap(Socket.local_address(srv))\n");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().rfind("127.0.0.1:", 0) == 0);
-    ASSERT_TRUE(v.as_string() != "127.0.0.1:0");
+    ASSERT_TRUE(v.as_string().starts_with("127.0.0.1:"));
+    ASSERT_NE(v.as_string(), "127.0.0.1:0");
 }
 
 static void test_socket_local_address_parts_after_listen() {
@@ -155,12 +251,12 @@ static void test_socket_local_address_parts_after_listen() {
 
     const auto* host = v.as_record()->find_field("host");
     const auto* port = v.as_record()->find_field("port");
-    ASSERT_TRUE(host != nullptr);
-    ASSERT_TRUE(port != nullptr);
+    ASSERT_NE(host, nullptr);
+    ASSERT_NE(port, nullptr);
     ASSERT_TRUE(host->is_string());
     ASSERT_EQ(host->as_string(), std::string{"127.0.0.1"});
     ASSERT_TRUE(port->is_integer());
-    ASSERT_TRUE(port->as_integer() > 0);
+    ASSERT_GT(port->as_integer(), 0);
 }
 
 static void test_socket_is_connected_reflects_lifetime() {
@@ -234,24 +330,6 @@ static void test_socket_tcp_remote_address_matches_server() {
 
 // ─── Socket: connect tries every resolved address ───
 
-// Bind a TCP socket to an ephemeral loopback port; returns the socket and fills
-// `addr` with the bound address.
-[[nodiscard]] static SocketHandle bind_loopback(sockaddr_in& addr) {
-    const SocketHandle sock = platform_socket::create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-    addr = sockaddr_in{};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = 0;
-
-    (void)::bind(sock, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr));
-
-    socklen_t len = sizeof(addr);
-    (void)::getsockname(sock, reinterpret_cast<sockaddr*>(&addr), &len);
-
-    return sock;
-}
-
 static void test_tcp_connect_any_falls_back_to_later_address() {
     // Regression: Socket/Http connect used only the FIRST getaddrinfo result,
     // so e.g. "localhost" resolving to ::1 first failed against a server that
@@ -260,36 +338,28 @@ static void test_tcp_connect_any_falls_back_to_later_address() {
     ensure_winsock();
 
     sockaddr_in live{};
-    const SocketHandle server = bind_loopback(live);
-    ASSERT_TRUE(server != invalid_socket_handle);
-    ASSERT_EQ(::listen(server, 4), 0);
+    const ScopedSocket server = bind_loopback(live);
+    ASSERT_EQ(::listen(server.get(), 4), 0);
 
     // A loopback port with nothing listening on it any more.
     sockaddr_in dead{};
-    platform_socket::close(bind_loopback(dead));
+    bind_loopback(dead).reset();
 
     addrinfo second{};
     second.ai_family = AF_INET;
     second.ai_socktype = SOCK_STREAM;
     second.ai_protocol = IPPROTO_TCP;
-    second.ai_addr = reinterpret_cast<sockaddr*>(&live);
+    second.ai_addr = as_sockaddr(live);
     second.ai_addrlen = sizeof(live);
 
     addrinfo first = second;
-    first.ai_addr = reinterpret_cast<sockaddr*>(&dead);
+    first.ai_addr = as_sockaddr(dead);
     first.ai_next = &second;
 
     TcpConnectFailure failure{};
-    const SocketHandle client = tcp_connect_any(&first, 1000, &failure);
-    const bool connected = client != invalid_socket_handle;
+    const ScopedSocket client{tcp_connect_any(&first, 1000, &failure)};
 
-    if (connected) {
-        platform_socket::close(client);
-    }
-
-    platform_socket::close(server);
-
-    ASSERT_TRUE(connected);
+    ASSERT_TRUE(client.is_valid());
 }
 
 static void test_socket_connect_localhost_reaches_ipv4_listener() {
@@ -311,35 +381,51 @@ static void test_socket_connect_localhost_reaches_ipv4_listener() {
 
 // ─── Socket: type errors (thrown RuntimeError, not failure result) ───
 
-static void test_socket_operations_reject_non_socket() {
+// (source, expected error message) for every socket-consuming function given a
+// non-socket first argument.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 15> non_socket_cases{{
+    {"Socket.is_connected(42)", "Socket.is_connected: expected socket, got 'integer'"},
+    {"Socket.send(42, \"x\")", "Socket.send: expected socket, got 'integer'"},
+    {"Socket.receive(42, 10)", "Socket.receive: expected socket, got 'integer'"},
+    {"Socket.accept(42)", "Socket.accept: expected socket, got 'integer'"},
+    {"Socket.close(42)", "Socket.close: expected socket, got 'integer'"},
+    {"Socket.set_timeout(42, 10)", "Socket.set_timeout: expected socket, got 'integer'"},
+    {"Socket.local_address(42)", "Socket.local_address: expected socket, got 'integer'"},
+    {"Socket.remote_address(42)", "Socket.remote_address: expected socket, got 'integer'"},
+    {"Socket.udp_bind(42, \"127.0.0.1\", 0)", "Socket.udp_bind: expected socket, got 'integer'"},
+    {"Socket.udp_send(42, \"d\", \"127.0.0.1\", 80)",
+     "Socket.udp_send: expected socket, got 'integer'"},
+    {"Socket.send_all(42, \"x\")", "Socket.send_all: expected socket, got 'integer'"},
+    {"Socket.send_bytes(42, [1])", "Socket.send_bytes: expected socket, got 'integer'"},
+    {"Socket.receive_all(42)", "Socket.receive_all: expected socket, got 'integer'"},
+    {"Socket.receive_line(42)", "Socket.receive_line: expected socket, got 'integer'"},
+    {"Socket.receive_bytes(42, 10)", "Socket.receive_bytes: expected socket, got 'integer'"},
+}};
+
+static void test_socket_operations_reject_non_socket(std::string_view source,
+                                                     std::string_view message) {
     // Every socket-consuming function rejects a non-socket first argument by
     // throwing, rather than silently producing a failure result.
-    ASSERT_THROWS(eval("Socket.send(42, \"x\")"));
-    ASSERT_THROWS(eval("Socket.receive(42, 10)"));
-    ASSERT_THROWS(eval("Socket.accept(42)"));
-    ASSERT_THROWS(eval("Socket.close(42)"));
-    ASSERT_THROWS(eval("Socket.set_timeout(42, 10)"));
-    ASSERT_THROWS(eval("Socket.local_address(42)"));
-    ASSERT_THROWS(eval("Socket.remote_address(42)"));
-    ASSERT_THROWS(eval("Socket.udp_bind(42, \"127.0.0.1\", 0)"));
-    ASSERT_THROWS(eval("Socket.udp_send(42, \"d\", \"127.0.0.1\", 80)"));
+    ASSERT_EVAL_THROWS(std::string{source}, message);
 }
 
 static void test_socket_connect_rejects_non_string_host() {
-    ASSERT_THROWS(eval("Socket.connect(123, 80)"));
+    ASSERT_EVAL_THROWS("Socket.connect(123, 80)", "Socket.connect: expected string, got 'integer'");
 }
 
 static void test_socket_connect_rejects_non_integer_port() {
-    ASSERT_THROWS(eval("Socket.connect(\"127.0.0.1\", \"80\")"));
+    ASSERT_EVAL_THROWS("Socket.connect(\"127.0.0.1\", \"80\")",
+                       "Socket.connect: expected integer, got 'string'");
 }
 
 static void test_socket_listen_rejects_non_string_host() {
-    ASSERT_THROWS(eval("Socket.listen(123, 80)"));
+    ASSERT_EVAL_THROWS("Socket.listen(123, 80)", "Socket.listen: expected string, got 'integer'");
 }
 
 static void test_socket_udp_send_rejects_non_string_data() {
-    ASSERT_THROWS(eval("socket s = Result.unwrap(Socket.udp_create())\n"
-                       "Socket.udp_send(s, 123, \"127.0.0.1\", 80)\n"));
+    ASSERT_EVAL_THROWS("socket s = Result.unwrap(Socket.udp_create())\n"
+                       "Socket.udp_send(s, 123, \"127.0.0.1\", 80)\n",
+                       "Socket.udp_send: expected string, got 'integer'");
 }
 
 // ─── Socket: failure results (recoverable, returned as failure) ───
@@ -541,14 +627,6 @@ static void test_socket_receive_line_on_closed_fails() {
                         "Socket.receive_line(s)\n");
 }
 
-static void test_socket_operations_reject_non_socket_extended() {
-    ASSERT_THROWS(eval("Socket.send_all(42, \"x\")"));
-    ASSERT_THROWS(eval("Socket.send_bytes(42, [1])"));
-    ASSERT_THROWS(eval("Socket.receive_all(42)"));
-    ASSERT_THROWS(eval("Socket.receive_line(42)"));
-    ASSERT_THROWS(eval("Socket.receive_bytes(42, 10)"));
-}
-
 static void test_socket_connect_timeout_invalid_port() {
     ASSERT_EVAL_FAILURE("Socket.connect_timeout(\"127.0.0.1\", 99999, 1000)");
 }
@@ -645,7 +723,6 @@ int main() {
     RUN(test_socket_connect_invalid_port);
     RUN(test_socket_connect_rejects_non_integer_port);
     RUN(test_socket_connect_rejects_non_string_host);
-    RUN(test_socket_is_connected_non_socket_throws);
     RUN(test_socket_is_connected_reflects_lifetime);
     RUN(test_socket_listen_and_close);
     RUN(test_socket_listen_rejects_invalid_port);
@@ -653,7 +730,7 @@ int main() {
     RUN(test_socket_local_address_after_listen);
     RUN(test_socket_local_address_parts_after_listen);
     RUN(test_socket_module);
-    RUN(test_socket_operations_reject_non_socket);
+    RUN_PARAMETERIZED(test_socket_operations_reject_non_socket, non_socket_cases);
     RUN(test_socket_receive_on_closed_fails);
     RUN(test_socket_receive_rejects_non_positive_max_bytes);
     RUN(test_socket_remote_address_on_unconnected_fails);
@@ -692,7 +769,6 @@ int main() {
     RUN(test_socket_receive_bytes_rejects_non_positive_max);
     RUN(test_socket_receive_all_on_closed_fails);
     RUN(test_socket_receive_line_on_closed_fails);
-    RUN(test_socket_operations_reject_non_socket_extended);
     RUN(test_socket_connect_timeout_invalid_port);
     RUN(test_socket_connect_timeout_negative_timeout);
     RUN(test_socket_tcp_send_all_receive_all_roundtrip);

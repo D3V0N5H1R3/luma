@@ -9,23 +9,31 @@
 #include "lex_parse_util.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::Linter;
+using luma::test::lex_and_parse_with_errors;
 
 // ─── Helpers ───
 
-static std::vector<Diagnostic> lint(const std::string& source) {
-    const auto program = luma::test::lex_and_parse(source);
+// Lint `source`. Every source must parse cleanly, so that a negative test
+// cannot pass merely because a syntax error dropped the code under test.
+[[nodiscard]] static std::vector<Diagnostic> lint(const std::string& source) {
+    const auto parsed = lex_and_parse_with_errors(source);
+
+    ASSERT_TRUE(parsed.errors.empty());
 
     Linter linter;
 
-    return linter.lint(program);
+    return linter.lint(parsed.program);
 }
 
-static bool no_warnings(const std::string& source) {
+[[nodiscard]] static bool no_warnings(const std::string& source) {
     return lint(source).empty();
 }
 
-static bool has_warning_containing(const std::string& source, const std::string& substring) {
+[[nodiscard]] static bool has_warning_containing(const std::string& source,
+                                                 const std::string& substring) {
     const auto warnings = lint(source);
 
     return std::ranges::any_of(warnings, [&](const Diagnostic& d) {
@@ -35,7 +43,8 @@ static bool has_warning_containing(const std::string& source, const std::string&
 
 // Returns the hint attached to the first warning with the given diagnostic code,
 // or nullopt if no such warning was produced.
-static std::optional<std::string> hint_for_code(const std::string& source, DiagnosticCode code) {
+[[nodiscard]] static std::optional<std::string> hint_for_code(const std::string& source,
+                                                              DiagnosticCode code) {
     const auto warnings = lint(source);
 
     const auto match =
@@ -120,11 +129,9 @@ static void test_no_false_positive_on_integer_equality() {
     const auto warnings = lint("integer x = 1\n"
                                "boolean y = x == 42\n");
 
-    bool has_float_warn = std::ranges::any_of(warnings, [](const Diagnostic& d) {
+    ASSERT_TRUE(std::ranges::none_of(warnings, [](const Diagnostic& d) {
         return d.message.find("Floating-point") != std::string::npos;
-    });
-
-    ASSERT_FALSE(has_float_warn);
+    }));
 }
 
 // ─── Additional warning category tests ───
@@ -176,12 +183,10 @@ static void test_no_warning_on_underscore_variable() {
                                "    integer _unused = 42\n"
                                "}\n");
 
-    bool has_unused = std::ranges::any_of(warnings, [](const Diagnostic& d) {
+    ASSERT_TRUE(std::ranges::none_of(warnings, [](const Diagnostic& d) {
         return d.message.find("unused") != std::string::npos &&
                d.message.find("_unused") != std::string::npos;
-    });
-
-    ASSERT_FALSE(has_unused);
+    }));
 }
 
 static void test_double_negation() {
@@ -213,8 +218,8 @@ static void test_discarded_result_hint_suggests_valid_luma() {
 
     ASSERT_TRUE(hint.has_value());
     ASSERT_FALSE(hint->empty());
-    ASSERT_TRUE(hint->find("let ") == std::string::npos);
-    ASSERT_TRUE(hint->find("_ = ...") != std::string::npos);
+    ASSERT_EQ(hint->find("let "), std::string::npos);
+    ASSERT_NE(hint->find("_ = ..."), std::string::npos);
 }
 
 static void test_discarded_result_collection_functions() {
@@ -250,8 +255,11 @@ static void test_no_discarded_result_warning_in_if_expression_branch() {
 
 static void test_no_discarded_result_warning_in_lambda_body() {
     // W0010 must NOT fire when the call is the return expression of a lambda.
+    // (This test used to spell the return type `function<() -> result<string>>`,
+    // which is not Luma syntax; it passed only because the syntax error dropped
+    // the lambda before the linter could see it.)
     ASSERT_FALSE(
-        has_warning_containing("function<() -> result<string>> make_reader(string path) {\n"
+        has_warning_containing("function function() -> result<string> make_reader(string path) {\n"
                                "    return () -> FileSystem.read_file(path)\n"
                                "}\n",
                                "discarded"));
@@ -284,8 +292,8 @@ static void test_empty_catch_hint_suggests_valid_luma() {
                                     DiagnosticCode::EmptyCatch);
 
     ASSERT_TRUE(hint.has_value());
-    ASSERT_TRUE(hint->find("Console.print") == std::string::npos);
-    ASSERT_TRUE(hint->find("print(err)") != std::string::npos);
+    ASSERT_EQ(hint->find("Console.print"), std::string::npos);
+    ASSERT_NE(hint->find("print(err)"), std::string::npos);
 }
 
 static void test_division_by_literal_zero() {

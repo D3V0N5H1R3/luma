@@ -30,24 +30,6 @@ namespace {
            left.kind == TypeInfo::Kind::Unknown || right.kind == TypeInfo::Kind::Unknown;
 }
 
-// The value of an integer literal, also seeing through a unary minus: Luma has
-// no negative integer literals, so `-3` parses as negation of `3`.
-[[nodiscard]] std::optional<std::int64_t> get_signed_integer_value(const Expression& expr) {
-    if (expr.kind == ExpressionKind::Unary) {
-        const auto& unary = static_cast<const UnaryExpression&>(expr);
-
-        if (unary.op == TokenType::Minus) {
-            if (const auto magnitude = get_integer_value(*unary.operand)) {
-                return -*magnitude;
-            }
-        }
-
-        return std::nullopt;
-    }
-
-    return get_integer_value(expr);
-}
-
 } // namespace
 
 // ── Constant-folding diagnostics ────────────────────────────────────────────

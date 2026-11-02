@@ -10,14 +10,12 @@
 // place the exact bytes write_message() emits and the messages read_message()
 // reconstructs can both be asserted.
 
-#include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -35,12 +33,15 @@
 
 using luma::json::JsonValue;
 using luma::protocol::StdioTransport;
+using luma::test::ScopedPathCleanup;
+using luma::test::unique_temp_path;
 
 namespace {
 
 // ─── Cross-platform file-descriptor helpers ───
 // Windows spells the POSIX descriptor calls with a leading underscore; wrap them
-// so the test bodies read the same on both platforms.
+// so the test bodies read the same on both platforms.  Each returns the raw
+// result (-1 on failure) so callers can check it.
 
 [[nodiscard]] int dup_fd(int fd) {
 #ifdef _WIN32
@@ -50,11 +51,11 @@ namespace {
 #endif
 }
 
-void dup2_fd(int from_fd, int to_fd) {
+[[nodiscard]] int dup2_fd(int from_fd, int to_fd) {
 #ifdef _WIN32
-    _dup2(from_fd, to_fd);
+    return _dup2(from_fd, to_fd);
 #else
-    ::dup2(from_fd, to_fd);
+    return ::dup2(from_fd, to_fd);
 #endif
 }
 
@@ -66,11 +67,11 @@ void dup2_fd(int from_fd, int to_fd) {
 #endif
 }
 
-void close_fd(int fd) {
+[[nodiscard]] int close_fd(int fd) {
 #ifdef _WIN32
-    _close(fd);
+    return _close(fd);
 #else
-    ::close(fd);
+    return ::close(fd);
 #endif
 }
 
@@ -78,66 +79,108 @@ void close_fd(int fd) {
 // POSIX, where there is no text/binary distinction).
 void set_binary(int fd) {
 #ifdef _WIN32
-    _setmode(fd, _O_BINARY);
+    if (_setmode(fd, _O_BINARY) == -1) {
+        throw std::runtime_error{"set_binary: _setmode failed for fd " + std::to_string(fd)};
+    }
 #else
     (void)fd;
 #endif
 }
 
+struct FileCloser {
+    void operator()(std::FILE* stream) const noexcept {
+        (void)std::fclose(stream);
+    }
+};
+
+using FilePtr = std::unique_ptr<std::FILE, FileCloser>;
+
 // Open a file, using the bounds-checked fopen_s on Windows (plain std::fopen
 // trips the MSVC C4996 deprecation, which the build treats as an error).
-[[nodiscard]] std::FILE* open_file(const std::filesystem::path& path, const char* mode) {
-#ifdef _WIN32
+// Throws when the file cannot be opened.
+[[nodiscard]] FilePtr open_file(const std::filesystem::path& path, const char* mode) {
     std::FILE* stream = nullptr;
+#ifdef _WIN32
     if (::fopen_s(&stream, path.string().c_str(), mode) != 0) {
-        return nullptr;
+        stream = nullptr;
     }
-    return stream;
 #else
-    return std::fopen(path.c_str(), mode);
+    stream = std::fopen(path.c_str(), mode);
 #endif
+    if (stream == nullptr) {
+        throw std::runtime_error{"open_file: cannot open " + path.string()};
+    }
+    return FilePtr{stream};
 }
 
-[[nodiscard]] std::filesystem::path unique_temp_path(const char* tag) {
-    static std::atomic<unsigned> counter{0};
-    const auto seq = counter.fetch_add(1, std::memory_order_relaxed);
-    const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
-    return std::filesystem::temp_directory_path() /
-           ("luma_" + std::string{tag} + "_" + std::to_string(ticks) + "_" + std::to_string(seq));
+// Flush a stream's buffered output and return its descriptor, so a redirect of
+// that descriptor never strands bytes written before the redirect began.
+[[nodiscard]] int flushed_fileno(std::FILE* stream) {
+    if (std::fflush(stream) != 0) {
+        throw std::runtime_error{"flushed_fileno: fflush failed"};
+    }
+    return fileno_of(stream);
 }
+
+// Write `contents` to `path` and open it for binary reading.
+[[nodiscard]] FilePtr write_and_open(const std::filesystem::path& path,
+                                     const std::string& contents) {
+    luma::test::write_file(path, contents);
+    return open_file(path, "rb");
+}
+
+// RAII: point descriptor `target_fd` at `source_fd` for the guard's lifetime,
+// restoring the original descriptor on destruction even if a test throws.
+class DescriptorRedirect {
+public:
+    DescriptorRedirect(int source_fd, int target_fd)
+        : target_fd_{target_fd}, saved_fd_{dup_fd(target_fd)} {
+        if (saved_fd_ < 0) {
+            throw std::runtime_error{"DescriptorRedirect: dup failed"};
+        }
+
+        if (dup2_fd(source_fd, target_fd_) < 0) {
+            (void)close_fd(saved_fd_);
+            throw std::runtime_error{"DescriptorRedirect: dup2 failed"};
+        }
+    }
+
+    ~DescriptorRedirect() noexcept {
+        // A destructor cannot report failure; restoring the descriptor is best
+        // effort, and the saved duplicate is always released.
+        (void)dup2_fd(saved_fd_, target_fd_);
+        (void)close_fd(saved_fd_);
+    }
+
+    DescriptorRedirect(const DescriptorRedirect&) = delete;
+    DescriptorRedirect& operator=(const DescriptorRedirect&) = delete;
+    DescriptorRedirect(DescriptorRedirect&&) = delete;
+    DescriptorRedirect& operator=(DescriptorRedirect&&) = delete;
+
+private:
+    int target_fd_;
+    int saved_fd_;
+};
 
 // RAII: redirect the process stdout to `path` (binary) for the guard's lifetime,
 // restoring the original descriptor on destruction even if a test throws.
+//
+// Deliberately do NOT flush stdout on destruction.  The write tests must observe
+// only the bytes the code under test flushed itself; flushing on the harness's
+// behalf (here or in capture_stdout) would deliver an unflushed message to the
+// file and mask a missing fflush() in write_message() — the single most
+// important property of the transport.  Members are destroyed in reverse order:
+// the descriptor is restored first, then the file is closed.
 class StdoutToFile {
 public:
-    explicit StdoutToFile(std::filesystem::path path) : path_{std::move(path)} {
-        std::fflush(stdout);
-        saved_fd_ = dup_fd(fileno_of(stdout));
-        file_ = open_file(path_, "wb");
-        dup2_fd(fileno_of(file_), fileno_of(stdout));
+    explicit StdoutToFile(const std::filesystem::path& path)
+        : file_{open_file(path, "wb")}, redirect_{fileno_of(file_.get()), flushed_fileno(stdout)} {
         set_binary(fileno_of(stdout));
     }
 
-    ~StdoutToFile() {
-        // Deliberately do NOT flush stdout here.  The write tests must observe
-        // only the bytes the code under test flushed itself; flushing on the
-        // harness's behalf (here or in capture_stdout) would deliver an
-        // unflushed message to the file and mask a missing fflush() in
-        // write_message() — the single most important property of the transport.
-        dup2_fd(saved_fd_, fileno_of(stdout));
-        close_fd(saved_fd_);
-        std::fclose(file_);
-    }
-
-    StdoutToFile(const StdoutToFile&) = delete;
-    StdoutToFile& operator=(const StdoutToFile&) = delete;
-    StdoutToFile(StdoutToFile&&) = delete;
-    StdoutToFile& operator=(StdoutToFile&&) = delete;
-
 private:
-    std::filesystem::path path_;
-    int saved_fd_{-1};
-    std::FILE* file_{nullptr};
+    FilePtr file_;
+    DescriptorRedirect redirect_;
 };
 
 // Capture everything written to stdout while `action` runs, returning the bytes.
@@ -145,55 +188,31 @@ private:
 // those the code under test flushed itself, so a transport that forgets to flush
 // is caught rather than masked.
 template <typename Fn> [[nodiscard]] std::string capture_stdout(Fn&& action) {
-    const auto path = unique_temp_path("stdout");
+    const ScopedPathCleanup cleanup{unique_temp_path("luma_stdout_", ".bin")};
     {
-        StdoutToFile guard{path};
-        action();
+        const StdoutToFile guard{cleanup.path()};
+        std::forward<Fn>(action)();
     }
 
-    std::ifstream in{path, std::ios::binary};
-    std::string data{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
-    in.close();
-
-    std::error_code ec;
-    std::filesystem::remove(path, ec);
-    return data;
+    return luma::test::read_file_text(cleanup.path());
 }
 
 // RAII: redirect the process stdin to read from a file preloaded with
-// `contents` (binary), restoring the original descriptor on destruction.
+// `contents` (binary), restoring the original descriptor and removing the file
+// on destruction.
 class StdinFromString {
 public:
-    explicit StdinFromString(const std::string& contents) : path_{unique_temp_path("stdin")} {
-        {
-            std::ofstream out{path_, std::ios::binary};
-            out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
-        }
-
-        saved_fd_ = dup_fd(fileno_of(stdin));
-        file_ = open_file(path_, "rb");
-        dup2_fd(fileno_of(file_), fileno_of(stdin));
+    explicit StdinFromString(const std::string& contents)
+        : cleanup_{unique_temp_path("luma_stdin_", ".bin")},
+          file_{write_and_open(cleanup_.path(), contents)},
+          redirect_{fileno_of(file_.get()), fileno_of(stdin)} {
         set_binary(fileno_of(stdin));
     }
 
-    ~StdinFromString() {
-        dup2_fd(saved_fd_, fileno_of(stdin));
-        close_fd(saved_fd_);
-        std::fclose(file_);
-
-        std::error_code ec;
-        std::filesystem::remove(path_, ec);
-    }
-
-    StdinFromString(const StdinFromString&) = delete;
-    StdinFromString& operator=(const StdinFromString&) = delete;
-    StdinFromString(StdinFromString&&) = delete;
-    StdinFromString& operator=(StdinFromString&&) = delete;
-
 private:
-    std::filesystem::path path_;
-    int saved_fd_{-1};
-    std::FILE* file_{nullptr};
+    ScopedPathCleanup cleanup_;
+    FilePtr file_;
+    DescriptorRedirect redirect_;
 };
 
 [[nodiscard]] JsonValue make_message(const std::string& method, std::int64_t id) {
@@ -256,7 +275,7 @@ static void test_write_message_content_length_matches_body() {
     });
 
     const auto separator = captured.find("\r\n\r\n");
-    ASSERT_TRUE(separator != std::string::npos);
+    ASSERT_NE(separator, std::string::npos);
 
     const auto body = captured.substr(separator + 4);
     const auto declared =

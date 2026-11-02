@@ -1,12 +1,14 @@
 // Unit tests for RuntimeError and error payload.
 
+#include <any>
 #include <string>
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_manager.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::RuntimeError;
+using luma::SourceLocation;
 
 // ─── RuntimeError construction ───
 
@@ -62,11 +64,11 @@ static void test_runtime_error_typed_payload() {
     RuntimeError err{"kaboom", loc};
 
     err.set_error_payload(std::any{42});
-    auto val = err.get_error_payload<int>();
+    const auto val = err.get_error_payload<int>();
     ASSERT_TRUE(val.has_value());
     ASSERT_EQ(*val, 42);
 
-    auto bad = err.get_error_payload<std::string>();
+    const auto bad = err.get_error_payload<std::string>();
     ASSERT_FALSE(bad.has_value());
 }
 

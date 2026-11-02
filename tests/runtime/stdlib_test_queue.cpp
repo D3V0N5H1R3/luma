@@ -2,6 +2,9 @@
 
 #include "stdlib_test_helpers.hpp"
 
+using luma::test::eval;
+using luma::test::make_std_env;
+
 static void test_queue_concat() {
     const auto v = eval("Queue.to_array(Queue.concat("
                         "Queue.from_array([1, 2]),"
@@ -19,7 +22,7 @@ static void test_queue_enqueue_dequeue() {
 
     ASSERT_TRUE(result.is_tuple());
 
-    auto& elems = result.as_tuple()->elements;
+    const auto& elems = result.as_tuple()->elements;
 
     ASSERT_EQ(elems[0].as_integer(), 42);
 }
@@ -39,7 +42,7 @@ static void test_queue_is_empty() {
 }
 
 static void test_queue_module() {
-    const auto env = luma::test::make_std_env();
+    const auto env = make_std_env();
 
     ASSERT_TRUE(env->has("Queue.new"));
     ASSERT_TRUE(env->has("Queue.from_array"));
@@ -149,6 +152,15 @@ static void test_queue_each() {
     const auto v = eval("Queue.from_array([1, 2, 3]) |> Queue.each((integer x) -> x)");
 
     ASSERT_RESULT_SUCCESS(v);
+
+    // each visits every element, front to back: folding the digits in visit
+    // order yields 123 only for FIFO order.
+    ASSERT_EQ(eval("reference<integer> total = Reference.new(0)\n"
+                   "result<none> _r = Queue.each(Queue.from_array([1, 2, 3]),"
+                   "(integer x) -> { Reference.set(total, Reference.get(total) * 10 + x) })\n"
+                   "Reference.get(total)")
+                  .as_integer(),
+              123);
 }
 
 static void test_queue_to_array() {
@@ -192,27 +204,28 @@ static void test_queue_peek_empty_fails() {
 // ─── Negative: wrong-argument-type errors ─────────────────────────
 
 static void test_queue_length_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Queue.length(42)"), "queue");
+    ASSERT_EVAL_THROWS("Queue.length(42)", "Queue.length: expected queue, got 'integer'");
 }
 
 static void test_queue_enqueue_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Queue.enqueue(42, 1)"), "queue");
+    ASSERT_EVAL_THROWS("Queue.enqueue(42, 1)", "Queue.enqueue: expected queue, got 'integer'");
 }
 
 static void test_queue_dequeue_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Queue.dequeue(42)"), "queue");
+    ASSERT_EVAL_THROWS("Queue.dequeue(42)", "Queue.dequeue: expected queue, got 'integer'");
 }
 
 static void test_queue_peek_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval(R"(Queue.peek("x"))"), "queue");
+    ASSERT_EVAL_THROWS(R"(Queue.peek("x"))", "Queue.peek: expected queue, got 'string'");
 }
 
 static void test_queue_from_array_wrong_type_throws() {
-    ASSERT_THROWS(eval("Queue.from_array(42)"));
+    ASSERT_EVAL_THROWS("Queue.from_array(42)", "Queue.from_array: expected array, got 'integer'");
 }
 
 static void test_queue_concat_wrong_type_throws() {
-    ASSERT_THROWS(eval("Queue.concat(Queue.new(), 42)"));
+    ASSERT_EVAL_THROWS("Queue.concat(Queue.new(), 42)",
+                       "Queue.concat: expected queue, got 'integer'");
 }
 
 static void test_queue_contains_uses_value_equality() {

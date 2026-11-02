@@ -5,7 +5,9 @@
 #include "common/escape.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::js_string_escape;
+using luma::json_escape;
+using luma::json_escape_string;
 
 // ═══════════════════════════════════════════════════════════
 // json_escape
@@ -40,12 +42,12 @@ static void test_json_escape_tab() {
 }
 
 static void test_json_escape_backspace() {
-    std::string input = "a\bb";
+    const std::string input = "a\bb";
     ASSERT_EQ(json_escape(input), std::string("a\\bb"));
 }
 
 static void test_json_escape_formfeed() {
-    std::string input = "a\fb";
+    const std::string input = "a\fb";
     ASSERT_EQ(json_escape(input), std::string("a\\fb"));
 }
 
@@ -62,13 +64,13 @@ static void test_json_escape_closes_script_tag() {
 
 static void test_json_escape_control_character() {
     // NUL (0x00)
-    std::string input(1, '\0');
+    const std::string input(1, '\0');
     ASSERT_EQ(json_escape(input), std::string("\\u0000"));
 }
 
 static void test_json_escape_control_char_0x1f() {
     // 0x1F = unit separator
-    std::string input(1, '\x1F');
+    const std::string input(1, '\x1F');
     ASSERT_EQ(json_escape(input), std::string("\\u001f"));
 }
 
@@ -100,7 +102,7 @@ static void test_json_escape_string_special_chars() {
 
 static void test_json_escape_string_control_char() {
     std::string out;
-    std::string input(1, '\x01');
+    const std::string input(1, '\x01');
     json_escape_string(input, out);
     ASSERT_EQ(out, std::string("\\u0001"));
 }

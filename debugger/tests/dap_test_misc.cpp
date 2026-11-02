@@ -100,7 +100,8 @@ void test_line_buffer_flushes_partial_line_on_sync() {
 // a client capability, not a server one.  Completions is implemented.
 void test_capabilities_match_implemented_features() {
     luma::dap::FeatureManager features;
-    features.receive_client_capabilities(luma::json::JsonValue(luma::json::JsonValue::ObjectType{}));
+    features.receive_client_capabilities(
+        luma::json::JsonValue(luma::json::JsonValue::ObjectType{}));
     const auto caps = features.build_capabilities_json();
 
     ASSERT_FALSE(caps.has("supportsExceptionOptions"));

@@ -6,6 +6,10 @@
 #include "common/resource_limits.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
+
 static void test_array_all() {
     ASSERT_EVAL_BOOL("Array.all([2, 4, 6], (integer x) -> x % 2 == 0)", true);
 
@@ -167,7 +171,14 @@ static void test_array_pop() {
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->is_tuple());
-    ASSERT_EQ(v.as_result()->owned_inner->as_tuple()->elements.size(), 2U);
+
+    // The tuple holds the remaining elements and the popped (last) element.
+    const auto& tup = v.as_result()->owned_inner->as_tuple()->elements;
+
+    ASSERT_EQ(tup.size(), 2U);
+    ASSERT_EQ(tup[0].as_array()->elements->size(), 2U);
+    ASSERT_EQ((*tup[0].as_array()->elements)[1].as_integer(), 2);
+    ASSERT_EQ(tup[1].as_integer(), 3);
 }
 
 static void test_array_pop_empty() {
@@ -207,7 +218,7 @@ static void test_array_reduce() {
 }
 
 static void test_array_reduce_non_callable() {
-    ASSERT_THROWS(eval("Array.reduce([1, 2, 3], 0, 42)"));
+    ASSERT_EVAL_THROWS("Array.reduce([1, 2, 3], 0, 42)", "Array.reduce: expected callable");
 }
 
 static void test_array_remove_at() {
@@ -356,10 +367,11 @@ static void test_array_chunk_negative() {
 }
 
 static void test_array_windows_too_large() {
+    // A window larger than the array yields no windows: success with an empty array.
     const auto v = eval("Array.windows([1, 2], 5)");
     ASSERT_RESULT_SUCCESS(v);
-    // Windows larger than array should return empty or handle gracefully.
     ASSERT_TRUE(v.as_result()->owned_inner->is_array());
+    ASSERT_EQ(v.as_result()->owned_inner->as_array()->elements->size(), 0U);
 }
 
 static void test_array_map_callback_error() {
@@ -440,10 +452,19 @@ static void test_array_is_empty() {
 }
 
 static void test_array_each() {
-    // each returns success(none) and does not mutate the input.
+    // each returns success(none).
     const auto v = eval("Array.each([1, 2, 3], (integer x) -> x)");
 
     ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_null());
+
+    // each visits every element, in order, for its side effects.
+    ASSERT_EQ(eval("reference<integer> total = Reference.new(0)\n"
+                   "result<none> _r = Array.each([1, 2, 3],"
+                   "(integer x) -> { Reference.set(total, Reference.get(total) * 10 + x) })\n"
+                   "Reference.get(total)")
+                  .as_integer(),
+              123);
 }
 
 static void test_array_each_callback_error() {
@@ -654,7 +675,7 @@ static void test_array_unzip_roundtrip() {
 // A non-2-tuple element is rejected with a runtime error (reachable through the
 // unchecked eval pipeline).
 static void test_array_unzip_malformed_throws() {
-    ASSERT_TRUE(throws_runtime("Array.unzip([(1, 2), 3])"));
+    ASSERT_EVAL_THROWS("Array.unzip([(1, 2), 3])", "Array.unzip: each element must be a 2-tuple");
 }
 
 static void test_array_take() {
@@ -828,7 +849,7 @@ static void test_array_sum_overflow_promotes_to_number() {
     const auto& inner = *v.as_result()->owned_inner;
 
     ASSERT_TRUE(inner.is_number());
-    ASSERT_TRUE(inner.as_number() > 9.0e18);
+    ASSERT_GT(inner.as_number(), 9.0e18);
 }
 
 static void test_array_rotate_wraps() {
@@ -966,7 +987,7 @@ static void test_array_product_overflow_promotes_to_number() {
     const auto& inner = *v.as_result()->owned_inner;
 
     ASSERT_TRUE(inner.is_number());
-    ASSERT_TRUE(inner.as_number() > 9.0e18);
+    ASSERT_GT(inner.as_number(), 9.0e18);
 }
 
 static void test_array_is_sorted() {

@@ -1,23 +1,26 @@
 // JSON parser and serialiser unit tests.
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "json/json.hpp"
 #include "json/json_helpers.hpp"
 #include "parse_error.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::json;
+using luma::json::JsonValue;
+using luma::json::try_extract_field;
 
 // ═══════════════════════════════════════════════════════════
 // Construction and type queries
 // ═══════════════════════════════════════════════════════════
 
 static void test_null_value() {
-    JsonValue v;
+    const JsonValue v;
     ASSERT_TRUE(v.is_null());
     ASSERT_FALSE(v.is_bool());
     ASSERT_FALSE(v.is_integer());
@@ -27,16 +30,16 @@ static void test_null_value() {
 }
 
 static void test_bool_value() {
-    JsonValue v{true};
+    const JsonValue v{true};
     ASSERT_TRUE(v.is_bool());
     ASSERT_EQ(v.as_bool(), true);
 
-    JsonValue f{false};
+    const JsonValue f{false};
     ASSERT_EQ(f.as_bool(), false);
 }
 
 static void test_integer_value() {
-    JsonValue v{static_cast<int64_t>(42)};
+    const JsonValue v{static_cast<int64_t>(42)};
     ASSERT_TRUE(v.is_integer());
     ASSERT_TRUE(v.is_number());
     ASSERT_EQ(v.as_integer(), 42);
@@ -44,20 +47,20 @@ static void test_integer_value() {
 }
 
 static void test_double_value() {
-    JsonValue v{3.14};
+    const JsonValue v{3.14};
     ASSERT_TRUE(v.is_number());
     ASSERT_FALSE(v.is_integer());
     ASSERT_NEAR(v.as_number(), 3.14, 0.001);
 }
 
 static void test_string_value() {
-    JsonValue v{std::string{"hello"}};
+    const JsonValue v{std::string{"hello"}};
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "hello");
 }
 
 static void test_cstring_value() {
-    JsonValue v{"world"};
+    const JsonValue v{"world"};
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "world");
 }
@@ -67,7 +70,7 @@ static void test_array_value() {
     arr.push_back(JsonValue{static_cast<int64_t>(1)});
     arr.push_back(JsonValue{static_cast<int64_t>(2)});
 
-    JsonValue v{arr};
+    const JsonValue v{arr};
     ASSERT_TRUE(v.is_array());
     ASSERT_EQ(v.as_array().size(), 2U);
     ASSERT_EQ(v.as_array()[0].as_integer(), 1);
@@ -77,7 +80,7 @@ static void test_object_value() {
     JsonValue::ObjectType obj;
     obj["key"] = JsonValue{std::string{"value"}};
 
-    JsonValue v{obj};
+    const JsonValue v{obj};
     ASSERT_TRUE(v.is_object());
     ASSERT_TRUE(v.has("key"));
     ASSERT_EQ(v["key"].as_string(), "value");
@@ -106,23 +109,23 @@ static void test_serialise_deeply_nested_is_depth_bounded() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_accessor_type_mismatch() {
-    JsonValue v{static_cast<int64_t>(42)};
-    ASSERT_THROWS(v.as_string());
-    ASSERT_THROWS(v.as_bool());
-    ASSERT_THROWS(v.as_array());
-    ASSERT_THROWS(v.as_object());
+    const JsonValue v{static_cast<int64_t>(42)};
+    ASSERT_THROWS_WITH_MESSAGE(v.as_string(), "JSON value is not a string");
+    ASSERT_THROWS_WITH_MESSAGE(v.as_bool(), "JSON value is not a boolean");
+    ASSERT_THROWS_WITH_MESSAGE(v.as_array(), "JSON value is not an array");
+    ASSERT_THROWS_WITH_MESSAGE(v.as_object(), "JSON value is not an object");
 }
 
 static void test_object_missing_key() {
     JsonValue::ObjectType obj;
     obj["a"] = JsonValue{static_cast<int64_t>(1)};
-    JsonValue v{obj};
+    const JsonValue v{obj};
 
-    ASSERT_THROWS(v["missing"]);
+    ASSERT_THROWS_WITH_MESSAGE(v["missing"], "JSON object has no key 'missing'");
 }
 
 static void test_has_on_non_object() {
-    JsonValue v{static_cast<int64_t>(42)};
+    const JsonValue v{static_cast<int64_t>(42)};
     ASSERT_FALSE(v.has("x"));
 }
 
@@ -133,7 +136,7 @@ static void test_has_on_non_object() {
 static void test_try_as_int_out_of_range_returns_nullopt() {
     const auto too_big = static_cast<int64_t>(std::numeric_limits<int>::max()) + 1;
 
-    JsonValue big{too_big};
+    const JsonValue big{too_big};
     ASSERT_TRUE(big.is_integer());
     ASSERT_FALSE(big.try_as<int>().has_value());
     // int64_t extraction is unaffected — the value fits.
@@ -141,12 +144,12 @@ static void test_try_as_int_out_of_range_returns_nullopt() {
 
     JsonValue::ObjectType obj;
     obj["seq"] = big;
-    JsonValue v{obj};
+    const JsonValue v{obj};
     ASSERT_FALSE(v.try_get<int>("seq").has_value());
     ASSERT_EQ(v.get_or<int>("seq", 7), 7);
 
     // An in-range integer is still extracted normally.
-    JsonValue ok{static_cast<int64_t>(42)};
+    const JsonValue ok{static_cast<int64_t>(42)};
     const auto extracted = ok.try_as<int>();
     ASSERT_TRUE(extracted.has_value());
     ASSERT_EQ(extracted.value(), 42);
@@ -228,64 +231,64 @@ static void test_try_extract_field_int_out_of_range_returns_nullopt() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_parse_null() {
-    auto v = JsonValue::parse("null");
+    const auto v = JsonValue::parse("null");
     ASSERT_TRUE(v.is_null());
 }
 
 static void test_parse_true() {
-    auto v = JsonValue::parse("true");
+    const auto v = JsonValue::parse("true");
     ASSERT_TRUE(v.is_bool());
     ASSERT_EQ(v.as_bool(), true);
 }
 
 static void test_parse_false() {
-    auto v = JsonValue::parse("false");
+    const auto v = JsonValue::parse("false");
     ASSERT_TRUE(v.is_bool());
     ASSERT_EQ(v.as_bool(), false);
 }
 
 static void test_parse_integer() {
-    auto v = JsonValue::parse("42");
+    const auto v = JsonValue::parse("42");
     ASSERT_TRUE(v.is_integer());
     ASSERT_EQ(v.as_integer(), 42);
 }
 
 static void test_parse_negative_integer() {
-    auto v = JsonValue::parse("-7");
+    const auto v = JsonValue::parse("-7");
     ASSERT_TRUE(v.is_integer());
     ASSERT_EQ(v.as_integer(), -7);
 }
 
 static void test_parse_double() {
-    auto v = JsonValue::parse("3.14");
+    const auto v = JsonValue::parse("3.14");
     ASSERT_TRUE(v.is_number());
     ASSERT_NEAR(v.as_number(), 3.14, 0.001);
 }
 
 static void test_parse_string() {
-    auto v = JsonValue::parse("\"hello world\"");
+    const auto v = JsonValue::parse("\"hello world\"");
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "hello world");
 }
 
 static void test_parse_string_escapes() {
-    auto v = JsonValue::parse("\"a\\nb\\tc\"");
+    const auto v = JsonValue::parse("\"a\\nb\\tc\"");
     ASSERT_EQ(v.as_string(), "a\nb\tc");
 }
 
 static void test_parse_string_unicode_escape() {
-    auto v = JsonValue::parse("\"\\u0041\""); // 'A'
+    const auto v = JsonValue::parse("\"\\u0041\""); // 'A'
     ASSERT_EQ(v.as_string(), "A");
 }
 
 static void test_parse_empty_array() {
-    auto v = JsonValue::parse("[]");
+    const auto v = JsonValue::parse("[]");
     ASSERT_TRUE(v.is_array());
     ASSERT_EQ(v.as_array().size(), 0U);
 }
 
 static void test_parse_array() {
-    auto v = JsonValue::parse("[1, 2, 3]");
+    const auto v = JsonValue::parse("[1, 2, 3]");
     ASSERT_TRUE(v.is_array());
     ASSERT_EQ(v.as_array().size(), 3U);
     ASSERT_EQ(v.as_array()[0].as_integer(), 1);
@@ -303,7 +306,7 @@ static void test_parse_depth_limit_is_a_json_parse_error() {
     } catch (const luma::JsonParseError& e) {
         caught = true;
         ASSERT_EQ(e.position(), std::size_t{2});
-        ASSERT_TRUE(std::string{e.what()}.find("maximum nesting depth 2") != std::string::npos);
+        ASSERT_NE(std::string{e.what()}.find("maximum nesting depth 2"), std::string::npos);
     }
 
     ASSERT_TRUE(caught);
@@ -320,11 +323,11 @@ static void test_parse_depth_is_capped_at_serializer_limit() {
 
     const auto deepest = JsonValue::parse(nested(128), 1000);
     ASSERT_EQ(deepest.to_string(), nested(128));
-    ASSERT_THROWS(JsonValue::parse(nested(129), 1000));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse(nested(129), 1000), "maximum nesting depth 128");
 }
 
 static void test_parse_nested_array() {
-    auto v = JsonValue::parse("[[1, 2], [3]]");
+    const auto v = JsonValue::parse("[[1, 2], [3]]");
     ASSERT_TRUE(v.is_array());
     ASSERT_EQ(v.as_array().size(), 2U);
     ASSERT_TRUE(v.as_array()[0].is_array());
@@ -332,45 +335,45 @@ static void test_parse_nested_array() {
 }
 
 static void test_parse_empty_object() {
-    auto v = JsonValue::parse("{}");
+    const auto v = JsonValue::parse("{}");
     ASSERT_TRUE(v.is_object());
     ASSERT_EQ(v.as_object().size(), 0U);
 }
 
 static void test_parse_object() {
-    auto v = JsonValue::parse("{\"name\": \"luma\", \"version\": 1}");
+    const auto v = JsonValue::parse("{\"name\": \"luma\", \"version\": 1}");
     ASSERT_TRUE(v.is_object());
     ASSERT_EQ(v["name"].as_string(), "luma");
     ASSERT_EQ(v["version"].as_integer(), 1);
 }
 
 static void test_parse_nested_object() {
-    auto v = JsonValue::parse("{\"a\": {\"b\": true}}");
+    const auto v = JsonValue::parse("{\"a\": {\"b\": true}}");
     ASSERT_TRUE(v["a"].is_object());
     ASSERT_EQ(v["a"]["b"].as_bool(), true);
 }
 
 static void test_parse_whitespace() {
-    auto v = JsonValue::parse("  \n\t  42  \n  ");
+    const auto v = JsonValue::parse("  \n\t  42  \n  ");
     ASSERT_EQ(v.as_integer(), 42);
 }
 
 // ─── Parse errors ───
 
 static void test_parse_empty_input() {
-    ASSERT_THROWS(JsonValue::parse(""));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse(""), "unexpected end of input");
 }
 
 static void test_parse_trailing_content() {
-    ASSERT_THROWS(JsonValue::parse("42 abc"));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse("42 abc"), "unexpected trailing content");
 }
 
 static void test_parse_unterminated_string() {
-    ASSERT_THROWS(JsonValue::parse("\"hello"));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse("\"hello"), "unterminated string");
 }
 
 static void test_parse_invalid_token() {
-    ASSERT_THROWS(JsonValue::parse("undefined"));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse("undefined"), "unexpected character 'u'");
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -378,25 +381,25 @@ static void test_parse_invalid_token() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_serialise_null() {
-    JsonValue v;
+    const JsonValue v;
     ASSERT_EQ(v.to_string(), "null");
 }
 
 static void test_serialise_bool() {
-    JsonValue t{true};
+    const JsonValue t{true};
     ASSERT_EQ(t.to_string(), "true");
 
-    JsonValue f{false};
+    const JsonValue f{false};
     ASSERT_EQ(f.to_string(), "false");
 }
 
 static void test_serialise_integer() {
-    JsonValue v{static_cast<int64_t>(42)};
+    const JsonValue v{static_cast<int64_t>(42)};
     ASSERT_EQ(v.to_string(), "42");
 }
 
 static void test_serialise_string_escape() {
-    JsonValue v{std::string{"hello\nworld"}};
+    const JsonValue v{std::string{"hello\nworld"}};
     ASSERT_EQ(v.to_string(), "\"hello\\nworld\"");
 }
 
@@ -405,13 +408,13 @@ static void test_serialise_array() {
     arr.push_back(JsonValue{static_cast<int64_t>(1)});
     arr.push_back(JsonValue{static_cast<int64_t>(2)});
 
-    JsonValue v{arr};
+    const JsonValue v{arr};
     ASSERT_EQ(v.to_string(), "[1,2]");
 }
 
 static void test_serialise_empty_object() {
-    JsonValue::ObjectType obj;
-    JsonValue v{obj};
+    const JsonValue::ObjectType obj;
+    const JsonValue v{obj};
     ASSERT_EQ(v.to_string(), "{}");
 }
 
@@ -419,9 +422,9 @@ static void test_serialise_empty_object() {
 
 static void test_round_trip_complex() {
     const auto input = "{\"arr\":[1,2,3],\"flag\":true,\"name\":\"test\",\"nested\":{\"x\":null}}";
-    auto parsed = JsonValue::parse(input);
-    auto output = parsed.to_string();
-    auto reparsed = JsonValue::parse(output);
+    const auto parsed = JsonValue::parse(input);
+    const auto output = parsed.to_string();
+    const auto reparsed = JsonValue::parse(output);
 
     ASSERT_EQ(reparsed["name"].as_string(), "test");
     ASSERT_EQ(reparsed["flag"].as_bool(), true);

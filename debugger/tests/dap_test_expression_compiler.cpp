@@ -14,8 +14,10 @@
 #include "expression_compiler.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::dap;
 using luma::SourceManager;
+using luma::dap::compile_expression_direct;
+using luma::dap::compile_program_pipeline;
+using luma::test::TempFile;
 
 namespace {
 

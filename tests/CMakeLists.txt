@@ -15,6 +15,7 @@ target_include_directories(luma_test_framework INTERFACE ${PROJECT_SOURCE_DIR}/t
 # Test naming convention: <component>_test.cpp
 # Exception: stdlib tests use stdlib_test_<module>.cpp for clarity.
 # Exception: type checker tests use type_checker_test_<aspect>.cpp.
+# Exception: parser, optimizer, and VM tests use <component>_test_<aspect>.cpp.
 function(luma_add_test)
     cmake_parse_arguments(ARG "" "NAME;WORKING_DIR;TIMEOUT" "SOURCES;LIBS;INCLUDES;LABELS" ${ARGN})
     add_executable(${ARG_NAME} ${ARG_SOURCES})
@@ -88,7 +89,10 @@ endfunction()
 
 set(LUMA_ANALYSIS_TESTS
     lexer_test
-    parser_test
+    parser_test_declarations
+    parser_test_statements
+    parser_test_expressions
+    parser_test_errors
     type_checker_test_basics
     type_checker_test_functions
     type_checker_test_advanced
@@ -234,11 +238,15 @@ set(LUMA_RUNTIME_TESTS
     compiler_test
     compiler_opcode_test
     compiler_disassemble_test
-    optimizer_test
+    optimizer_test_peephole
+    optimizer_test_constant_fold
+    optimizer_test_control_flow
     verifier_test
     compilation_cache_test
     bytecode_serializer_test
     vm_test_core
+    vm_test_control_flow
+    vm_test_errors
     vm_test_types
     vm_test_generics
     vm_test_concurrency

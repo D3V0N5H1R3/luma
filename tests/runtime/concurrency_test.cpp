@@ -2,15 +2,19 @@
 
 #include <atomic>
 #include <chrono>
+#include <concepts>
 #include <cstddef>
 #include <exception>
 #include <future>
 #include <memory>
 #include <stdexcept>
+#include <stop_token>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
+#include "common/scope_guard.hpp"
 #include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/channel.hpp"
 #include "runtime/concurrency/task_completion.hpp"
@@ -20,7 +24,64 @@
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::CancellationToken;
+using luma::CancelledException;
+using luma::Channel;
+using luma::ChannelClosedError;
+using luma::ChannelEmptyError;
+using luma::ChannelFullError;
+using luma::CompletionSubscription;
+using luma::ScopeGuard;
+using luma::TaskCompletion;
+using luma::TaskScope;
+using luma::TaskValue;
+using luma::ThreadPool;
+using luma::Value;
+
+namespace {
+
+// A std::jthread whose body can never reach std::terminate: an exception
+// thrown by the body is captured and rethrown on the test thread by join().
+// If a test assertion fails before join(), the destructor requests stop and
+// joins, so the thread never outlives the locals it references.  A body may
+// take a std::stop_token to observe that request.
+class GuardedThread {
+public:
+    template <typename Body>
+    explicit GuardedThread(Body body)
+        : error_{std::make_shared<std::exception_ptr>()},
+          thread_{[error = error_,
+                   body = std::move(body)]([[maybe_unused]] const std::stop_token& stop) mutable {
+              try {
+                  if constexpr (std::invocable<Body&, const std::stop_token&>) {
+                      body(stop);
+                  } else {
+                      body();
+                  }
+              } catch (...) {
+                  *error = std::current_exception();
+              }
+          }} {}
+
+    void request_stop() noexcept {
+        thread_.request_stop();
+    }
+
+    // Wait for the body to finish and rethrow anything it threw.
+    void join() {
+        thread_.join();
+
+        if (*error_) {
+            std::rethrow_exception(*error_);
+        }
+    }
+
+private:
+    std::shared_ptr<std::exception_ptr> error_;
+    std::jthread thread_;
+};
+
+} // namespace
 
 // ─── Channel tests ───
 
@@ -52,7 +113,7 @@ static void test_channel_try_receive_empty() {
     ASSERT_THROWS_AS(channel.try_receive(), ChannelEmptyError);
 }
 
-static void test_channel_close_send_returns_false() {
+static void test_channel_send_after_close_throws() {
     Channel channel;
     channel.close();
 
@@ -93,15 +154,15 @@ static void test_channel_is_closed() {
 static void test_channel_length() {
     Channel channel;
 
-    ASSERT_EQ(channel.length(), static_cast<std::size_t>(0));
+    ASSERT_EQ(channel.length(), 0);
     channel.send(Value{1});
-    ASSERT_EQ(channel.length(), static_cast<std::size_t>(1));
+    ASSERT_EQ(channel.length(), 1);
     channel.send(Value{2});
-    ASSERT_EQ(channel.length(), static_cast<std::size_t>(2));
+    ASSERT_EQ(channel.length(), 2);
 
-    (void)channel.try_receive();
+    ASSERT_EQ(channel.try_receive().to_string(), "1");
 
-    ASSERT_EQ(channel.length(), static_cast<std::size_t>(1));
+    ASSERT_EQ(channel.length(), 1);
 }
 
 static void test_channel_try_send_closed() {
@@ -120,9 +181,11 @@ static void test_channel_buffered_try_send_full() {
     ASSERT_THROWS_AS(channel.try_send(Value{3}), ChannelFullError);
 
     // Drain one, then try_send should succeed again.
-    (void)channel.try_receive();
+    ASSERT_EQ(channel.try_receive().to_string(), "1");
 
     channel.try_send(Value{3});
+
+    ASSERT_EQ(channel.length(), 2);
 }
 
 static void test_channel_receive_timeout() {
@@ -167,7 +230,7 @@ static void test_channel_send_timeout_succeeds_with_room() {
     const auto result = channel.send_timeout(Value{7}, std::chrono::milliseconds{1000});
 
     ASSERT_FALSE(result.timed_out);
-    ASSERT_EQ(channel.length(), static_cast<std::size_t>(1));
+    ASSERT_EQ(channel.length(), 1);
     ASSERT_EQ(channel.try_receive().to_string(), "7");
 }
 
@@ -177,7 +240,7 @@ static void test_channel_send_timeout_unblocks_on_receive() {
     Channel channel{1};
     channel.send(Value{1}); // fill the buffer
 
-    std::thread receiver{[&] {
+    GuardedThread receiver{[&channel] {
         std::this_thread::sleep_for(std::chrono::milliseconds{20});
 
         (void)channel.try_receive(); // free a slot
@@ -199,7 +262,7 @@ static void test_channel_unbounded_try_send_never_full() {
         channel.try_send(Value{i});
     }
 
-    ASSERT_EQ(channel.length(), static_cast<std::size_t>(1000));
+    ASSERT_EQ(channel.length(), 1000);
 }
 
 static void test_channel_concurrent_send_receive() {
@@ -209,20 +272,21 @@ static void test_channel_concurrent_send_receive() {
 
     std::atomic<int> received{0};
 
-    // Producer thread sends values.
-    std::thread producer{[&] {
-        for (int i{0}; i < count; ++i) {
-            (void)channel.send(Value{i});
-        }
+    // Producer thread sends values.  It closes the channel on every path, so
+    // the consumer can never wait forever.
+    GuardedThread producer{[&channel] {
+        const ScopeGuard close_channel{[&channel] { channel.close(); }};
 
-        channel.close();
+        for (int i{0}; i < count; ++i) {
+            channel.send(Value{i});
+        }
     }};
 
-    // Consumer thread receives values.
-    std::thread consumer{[&] {
+    // Consumer thread receives values until the channel is closed and drained.
+    GuardedThread consumer{[&channel, &received] {
         while (true) {
             try {
-                const auto value = channel.receive();
+                (void)channel.receive();
                 ++received;
             } catch (const ChannelClosedError&) {
                 break;
@@ -239,23 +303,27 @@ static void test_channel_concurrent_send_receive() {
 static void test_channel_receive_blocks_until_value() {
     Channel channel;
 
-    std::thread sender{[&] {
+    // The sender closes the channel after sending (on every path), so a failed
+    // send surfaces as ChannelClosedError instead of leaving receive() blocked.
+    GuardedThread sender{[&channel] {
+        const ScopeGuard close_channel{[&channel] { channel.close(); }};
+
         std::this_thread::sleep_for(std::chrono::milliseconds{20});
 
-        (void)channel.send(Value{42});
+        channel.send(Value{42});
     }};
 
     const auto result = channel.receive();
 
-    ASSERT_EQ(result.to_string(), "42");
-
     sender.join();
+
+    ASSERT_EQ(result.to_string(), "42");
 }
 
 static void test_channel_receive_unblocks_on_close() {
     Channel channel;
 
-    std::thread closer{[&] {
+    GuardedThread closer{[&channel] {
         std::this_thread::sleep_for(std::chrono::milliseconds{20});
 
         channel.close();
@@ -289,7 +357,7 @@ static void test_thread_pool_concurrent_enqueue() {
     {
         ThreadPool pool{4};
 
-        std::vector<std::thread> producers;
+        std::vector<GuardedThread> producers;
 
         for (int t{0}; t < 4; ++t) {
             producers.emplace_back([&pool, &counter] {
@@ -299,8 +367,8 @@ static void test_thread_pool_concurrent_enqueue() {
             });
         }
 
-        for (auto& thread : producers) {
-            thread.join();
+        for (auto& producer : producers) {
+            producer.join();
         }
     } // pool destroyed — all tasks complete
 
@@ -330,7 +398,8 @@ static void test_cancellation_token_throw_if_cancelled() {
 
     token.cancel();
 
-    ASSERT_THROWS(token.throw_if_cancelled());
+    ASSERT_THROWS_AS(token.throw_if_cancelled(), CancelledException);
+    ASSERT_THROWS_WITH_MESSAGE(token.throw_if_cancelled(), "task cancelled");
 }
 
 // ─── TaskCompletion tests ───
@@ -343,17 +412,17 @@ static void test_task_completion_subscription_released_on_scope_exit() {
 
     for (int i = 0; i < 3; ++i) {
         const CompletionSubscription subscription{{completion, completion}};
-        ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(2));
+        ASSERT_EQ(completion->subscriber_count(), 2);
     }
 
-    ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(0));
+    ASSERT_EQ(completion->subscriber_count(), 0);
 }
 
 static void test_task_completion_wakes_waiter() {
     const auto completion = std::make_shared<TaskCompletion>();
     const CompletionSubscription subscription{{completion}};
 
-    std::thread producer{[&completion] { completion->mark_complete(); }};
+    GuardedThread producer{[&completion] { completion->mark_complete(); }};
 
     // A generous timeout: a missed notification would make the wait run to it.
     const auto start = std::chrono::steady_clock::now();
@@ -362,8 +431,8 @@ static void test_task_completion_wakes_waiter() {
 
     producer.join();
 
-    ASSERT_TRUE(waited < std::chrono::seconds{5});
-    ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(0));
+    ASSERT_LT(waited, std::chrono::seconds{5});
+    ASSERT_EQ(completion->subscriber_count(), 0);
 }
 
 static void test_task_completion_subscribe_after_completion_notifies() {
@@ -375,7 +444,7 @@ static void test_task_completion_subscribe_after_completion_notifies() {
     const auto start = std::chrono::steady_clock::now();
     subscription.wait_for(std::chrono::seconds{10});
 
-    ASSERT_TRUE(std::chrono::steady_clock::now() - start < std::chrono::seconds{5});
+    ASSERT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds{5});
 }
 
 // ─── TaskScope tests ───
@@ -384,7 +453,7 @@ static void test_task_scope_join_empty() {
     TaskScope scope;
     const auto results = scope.join_all();
 
-    ASSERT_EQ(results.size(), static_cast<std::size_t>(0));
+    ASSERT_EQ(results.size(), 0);
 }
 
 static void test_task_scope_join_collects_results() {
@@ -401,12 +470,12 @@ static void test_task_scope_join_collects_results() {
     const auto task2 = std::make_shared<TaskValue>(std::move(future2), scope.token());
     scope.add_child(task2);
 
-    pool.enqueue([&] { promise1->set_value(Value{10}); });
-    pool.enqueue([&] { promise2->set_value(Value{20}); });
+    pool.enqueue([promise1] { promise1->set_value(Value{10}); });
+    pool.enqueue([promise2] { promise2->set_value(Value{20}); });
 
     const auto results = scope.join_all();
 
-    ASSERT_EQ(results.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(results.size(), 2);
     ASSERT_EQ(results[0].to_string(), "10");
     ASSERT_EQ(results[1].to_string(), "20");
 }
@@ -429,9 +498,9 @@ static void test_task_deep_copy_yields_independent_shared_future() {
 
     ASSERT_TRUE(clone.is_task());
     // Distinct wrapper objects (pre-fix they were the same shared_ptr).
-    ASSERT_TRUE(clone.as_task().get() != original.as_task().get());
+    ASSERT_NE(clone.as_task().get(), original.as_task().get());
     // The cancellation token is still shared so cancellation propagates.
-    ASSERT_TRUE(clone.as_task()->token == original.as_task()->token);
+    ASSERT_EQ(clone.as_task()->token, original.as_task()->token);
 
     promise->set_value(Value{99});
 
@@ -458,42 +527,33 @@ static void test_task_scope_error_cancels_siblings() {
     const auto task2 = std::make_shared<TaskValue>(std::move(future2), scope.token());
     scope.add_child(task2);
 
-    // First task fails.
-    pool.enqueue([&] {
+    // First task fails.  The pool tasks capture by value: join_all() may return
+    // while a pool task is still unwinding, so they must not reference locals.
+    pool.enqueue([promise1] {
         promise1->set_exception(std::make_exception_ptr(std::runtime_error{"task1 failed"}));
     });
 
     // Second task checks cancellation (simulating cooperative check).
-    pool.enqueue([&] {
+    pool.enqueue([promise2, token = scope.token()] {
         std::this_thread::sleep_for(std::chrono::milliseconds{20});
 
-        if (scope.token()->is_cancelled()) {
+        if (token->is_cancelled()) {
             promise2->set_exception(std::make_exception_ptr(CancelledException{"task cancelled"}));
         } else {
             promise2->set_value(Value{42});
         }
     });
 
-    bool threw{false};
-
-    try {
-        (void)scope.join_all();
-    } catch (const std::runtime_error& e) {
-        threw = true;
-
-        ASSERT_EQ(std::string{e.what()}, "task1 failed");
-    }
-
-    ASSERT_TRUE(threw);
+    ASSERT_THROWS_WITH_MESSAGE((void)scope.join_all(), "task1 failed");
     ASSERT_TRUE(scope.token()->is_cancelled());
 }
 
 static void test_task_scope_nested() {
     TaskScope outer;
-    TaskScope inner{&outer};
+    const TaskScope inner{&outer};
 
-    ASSERT_TRUE(inner.parent() == &outer);
-    ASSERT_TRUE(outer.parent() == nullptr);
+    ASSERT_EQ(inner.parent(), &outer);
+    ASSERT_EQ(outer.parent(), nullptr);
 }
 
 static void test_task_scope_cancel_all() {
@@ -536,31 +596,32 @@ static void test_task_scope_parent_cancel_propagates() {
 static void test_cancellation_token_shared_across_threads() {
     const auto token = std::make_shared<CancellationToken>();
 
-    std::thread t{[&] {
+    GuardedThread spinner{[&token] {
         while (!token->is_cancelled()) {
             std::this_thread::yield();
         }
     }};
 
     token->cancel();
-    t.join();
+    spinner.join();
 
     ASSERT_TRUE(token->is_cancelled());
 }
 
 // ─── Resource-exhaustion and cancellation tests ───
 
-static void test_task_cancellation_during_execution() {
-    // Verify that a CancellationToken signals correctly between threads.
+static void test_cancelled_token_is_visible_to_a_later_thread() {
+    // A token cancelled on this thread reads as cancelled from a thread started
+    // afterwards.  (Cancelling a thread that is already running is covered by
+    // test_cancellation_token_shared_across_threads.)
     const auto token = std::make_shared<CancellationToken>();
 
     ASSERT_FALSE(token->is_cancelled());
 
-    // Cancel from this thread; check from another.
     token->cancel();
 
     std::atomic<bool> observed_cancel{false};
-    std::thread observer{[&] { observed_cancel = token->is_cancelled(); }};
+    GuardedThread observer{[&token, &observed_cancel] { observed_cancel = token->is_cancelled(); }};
     observer.join();
 
     ASSERT_TRUE(observed_cancel.load());
@@ -584,7 +645,7 @@ static void test_channel_concurrent_close_during_send() {
 
     std::atomic<bool> send_returned{false};
 
-    std::thread sender{[&] {
+    GuardedThread sender{[&channel, &send_returned] {
         // This send may block briefly, time out, or throw ChannelClosedError;
         // any outcome is acceptable.
         try {
@@ -671,7 +732,7 @@ static void test_channel_bounded_ring_wraparound() {
     channel.send(Value{4});
     channel.send(Value{5}); // buffer holds [3,4,5] across the wrap
 
-    ASSERT_EQ(channel.length(), static_cast<std::size_t>(3));
+    ASSERT_EQ(channel.length(), 3);
     ASSERT_EQ(channel.try_receive().to_string(), "3");
     ASSERT_EQ(channel.try_receive().to_string(), "4");
     ASSERT_EQ(channel.try_receive().to_string(), "5");
@@ -686,12 +747,14 @@ static void test_channel_bounded_ring_wraparound() {
 // for is still queued must not deadlock the pool — the pool starts a
 // compensating worker.  A one-worker pool reproduces the deadlock directly.
 static void test_thread_pool_compensates_for_blocked_worker() {
-    ThreadPool pool{1};
-
+    // The promises outlive the pool: its destructor waits for the tasks, which
+    // reference them.
     std::promise<void> release;
     const auto released = release.get_future().share();
     std::promise<void> finish;
-    auto finished = finish.get_future();
+    const auto finished = finish.get_future();
+
+    ThreadPool pool{1};
 
     pool.enqueue([released, &finish] {
         const ThreadPool::BlockingRegion blocking;
@@ -709,7 +772,7 @@ static void test_thread_pool_compensates_for_blocked_worker() {
     }
 
     ASSERT_TRUE(completed);
-    ASSERT_TRUE(pool.worker_count() >= static_cast<std::size_t>(2));
+    ASSERT_GE(pool.worker_count(), 2);
 }
 
 // Review #3: tokens form a tree — cancelling a task's own token leaves its
@@ -747,7 +810,7 @@ static void test_task_scope_cancelled_child_is_not_a_failure() {
 
     const auto results = scope.join_all();
 
-    ASSERT_EQ(results.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(results.size(), 2);
     ASSERT_TRUE(results[0].is_null());
     ASSERT_EQ(results[1].to_string(), "5");
     ASSERT_FALSE(scope.token()->is_cancelled());
@@ -768,9 +831,11 @@ static void test_task_scope_fail_fast_in_completion_order() {
         std::make_shared<TaskValue>(failing_promise->get_future().share(), scope.token()));
 
     const auto token = scope.token();
-    std::atomic<bool> give_up{false};
-    std::thread waiter{[waiting_promise, token, &give_up] {
-        while (!token->is_cancelled() && !give_up.load()) {
+    // Releases child 0 once the scope is cancelled.  A regression that never
+    // cancels is bounded by request_stop() below (or by the destructor, if an
+    // exception escapes first), so the thread can never outlive the test.
+    GuardedThread waiter{[waiting_promise, token](const std::stop_token& stop) {
+        while (!token->is_cancelled() && !stop.stop_requested()) {
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
         }
         waiting_promise->set_exception(
@@ -790,7 +855,7 @@ static void test_task_scope_fail_fast_in_completion_order() {
     });
 
     const bool finished = joined.wait_for(std::chrono::seconds{10}) == std::future_status::ready;
-    give_up.store(true);
+    waiter.request_stop();
     waiter.join();
 
     ASSERT_TRUE(finished);
@@ -804,7 +869,7 @@ static void test_channel_receive_is_cancellable() {
     Channel channel;
     CancellationToken token;
 
-    std::thread canceller{[&token] {
+    GuardedThread canceller{[&token] {
         std::this_thread::sleep_for(std::chrono::milliseconds{20});
         token.cancel();
     }};
@@ -818,7 +883,7 @@ int main() {
     RUN(test_channel_send_receive);
     RUN(test_channel_fifo_order);
     RUN(test_channel_try_receive_empty);
-    RUN(test_channel_close_send_returns_false);
+    RUN(test_channel_send_after_close_throws);
     RUN(test_channel_close_drains);
     RUN(test_channel_is_closed);
     RUN(test_channel_length);
@@ -861,7 +926,7 @@ int main() {
     RUN(test_cancellation_token_shared_across_threads);
 
     // Resource-exhaustion and cancellation tests.
-    RUN(test_task_cancellation_during_execution);
+    RUN(test_cancelled_token_is_visible_to_a_later_thread);
     RUN(test_channel_send_after_close_multiple);
     RUN(test_channel_concurrent_close_during_send);
 

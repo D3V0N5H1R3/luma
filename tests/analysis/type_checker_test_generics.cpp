@@ -1,6 +1,33 @@
 // Type checker unit tests — generics, recursive ADTs, concurrency, bounds checking.
 
+#include <algorithm>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::test::check;
+using luma::test::check_warnings;
+using luma::test::fails;
+using luma::test::fails_with;
+using luma::test::fails_with_message;
+using luma::test::has_warnings;
+using luma::test::passes;
+
+namespace {
+
+// True if any diagnostic's message contains `fragment`.
+[[nodiscard]] bool any_message_contains(const std::vector<Diagnostic>& diagnostics,
+                                        std::string_view fragment) {
+    return std::ranges::any_of(diagnostics, [fragment](const Diagnostic& d) {
+        return d.message.find(fragment) != std::string::npos;
+    });
+}
+
+} // namespace
 
 // ─── Recursive ADTs ───
 
@@ -231,33 +258,13 @@ static void test_compatible_type_comparison_no_warn() {
     const auto warnings = check_warnings("boolean b = 42 == 3.14\n");
 
     // integer == number should NOT warn (numeric promotion).
-    bool has_incompatible = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("incompatible") != std::string::npos) {
-            has_incompatible = true;
-        }
-    }
-
-    ASSERT_FALSE(has_incompatible);
+    ASSERT_FALSE(any_message_contains(warnings, "incompatible"));
 }
 
 static void test_same_type_comparison_no_incompatible_warn() {
     const auto warnings = check_warnings("boolean b = \"a\" == \"b\"\n");
 
-    bool has_incompatible = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("incompatible") != std::string::npos) {
-            has_incompatible = true;
-        }
-    }
-
-    ASSERT_FALSE(has_incompatible);
+    ASSERT_FALSE(any_message_contains(warnings, "incompatible"));
 }
 
 // ─── Compile-time array bounds checking ───
@@ -267,10 +274,16 @@ static void test_array_literal_out_of_bounds() {
 }
 
 static void test_array_literal_negative_index() {
-    // Negative indices are always out of bounds for array literals.
-    // Note: -1 is parsed as unary minus on a literal, so the type checker
-    // may not catch this at compile time. Verify it at least doesn't crash.
-    (void)check("integer x = [1, 2, 3][-1]\n");
+    // -1 parses as unary minus applied to the literal 1; the compile-time bounds
+    // check sees through the negation, so a negative literal index is rejected.
+    ASSERT_TRUE(
+        fails_with_message("integer x = [1, 2, 3][-1]\n", "index -1 out of bounds for array"));
+}
+
+static void test_array_literal_computed_negative_index_left_to_runtime() {
+    // Only a (possibly negated) literal is checked statically; an arithmetic
+    // index is left to the VM's runtime bounds check.
+    ASSERT_TRUE(passes("integer x = [1, 2, 3][0 - 1]\n"));
 }
 
 static void test_array_literal_in_bounds() {
@@ -281,6 +294,11 @@ static void test_array_literal_in_bounds() {
 
 static void test_tuple_out_of_bounds() {
     ASSERT_TRUE(fails("integer x = (1, \"a\", true)[5]\n"));
+}
+
+static void test_tuple_negative_literal_index() {
+    ASSERT_TRUE(fails_with_message("integer x = (1, \"a\", true)[-1]\n",
+                                   "index -1 out of bounds for tuple of length 3"));
 }
 
 // ─── String interpolation function warning ───
@@ -296,17 +314,7 @@ static void test_string_interpolation_call_no_warn() {
     const auto warnings = check_warnings("function integer foo() { return 1 }\n"
                                          "string s = \"value is ${foo()}\"\n");
 
-    bool has_func_warn = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("function value") != std::string::npos) {
-            has_func_warn = true;
-        }
-    }
-
-    ASSERT_FALSE(has_func_warn);
+    ASSERT_FALSE(any_message_contains(warnings, "function value"));
 }
 
 // ─── Floating-point equality warning ───
@@ -314,35 +322,15 @@ static void test_string_interpolation_call_no_warn() {
 static void test_float_equality_warns() {
     const auto warnings = check_warnings("boolean b = 3.14 == 3.14\n");
 
-    bool has_float_warn = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("floating") != std::string::npos ||
-            msg.find("rounding") != std::string::npos) {
-            has_float_warn = true;
-        }
-    }
-
-    ASSERT_TRUE(has_float_warn);
+    ASSERT_TRUE(any_message_contains(warnings, "floating") ||
+                any_message_contains(warnings, "rounding"));
 }
 
 static void test_integer_equality_no_float_warn() {
     const auto warnings = check_warnings("boolean b = 42 == 42\n");
 
-    bool has_float_warn = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("floating") != std::string::npos ||
-            msg.find("rounding") != std::string::npos) {
-            has_float_warn = true;
-        }
-    }
-
-    ASSERT_FALSE(has_float_warn);
+    ASSERT_FALSE(any_message_contains(warnings, "floating") ||
+                 any_message_contains(warnings, "rounding"));
 }
 
 // ─── String interpolation namespace warning ───
@@ -666,21 +654,16 @@ static void test_spawn_outside_task_scope_warns() {
 }
 
 static void test_spawn_inside_task_scope_no_warn() {
-    auto warnings = check_warnings("function integer compute() { return 42 }\n"
-                                   "task_scope {\n"
-                                   "    task<integer> t = spawn compute()\n"
-                                   "    integer val = await t\n"
-                                   "}\n");
+    // spawn inside a task_scope is structured: no "spawn outside task_scope"
+    // error (it is a hard error, not a warning) and no warning either.
+    const std::string source{"function integer compute() { return 42 }\n"
+                             "task_scope {\n"
+                             "    task<integer> t = spawn compute()\n"
+                             "    integer val = await t\n"
+                             "}\n"};
 
-    bool found{false};
-
-    for (const auto& w : warnings) {
-        if (w.message.find("spawn outside task_scope") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_FALSE(found);
+    ASSERT_TRUE(passes(source));
+    ASSERT_FALSE(any_message_contains(check_warnings(source), "spawn outside task_scope"));
 }
 
 static void test_task_scope_result_type() {
@@ -706,72 +689,37 @@ static void test_task_scope_heterogeneous_spawn_rejected() {
 }
 
 static void test_task_scope_nested_no_warn() {
-    // spawn inside nested task_scope should not warn.
-    auto warnings = check_warnings("function integer compute() { return 42 }\n"
-                                   "task_scope {\n"
-                                   "    task_scope {\n"
-                                   "        task<integer> t = spawn compute()\n"
-                                   "        integer val = await t\n"
-                                   "    }\n"
-                                   "}\n");
+    // spawn inside nested task_scope is structured: no error and no warning.
+    const std::string source{"function integer compute() { return 42 }\n"
+                             "task_scope {\n"
+                             "    task_scope {\n"
+                             "        task<integer> t = spawn compute()\n"
+                             "        integer val = await t\n"
+                             "    }\n"
+                             "}\n"};
 
-    bool found{false};
-
-    for (const auto& w : warnings) {
-        if (w.message.find("spawn outside task_scope") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_FALSE(found);
+    ASSERT_TRUE(passes(source));
+    ASSERT_FALSE(any_message_contains(check_warnings(source), "spawn outside task_scope"));
 }
 
 // ─── Concurrency type checking — negative cases ───
 
 static void test_spawn_non_call_rejected() {
     // spawn must be applied to a function call, not an arbitrary expression.
-    auto errors = check("task<integer> t = spawn 42\n");
-
-    bool found{false};
-
-    for (const auto& e : errors) {
-        if (e.message.find("spawn requires a function call") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(
+        fails_with_message("task<integer> t = spawn 42\n", "spawn requires a function call"));
 }
 
 static void test_await_non_task_rejected() {
     // await must be applied to a task value, not an integer.
-    auto errors = check("integer v = await 42\n");
-
-    bool found{false};
-
-    for (const auto& e : errors) {
-        if (e.message.find("await requires a task value") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(fails_with_message("integer v = await 42\n", "await requires a task value"));
 }
 
 static void test_await_channel_rejected() {
     // A channel is not awaitable — await requires a task value.
-    auto errors = check("channel<integer> ch = Channel.new()\n"
-                        "integer v = await ch\n");
-
-    bool found{false};
-
-    for (const auto& e : errors) {
-        if (e.message.find("await requires a task value") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(fails_with_message("channel<integer> ch = Channel.new()\n"
+                                   "integer v = await ch\n",
+                                   "await requires a task value"));
 }
 
 static void test_task_scope_result_type_mismatch() {
@@ -822,25 +770,15 @@ static void test_generic_nested_type_params() {
 // ─── Edge-case generics tests ───
 
 static void test_generic_constraint_violation_error_message() {
-    // Verify that a constraint violation produces an error mentioning the bound.
+    // Verify that a constraint violation produces an error naming the bound.
     const auto errors = check("interface Named { string name }\n"
                               "record Dog { integer age }\n"
                               "function<T: Named> string greet(T thing) {\n"
                               "    return thing.name\n"
                               "}\n"
                               "string s = greet(Dog { age = 5 })\n");
-    ASSERT_FALSE(errors.empty());
-    // The error should reference the failing constraint or the missing field.
-    bool found_constraint_msg{false};
-    for (const auto& d : errors) {
-        if (d.message.find("Named") != std::string::npos ||
-            d.message.find("name") != std::string::npos ||
-            d.message.find("satisfy") != std::string::npos ||
-            d.message.find("bound") != std::string::npos) {
-            found_constraint_msg = true;
-        }
-    }
-    ASSERT_TRUE(found_constraint_msg);
+
+    ASSERT_TRUE(any_message_contains(errors, "does not satisfy interface 'Named'"));
 }
 
 static void test_generic_no_type_args_when_required() {
@@ -1067,8 +1005,10 @@ int main() {
 
     RUN(test_array_literal_out_of_bounds);
     RUN(test_array_literal_negative_index);
+    RUN(test_array_literal_computed_negative_index_left_to_runtime);
     RUN(test_array_literal_in_bounds);
     RUN(test_tuple_out_of_bounds);
+    RUN(test_tuple_negative_literal_index);
 
     // ─── String interpolation warnings ───
 

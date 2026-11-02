@@ -20,7 +20,17 @@
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::BytecodeSerializer;
+using luma::CompiledFunction;
+using luma::ConstantPool;
+using luma::DeserializeError;
+using luma::k_bytecode_format_version;
+using luma::NameTable;
+using luma::Op;
+using luma::SerializerLimits;
+using luma::SourceDependency;
+using luma::SourceLocation;
+using luma::Value;
 
 // ─── Big-endian byte-buffer helpers ───
 //
@@ -92,7 +102,7 @@ static void test_round_trip_minimal() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_TRUE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::None);
+    ASSERT_EQ(result.error, DeserializeError::None);
     ASSERT_EQ(result->top_level.name, std::string{"<top-level>"});
     ASSERT_TRUE(result->functions.empty());
 }
@@ -167,7 +177,7 @@ static void test_rejects_oversized_source_map_count() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::CorruptFunction);
+    ASSERT_EQ(result.error, DeserializeError::CorruptFunction);
 }
 
 // A source-map count that is small enough to allocate but still larger than the
@@ -182,7 +192,7 @@ static void test_rejects_truncated_source_map() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::CorruptFunction);
+    ASSERT_EQ(result.error, DeserializeError::CorruptFunction);
 }
 
 // ─── Malformed input: oversized name-table count ───
@@ -205,7 +215,7 @@ static void test_rejects_oversized_name_count() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::CorruptFunction);
+    ASSERT_EQ(result.error, DeserializeError::CorruptFunction);
 }
 
 //
@@ -239,7 +249,7 @@ static void test_rejects_upvalue_count_mismatch() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::CorruptFunction);
+    ASSERT_EQ(result.error, DeserializeError::CorruptFunction);
 }
 
 // ─── Malformed input: oversized schema scalars ───
@@ -289,7 +299,7 @@ static void test_rejects_oversized_arity() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::CorruptFunction);
+    ASSERT_EQ(result.error, DeserializeError::CorruptFunction);
 }
 
 static void test_rejects_oversized_required_arity() {
@@ -300,7 +310,7 @@ static void test_rejects_oversized_required_arity() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::CorruptFunction);
+    ASSERT_EQ(result.error, DeserializeError::CorruptFunction);
 }
 
 static void test_rejects_oversized_upvalue_count() {
@@ -316,7 +326,7 @@ static void test_rejects_oversized_upvalue_count() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::CorruptFunction);
+    ASSERT_EQ(result.error, DeserializeError::CorruptFunction);
 }
 
 // ─── Malformed input: parameter-name table larger than arity ───
@@ -356,7 +366,7 @@ static void test_rejects_param_count_exceeding_arity() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::CorruptFunction);
+    ASSERT_EQ(result.error, DeserializeError::CorruptFunction);
 }
 
 // ─── Malformed input: function count larger than the remaining input ───
@@ -386,7 +396,7 @@ static void test_rejects_function_count_exceeding_input() {
     ASSERT_FALSE(static_cast<bool>(result));
     // Rejected by the remaining-input guard before the vector reservation, not by
     // a per-function read failing afterwards.
-    ASSERT_TRUE(result.error == DeserializeError::BadFunctionCount);
+    ASSERT_EQ(result.error, DeserializeError::BadFunctionCount);
 }
 
 // ─── Constant-pool / name-table cap vs. the u16 wire count ───
@@ -406,19 +416,14 @@ static void test_constant_pool_cap_round_trips_within_u16_count() {
 
     // Fill to the cap with distinct integer constants (dedup keeps them distinct).
     for (std::size_t i = 0; i < ConstantPool::max_size; ++i) {
-        (void)constants.add(Value{static_cast<std::int64_t>(i)});
+        ASSERT_EQ(constants.add(Value{static_cast<std::int64_t>(i)}), i);
     }
     ASSERT_EQ(constants.size(), ConstantPool::max_size);
 
     // One more distinct constant must overflow rather than push the count past
     // what the u16 wire field can represent.
-    bool overflowed = false;
-    try {
-        (void)constants.add(Value{static_cast<std::int64_t>(ConstantPool::max_size)});
-    } catch (const std::overflow_error&) {
-        overflowed = true;
-    }
-    ASSERT_TRUE(overflowed);
+    ASSERT_THROWS_AS(constants.add(Value{static_cast<std::int64_t>(ConstantPool::max_size)}),
+                     std::overflow_error);
 
     // The full pool must survive the round-trip intact; a wrapped count would
     // load zero constants.
@@ -438,17 +443,11 @@ static void test_name_table_cap_round_trips_within_u16_count() {
     auto& names = top.mutable_chunk().names;
 
     for (std::size_t i = 0; i < NameTable::k_max_size; ++i) {
-        (void)names.add("n" + std::to_string(i));
+        ASSERT_EQ(names.add("n" + std::to_string(i)), i);
     }
     ASSERT_EQ(names.size(), NameTable::k_max_size);
 
-    bool overflowed = false;
-    try {
-        (void)names.add("n" + std::to_string(NameTable::k_max_size));
-    } catch (const std::overflow_error&) {
-        overflowed = true;
-    }
-    ASSERT_TRUE(overflowed);
+    ASSERT_THROWS_AS(names.add("n" + std::to_string(NameTable::k_max_size)), std::overflow_error);
 
     const auto bytes = BytecodeSerializer::serialize(top, {}, /*source_hash=*/0);
     const auto result = BytecodeSerializer::deserialize(bytes);
@@ -485,7 +484,7 @@ static void test_round_trip_large_string_constant() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_TRUE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::None);
+    ASSERT_EQ(result.error, DeserializeError::None);
     const auto& round_tripped = result->top_level.chunk().constants;
     ASSERT_EQ(round_tripped.size(), 2U);
     ASSERT_TRUE(round_tripped[large_index].is_string());
@@ -529,7 +528,7 @@ static void test_rejects_oversized_dependency_count() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::BadDependencyTable);
+    ASSERT_EQ(result.error, DeserializeError::BadDependencyTable);
 }
 
 // A dependency count within the cap but larger than the remaining input can
@@ -545,7 +544,7 @@ static void test_rejects_dependency_count_exceeding_input() {
     const auto result = BytecodeSerializer::deserialize(bytes);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_TRUE(result.error == DeserializeError::BadDependencyTable);
+    ASSERT_EQ(result.error, DeserializeError::BadDependencyTable);
 }
 
 // ─── main ───

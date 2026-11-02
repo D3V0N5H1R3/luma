@@ -1,24 +1,66 @@
 // Standard library tests: FileSystem (and Sandbox gating).
 
+#include <array>
+#include <cstddef>
 #include <filesystem>
-#include <fstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
+#include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/stdlib/common/file_helpers.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::path_from_utf8;
+using luma::ResourceLimits;
+using luma::RuntimeError;
+using luma::SourceLocation;
+using luma::test::eval;
+using luma::test::LimitGuard;
+using luma::test::LumaTempFile;
+using luma::test::make_sandboxed_std_env;
+using luma::test::make_std_env;
+using luma::test::ScopedPathCleanup;
+
+namespace {
+
+// RAII guard that switches the process working directory and restores the
+// original on destruction, even if an assertion throws in between.
+class ScopedCurrentPath {
+public:
+    explicit ScopedCurrentPath(const std::filesystem::path& path)
+        : original_{std::filesystem::current_path()} {
+        std::filesystem::current_path(path);
+    }
+
+    ScopedCurrentPath(const ScopedCurrentPath&) = delete;
+    ScopedCurrentPath& operator=(const ScopedCurrentPath&) = delete;
+    ScopedCurrentPath(ScopedCurrentPath&&) = delete;
+    ScopedCurrentPath& operator=(ScopedCurrentPath&&) = delete;
+
+    // A destructor cannot report a failed restore; restoring is best effort.
+    ~ScopedCurrentPath() noexcept {
+        std::error_code ec;
+        std::filesystem::current_path(original_, ec);
+    }
+
+private:
+    std::filesystem::path original_;
+};
+
+} // namespace
+
 static void test_filesystem_absolute_path() {
     const auto ok = eval("FileSystem.absolute_path(\"some_file.txt\")");
 
     ASSERT_RESULT_SUCCESS(ok);
     ASSERT_TRUE(ok.as_result()->owned_inner->is_string());
-    ASSERT_TRUE(ok.as_result()->owned_inner->as_string().size() >
-                std::string_view{"some_file.txt"}.size());
+    ASSERT_GT(ok.as_result()->owned_inner->as_string().size(),
+              std::string_view{"some_file.txt"}.size());
 }
 
 static void test_filesystem_absolute_path_rejects_escape() {
@@ -80,7 +122,7 @@ static void test_filesystem_split_path_no_extension() {
 
 static void test_filesystem_append_file() {
     const LumaTempFile file{"_test_io_app.txt", "a"};
-    eval(R"(FileSystem.append_file("_test_io_app.txt", "b"))");
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.append_file("_test_io_app.txt", "b"))"));
 
     ASSERT_EVAL_STR("FileSystem.read_file(\"_test_io_app.txt\")", "ab");
 }
@@ -97,13 +139,17 @@ static void test_filesystem_write_read_file() {
 
 static void test_filesystem_write_read_lines() {
     const LumaTempFile file{"_test_io_lines.txt"};
-    eval(R"(FileSystem.write_lines("_test_io_lines.txt", ["one", "two"]))");
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.write_lines("_test_io_lines.txt", ["one", "two"]))"));
 
     const auto v = eval("FileSystem.read_lines(\"_test_io_lines.txt\")");
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->is_array());
-    ASSERT_EQ(v.as_result()->owned_inner->as_array()->elements->size(), 2U);
+
+    const auto& lines = *v.as_result()->owned_inner->as_array()->elements;
+    ASSERT_EQ(lines.size(), 2U);
+    ASSERT_EQ(lines[0].as_string(), "one");
+    ASSERT_EQ(lines[1].as_string(), "two");
 }
 
 // ─── FileSystem.read_bytes / write_bytes — raw binary I/O ───
@@ -151,68 +197,54 @@ static void test_filesystem_write_bytes_rejects_out_of_range() {
 }
 
 static void test_filesystem_read_bytes_rejects_traversal() {
-    ASSERT_THROWS(eval(R"(FileSystem.read_bytes("../_outside_read.bin"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.read_bytes("../_outside_read.bin"))",
+                       "resolves outside the working directory");
 }
 
 static void test_filesystem_write_bytes_rejects_traversal() {
-    ASSERT_THROWS(eval(R"(FileSystem.write_bytes("../_outside_write.bin", [1]))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.write_bytes("../_outside_write.bin", [1]))",
+                       "resolves outside the working directory");
 }
 
 // ─── FileSystem.copy_directory / create_directories ───
-
-// Force-remove a directory tree via the C++ filesystem (not the Luma layer) so a
-// stale directory left by a prior process — e.g. one an antivirus scanner briefly
-// held open on Windows — cannot wedge a later run.  Ignores errors: absence is
-// success, and a genuine lock surfaces as the test's own assertion below.
-static void force_remove_all(const char* path) {
-    std::error_code ec;
-    std::filesystem::remove_all(path, ec);
-}
+//
+// Each test removes its directories (via the C++ filesystem, not the Luma layer)
+// both before and after it runs, so a stale directory left by a prior process —
+// e.g. one an antivirus scanner briefly held open on Windows — cannot wedge a
+// later run, and a failing assertion cannot leak the tree.
 
 static void test_filesystem_create_directories_nested() {
-    force_remove_all("_test_mkdirp");
+    const ScopedPathCleanup cleanup{"_test_mkdirp"};
 
     ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directories("_test_mkdirp/a/b/c"))"));
     ASSERT_EVAL_BOOL(R"(FileSystem.is_directory("_test_mkdirp/a/b/c"))", true);
 
     // Idempotent: a second call on an existing path is a no-op success.
     ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directories("_test_mkdirp/a/b/c"))"));
-
-    force_remove_all("_test_mkdirp");
 }
 
 static void test_filesystem_copy_directory_recursive() {
-    force_remove_all("_test_cpdir_src");
-    force_remove_all("_test_cpdir_dst");
+    const ScopedPathCleanup source_cleanup{"_test_cpdir_src"};
+    const ScopedPathCleanup destination_cleanup{"_test_cpdir_dst"};
 
-    eval(R"(FileSystem.create_directories("_test_cpdir_src/sub"))");
-    eval(R"(FileSystem.write_file("_test_cpdir_src/a.txt", "a"))");
-    eval(R"(FileSystem.write_file("_test_cpdir_src/sub/b.txt", "b"))");
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directories("_test_cpdir_src/sub"))"));
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.write_file("_test_cpdir_src/a.txt", "a"))"));
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.write_file("_test_cpdir_src/sub/b.txt", "b"))"));
 
-    // Bind the result to a local: copy_directory is not idempotent (it fails if
-    // the destination exists), and ASSERT_RESULT_SUCCESS references its argument
-    // twice — evaluating the copy inline would run it a second time and see the
-    // destination it just created.
-    const auto copied = eval(R"(FileSystem.copy_directory("_test_cpdir_src", "_test_cpdir_dst"))");
-    ASSERT_RESULT_SUCCESS(copied);
+    ASSERT_RESULT_SUCCESS(
+        eval(R"(FileSystem.copy_directory("_test_cpdir_src", "_test_cpdir_dst"))"));
     ASSERT_EVAL_STR(R"(FileSystem.read_file("_test_cpdir_dst/a.txt"))", "a");
     ASSERT_EVAL_STR(R"(FileSystem.read_file("_test_cpdir_dst/sub/b.txt"))", "b");
-
-    force_remove_all("_test_cpdir_src");
-    force_remove_all("_test_cpdir_dst");
 }
 
 static void test_filesystem_copy_directory_fails_if_dest_exists() {
-    force_remove_all("_test_cpdir_src2");
-    force_remove_all("_test_cpdir_dst2");
+    const ScopedPathCleanup source_cleanup{"_test_cpdir_src2"};
+    const ScopedPathCleanup destination_cleanup{"_test_cpdir_dst2"};
 
-    eval(R"(FileSystem.create_directories("_test_cpdir_src2"))");
-    eval(R"(FileSystem.create_directories("_test_cpdir_dst2"))");
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directories("_test_cpdir_src2"))"));
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directories("_test_cpdir_dst2"))"));
 
     ASSERT_EVAL_FAILURE(R"(FileSystem.copy_directory("_test_cpdir_src2", "_test_cpdir_dst2"))");
-
-    force_remove_all("_test_cpdir_src2");
-    force_remove_all("_test_cpdir_dst2");
 }
 
 static void test_filesystem_metadata_file() {
@@ -234,7 +266,7 @@ static void test_filesystem_metadata_file() {
     ASSERT_EQ(rec.find_field("kind")->as_choice()->variant, "File");
     // Modified time is a Unix timestamp — after 2020-01-01.
     ASSERT_TRUE(rec.find_field("modified_time")->is_number());
-    ASSERT_TRUE(rec.find_field("modified_time")->as_number() > 1577836800.0);
+    ASSERT_GT(rec.find_field("modified_time")->as_number(), 1577836800.0);
 }
 
 static void test_filesystem_metadata_directory() {
@@ -280,7 +312,8 @@ static void test_filesystem_kind_nonexistent() {
 static void test_filesystem_kind_rejects_traversal() {
     // Path traversal is a security violation, so kind throws (like every other
     // FileSystem function) rather than returning a failure result.
-    ASSERT_THROWS(eval("FileSystem.kind(\"../escape.txt\")"));
+    ASSERT_EVAL_THROWS("FileSystem.kind(\"../escape.txt\")",
+                       "resolves outside the working directory");
 }
 
 // ─── FileSystem.permissions — result<FileSystem.Permissions> ───
@@ -305,7 +338,7 @@ static void test_filesystem_permissions_file() {
     ASSERT_TRUE(rec.find_field("executable")->is_bool());
     // mode carries the POSIX mode bits; a regular file always has some read bit.
     ASSERT_TRUE(rec.find_field("mode")->is_integer());
-    ASSERT_TRUE(rec.find_field("mode")->as_integer() != 0);
+    ASSERT_NE(rec.find_field("mode")->as_integer(), 0);
 }
 
 static void test_filesystem_permissions_directory() {
@@ -317,7 +350,7 @@ static void test_filesystem_permissions_directory() {
 
     // The current directory is readable, and its mode carries bits.
     ASSERT_TRUE(rec.find_field("readable")->as_bool());
-    ASSERT_TRUE(rec.find_field("mode")->as_integer() != 0);
+    ASSERT_NE(rec.find_field("mode")->as_integer(), 0);
 }
 
 static void test_filesystem_permissions_nonexistent() {
@@ -328,7 +361,8 @@ static void test_filesystem_permissions_nonexistent() {
 static void test_filesystem_permissions_rejects_traversal() {
     // Path traversal is a security violation, so permissions throws (like every
     // other FileSystem function) rather than returning a failure result.
-    ASSERT_THROWS(eval("FileSystem.permissions(\"../escape.txt\")"));
+    ASSERT_EVAL_THROWS("FileSystem.permissions(\"../escape.txt\")",
+                       "resolves outside the working directory");
 }
 
 // ─── FileSystem.read_file_typed — result<string, FileSystem.IoError> (N08) ──
@@ -385,7 +419,8 @@ static void test_filesystem_metadata_nonexistent() {
 static void test_filesystem_metadata_rejects_traversal() {
     // Path traversal is a security violation, so metadata throws (like every
     // other FileSystem function) rather than returning a failure result.
-    ASSERT_THROWS(eval("FileSystem.metadata(\"../escape.txt\")"));
+    ASSERT_EVAL_THROWS("FileSystem.metadata(\"../escape.txt\")",
+                       "resolves outside the working directory");
 }
 
 static void test_filesystem_read_lines_rejects_oversized_file() {
@@ -409,18 +444,19 @@ static void test_read_file_bounded_enforces_limit_while_reading() {
     // bound on the bytes actually read.
     const LumaTempFile file{"_test_read_bounded.txt", std::string(100, 'x')};
 
-    using file_helpers::BoundedReadStatus;
+    using luma::file_helpers::BoundedReadStatus;
+    using luma::file_helpers::read_file_bounded;
 
-    const auto over = file_helpers::read_file_bounded("_test_read_bounded.txt", 99);
-    ASSERT_TRUE(over.status == BoundedReadStatus::TooLarge);
+    const auto over = read_file_bounded("_test_read_bounded.txt", 99);
+    ASSERT_EQ(over.status, BoundedReadStatus::TooLarge);
     ASSERT_TRUE(over.data.empty());
 
-    const auto exact = file_helpers::read_file_bounded("_test_read_bounded.txt", 100);
-    ASSERT_TRUE(exact.status == BoundedReadStatus::Ok);
+    const auto exact = read_file_bounded("_test_read_bounded.txt", 100);
+    ASSERT_EQ(exact.status, BoundedReadStatus::Ok);
     ASSERT_EQ(exact.data.size(), std::size_t{100});
 
-    const auto missing = file_helpers::read_file_bounded("_test_read_bounded_missing.txt", 100);
-    ASSERT_TRUE(missing.status == BoundedReadStatus::OpenFailed);
+    const auto missing = read_file_bounded("_test_read_bounded_missing.txt", 100);
+    ASSERT_EQ(missing.status, BoundedReadStatus::OpenFailed);
 }
 
 static void test_filesystem_utf8_file_names_reach_the_disk_intact() {
@@ -433,34 +469,30 @@ static void test_filesystem_utf8_file_names_reach_the_disk_intact() {
     const std::string name_utf8 = "\xE6\x95\xB0\xE6\x8D\xAE_\xC3\xBC_unit.txt";
     const std::string file_utf8 = dir_utf8 + "/" + name_utf8;
     const fs::path on_disk = path_from_utf8(dir_utf8) / path_from_utf8(name_utf8);
+    const ScopedPathCleanup cleanup{path_from_utf8(dir_utf8)};
 
     ASSERT_RESULT_SUCCESS(eval("FileSystem.create_directory(\"" + dir_utf8 + "\")"));
     ASSERT_RESULT_SUCCESS(eval("FileSystem.write_file(\"" + file_utf8 + "\", \"data\")"));
 
-    const bool exists_on_disk = fs::exists(on_disk);
+    ASSERT_TRUE(fs::exists(on_disk));
+
     const auto listed = eval("FileSystem.list_files(\"" + dir_utf8 + "\")");
-    const auto read = eval("FileSystem.read_file(\"" + file_utf8 + "\")");
-    const auto absolute = eval("FileSystem.absolute_path(\"" + file_utf8 + "\")");
-    const auto deleted = eval("FileSystem.delete(\"" + file_utf8 + "\")");
-    const bool gone = !fs::exists(on_disk);
-
-    std::error_code ignored;
-    fs::remove_all(path_from_utf8(dir_utf8), ignored);
-
-    ASSERT_TRUE(exists_on_disk);
     ASSERT_RESULT_SUCCESS(listed);
 
     const auto& names = *listed.as_result()->owned_inner->as_array()->elements;
     ASSERT_EQ(names.size(), std::size_t{1});
     ASSERT_EQ(names[0].as_string(), name_utf8);
 
+    const auto read = eval("FileSystem.read_file(\"" + file_utf8 + "\")");
     ASSERT_RESULT_SUCCESS(read);
     ASSERT_EQ(read.as_result()->owned_inner->as_string(), "data");
+
+    const auto absolute = eval("FileSystem.absolute_path(\"" + file_utf8 + "\")");
     ASSERT_RESULT_SUCCESS(absolute);
-    ASSERT_TRUE(absolute.as_result()->owned_inner->as_string().find(name_utf8) !=
-                std::string::npos);
-    ASSERT_RESULT_SUCCESS(deleted);
-    ASSERT_TRUE(gone);
+    ASSERT_NE(absolute.as_result()->owned_inner->as_string().find(name_utf8), std::string::npos);
+
+    ASSERT_RESULT_SUCCESS(eval("FileSystem.delete(\"" + file_utf8 + "\")"));
+    ASSERT_FALSE(fs::exists(on_disk));
 }
 
 static void test_filesystem_delete_directory_refuses_working_directory() {
@@ -469,39 +501,31 @@ static void test_filesystem_delete_directory_refuses_working_directory() {
     // from a scratch directory so a regression could only ever wipe that.
     namespace fs = std::filesystem;
 
-    const auto original_cwd = fs::current_path();
-    const fs::path scratch = original_cwd / "_test_fs_cwd_guard";
+    // The scratch path is absolute, so its cleanup does not depend on the
+    // working directory, which is restored first (reverse declaration order).
+    const ScopedPathCleanup cleanup{fs::current_path() / "_test_fs_cwd_guard"};
+    const fs::path& scratch = cleanup.path();
     fs::create_directories(scratch / "sub");
-    { std::ofstream{scratch / "marker.txt"} << "keep"; }
+    luma::test::write_file(scratch / "marker.txt", "keep");
 
-    fs::current_path(scratch);
+    {
+        const ScopedCurrentPath in_scratch{scratch};
 
-    bool all_refused{true};
+        for (const std::string_view target : std::array{".", "./", "sub/.."}) {
+            ASSERT_RESULT_FAILURE(
+                eval("FileSystem.delete_directory(\"" + std::string{target} + "\")"));
+        }
 
-    for (const char* const target : {".", "./", "sub/.."}) {
-        const auto v = eval(std::string{"FileSystem.delete_directory(\""} + target + "\")");
-        all_refused = all_refused && v.is_result() && !v.as_result()->is_success;
+        // A genuine subdirectory can still be deleted.
+        ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.delete_directory("sub"))"));
     }
 
-    // A genuine subdirectory can still be deleted.
-    const auto sub = eval(R"(FileSystem.delete_directory("sub"))");
-
-    fs::current_path(original_cwd);
-
-    const bool marker_survived = fs::exists(scratch / "marker.txt");
-    const bool sub_removed = !fs::exists(scratch / "sub");
-
-    std::error_code ignored;
-    fs::remove_all(scratch, ignored);
-
-    ASSERT_TRUE(all_refused);
-    ASSERT_TRUE(marker_survived);
-    ASSERT_RESULT_SUCCESS(sub);
-    ASSERT_TRUE(sub_removed);
+    ASSERT_TRUE(fs::exists(scratch / "marker.txt"));
+    ASSERT_FALSE(fs::exists(scratch / "sub"));
 }
 
 static void test_sandbox_disables_dangerous_modules() {
-    const auto env = luma::test::make_std_env(true);
+    const auto env = make_sandboxed_std_env();
 
     // Modules disabled in sandbox mode.
     ASSERT_FALSE(env->has("FileSystem.read_file"));
@@ -520,7 +544,7 @@ static void test_sandbox_disables_dangerous_modules() {
 }
 
 static void test_sandbox_gates_file_io_in_safe_modules() {
-    const auto env = luma::test::make_std_env(true);
+    const auto env = make_sandboxed_std_env();
 
     // File-I/O functions inside otherwise-safe modules must be disabled.
     ASSERT_FALSE(env->has("Log.set_output"));
@@ -539,7 +563,7 @@ static void test_sandbox_gates_file_io_in_safe_modules() {
 }
 
 static void test_sandbox_keeps_safe_modules() {
-    const auto env = luma::test::make_std_env(true);
+    const auto env = make_sandboxed_std_env();
 
     // Core builtins remain available.
     ASSERT_TRUE(env->has("print"));
@@ -561,7 +585,7 @@ static void test_sandbox_keeps_safe_modules() {
 }
 
 static void test_sandbox_non_sandbox_has_file_io() {
-    const auto env = luma::test::make_std_env(false);
+    const auto env = make_std_env();
 
     // Outside sandbox, file-I/O functions must be available.
     ASSERT_TRUE(env->has("Log.set_output"));
@@ -572,7 +596,7 @@ static void test_sandbox_non_sandbox_has_file_io() {
 }
 
 static void test_sandbox_violation_all_blocked_modules() {
-    const auto env = luma::test::make_std_env(true);
+    const auto env = make_sandboxed_std_env();
 
     const SourceLocation loc{.file_id = 0, .line = 1, .column = 1};
 
@@ -582,61 +606,30 @@ static void test_sandbox_violation_all_blocked_modules() {
         "KeyValueStore.open", "Process.run",       "Socket.connect", "Xml.deserialize_file"};
 
     for (const auto& name : blocked_names) {
-        bool caught = false;
-
-        try {
-            (void)env->get(name, loc);
-        } catch (const RuntimeError& e) {
-            caught = true;
-
-            const std::string msg = e.what();
-
-            ASSERT_TRUE(msg.find("sandbox") != std::string::npos);
-        }
-
-        ASSERT_TRUE(caught);
+        ASSERT_THROWS_AS(env->get(name, loc), RuntimeError);
+        ASSERT_THROWS_WITH_MESSAGE(env->get(name, loc),
+                                   "'" + name + "' is not available in sandbox mode");
     }
 }
 
 static void test_sandbox_violation_clear_message() {
-    const auto env = luma::test::make_std_env(true);
+    const auto env = make_sandboxed_std_env();
 
     const SourceLocation loc{.file_id = 0, .line = 1, .column = 1};
 
-    // Accessing a blocked module should produce a sandbox-specific error.
-    bool caught = false;
-
-    try {
-        (void)env->get("FileSystem.exists", loc);
-    } catch (const RuntimeError& e) {
-        caught = true;
-
-        const std::string msg = e.what();
-
-        ASSERT_TRUE(msg.find("sandbox") != std::string::npos);
-        ASSERT_TRUE(msg.find("--box") != std::string::npos);
-    }
-
-    ASSERT_TRUE(caught);
+    // Accessing a blocked module should produce a sandbox-specific error that
+    // names the flag responsible.
+    ASSERT_THROWS_AS(env->get("FileSystem.exists", loc), RuntimeError);
+    ASSERT_THROWS_WITH_MESSAGE(env->get("FileSystem.exists", loc),
+                               "is not available in sandbox mode (--box)");
 
     // Accessing a truly undefined variable should still give generic error.
-    bool caught_generic = false;
-
-    try {
-        (void)env->get("NoSuchModule.foo", loc);
-    } catch (const RuntimeError& e) {
-        caught_generic = true;
-
-        const std::string msg = e.what();
-
-        ASSERT_TRUE(msg.find("undefined variable") != std::string::npos);
-    }
-
-    ASSERT_TRUE(caught_generic);
+    ASSERT_THROWS_AS(env->get("NoSuchModule.foo", loc), RuntimeError);
+    ASSERT_THROWS_WITH_MESSAGE(env->get("NoSuchModule.foo", loc), "undefined variable");
 }
 
 static void test_filesystem_new_functions_registered() {
-    const auto env = luma::test::make_std_env();
+    const auto env = make_std_env();
     ASSERT_TRUE(env->has("FileSystem.is_symbolic_link"));
     ASSERT_TRUE(env->has("FileSystem.get_modified_time"));
     ASSERT_TRUE(env->has("FileSystem.list_recursively"));
@@ -659,7 +652,7 @@ static void test_filesystem_get_modified_time() {
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->is_number());
-    ASSERT_TRUE(v.as_result()->owned_inner->as_number() > 0.0);
+    ASSERT_GT(v.as_result()->owned_inner->as_number(), 0.0);
 }
 
 static void test_filesystem_get_modified_time_missing() {
@@ -667,20 +660,17 @@ static void test_filesystem_get_modified_time_missing() {
 }
 
 static void test_filesystem_list_recursively() {
-    eval(R"(FileSystem.create_directory("_test_recurse/sub"))");
-    eval(R"(FileSystem.write_file("_test_recurse/a.txt", "a"))");
-    eval(R"(FileSystem.write_file("_test_recurse/sub/b.txt", "b"))");
+    const ScopedPathCleanup cleanup{"_test_recurse"};
+
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directory("_test_recurse/sub"))"));
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.write_file("_test_recurse/a.txt", "a"))"));
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.write_file("_test_recurse/sub/b.txt", "b"))"));
 
     const auto v = eval("FileSystem.list_recursively(\"_test_recurse\")");
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->is_array());
-    ASSERT_TRUE(v.as_result()->owned_inner->as_array()->elements->size() >= 2U);
-
-    eval("FileSystem.delete(\"_test_recurse/a.txt\")");
-    eval("FileSystem.delete(\"_test_recurse/sub/b.txt\")");
-    eval("FileSystem.delete_directory(\"_test_recurse/sub\")");
-    eval("FileSystem.delete_directory(\"_test_recurse\")");
+    ASSERT_GE(v.as_result()->owned_inner->as_array()->elements->size(), 2U);
 }
 
 static void test_filesystem_read_file_nonexistent() {
@@ -718,9 +708,9 @@ static void test_filesystem_normalize_collapses_dotdot() {
     ASSERT_TRUE(v.is_string());
 
     const auto s = v.as_string();
-    ASSERT_TRUE(s.find("..") == std::string::npos);
-    ASSERT_TRUE(s.find('a') != std::string::npos);
-    ASSERT_TRUE(s.find('c') != std::string::npos);
+    ASSERT_EQ(s.find(".."), std::string::npos);
+    ASSERT_NE(s.find('a'), std::string::npos);
+    ASSERT_NE(s.find('c'), std::string::npos);
 }
 
 static void test_filesystem_join_combines_segments() {
@@ -729,9 +719,9 @@ static void test_filesystem_join_combines_segments() {
     ASSERT_TRUE(v.is_string());
 
     const auto s = v.as_string();
-    ASSERT_TRUE(s.find("src") != std::string::npos);
-    ASSERT_TRUE(s.find("stdlib") != std::string::npos);
-    ASSERT_TRUE(s.find("x.txt") != std::string::npos);
+    ASSERT_NE(s.find("src"), std::string::npos);
+    ASSERT_NE(s.find("stdlib"), std::string::npos);
+    ASSERT_NE(s.find("x.txt"), std::string::npos);
 }
 
 static void test_filesystem_relative_strips_base() {
@@ -765,38 +755,36 @@ static void test_filesystem_home_directory_returns_path() {
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->is_string());
-    ASSERT_TRUE(!v.as_result()->owned_inner->as_string().empty());
+    ASSERT_FALSE(v.as_result()->owned_inner->as_string().empty());
 }
 
 // ─── Filesystem round-trip (create / copy / list / rename / size) ───
 
 static void test_filesystem_create_copy_list_rename_roundtrip() {
-    eval(R"(FileSystem.create_directory("_test_fs_round"))");
-    eval(R"(FileSystem.write_file("_test_fs_round/a.txt", "hello"))");
+    const ScopedPathCleanup cleanup{"_test_fs_round"};
 
-    const auto copied = eval(R"(FileSystem.copy("_test_fs_round/a.txt", "_test_fs_round/b.txt"))");
-    ASSERT_RESULT_SUCCESS(copied);
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directory("_test_fs_round"))"));
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.write_file("_test_fs_round/a.txt", "hello"))"));
 
-    ASSERT_TRUE(
-        eval(R"(FileSystem.is_file("_test_fs_round/b.txt"))").as_result()->owned_inner->as_bool());
-    ASSERT_TRUE(
-        eval(R"(FileSystem.is_directory("_test_fs_round"))").as_result()->owned_inner->as_bool());
+    ASSERT_RESULT_SUCCESS(
+        eval(R"(FileSystem.copy("_test_fs_round/a.txt", "_test_fs_round/b.txt"))"));
+
+    ASSERT_EVAL_BOOL(R"(FileSystem.is_file("_test_fs_round/b.txt"))", true);
+    ASSERT_EVAL_BOOL(R"(FileSystem.is_directory("_test_fs_round"))", true);
 
     const auto files = eval(R"(FileSystem.list_files("_test_fs_round"))");
     ASSERT_RESULT_SUCCESS(files);
     ASSERT_EQ(files.as_result()->owned_inner->as_array()->elements->size(), 2U);
 
-    const auto renamed =
-        eval(R"(FileSystem.rename("_test_fs_round/a.txt", "_test_fs_round/c.txt"))");
-    ASSERT_RESULT_SUCCESS(renamed);
-    ASSERT_FALSE(
-        eval(R"(FileSystem.exists("_test_fs_round/a.txt"))").as_result()->owned_inner->as_bool());
+    ASSERT_RESULT_SUCCESS(
+        eval(R"(FileSystem.rename("_test_fs_round/a.txt", "_test_fs_round/c.txt"))"));
+    ASSERT_EVAL_BOOL(R"(FileSystem.exists("_test_fs_round/a.txt"))", false);
 
     ASSERT_EVAL_INT(R"(FileSystem.size("_test_fs_round/c.txt"))", 5);
 
-    eval(R"(FileSystem.delete("_test_fs_round/b.txt"))");
-    eval(R"(FileSystem.delete("_test_fs_round/c.txt"))");
-    eval(R"(FileSystem.delete_directory("_test_fs_round"))");
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.delete("_test_fs_round/b.txt"))"));
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.delete("_test_fs_round/c.txt"))"));
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.delete_directory("_test_fs_round"))"));
 }
 
 static void test_filesystem_read_file_limited_success() {
@@ -808,46 +796,55 @@ static void test_filesystem_read_file_limited_success() {
 // ─── Sandbox-escape rejection (validate_path throws) ───
 
 static void test_filesystem_read_file_rejects_traversal() {
-    ASSERT_THROWS(eval(R"(FileSystem.read_file("../_outside_read.txt"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.read_file("../_outside_read.txt"))",
+                       "resolves outside the working directory");
 }
 
 static void test_filesystem_write_file_rejects_traversal() {
-    ASSERT_THROWS(eval(R"(FileSystem.write_file("../_outside_write.txt", "x"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.write_file("../_outside_write.txt", "x"))",
+                       "resolves outside the working directory");
 }
 
 static void test_filesystem_delete_rejects_traversal() {
-    ASSERT_THROWS(eval(R"(FileSystem.delete("../_outside_delete.txt"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.delete("../_outside_delete.txt"))",
+                       "resolves outside the working directory");
 }
 
 static void test_filesystem_copy_rejects_traversal_destination() {
     const LumaTempFile file{"_test_copy_trav.txt", "x"};
-    ASSERT_THROWS(eval(R"(FileSystem.copy("_test_copy_trav.txt", "../_outside_copy.txt"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.copy("_test_copy_trav.txt", "../_outside_copy.txt"))",
+                       "'../_outside_copy.txt' resolves outside the working directory");
 }
 
 static void test_filesystem_list_files_rejects_traversal() {
-    ASSERT_THROWS(eval(R"(FileSystem.list_files("../"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.list_files("../"))", "resolves outside the working directory");
 }
 
 static void test_filesystem_exists_rejects_absolute_outside() {
-    ASSERT_THROWS(eval(R"(FileSystem.exists("/etc/passwd"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.exists("/etc/passwd"))",
+                       "resolves outside the working directory");
 }
 
 static void test_filesystem_join_rejects_escape() {
-    ASSERT_THROWS(eval(R"(FileSystem.join("a", "..", "..", "b"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.join("a", "..", "..", "b"))",
+                       "resolves outside the working directory");
 }
 
 // ─── Argument validation ───
 
 static void test_filesystem_join_requires_two_args() {
-    ASSERT_THROWS(eval(R"(FileSystem.join("only_one"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.join("only_one"))",
+                       "FileSystem.join: expected at least 2 argument(s), got 1");
 }
 
 static void test_filesystem_exists_rejects_non_string_arg() {
-    ASSERT_THROWS(eval("FileSystem.exists(123)"));
+    ASSERT_EVAL_THROWS("FileSystem.exists(123)",
+                       "FileSystem.exists: expected string for argument 1");
 }
 
 static void test_filesystem_write_lines_rejects_non_array() {
-    ASSERT_THROWS(eval(R"(FileSystem.write_lines("_wl.txt", "notarray"))"));
+    ASSERT_EVAL_THROWS(R"(FileSystem.write_lines("_wl.txt", "notarray"))",
+                       "FileSystem.write_lines: expected array");
 }
 
 static void test_filesystem_read_file_limited_rejects_negative_max_bytes() {

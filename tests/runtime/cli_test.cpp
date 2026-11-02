@@ -3,13 +3,13 @@
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
-#include <fstream>
 #include <initializer_list>
 #include <iostream>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include "analysis/diagnostics/diagnostic.hpp"
@@ -20,7 +20,36 @@
 #include "runtime/compiler/compilation_cache.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::check_file;
+using luma::check_strict_warnings;
+using luma::Command;
+using luma::CompilationCache;
+using luma::CompilerProfile;
+using luma::Diagnostic;
+using luma::DiagnosticCategory;
+using luma::is_known_flag;
+using luma::levenshtein_distance;
+using luma::luma_extension;
+using luma::luma_version;
+using luma::OptimizationLevel;
+using luma::parse_args;
+using luma::ParsedArgs;
+using luma::path_from_utf8;
+using luma::path_to_utf8;
+using luma::PipelineResult;
+using luma::run_file;
+using luma::run_pkg_command;
+using luma::run_tests_file;
+using luma::RunOptions;
+using luma::Severity;
+using luma::suggest_flag;
+using luma::validate_file_argument;
+using luma::test::CapturedStream;
+using luma::test::CapturedStreams;
+using luma::test::TempDir;
+using luma::test::TempFile;
+
+namespace exit_code = luma::exit_code;
 
 namespace {
 // Builds a mutable argv array (with a dummy argv[0] program name) so parse_args
@@ -164,7 +193,7 @@ static void test_levenshtein_two_edits() {
 static void test_levenshtein_completely_different() {
     const auto dist = levenshtein_distance("--help", "--version");
 
-    ASSERT_TRUE(dist > 2);
+    ASSERT_GT(dist, 2U);
 }
 
 // ─── suggest_flag tests ───
@@ -206,21 +235,36 @@ static void test_suggest_flag_strict_typo() {
 // ─── run_file / check_file / run_tests_file tests ───
 
 static void test_run_file_nonexistent() {
+    // An unreadable file is reported on stderr. (validate_file_argument turns a
+    // missing file into a usage error before the CLI gets this far.)
+    const CapturedStream captured_err{std::cerr};
     const int code = run_file("__nonexistent__.luma", RunOptions{});
 
-    ASSERT_TRUE(code != exit_code::success);
+    ASSERT_EQ(code, exit_code::runtime_error);
+    ASSERT_NE(captured_err.str().find("cannot open file '__nonexistent__.luma'"),
+              std::string::npos);
 }
 
 static void test_check_file_nonexistent() {
+    // An unreadable file is reported on stderr. (validate_file_argument turns a
+    // missing file into a usage error before the CLI gets this far.)
+    const CapturedStream captured_err{std::cerr};
     const int code = check_file("__nonexistent__.luma");
 
-    ASSERT_TRUE(code != exit_code::success);
+    ASSERT_EQ(code, exit_code::runtime_error);
+    ASSERT_NE(captured_err.str().find("cannot open file '__nonexistent__.luma'"),
+              std::string::npos);
 }
 
 static void test_run_tests_file_nonexistent() {
+    // An unreadable file is reported on stderr. (validate_file_argument turns a
+    // missing file into a usage error before the CLI gets this far.)
+    const CapturedStream captured_err{std::cerr};
     const int code = run_tests_file("__nonexistent__.luma");
 
-    ASSERT_TRUE(code != exit_code::success);
+    ASSERT_EQ(code, exit_code::runtime_error);
+    ASSERT_NE(captured_err.str().find("cannot open file '__nonexistent__.luma'"),
+              std::string::npos);
 }
 
 static void test_run_tests_file_passing() {
@@ -288,7 +332,7 @@ static void test_run_file_with_sandbox() {
 
 static void test_version_string() {
     ASSERT_FALSE(luma_version.empty());
-    ASSERT_TRUE(luma_version.find('.') != std::string_view::npos);
+    ASSERT_NE(luma_version.find('.'), std::string_view::npos);
 }
 
 static void test_extension_constant() {
@@ -420,46 +464,26 @@ static void test_run_file_nonstrict_succeeds_on_warning() {
     ASSERT_EQ(run_file(file.path_string(), RunOptions{.strict = false}), exit_code::success);
 }
 
-// Redirects std::cerr into a string for the lifetime of the object.
-class CerrCapture {
-public:
-    CerrCapture() : previous_{std::cerr.rdbuf(buffer_.rdbuf())} {}
+// `raw` with ANSI colour sequences removed: the renderer colours carets when
+// the real stderr is a terminal, even while captured.
+[[nodiscard]] static std::string strip_ansi(const std::string& raw) {
+    std::string plain;
+    plain.reserve(raw.size());
 
-    ~CerrCapture() {
-        std::cerr.rdbuf(previous_);
-    }
-
-    CerrCapture(const CerrCapture&) = delete;
-    CerrCapture& operator=(const CerrCapture&) = delete;
-    CerrCapture(CerrCapture&&) = delete;
-    CerrCapture& operator=(CerrCapture&&) = delete;
-
-    // The captured text with ANSI colour sequences removed: the renderer
-    // colours carets when the real stderr is a terminal, even while captured.
-    [[nodiscard]] std::string text() const {
-        const std::string raw = buffer_.str();
-        std::string plain;
-        plain.reserve(raw.size());
-
-        for (std::size_t i = 0; i < raw.size(); ++i) {
-            if (raw[i] == '\x1B' && i + 1 < raw.size() && raw[i + 1] == '[') {
-                i += 2;
-                while (i < raw.size() && raw[i] != 'm') {
-                    ++i;
-                }
-                continue;
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+        if (raw[i] == '\x1B' && i + 1 < raw.size() && raw[i + 1] == '[') {
+            i += 2;
+            while (i < raw.size() && raw[i] != 'm') {
+                ++i;
             }
-
-            plain += raw[i];
+            continue;
         }
 
-        return plain;
+        plain += raw[i];
     }
 
-private:
-    std::ostringstream buffer_;
-    std::streambuf* previous_;
-};
+    return plain;
+}
 
 static void test_type_error_caret_points_at_token() {
     // Regression: AST locations point one past their first token, so the type
@@ -468,16 +492,15 @@ static void test_type_error_caret_points_at_token() {
     const TempFile file{"@main\nfunction void main() {\n    mutable integer x = 1\n"
                         "    x += 0.5\n    print(x)\n}\n"};
 
-    std::string output;
-    {
-        const CerrCapture capture;
+    const std::string output = [&] {
+        const CapturedStream capture{std::cerr};
         ASSERT_EQ(check_file(file.path_string()), exit_code::type_error);
-        output = capture.text();
-    }
+        return strip_ansi(capture.str());
+    }();
 
     // `x` is in column 5: the caret line is "| " plus a 4-space indent.
-    ASSERT_TRUE(output.find(":4:5") != std::string::npos);
-    ASSERT_TRUE(output.find("|" + std::string(5, ' ') + "^\n") != std::string::npos);
+    ASSERT_NE(output.find(":4:5"), std::string::npos);
+    ASSERT_NE(output.find("|" + std::string(5, ' ') + "^\n"), std::string::npos);
 }
 
 static void test_runtime_error_caret_points_at_token() {
@@ -488,17 +511,16 @@ static void test_runtime_error_caret_points_at_token() {
                         "    mutable integer x = big\n    x = x + 2\n    print(x)\n}\n"};
 
     for (int run = 0; run < 2; ++run) {
-        std::string output;
-        {
-            const CerrCapture capture;
+        const std::string output = [&] {
+            const CapturedStream capture{std::cerr};
             ASSERT_EQ(run_file(file.path_string(), RunOptions{}), exit_code::runtime_error);
-            output = capture.text();
-        }
+            return strip_ansi(capture.str());
+        }();
 
-        ASSERT_TRUE(output.find("integer overflow in addition") != std::string::npos);
-        ASSERT_TRUE(output.find(":5:11") != std::string::npos);
+        ASSERT_NE(output.find("integer overflow in addition"), std::string::npos);
+        ASSERT_NE(output.find(":5:11"), std::string::npos);
         // `+` is in column 11: the caret line is "| " plus a 10-space indent.
-        ASSERT_TRUE(output.find("|" + std::string(11, ' ') + "^\n") != std::string::npos);
+        ASSERT_NE(output.find("|" + std::string(11, ' ') + "^\n"), std::string::npos);
     }
 }
 
@@ -528,8 +550,8 @@ static constexpr std::string_view k_include_entry_point = "include \"helper.luma
                                                           "}\n";
 
 static void write_helper(const std::filesystem::path& path, bool should_fail) {
-    std::ofstream out{path, std::ios::binary | std::ios::trunc};
-    out << "function boolean should_fail() { return " << (should_fail ? "true" : "false") << " }\n";
+    luma::test::write_file(path, std::string{"function boolean should_fail() { return "} +
+                                     (should_fail ? "true" : "false") + " }\n");
 }
 
 // Run `program` with stdout/stderr captured so the expected assertion failure
@@ -589,7 +611,7 @@ static void test_run_file_disk_cache_hit_with_unchanged_include() {
     // An unchanged include must still be served from the .lumc file.
     CompilationCache second_process;
     ASSERT_EQ(run_quietly(program.path(), second_process), exit_code::success);
-    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) == backdated);
+    ASSERT_EQ(std::filesystem::last_write_time(cache_file), backdated);
 }
 
 static void test_run_tests_file_strict_fails_on_warning() {
@@ -708,7 +730,7 @@ static void test_parse_args_non_level_dash_o_after_file_is_forwarded() {
 
     const std::vector<std::string> expected{"-Output", "x",          "-O3", "-Ofast", "-O",
                                             "fast",    "--optimize", "9",   "-O"};
-    ASSERT_TRUE(parsed.program_args == expected);
+    ASSERT_EQ(parsed.program_args, expected);
 }
 
 static void test_parse_args_valid_level_after_file_is_luma_flag() {
@@ -873,8 +895,8 @@ static void test_parse_args_unknown_flag_emits_suggestion() {
     const std::string output = captured.str();
 
     ASSERT_FALSE(parsed.has_value());
-    ASSERT_TRUE(output.find("did you mean") != std::string::npos);
-    ASSERT_TRUE(output.find("--help") != std::string::npos);
+    ASSERT_NE(output.find("did you mean"), std::string::npos);
+    ASSERT_NE(output.find("--help"), std::string::npos);
 }
 
 static void test_parse_args_combined_optimize_invalid_returns_nullopt() {
@@ -897,7 +919,7 @@ static void test_parse_args_optimize_separated_invalid_is_usage_error() {
     const std::string output = captured.str();
 
     ASSERT_FALSE(parsed.has_value());
-    ASSERT_TRUE(output.find("invalid optimization level") != std::string::npos);
+    ASSERT_NE(output.find("invalid optimization level"), std::string::npos);
 }
 
 static void test_parse_args_optimize_missing_value_is_usage_error() {
@@ -908,7 +930,7 @@ static void test_parse_args_optimize_missing_value_is_usage_error() {
     const std::string output = captured.str();
 
     ASSERT_FALSE(parsed.has_value());
-    ASSERT_TRUE(output.find("requires a level") != std::string::npos);
+    ASSERT_NE(output.find("requires a level"), std::string::npos);
 }
 
 // ─── validate_file_argument (regression: a missing file or wrong extension
@@ -936,14 +958,14 @@ static void test_validate_file_argument_rejects_wrong_extension() {
     const auto error = validate_file_argument(make_args(Command::Run, file.path_string()));
 
     ASSERT_TRUE(error.has_value());
-    ASSERT_TRUE(error->find(".luma") != std::string::npos);
+    ASSERT_NE(error->find(".luma"), std::string::npos);
 }
 
 static void test_validate_file_argument_rejects_nonexistent_file() {
     const auto error = validate_file_argument(make_args(Command::Check, "__nonexistent__.luma"));
 
     ASSERT_TRUE(error.has_value());
-    ASSERT_TRUE(error->find("not found") != std::string::npos);
+    ASSERT_NE(error->find("not found"), std::string::npos);
 }
 
 static void test_validate_file_argument_accepts_existing_luma_file() {
@@ -999,7 +1021,7 @@ static void test_run_file_non_ascii_path() {
 
     CompilationCache second_process;
     ASSERT_EQ(run_file(utf8_path, RunOptions{}, second_process), exit_code::success);
-    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) == backdated);
+    ASSERT_EQ(std::filesystem::last_write_time(cache_file), backdated);
 }
 
 // ─── --verify bypasses the compilation caches (regression: a cache hit, e.g. a
@@ -1031,7 +1053,7 @@ static void test_run_file_verify_bypasses_caches() {
         const CapturedStreams quiet{std::cout, std::cerr};
         ASSERT_EQ(run_file(program.path_string(), RunOptions{}, cache), exit_code::success);
     }
-    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) == backdated);
+    ASSERT_EQ(std::filesystem::last_write_time(cache_file), backdated);
 
     // With --verify the warm caches are bypassed and the program is compiled
     // (and verified) afresh, which rewrites the .lumc.
@@ -1040,7 +1062,7 @@ static void test_run_file_verify_bypasses_caches() {
         ASSERT_EQ(run_file(program.path_string(), RunOptions{.verify = true}, cache),
                   exit_code::success);
     }
-    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) != backdated);
+    ASSERT_NE(std::filesystem::last_write_time(cache_file), backdated);
 }
 
 // ─── is_known_flag ───

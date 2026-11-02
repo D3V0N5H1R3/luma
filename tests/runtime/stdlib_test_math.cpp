@@ -1,8 +1,13 @@
 // Standard library tests: Math module.
 
 #include <limits>
+#include <numbers>
+#include <string>
 
 #include "stdlib_test_helpers.hpp"
+
+using luma::test::eval;
+using luma::test::make_std_env;
 
 LUMA_TEST(math_absolute) {
     ASSERT_EVAL_INT("Math.absolute(-5)", 5);
@@ -29,9 +34,7 @@ LUMA_TEST(math_arc_cosine) {
     ASSERT_RESULT_SUCCESS(ok_val);
 
     // value ≈ π/2
-    const auto n = ok_val.as_result()->owned_inner->as_number();
-
-    ASSERT_TRUE(n > 1.57 && n < 1.58);
+    ASSERT_NEAR(ok_val.as_result()->owned_inner->as_number(), std::numbers::pi / 2.0, 1e-12);
 
     ASSERT_EVAL_FAILURE("Math.arc_cosine(2.0)");
 }
@@ -42,9 +45,7 @@ LUMA_TEST(math_arc_sine) {
     ASSERT_RESULT_SUCCESS(ok_val);
 
     // value ≈ π/2
-    const auto n = ok_val.as_result()->owned_inner->as_number();
-
-    ASSERT_TRUE(n > 1.57 && n < 1.58);
+    ASSERT_NEAR(ok_val.as_result()->owned_inner->as_number(), std::numbers::pi / 2.0, 1e-12);
 
     ASSERT_EVAL_FAILURE("Math.arc_sine(-2.0)");
 }
@@ -66,9 +67,7 @@ LUMA_TEST(math_constants) {
 
     ASSERT_TRUE(pi.is_number());
 
-    const auto d = pi.as_number();
-
-    ASSERT_TRUE(d > 3.14 && d < 3.15);
+    ASSERT_NEAR(pi.as_number(), std::numbers::pi, 1e-15);
 }
 
 LUMA_TEST(math_factorial) {
@@ -166,14 +165,14 @@ LUMA_TEST(math_number_bounds) {
     // Largest finite double and smallest positive normal double.
     ASSERT_EQ(eval("Math.max_number").as_number(), std::numeric_limits<double>::max());
     ASSERT_EQ(eval("Math.min_number").as_number(), std::numeric_limits<double>::min());
-    ASSERT_TRUE(eval("Math.min_number").as_number() > 0.0);
+    ASSERT_GT(eval("Math.min_number").as_number(), 0.0);
     ASSERT_EQ(eval("Math.is_finite(Math.max_number)").as_bool(), true);
 }
 
 LUMA_TEST(math_epsilon) {
     // Machine epsilon is positive and smaller than any everyday tolerance.
-    ASSERT_TRUE(eval("Math.epsilon").as_number() > 0.0);
-    ASSERT_TRUE(eval("Math.epsilon").as_number() < 1e-15);
+    ASSERT_GT(eval("Math.epsilon").as_number(), 0.0);
+    ASSERT_LT(eval("Math.epsilon").as_number(), 1e-15);
     // 1.0 + epsilon is distinguishable from 1.0.
     ASSERT_EQ(eval("1.0 + Math.epsilon > 1.0").as_bool(), true);
 }
@@ -198,7 +197,7 @@ LUMA_TEST(math_lerp) {
 }
 
 LUMA_TEST(math_module) {
-    const auto env = luma::test::make_std_env();
+    const auto env = make_std_env();
 
     ASSERT_TRUE(env->has("Math.absolute"));
     ASSERT_TRUE(env->has("Math.floor"));
@@ -210,9 +209,7 @@ LUMA_TEST(math_power) {
 
     ASSERT_RESULT_SUCCESS(v);
 
-    const auto d = v.as_result()->owned_inner->as_number();
-
-    ASSERT_TRUE(d > 1023.9 && d < 1024.1);
+    ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 1024.0, 1e-9);
 }
 
 LUMA_TEST(math_power_fail) {
@@ -277,6 +274,7 @@ LUMA_TEST(math_square_root) {
     const auto v = eval("Math.square_root(16.0)");
 
     ASSERT_RESULT_SUCCESS(v);
+    ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 4.0, 1e-12);
 }
 
 LUMA_TEST(math_sum) {
@@ -579,7 +577,8 @@ LUMA_TEST(math_round_to) {
 
 LUMA_TEST(math_approximately_equal_negative_epsilon) {
     // A negative epsilon is a programming error and raises a runtime error.
-    ASSERT_THROWS(eval("Math.approximately_equal(1.0, 1.0, -0.1)"));
+    ASSERT_EVAL_THROWS("Math.approximately_equal(1.0, 1.0, -0.1)",
+                       "Math.approximately_equal: epsilon must not be negative");
 }
 
 // --- Math.Interval (T02) ---
@@ -800,9 +799,11 @@ LUMA_TEST(math_circle_rectangle_intersects) {
 }
 
 LUMA_TEST(math_circle_rejects_non_record) {
-    ASSERT_TRUE(luma::test::eval_throws("Math.circle_contains(42, Math.vector2(0.0, 0.0))"));
-    ASSERT_TRUE(luma::test::eval_throws(
-        "Math.circle_rectangle_intersects(Math.circle(Math.vector2(0.0, 0.0), 1.0), 42)"));
+    ASSERT_EVAL_THROWS("Math.circle_contains(42, Math.vector2(0.0, 0.0))",
+                       "Math.circle_contains: expected a Math.Circle record");
+    ASSERT_EVAL_THROWS(
+        "Math.circle_rectangle_intersects(Math.circle(Math.vector2(0.0, 0.0), 1.0), 42)",
+        "Math.circle_rectangle_intersects: expected a Math.Rectangle record");
 }
 
 // --- Math.Angle (N07) ---

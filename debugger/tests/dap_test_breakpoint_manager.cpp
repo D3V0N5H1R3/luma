@@ -14,7 +14,9 @@
 #include "runtime/compiler/compiled_function.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::dap;
+using luma::dap::BreakpointManager;
+using luma::dap::BreakpointRequest;
+using luma::dap::ISourceLocator;
 
 namespace {
 

@@ -11,7 +11,7 @@
 #include "json/json.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::dap;
+using luma::dap::DapProtocolHandler;
 using luma::json::JsonValue;
 
 namespace {

@@ -7,6 +7,10 @@
 #include "common/resource_limits.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
+
 static void test_native_type_error_is_catchable() {
     // A type-confused 'any' value reaching a native accessor used to raise
     // std::bad_variant_access — which the VM's RuntimeError-only dispatch could
@@ -78,9 +82,7 @@ static void test_string_ends_with() {
 }
 
 static void test_string_from_bytes() {
-    const auto v = eval("String.from_bytes([72, 105])");
-
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EVAL_STR("String.from_bytes([72, 105])", "Hi");
 }
 
 static void test_string_from_bytes_above_255() {
@@ -215,15 +217,11 @@ static void test_string_pad_right() {
 }
 
 static void test_string_parse_integer() {
-    const auto v = eval("String.parse_integer(\"42\")");
-
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EVAL_INT("String.parse_integer(\"42\")", 42);
 }
 
 static void test_string_parse_number() {
-    const auto v = eval("String.parse_number(\"3.14\")");
-
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EVAL_NUM("String.parse_number(\"3.14\")", 3.14);
 }
 
 // Regression: String.parse_number must reject non-finite parses (NaN / ±Inf)
@@ -234,8 +232,7 @@ static void test_string_parse_number_rejects_non_finite() {
     ASSERT_EVAL_FAILURE("String.parse_number(\"infinity\")");
     ASSERT_EVAL_FAILURE("String.parse_number(\"nan\")");
 
-    const auto v = eval("String.parse_number(\"2.5\")");
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EVAL_NUM("String.parse_number(\"2.5\")", 2.5);
 }
 
 static void test_string_repeat() {
@@ -511,7 +508,7 @@ static void test_string_chunk() {
 }
 
 static void test_string_chunk_invalid_size() {
-    ASSERT_THROWS(eval("String.chunk(\"abc\", 0)"));
+    ASSERT_EVAL_THROWS("String.chunk(\"abc\", 0)", "String.chunk: size must be positive");
 }
 
 static void test_string_common_prefix() {
@@ -538,7 +535,8 @@ static void test_string_format_number() {
 }
 
 static void test_string_format_number_invalid_precision() {
-    ASSERT_THROWS(eval("String.format_number(1.0, 200)"));
+    ASSERT_EVAL_THROWS("String.format_number(1.0, 200)",
+                       "String.format_number: precision must be between 0 and 100");
 }
 
 static void test_string_is_alpha() {
@@ -582,7 +580,8 @@ static void test_string_join() {
 static void test_string_join_caps_output_size() {
     const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(8)};
 
-    ASSERT_THROWS(eval("String.join([\"abc\", 12345], \"-\")"));
+    ASSERT_EVAL_THROWS("String.join([\"abc\", 12345], \"-\")",
+                       "String.join: result exceeds maximum string size");
 }
 
 static void test_string_last_index_of() {
@@ -621,7 +620,8 @@ static void test_string_split_n_caps_array_size() {
     const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(4)};
 
     // Eight delimiters request up to nine parts, exceeding the lowered cap of 4.
-    ASSERT_THROWS(eval("String.split_n(\"a,b,c,d,e,f,g,h,i\", \",\", 1000000)"));
+    ASSERT_EVAL_THROWS("String.split_n(\"a,b,c,d,e,f,g,h,i\", \",\", 1000000)",
+                       "String.split_n: result exceeds maximum array size");
 }
 
 static void test_string_template() {
@@ -637,8 +637,9 @@ static void test_string_template_caps_output_size() {
     const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(64)};
 
     // Ten "{x}" placeholders each expand to ten characters (100 bytes > 64).
-    ASSERT_THROWS(
-        eval("String.template(\"{x}{x}{x}{x}{x}{x}{x}{x}{x}{x}\", {\"x\": \"0123456789\"})"));
+    ASSERT_EVAL_THROWS(
+        "String.template(\"{x}{x}{x}{x}{x}{x}{x}{x}{x}{x}\", {\"x\": \"0123456789\"})",
+        "String.template: result exceeds maximum string size");
 }
 
 static void test_string_to_array_ops_cap_array_size() {
@@ -647,10 +648,14 @@ static void test_string_to_array_ops_cap_array_size() {
     // max_string_size could still build an array far past the array limit.
     const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(4)};
 
-    ASSERT_THROWS(eval("String.to_bytes(\"abcdefghij\")"));
-    ASSERT_THROWS(eval("String.characters(\"abcdefghij\")"));
-    ASSERT_THROWS(eval("String.to_codepoints(\"abcdefghij\")"));
-    ASSERT_THROWS(eval("String.chunk(\"abcdefghij\", 1)"));
+    ASSERT_EVAL_THROWS("String.to_bytes(\"abcdefghij\")",
+                       "String.to_bytes: result exceeds maximum array size");
+    ASSERT_EVAL_THROWS("String.characters(\"abcdefghij\")",
+                       "String.characters: result exceeds maximum array size");
+    ASSERT_EVAL_THROWS("String.to_codepoints(\"abcdefghij\")",
+                       "String.to_codepoints: result exceeds maximum array size");
+    ASSERT_EVAL_THROWS("String.chunk(\"abcdefghij\", 1)",
+                       "String.chunk: result exceeds maximum array size");
 }
 
 static void test_string_trim_start() {
@@ -863,7 +868,8 @@ static void test_string_character_class_constants() {
 // array<any>, so the type checker cannot reject it) inside a Luma try/catch and
 // return the caught error message ("" when nothing was thrown).  `result_type`
 // is the declared type of the call's result binding.
-static std::string caught_message(const std::string& result_type, const std::string& call) {
+[[nodiscard]] static std::string caught_message(const std::string& result_type,
+                                                const std::string& call) {
     const auto v = eval(R"(
         array<any> mixed = [42]
         mutable string message = ""
@@ -920,14 +926,16 @@ static void test_string_template_single_pass() {
 // 8 entries) it took over 20 seconds; it now takes milliseconds.
 static void test_string_template_many_open_braces_is_linear() {
     const auto start = std::chrono::steady_clock::now();
-    const auto v = eval(R"(String.template(Result.unwrap(String.repeat("{", 200000)) + "a}",
-        {"a": "1", "b": "2", "c": "3", "d": "4", "e": "5", "f": "6", "g": "7", "h": "8", "i": "9"}))");
+    const auto v = eval(R"(String.template(Result.unwrap(String.repeat("{", 200000)) + "a}",)"
+                        "\n        "
+                        R"({"a": "1", "b": "2", "c": "3", "d": "4", "e": "5", "f": "6", )"
+                        R"("g": "7", "h": "8", "i": "9"}))");
     const auto elapsed = std::chrono::steady_clock::now() - start;
 
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string().size(), std::size_t{200000});
     ASSERT_EQ(v.as_string().substr(v.as_string().size() - 2), "{1");
-    ASSERT_TRUE(elapsed < std::chrono::seconds{3});
+    ASSERT_LT(elapsed, std::chrono::seconds{3});
 
     // Unknown placeholders after a run of braces keep their text.
     ASSERT_EQ(eval(R"(String.template(Result.unwrap(String.repeat("{", 5)) + "zz}", {"a": "1"}))")
@@ -940,7 +948,8 @@ static void test_string_indent_caps_output_size() {
     const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(64)};
 
     // 10 lines × 8-byte prefix + 20 bytes = 100 > 64.
-    ASSERT_THROWS(eval(R"(String.indent("a\na\na\na\na\na\na\na\na\na\n", "########"))"));
+    ASSERT_EVAL_THROWS(R"(String.indent("a\na\na\na\na\na\na\na\na\na\n", "########"))",
+                       "String.indent: result exceeds maximum string size");
     ASSERT_EQ(eval(R"(String.indent("a\nb\n", "> "))").as_string(), "> a\n> b\n");
 }
 
@@ -960,19 +969,18 @@ static void test_string_edit_ops_on_truncated_utf8() {
     // utf8_byte_offset return an offset past size(), so insert/delete/
     // replace_range threw std::out_of_range ("invalid string position").
     ASSERT_EQ(
-        eval(
-            R"(Result.unwrap(String.insert(Result.unwrap(String.from_bytes([97, 226])), 2, "x")) |> String.to_bytes() |> Array.length())")
+        eval(R"(Result.unwrap(String.insert(Result.unwrap(String.from_bytes([97, 226])), 2, "x")))"
+             R"( |> String.to_bytes() |> Array.length())")
             .as_integer(),
         3);
     ASSERT_EQ(
         eval(R"(Result.unwrap(String.delete(Result.unwrap(String.from_bytes([97, 226])), 1, 2)))")
             .as_string(),
         "a");
-    ASSERT_EQ(
-        eval(
-            R"(Result.unwrap(String.replace_range(Result.unwrap(String.from_bytes([97, 226])), 1, 2, "b")))")
-            .as_string(),
-        "ab");
+    ASSERT_EQ(eval(R"(Result.unwrap(String.replace_range()"
+                   R"(Result.unwrap(String.from_bytes([97, 226])), 1, 2, "b")))")
+                  .as_string(),
+              "ab");
 }
 
 static void test_string_edit_ops_cap_output_size() {
@@ -980,9 +988,12 @@ static void test_string_edit_ops_cap_output_size() {
     // max_string_size, so repeated calls could double a string past the limit.
     const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(8)};
 
-    ASSERT_THROWS(eval(R"(String.insert("abcdef", 3, "ghij"))"));
-    ASSERT_THROWS(eval(R"(String.replace_range("abcdef", 0, 1, "ghijk"))"));
-    ASSERT_THROWS(eval(R"(String.replace("abcdef", "a", "ghijk"))"));
+    ASSERT_EVAL_THROWS(R"(String.insert("abcdef", 3, "ghij"))",
+                       "String.insert: result exceeds maximum string size");
+    ASSERT_EVAL_THROWS(R"(String.replace_range("abcdef", 0, 1, "ghijk"))",
+                       "String.replace_range: result exceeds maximum string size");
+    ASSERT_EVAL_THROWS(R"(String.replace("abcdef", "a", "ghijk"))",
+                       "String.replace: result exceeds maximum string size");
     ASSERT_TRUE(eval(R"(String.insert("abcd", 2, "xy") == success("abxycd"))").as_bool());
 }
 
@@ -991,8 +1002,10 @@ static void test_string_split_whitespace_caps_while_producing() {
     // materialising every token first; word_count counts without allocating.
     const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(3)};
 
-    ASSERT_THROWS(eval(R"(String.split_whitespace("a b c d e"))"));
-    ASSERT_THROWS(eval(R"(String.words("a b c d e"))"));
+    ASSERT_EVAL_THROWS(R"(String.split_whitespace("a b c d e"))",
+                       "String.split_whitespace: result exceeds maximum array size");
+    ASSERT_EVAL_THROWS(R"(String.words("a b c d e"))",
+                       "String.words: result exceeds maximum array size");
     // word_count builds no array, so it is not subject to the array limit.
     ASSERT_EQ(eval(R"(String.word_count("  a b\tc\nd e  "))").as_integer(), 5);
 }
@@ -1002,11 +1015,10 @@ static void test_string_levenshtein_multibyte_and_invalid_bytes() {
     ASSERT_EQ(eval(R"(String.levenshtein_distance("café", "cafe"))").as_integer(), 1);
     ASSERT_EQ(eval(R"(String.levenshtein_distance("kitten", "sitting"))").as_integer(), 3);
     // Distinct ill-formed bytes stay distinct (they both decode to U+FFFD).
-    ASSERT_EQ(
-        eval(
-            R"(String.levenshtein_distance(Result.unwrap(String.from_bytes([128])), Result.unwrap(String.from_bytes([129]))))")
-            .as_integer(),
-        1);
+    ASSERT_EQ(eval(R"(String.levenshtein_distance(Result.unwrap(String.from_bytes([128])), )"
+                   R"(Result.unwrap(String.from_bytes([129]))))")
+                  .as_integer(),
+              1);
 }
 
 int main() {

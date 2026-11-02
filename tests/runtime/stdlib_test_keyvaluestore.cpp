@@ -1,14 +1,86 @@
 // Standard library tests: KeyValueStore.
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <filesystem>
-#include <fstream>
 #include <iterator>
 #include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 #include "common/resource_limits.hpp"
 #include "runtime/stdlib/collections/keyvaluestore_codec.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
+using luma::test::LumaTempFile;
+using luma::test::read_file_text;
+using luma::test::ScopedPathCleanup;
+using luma::test::TempFile;
+
+namespace kvs = luma::kvs;
+
+namespace {
+
+// Leftover temp files of a store write ("<store>.<nonce>....tmp") in the
+// working directory.
+[[nodiscard]] std::vector<std::filesystem::path> store_temp_files(const std::string& store_name) {
+    const auto prefix = store_name + ".";
+    std::vector<std::filesystem::path> leftovers;
+
+    std::ranges::copy_if(
+        std::filesystem::directory_iterator{"."}, std::back_inserter(leftovers),
+        [&prefix](const std::filesystem::path& path) {
+            const auto name = path.filename().string();
+            return name.starts_with(prefix) && name.ends_with(".tmp");
+        },
+        &std::filesystem::directory_entry::path);
+
+    return leftovers;
+}
+
+// Removes a store file (or a directory squatting on its path) together with any
+// temp files of its atomic writes, at construction and destruction, so neither
+// a stale leftover nor a failing assertion can leak them into the working tree.
+class ScopedStoreCleanup {
+public:
+    explicit ScopedStoreCleanup(std::string store_name)
+        : store_name_{std::move(store_name)}, store_{store_name_} {
+        remove_temp_files();
+    }
+
+    ScopedStoreCleanup(const ScopedStoreCleanup&) = delete;
+    ScopedStoreCleanup& operator=(const ScopedStoreCleanup&) = delete;
+    ScopedStoreCleanup(ScopedStoreCleanup&&) = delete;
+    ScopedStoreCleanup& operator=(ScopedStoreCleanup&&) = delete;
+
+    ~ScopedStoreCleanup() noexcept {
+        remove_temp_files();
+    }
+
+private:
+    // Best effort: a destructor cannot report a failed removal.
+    void remove_temp_files() const noexcept {
+        try {
+            for (const auto& path : store_temp_files(store_name_)) {
+                std::error_code ignored;
+                std::filesystem::remove(path, ignored);
+            }
+        } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+            // An exception must not escape a destructor.
+        }
+    }
+
+    std::string store_name_;
+    ScopedPathCleanup store_;
+};
+
+} // namespace
 
 // ─── Codec layer (keyvaluestore_codec.hpp) ───────────────────────────────────
 // The escape/unescape line codec, the .kv parser and the glob matcher form the
@@ -27,11 +99,12 @@ static void test_keyvaluestore_codec_escape_renders_specials() {
 }
 
 static void test_keyvaluestore_codec_parse_serialize_roundtrip() {
-    kvs::StoreEntries entries{};
-    entries["key\twith\ttabs"] = "value\nwith\nnewlines";
-    entries["back\\slash"] = "plain";
-    entries[""] = "empty-key";
-    entries["empty-value"] = "";
+    const kvs::StoreEntries entries{
+        {"key\twith\ttabs", "value\nwith\nnewlines"},
+        {"back\\slash", "plain"},
+        {"", "empty-key"},
+        {"empty-value", ""},
+    };
 
     ASSERT_TRUE(kvs::parse_store(kvs::serialize_store(entries)) == entries);
 }
@@ -194,7 +267,7 @@ static void test_keyvaluestore_count() {
     )");
 
     ASSERT_TRUE(v.is_integer());
-    ASSERT_EQ(v.as_integer(), int64_t{2});
+    ASSERT_EQ(v.as_integer(), std::int64_t{2});
 }
 
 static void test_keyvaluestore_clear() {
@@ -209,7 +282,7 @@ static void test_keyvaluestore_clear() {
     )");
 
     ASSERT_TRUE(v.is_integer());
-    ASSERT_EQ(v.as_integer(), int64_t{0});
+    ASSERT_EQ(v.as_integer(), std::int64_t{0});
 }
 
 static void test_keyvaluestore_to_dictionary() {
@@ -268,7 +341,7 @@ static void test_keyvaluestore_set_many_count() {
     )");
 
     ASSERT_TRUE(v.is_integer());
-    ASSERT_EQ(v.as_integer(), int64_t{3});
+    ASSERT_EQ(v.as_integer(), std::int64_t{3});
 }
 
 static void test_keyvaluestore_get_many_skips_missing() {
@@ -288,8 +361,8 @@ static void test_keyvaluestore_get_many_skips_missing() {
 
     ASSERT_TRUE(x && x->is_string());
     ASSERT_EQ(x->as_string(), "10");
-    ASSERT_TRUE(v.as_dictionary()->find("missing") == nullptr);
-    ASSERT_TRUE(v.as_dictionary()->find("y") == nullptr);
+    ASSERT_EQ(v.as_dictionary()->find("missing"), nullptr);
+    ASSERT_EQ(v.as_dictionary()->find("y"), nullptr);
 }
 
 static void test_keyvaluestore_find_by_pattern_wildcard() {
@@ -312,39 +385,23 @@ static void test_keyvaluestore_find_by_pattern_wildcard() {
 
     ASSERT_TRUE(alice && alice->is_string());
     ASSERT_EQ(alice->as_string(), "admin");
-    ASSERT_TRUE(v.as_dictionary()->find("session_1") == nullptr);
+    ASSERT_EQ(v.as_dictionary()->find("session_1"), nullptr);
 }
 
 // ─── Positive: read-only mode ────────────────────────────────────────────────
 
-// An empty store file on disk for the duration of a test: open_read_only fails
-// on a missing file, so read-only tests need a real (empty) store to open.
-class ScopedStoreFile {
-public:
-    explicit ScopedStoreFile(std::string path) : path_{std::move(path)} {
-        std::ofstream{path_};
-    }
-
-    ~ScopedStoreFile() {
-        std::error_code ignored;
-        std::filesystem::remove(path_, ignored);
-    }
-
-    ScopedStoreFile(const ScopedStoreFile&) = delete;
-    ScopedStoreFile& operator=(const ScopedStoreFile&) = delete;
-
-private:
-    std::string path_;
-};
+// open_read_only fails on a missing file, so read-only tests open a real, empty
+// store file (a TempFile) that is removed when the test ends.
 
 static void test_keyvaluestore_open_read_only_missing_file_fails() {
+    const ScopedStoreCleanup absent{"test_kv_cpp_ro_missing.kv"};
     const auto v = eval(R"(KeyValueStore.open_read_only("test_kv_cpp_ro_missing.kv"))");
 
     ASSERT_RESULT_FAILURE(v);
 }
 
 static void test_keyvaluestore_is_read_only_true() {
-    const ScopedStoreFile file{"test_kv_cpp_ro.kv"};
+    const TempFile file{"test_kv_cpp_ro.kv", ""};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro.kv")
         |> Result.unwrap()
@@ -369,13 +426,15 @@ static void test_keyvaluestore_is_read_only_false() {
 // ─── Positive: persistence through the .kv file codec ────────────────────────
 
 static void test_keyvaluestore_save_reopen() {
-    (void)eval(R"(
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_persist.kv"};
+
+    ASSERT_RESULT_SUCCESS(eval(R"(
         KeyValueStore.open("test_kv_cpp_persist.kv")
         |> Result.unwrap()
         |> KeyValueStore.set("k", "v")
         |> Result.unwrap()
         |> KeyValueStore.save()
-    )");
+    )"));
 
     const auto v = eval(R"(
         KeyValueStore.open("test_kv_cpp_persist.kv")
@@ -386,22 +445,18 @@ static void test_keyvaluestore_save_reopen() {
 
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "v");
-
-    (void)eval(R"(
-        KeyValueStore.open("test_kv_cpp_persist.kv")
-        |> Result.unwrap()
-        |> KeyValueStore.destroy()
-    )");
 }
 
 static void test_keyvaluestore_reload_from_disk() {
-    (void)eval(R"(
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_reload.kv"};
+
+    ASSERT_RESULT_SUCCESS(eval(R"(
         KeyValueStore.open("test_kv_cpp_reload.kv")
         |> Result.unwrap()
         |> KeyValueStore.set("k", "v")
         |> Result.unwrap()
         |> KeyValueStore.save()
-    )");
+    )"));
 
     const auto v = eval(R"(
         KeyValueStore.open("test_kv_cpp_reload.kv")
@@ -414,12 +469,6 @@ static void test_keyvaluestore_reload_from_disk() {
 
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "v");
-
-    (void)eval(R"(
-        KeyValueStore.open("test_kv_cpp_reload.kv")
-        |> Result.unwrap()
-        |> KeyValueStore.destroy()
-    )");
 }
 
 // Special characters (tab, newline, backslash) must survive an escape →
@@ -427,13 +476,15 @@ static void test_keyvaluestore_reload_from_disk() {
 // in string literals identically to C++, so the expected value below is the
 // same byte sequence on both sides.
 static void test_keyvaluestore_special_chars_persist() {
-    (void)eval(R"(
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_special.kv"};
+
+    ASSERT_RESULT_SUCCESS(eval(R"(
         KeyValueStore.open("test_kv_cpp_special.kv")
         |> Result.unwrap()
         |> KeyValueStore.set("k", "a\tb\nc\\d")
         |> Result.unwrap()
         |> KeyValueStore.save()
-    )");
+    )"));
 
     const auto v = eval(R"(
         KeyValueStore.open("test_kv_cpp_special.kv")
@@ -444,22 +495,19 @@ static void test_keyvaluestore_special_chars_persist() {
 
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "a\tb\nc\\d");
-
-    (void)eval(R"(
-        KeyValueStore.open("test_kv_cpp_special.kv")
-        |> Result.unwrap()
-        |> KeyValueStore.destroy()
-    )");
 }
 
 static void test_keyvaluestore_destroy_removes_file() {
-    (void)eval(R"(
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_destroy.kv"};
+
+    ASSERT_RESULT_SUCCESS(eval(R"(
         KeyValueStore.open("test_kv_cpp_destroy.kv")
         |> Result.unwrap()
         |> KeyValueStore.set("k", "v")
         |> Result.unwrap()
         |> KeyValueStore.save()
-    )");
+    )"));
+    ASSERT_TRUE(std::filesystem::exists("test_kv_cpp_destroy.kv"));
 
     const auto destroyed = eval(R"(
         KeyValueStore.open("test_kv_cpp_destroy.kv")
@@ -506,16 +554,9 @@ static void test_keyvaluestore_open_rejects_oversized_file() {
         const auto v = eval(call);
 
         ASSERT_RESULT_FAILURE(v);
-        ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("exceeds the maximum size") !=
-                    std::string::npos);
+        ASSERT_NE(v.as_result()->owned_inner->as_string().find("exceeds the maximum size"),
+                  std::string::npos);
     }
-}
-
-// Read a file's raw bytes (to prove a failed open left it untouched).
-[[nodiscard]] static std::string read_raw(const std::string& path) {
-    std::ifstream in{path, std::ios::binary};
-
-    return std::string{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
 }
 
 static void test_keyvaluestore_unreadable_file_is_never_overwritten() {
@@ -523,14 +564,13 @@ static void test_keyvaluestore_unreadable_file_is_never_overwritten() {
     // succeed with an EMPTY store, and a following set + save replaced the
     // real file with that one entry.  Now open fails, so nothing can be saved
     // over the file, and it is left byte-for-byte intact.
-    const std::string store_name{"test_kv_cpp_no_overwrite.kv"};
     const std::string original = "keep\t" + std::string(64, 'v') + "\n";
-    { std::ofstream{store_name, std::ios::binary} << original; }
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_no_overwrite.kv"};
+    const TempFile file{"test_kv_cpp_no_overwrite.kv", original};
 
-    Value v;
-    {
+    const auto v = [] {
         const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(16)};
-        v = eval(R"(
+        return eval(R"(
             result<key_value_store> opened = KeyValueStore.open("test_kv_cpp_no_overwrite.kv")
             if Result.is_success(opened) {
                 result<string> _saved = Result.unwrap(opened)
@@ -540,58 +580,46 @@ static void test_keyvaluestore_unreadable_file_is_never_overwritten() {
             }
             opened
         )");
-    }
-
-    const auto after = read_raw(store_name);
-    std::error_code ignored;
-    std::filesystem::remove(store_name, ignored);
+    }();
 
     ASSERT_RESULT_FAILURE(v);
-    ASSERT_EQ(after, original);
+    ASSERT_EQ(read_file_text(file.path()), original);
 }
 
 static void test_keyvaluestore_open_rejects_corrupt_file() {
     // A non-empty line without the key/value tab is corruption (the encoder
     // never writes one).  It used to be dropped silently — and lost for good on
     // the next save — so open, open_read_only and reload now fail instead.
-    const std::string store_name{"test_kv_cpp_corrupt.kv"};
-    { std::ofstream{store_name, std::ios::binary} << "good\tvalue\nno separator here\n"; }
+    const TempFile file{"test_kv_cpp_corrupt.kv", "good\tvalue\nno separator here\n"};
 
     const auto opened = eval(R"(KeyValueStore.open("test_kv_cpp_corrupt.kv"))");
     const auto read_only = eval(R"(KeyValueStore.open_read_only("test_kv_cpp_corrupt.kv"))");
 
-    std::error_code ignored;
-    std::filesystem::remove(store_name, ignored);
-
     ASSERT_RESULT_FAILURE(opened);
-    ASSERT_TRUE(opened.as_result()->owned_inner->as_string().find("line 2") != std::string::npos);
+    ASSERT_NE(opened.as_result()->owned_inner->as_string().find("line 2"), std::string::npos);
     ASSERT_RESULT_FAILURE(read_only);
 }
 
 static void test_keyvaluestore_open_rejects_over_limit_entries_as_failure() {
     // parse_store's entry-count limit used to escape open as a thrown runtime
     // error; it is now an ordinary failure result.
-    const std::string store_name{"test_kv_cpp_too_many.kv"};
-    { std::ofstream{store_name, std::ios::binary} << "a\t1\nb\t2\nc\t3\n"; }
+    const TempFile file{"test_kv_cpp_too_many.kv", "a\t1\nb\t2\nc\t3\n"};
 
-    Value v;
-    {
+    const auto v = [] {
         const LimitGuard guard{ResourceLimits::max_dictionary_size, static_cast<std::size_t>(2)};
-        v = eval(R"(KeyValueStore.open("test_kv_cpp_too_many.kv"))");
-    }
-
-    std::error_code ignored;
-    std::filesystem::remove(store_name, ignored);
+        return eval(R"(KeyValueStore.open("test_kv_cpp_too_many.kv"))");
+    }();
 
     ASSERT_RESULT_FAILURE(v);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("exceeds maximum entry count"),
+              std::string::npos);
 }
 
 static void test_keyvaluestore_reload_fails_when_file_becomes_unreadable() {
     // reload follows the same rule as open: a missing file reloads empty, but
     // a file that cannot be read completely is a failure, not an empty store.
-    const std::string store_name{"test_kv_cpp_reload_corrupt.kv"};
-    std::error_code ignored;
-    std::filesystem::remove(store_name, ignored);
+    const ScopedStoreCleanup corrupt_store{"test_kv_cpp_reload_corrupt.kv"};
+    const ScopedStoreCleanup missing_store{"test_kv_cpp_reload_missing.kv"};
 
     const auto v = eval(R"(
         key_value_store s = Result.unwrap(KeyValueStore.open("test_kv_cpp_reload_corrupt.kv"))
@@ -604,8 +632,6 @@ static void test_keyvaluestore_reload_fails_when_file_becomes_unreadable() {
         KeyValueStore.reload(s)
     )");
 
-    std::filesystem::remove(store_name, ignored);
-
     ASSERT_RESULT_FAILURE(v);
     ASSERT_RESULT_SUCCESS(missing);
 }
@@ -613,7 +639,7 @@ static void test_keyvaluestore_reload_fails_when_file_becomes_unreadable() {
 // ─── Negative: writes on a read-only store fail (no throw, failure result) ────
 
 static void test_keyvaluestore_set_read_only_fails() {
-    const ScopedStoreFile file{"test_kv_cpp_ro_set.kv"};
+    const TempFile file{"test_kv_cpp_ro_set.kv", ""};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_set.kv")
         |> Result.unwrap()
@@ -624,7 +650,7 @@ static void test_keyvaluestore_set_read_only_fails() {
 }
 
 static void test_keyvaluestore_remove_read_only_fails() {
-    const ScopedStoreFile file{"test_kv_cpp_ro_remove.kv"};
+    const TempFile file{"test_kv_cpp_ro_remove.kv", ""};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_remove.kv")
         |> Result.unwrap()
@@ -635,7 +661,7 @@ static void test_keyvaluestore_remove_read_only_fails() {
 }
 
 static void test_keyvaluestore_clear_read_only_fails() {
-    const ScopedStoreFile file{"test_kv_cpp_ro_clear.kv"};
+    const TempFile file{"test_kv_cpp_ro_clear.kv", ""};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_clear.kv")
         |> Result.unwrap()
@@ -646,7 +672,7 @@ static void test_keyvaluestore_clear_read_only_fails() {
 }
 
 static void test_keyvaluestore_set_many_read_only_fails() {
-    const ScopedStoreFile file{"test_kv_cpp_ro_setmany.kv"};
+    const TempFile file{"test_kv_cpp_ro_setmany.kv", ""};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_setmany.kv")
         |> Result.unwrap()
@@ -657,7 +683,7 @@ static void test_keyvaluestore_set_many_read_only_fails() {
 }
 
 static void test_keyvaluestore_save_read_only_fails() {
-    const ScopedStoreFile file{"test_kv_cpp_ro_save.kv"};
+    const TempFile file{"test_kv_cpp_ro_save.kv", ""};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_save.kv")
         |> Result.unwrap()
@@ -668,7 +694,7 @@ static void test_keyvaluestore_save_read_only_fails() {
 }
 
 static void test_keyvaluestore_destroy_read_only_fails() {
-    const ScopedStoreFile file{"test_kv_cpp_ro_destroy.kv"};
+    const TempFile file{"test_kv_cpp_ro_destroy.kv", ""};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_destroy.kv")
         |> Result.unwrap()
@@ -676,6 +702,7 @@ static void test_keyvaluestore_destroy_read_only_fails() {
     )");
 
     ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(std::filesystem::exists(file.path()));
 }
 
 // ─── Negative: entry-count cap mirrors parse_store / Dictionary.set ──────────
@@ -686,7 +713,7 @@ static void test_keyvaluestore_set_caps_new_keys() {
 
     // Two distinct keys fill the store to the cap; a third NEW key must fail
     // rather than grow past the limit that a later open()/reload() would reject.
-    ASSERT_THROWS(eval(R"(
+    ASSERT_EVAL_THROWS(R"(
         KeyValueStore.open("test_kv_cpp_cap_set.kv")
         |> Result.unwrap()
         |> KeyValueStore.set("a", "1")
@@ -694,7 +721,8 @@ static void test_keyvaluestore_set_caps_new_keys() {
         |> KeyValueStore.set("b", "2")
         |> Result.unwrap()
         |> KeyValueStore.set("c", "3")
-    )"));
+    )",
+                       "KeyValueStore exceeds maximum entry count");
 
     // Overwriting an existing key at the cap is still allowed (no new entry).
     const auto v = eval(R"(
@@ -719,41 +747,46 @@ static void test_keyvaluestore_set_many_caps_size() {
 
     // A single set_many whose distinct keys exceed the cap must fail, matching
     // the entry-count guard parse_store enforces on the persisted file.
-    ASSERT_THROWS(eval(R"(
+    ASSERT_EVAL_THROWS(R"(
         KeyValueStore.open("test_kv_cpp_cap_setmany.kv")
         |> Result.unwrap()
         |> KeyValueStore.set_many({"a": "1", "b": "2", "c": "3"})
-    )"));
+    )",
+                       "KeyValueStore exceeds maximum entry count");
 }
 
 // ─── Negative: type errors raise RuntimeError ────────────────────────────────
 
 static void test_keyvaluestore_open_non_string_throws() {
-    ASSERT_THROWS(eval("KeyValueStore.open(42)"));
+    ASSERT_EVAL_THROWS("KeyValueStore.open(42)", "KeyValueStore.open: expected string");
 }
 
 static void test_keyvaluestore_get_non_store_throws() {
-    ASSERT_THROWS(eval(R"(KeyValueStore.get(42, "k"))"));
+    ASSERT_EVAL_THROWS(R"(KeyValueStore.get(42, "k"))",
+                       "KeyValueStore.get: expected key_value_store");
 }
 
 static void test_keyvaluestore_has_non_store_throws() {
-    ASSERT_THROWS(eval(R"(KeyValueStore.has("not a store", "k"))"));
+    ASSERT_EVAL_THROWS(R"(KeyValueStore.has("not a store", "k"))",
+                       "KeyValueStore.has: expected key_value_store");
 }
 
 static void test_keyvaluestore_set_non_string_key_throws() {
-    ASSERT_THROWS(eval(R"(
+    ASSERT_EVAL_THROWS(R"(
         KeyValueStore.open("test_kv_cpp_badkey.kv")
         |> Result.unwrap()
         |> KeyValueStore.set(123, "v")
-    )"));
+    )",
+                       "KeyValueStore.set: expected string");
 }
 
 static void test_keyvaluestore_set_many_non_dict_throws() {
-    ASSERT_THROWS(eval(R"(
+    ASSERT_EVAL_THROWS(R"(
         KeyValueStore.open("test_kv_cpp_baddict.kv")
         |> Result.unwrap()
         |> KeyValueStore.set_many("not a dict")
-    )"));
+    )",
+                       "KeyValueStore.set_many: expected dictionary");
 }
 
 // ─── Positive: transactions ──────────────────────────────────────────────────
@@ -761,6 +794,7 @@ static void test_keyvaluestore_set_many_non_dict_throws() {
 static void test_keyvaluestore_transaction_commit() {
     // A body that returns success(final) commits — the returned store carries
     // every threaded change.
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_tx_commit.kv"};
     const auto v = eval(R"(
         KeyValueStore.open("test_kv_cpp_tx_commit.kv")
         |> Result.unwrap()
@@ -775,14 +809,12 @@ static void test_keyvaluestore_transaction_commit() {
 
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "2");
-
-    (void)eval(R"(KeyValueStore.open("test_kv_cpp_tx_commit.kv")
-        |> Result.unwrap() |> KeyValueStore.destroy())");
 }
 
 static void test_keyvaluestore_transaction_rollback() {
     // A body that returns a failure rolls back — transaction yields that failure
     // and nothing is persisted.
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_tx_rollback.kv"};
     const auto v = eval(R"(
         KeyValueStore.open("test_kv_cpp_tx_rollback.kv")
         |> Result.unwrap()
@@ -790,24 +822,26 @@ static void test_keyvaluestore_transaction_rollback() {
             key_value_store _s1 = KeyValueStore.set(s, "x", "1")?
             return failure("aborted")
         })
-        |> Result.is_failure()
     )");
 
-    ASSERT_TRUE(v.is_bool());
-    ASSERT_TRUE(v.as_bool());
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_string(), "aborted");
+    ASSERT_FALSE(std::filesystem::exists("test_kv_cpp_tx_rollback.kv"));
 }
 
 static void test_keyvaluestore_transaction_commit_persists() {
     // Committing a transaction on a file-backed store persists atomically, so a
     // fresh open sees the committed keys.
-    (void)eval(R"(
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_tx_persist.kv"};
+
+    ASSERT_RESULT_SUCCESS(eval(R"(
         KeyValueStore.open("test_kv_cpp_tx_persist.kv")
         |> Result.unwrap()
         |> KeyValueStore.transaction((key_value_store s) -> {
             key_value_store s1 = KeyValueStore.set(s, "k", "v")?
             return success(s1)
         })
-    )");
+    )"));
 
     const auto v = eval(R"(
         KeyValueStore.open("test_kv_cpp_tx_persist.kv")
@@ -818,41 +852,21 @@ static void test_keyvaluestore_transaction_commit_persists() {
 
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "v");
-
-    (void)eval(R"(KeyValueStore.open("test_kv_cpp_tx_persist.kv")
-        |> Result.unwrap() |> KeyValueStore.destroy())");
-}
-
-// Count leftover temp files of a store write ("<store>.<nonce>....tmp") in the
-// working directory.
-[[nodiscard]] static std::size_t count_store_temp_files(const std::string& store_name) {
-    std::size_t count{0};
-
-    for (const auto& entry : std::filesystem::directory_iterator{"."}) {
-        const auto name = entry.path().filename().string();
-
-        if (name.starts_with(store_name + ".") && name.ends_with(".tmp")) {
-            ++count;
-        }
-    }
-
-    return count;
 }
 
 static void test_keyvaluestore_save_leaves_no_temp_file() {
-    (void)eval(R"(
+    const ScopedStoreCleanup cleanup{"test_kv_cpp_tmp_clean.kv"};
+
+    ASSERT_RESULT_SUCCESS(eval(R"(
         KeyValueStore.open("test_kv_cpp_tmp_clean.kv")
         |> Result.unwrap()
         |> KeyValueStore.set("k", "v")
         |> Result.unwrap()
         |> KeyValueStore.save()
-    )");
+    )"));
 
     ASSERT_TRUE(std::filesystem::exists("test_kv_cpp_tmp_clean.kv"));
-    ASSERT_EQ(count_store_temp_files("test_kv_cpp_tmp_clean.kv"), std::size_t{0});
-
-    (void)eval(R"(KeyValueStore.open("test_kv_cpp_tmp_clean.kv")
-        |> Result.unwrap() |> KeyValueStore.destroy())");
+    ASSERT_EQ(store_temp_files("test_kv_cpp_tmp_clean.kv").size(), std::size_t{0});
 }
 
 static void test_keyvaluestore_failed_save_reports_failure_and_cleans_up() {
@@ -863,8 +877,7 @@ static void test_keyvaluestore_failed_save_reports_failure_and_cleans_up() {
     // The directory is created after the open (an existing unreadable path
     // would now make open itself fail), so it is the rename that fails.
     const std::string store_name{"test_kv_cpp_dir_target.kv"};
-    std::error_code pre_ignored;
-    std::filesystem::remove_all(store_name, pre_ignored);
+    const ScopedStoreCleanup cleanup{store_name};
 
     const auto v = eval(R"(
         key_value_store s = Result.unwrap(KeyValueStore.open("test_kv_cpp_dir_target.kv"))
@@ -872,15 +885,9 @@ static void test_keyvaluestore_failed_save_reports_failure_and_cleans_up() {
         KeyValueStore.set(s, "k", "v") |> Result.unwrap() |> KeyValueStore.save()
     )");
 
-    const auto leftovers = count_store_temp_files(store_name);
-    const bool still_directory = std::filesystem::is_directory(store_name);
-
-    std::error_code ignored;
-    std::filesystem::remove_all(store_name, ignored);
-
     ASSERT_RESULT_FAILURE(v);
-    ASSERT_EQ(leftovers, std::size_t{0});
-    ASSERT_TRUE(still_directory);
+    ASSERT_EQ(store_temp_files(store_name).size(), std::size_t{0});
+    ASSERT_TRUE(std::filesystem::is_directory(store_name));
 }
 
 int main() {

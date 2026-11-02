@@ -1,6 +1,18 @@
 // Type checker unit tests — function calls, match, interfaces, and control flow.
 
+#include <algorithm>
+#include <string>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::test::check;
+using luma::test::fails;
+using luma::test::fails_with;
+using luma::test::fails_with_message;
+using luma::test::has_code;
+using luma::test::passes;
 
 // ─── Call-site argument checking ───
 
@@ -573,10 +585,10 @@ static void test_stdlib_calls_accepted() {
 // ─── Multiple errors collected ───
 
 static void test_multiple_errors_collected() {
-    auto errors = check("integer x = \"hello\"\n"
-                        "string y = 42\n");
+    const auto errors = check("integer x = \"hello\"\n"
+                              "string y = 42\n");
 
-    ASSERT_TRUE(errors.size() >= 2);
+    ASSERT_GE(errors.size(), 2);
 }
 
 // ─── Result type ───

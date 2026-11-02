@@ -3,6 +3,8 @@
 #include "common/resource_limits.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::test::eval;
+
 LUMA_TEST(calculus_derivative) {
     const auto v = eval("Calculus.derivative(3.0, (number x) -> x * x)");
 
@@ -110,9 +112,10 @@ LUMA_TEST(calculus_sum_series_allows_exactly_max_terms) {
 }
 
 // One past the inclusive maximum is still rejected (the cap continues to bound
-// work); the throw propagates through eval, so ASSERT_THROWS is required.
+// work); the throw propagates through eval, so ASSERT_EVAL_THROWS is required.
 LUMA_TEST(calculus_sum_series_rejects_beyond_max_terms) {
-    ASSERT_THROWS(eval("Calculus.sum_series(0, 1000001, (integer _n) -> 0.0)"));
+    ASSERT_EVAL_THROWS("Calculus.sum_series(0, 1000001, (integer _n) -> 0.0)",
+                       "Calculus.sum_series: too many terms");
 }
 
 LUMA_TEST(calculus_partial_derivative) {
@@ -266,29 +269,37 @@ LUMA_TEST(calculus_newton_zero_derivative) {
 }
 
 LUMA_TEST(calculus_derivative_with_nonpositive_step) {
-    ASSERT_THROWS(eval("Calculus.derivative_with(1.0, 0.0, (number x) -> x * x)"));
-    ASSERT_THROWS(eval("Calculus.derivative_with(1.0, -0.5, (number x) -> x * x)"));
+    ASSERT_EVAL_THROWS("Calculus.derivative_with(1.0, 0.0, (number x) -> x * x)",
+                       "step must be positive, got 0");
+    ASSERT_EVAL_THROWS("Calculus.derivative_with(1.0, -0.5, (number x) -> x * x)",
+                       "step must be positive, got -0.5");
 }
 
 LUMA_TEST(calculus_integrate_with_nonpositive_steps) {
-    ASSERT_THROWS(eval("Calculus.integrate_with(0.0, 1.0, 0, (number x) -> x)"));
-    ASSERT_THROWS(eval("Calculus.integrate_with(0.0, 1.0, -5, (number x) -> x)"));
+    ASSERT_EVAL_THROWS("Calculus.integrate_with(0.0, 1.0, 0, (number x) -> x)",
+                       "steps must be positive, got 0");
+    ASSERT_EVAL_THROWS("Calculus.integrate_with(0.0, 1.0, -5, (number x) -> x)",
+                       "steps must be positive, got -5");
 }
 
 LUMA_TEST(calculus_integrate_with_steps_capped) {
     // A huge subdivision count must be rejected rather than overflow the
     // even-rounding `steps = n + 1` (signed-overflow UB) or loop ~2^63 times.
-    ASSERT_THROWS(eval("Calculus.integrate_with(0.0, 1.0, 9223372036854775807, (number x) -> x)"));
-    ASSERT_THROWS(eval("Calculus.integrate_with(0.0, 1.0, 2000000, (number x) -> x)"));
+    ASSERT_EVAL_THROWS("Calculus.integrate_with(0.0, 1.0, 9223372036854775807, (number x) -> x)",
+                       "steps must be at most 1000000");
+    ASSERT_EVAL_THROWS("Calculus.integrate_with(0.0, 1.0, 2000000, (number x) -> x)",
+                       "steps must be at most 1000000");
 }
 
 LUMA_TEST(calculus_sum_series_too_many_terms) {
     // The term count exceeds the one-million guard.
-    ASSERT_THROWS(eval("Calculus.sum_series(0, 2000000, (integer _n) -> 1.0)"));
+    ASSERT_EVAL_THROWS("Calculus.sum_series(0, 2000000, (integer _n) -> 1.0)",
+                       "Calculus.sum_series: too many terms");
 
     // An adversarially huge term count must be rejected rather than loop ~2^63
     // times.
-    ASSERT_THROWS(eval("Calculus.sum_series(-1, 9223372036854775807, (integer _n) -> 1.0)"));
+    ASSERT_EVAL_THROWS("Calculus.sum_series(-1, 9223372036854775807, (integer _n) -> 1.0)",
+                       "Calculus.sum_series: too many terms");
 }
 
 LUMA_TEST(calculus_sum_series_counts_terms_from_start) {
@@ -304,27 +315,32 @@ LUMA_TEST(calculus_sum_series_counts_terms_from_start) {
 }
 
 LUMA_TEST(calculus_partial_derivative_index_out_of_range) {
-    ASSERT_THROWS(eval("Calculus.partial_derivative([1.0, 2.0], 5, "
-                       "(array<number> p) -> p[0] + p[1])"));
-    ASSERT_THROWS(eval("Calculus.partial_derivative([1.0, 2.0], -1, "
-                       "(array<number> p) -> p[0] + p[1])"));
+    ASSERT_EVAL_THROWS("Calculus.partial_derivative([1.0, 2.0], 5, "
+                       "(array<number> p) -> p[0] + p[1])",
+                       "Calculus.partial_derivative: index out of range");
+    ASSERT_EVAL_THROWS("Calculus.partial_derivative([1.0, 2.0], -1, "
+                       "(array<number> p) -> p[0] + p[1])",
+                       "Calculus.partial_derivative: index out of range");
 }
 
 LUMA_TEST(calculus_divergence_field_mismatch) {
     // A 3D point with a single component field is a dimension mismatch.
-    ASSERT_THROWS(eval("Calculus.divergence([1.0, 2.0, 3.0], "
-                       "[(array<number> p) -> p[0]])"));
+    ASSERT_EVAL_THROWS("Calculus.divergence([1.0, 2.0, 3.0], "
+                       "[(array<number> p) -> p[0]])",
+                       "number of fields must match dimension of point");
 }
 
 LUMA_TEST(calculus_convolution_invalid_bounds) {
     // The lower bound must be strictly less than the upper bound.
-    ASSERT_THROWS(eval("Calculus.convolution((number x) -> x, (number x) -> x, "
-                       "1.0, 1.0, 0.0)"));
+    ASSERT_EVAL_THROWS("Calculus.convolution((number x) -> x, (number x) -> x, "
+                       "1.0, 1.0, 0.0)",
+                       "lower bound must be less than upper bound");
 }
 
 LUMA_TEST(calculus_callback_failure) {
     // A callback that yields a failure result must surface as a runtime error.
-    ASSERT_THROWS(eval("Calculus.derivative(1.0, (number _x) -> failure(\"boom\"))"));
+    ASSERT_EVAL_THROWS("Calculus.derivative(1.0, (number _x) -> failure(\"boom\"))",
+                       "Calculus: callback returned a fail result");
 }
 
 int main() {

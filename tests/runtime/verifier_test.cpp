@@ -1,6 +1,9 @@
 // Bytecode verifier unit tests.
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <string>
 #include <utility>
 #include <vector>
@@ -9,10 +12,16 @@
 #include "runtime/compiler/chunk.hpp"
 #include "runtime/compiler/compiler.hpp"
 #include "runtime/compiler/opcode.hpp"
+#include "runtime/compiler/opcode_metadata.hpp"
 #include "runtime/compiler/verifier.hpp"
+#include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::BytecodeVerifier;
+using luma::CompiledFunction;
+using luma::Compiler;
+using luma::Op;
+using luma::Value;
 
 // ─── Helpers ───
 
@@ -25,25 +34,21 @@ static CompiledFunction make_func(std::initializer_list<std::uint8_t> bytes, int
 
 static bool has_error_containing(const std::vector<BytecodeVerifier::VerifyError>& errors,
                                  const std::string& substr) {
-    for (const auto& err : errors) {
-        if (err.message.find(substr) != std::string::npos) {
-            return true;
-        }
-    }
-
-    return false;
+    return std::ranges::any_of(errors, [&substr](const BytecodeVerifier::VerifyError& err) {
+        return err.message.find(substr) != std::string::npos;
+    });
 }
 
 // ─── Valid bytecode passes verification ───
 
 static void test_valid_simple_bytecode() {
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::True),
         static_cast<std::uint8_t>(Op::Return),
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_TRUE(errors.empty());
 }
@@ -60,7 +65,7 @@ static void test_valid_constant_bytecode() {
     func.mutable_chunk().constants.push_back(Value{static_cast<std::int64_t>(42)});
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_TRUE(errors.empty());
 }
@@ -71,7 +76,7 @@ static void test_empty_chunk_error() {
     CompiledFunction func;
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "empty"));
@@ -80,10 +85,10 @@ static void test_empty_chunk_error() {
 // ─── Invalid opcode ───
 
 static void test_invalid_opcode_byte() {
-    auto func = make_func({0xFF}); // No valid opcode has value 0xFF.
+    const auto func = make_func({0xFF}); // No valid opcode has value 0xFF.
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "invalid opcode"));
@@ -93,13 +98,13 @@ static void test_invalid_opcode_byte() {
 
 static void test_truncated_constant_instruction() {
     // Constant needs 3 bytes but we only provide 2.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::Constant),
         0x00,
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "truncated"));
@@ -109,7 +114,7 @@ static void test_truncated_constant_instruction() {
 
 static void test_constant_index_out_of_bounds() {
     // Reference constant at index 5, but pool is empty.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::Constant),
         0x00,
         0x05,
@@ -117,7 +122,7 @@ static void test_constant_index_out_of_bounds() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "constant index"));
@@ -127,7 +132,7 @@ static void test_constant_index_out_of_bounds() {
 
 static void test_jump_target_out_of_bounds() {
     // Jump with offset that goes past the end of the code.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::Jump),
         0x00,
         0x00,
@@ -137,7 +142,7 @@ static void test_jump_target_out_of_bounds() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "jump"));
@@ -148,7 +153,7 @@ static void test_jump_target_out_of_bounds() {
 static void test_valid_jump_target() {
     // Hand-laid bytecode: opcode, then its operand bytes.
     // clang-format off
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::Jump),
         0x00, 0x00, 0x00, 0x01,                // jump +1 → offset 6
         static_cast<std::uint8_t>(Op::True),   // offset 5 (skipped)
@@ -157,19 +162,18 @@ static void test_valid_jump_target() {
     // clang-format on
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    // Filter out only jump-related errors (stack depth may report issues
-    // because Return at end doesn't push a return value).
-    bool jump_error = has_error_containing(errors, "jump");
-    ASSERT_FALSE(jump_error);
+    // The skipped True is unreachable; the Return finds the callee slot to
+    // return, so the function verifies cleanly.
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Loop underflow ───
 
 static void test_loop_underflow() {
     // Loop with offset larger than the current position.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::Loop),
         0x00,
         0x00,
@@ -179,7 +183,7 @@ static void test_loop_underflow() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "loop"));
@@ -189,7 +193,7 @@ static void test_loop_underflow() {
 
 static void test_name_index_out_of_bounds() {
     // GetGlobal references name index 5 but name table is empty.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::GetGlobal),
         0x00,
         0x05,
@@ -197,7 +201,7 @@ static void test_name_index_out_of_bounds() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "name index"));
@@ -213,26 +217,25 @@ static void test_valid_name_reference() {
         static_cast<std::uint8_t>(Op::Return),
     });
 
-    (void)func.mutable_chunk().names.add("my_var");
+    ASSERT_EQ(func.mutable_chunk().names.add("my_var"), 0U);
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool name_error = has_error_containing(errors, "name index");
-    ASSERT_FALSE(name_error);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Stack underflow ───
 
 static void test_stack_underflow() {
     // Pop with nothing on the stack.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::Pop),
         static_cast<std::uint8_t>(Op::Return),
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "stack underflow"));
@@ -243,7 +246,7 @@ static void test_stack_underflow() {
 static void test_stack_depth_with_arity() {
     // A function with arity 2 starts with the callee and 2 arguments on the
     // stack, so popping both arguments still leaves a value to return.
-    auto func = make_func(
+    const auto func = make_func(
         {
             static_cast<std::uint8_t>(Op::Pop),
             static_cast<std::uint8_t>(Op::Pop),
@@ -252,11 +255,10 @@ static void test_stack_depth_with_arity() {
         2);
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    // No stack underflow expected.
-    bool underflow = has_error_containing(errors, "stack underflow");
-    ASSERT_FALSE(underflow);
+    // No stack underflow (or any other error) expected.
+    ASSERT_TRUE(errors.empty());
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -266,7 +268,7 @@ static void test_stack_depth_with_arity() {
 // ─── Valid multi-instruction sequence ───
 
 static void test_valid_multi_instruction_sequence() {
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::True),
         static_cast<std::uint8_t>(Op::False),
         static_cast<std::uint8_t>(Op::And),
@@ -275,7 +277,7 @@ static void test_valid_multi_instruction_sequence() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_TRUE(errors.empty());
 }
@@ -285,7 +287,7 @@ static void test_valid_multi_instruction_sequence() {
 static void test_conditional_jump_valid() {
     // Hand-laid bytecode: opcode, then its operand bytes.
     // clang-format off
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::True),
         static_cast<std::uint8_t>(Op::JumpIfFalse),
         0x00, 0x00, 0x00, 0x01,                // jump +1 → offset 7
@@ -295,10 +297,9 @@ static void test_conditional_jump_valid() {
     // clang-format on
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool jump_error = has_error_containing(errors, "jump");
-    ASSERT_FALSE(jump_error);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Valid TryCatch ───
@@ -306,7 +307,7 @@ static void test_conditional_jump_valid() {
 static void test_try_catch_valid() {
     // Hand-laid bytecode: opcode, then its operand bytes.
     // clang-format off
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::TryCatch),
         0x00, 0x00, 0x00, 0x02,                // catch at offset 5+2=7
         static_cast<std::uint8_t>(Op::True),   // try body (offset 5)
@@ -316,10 +317,9 @@ static void test_try_catch_valid() {
     // clang-format on
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool jump_error = has_error_containing(errors, "jump");
-    ASSERT_FALSE(jump_error);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Valid multiple constants ───
@@ -340,16 +340,15 @@ static void test_multiple_constants_valid() {
     func.mutable_chunk().constants.push_back(Value{static_cast<std::int64_t>(20)});
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool const_error = has_error_containing(errors, "constant");
-    ASSERT_FALSE(const_error);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── ConstantLong out of bounds ───
 
 static void test_constant_long_out_of_bounds() {
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::ConstantLong),
         0x00,
         0x00,
@@ -359,7 +358,7 @@ static void test_constant_long_out_of_bounds() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "constant"));
@@ -378,20 +377,19 @@ static void test_multiple_name_ops_valid() {
         static_cast<std::uint8_t>(Op::Return),
     });
 
-    (void)func.mutable_chunk().names.add("my_module");
-    (void)func.mutable_chunk().names.add("field_name");
+    ASSERT_EQ(func.mutable_chunk().names.add("my_module"), 0U);
+    ASSERT_EQ(func.mutable_chunk().names.add("field_name"), 1U);
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool name_error = has_error_containing(errors, "name index");
-    ASSERT_FALSE(name_error);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Stack push/pop balanced ───
 
 static void test_stack_push_pop_balanced() {
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::True),
         static_cast<std::uint8_t>(Op::False),
         static_cast<std::uint8_t>(Op::Pop),
@@ -399,17 +397,16 @@ static void test_stack_push_pop_balanced() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool underflow = has_error_containing(errors, "stack underflow");
-    ASSERT_FALSE(underflow);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Stack depth with arithmetic ───
 
 static void test_stack_arithmetic_depth() {
     // Push two values, add them (net: +1), then return.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::One),
         static_cast<std::uint8_t>(Op::One),
         static_cast<std::uint8_t>(Op::Add),
@@ -417,17 +414,16 @@ static void test_stack_arithmetic_depth() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool underflow = has_error_containing(errors, "stack underflow");
-    ASSERT_FALSE(underflow);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Stack depth with MakeArray ───
 
 static void test_make_array_stack_effect() {
     // Push 3 elements, make array (3 → 1).
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::One),
         static_cast<std::uint8_t>(Op::One),
         static_cast<std::uint8_t>(Op::One),
@@ -438,17 +434,16 @@ static void test_make_array_stack_effect() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool underflow = has_error_containing(errors, "stack underflow");
-    ASSERT_FALSE(underflow);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Stack depth with Call ───
 
 static void test_call_stack_effect() {
     // Call with 0 args: pops callee, pushes result → net 0.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::True), // push callee
         static_cast<std::uint8_t>(Op::Call),
         0x00, // call with 0 args
@@ -456,24 +451,23 @@ static void test_call_stack_effect() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    // Should not underflow (callee is consumed, result pushed).
-    bool underflow = has_error_containing(errors, "stack underflow");
-    ASSERT_FALSE(underflow);
+    // No underflow: the callee is consumed and the result pushed.
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── Truncated jump instruction ───
 
 static void test_truncated_jump_instruction() {
     // Jump needs 3 bytes but only 2 provided.
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::Jump),
         0x00,
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "truncated"));
@@ -482,7 +476,7 @@ static void test_truncated_jump_instruction() {
 // ─── Field name index out of bounds ───
 
 static void test_field_name_out_of_bounds() {
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::True),
         static_cast<std::uint8_t>(Op::GetField),
         0x00,
@@ -491,7 +485,7 @@ static void test_field_name_out_of_bounds() {
     });
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "name index"));
@@ -510,7 +504,7 @@ static void test_upvalue_index_out_of_bounds() {
     func.upvalue_count = 2; // Only 2 upvalues.
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "upvalue index"));
@@ -529,10 +523,9 @@ static void test_valid_upvalue_index() {
     func.upvalue_count = 3; // 3 upvalues available (0, 1, 2).
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
-    bool upvalue_error = has_error_containing(errors, "upvalue index");
-    ASSERT_FALSE(upvalue_error);
+    ASSERT_TRUE(errors.empty());
 }
 
 // ─── SetUpvalue index out of bounds ───
@@ -549,7 +542,7 @@ static void test_set_upvalue_out_of_bounds() {
     func.upvalue_count = 1; // Only 1 upvalue.
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "upvalue index"));
@@ -568,7 +561,7 @@ static void test_upvalue_access_with_zero_upvalues() {
     func.upvalue_count = 0; // No upvalues at all.
 
     BytecodeVerifier verifier;
-    auto errors = verifier.verify(func);
+    const auto errors = verifier.verify(func);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_error_containing(errors, "upvalue index"));
@@ -606,7 +599,7 @@ static void test_make_closure_pushes_the_closure() {
         static_cast<std::uint8_t>(Op::None),
         static_cast<std::uint8_t>(Op::Return),
     });
-    (void)func.mutable_chunk().names.add("f");
+    ASSERT_EQ(func.mutable_chunk().names.add("f"), 0U);
 
     ASSERT_TRUE(BytecodeVerifier{}.verify(func).empty());
 }
@@ -736,7 +729,7 @@ static void test_make_record_pops_its_fields() {
         0x00,
         static_cast<std::uint8_t>(Op::Return),
     });
-    (void)func.mutable_chunk().names.add("Point");
+    ASSERT_EQ(func.mutable_chunk().names.add("Point"), 0U);
 
     ASSERT_TRUE(has_error_containing(BytecodeVerifier{}.verify(func), "stack underflow"));
 }
@@ -747,15 +740,15 @@ static void test_stack_effects_match_fixed_opcode_metadata() {
     // operand bytes used here never matter.
     for (std::size_t i = 0; i <= static_cast<std::size_t>(Op::EndModule); ++i) {
         const auto op = static_cast<Op>(i);
-        const auto fixed = opcode_fixed_stack_effect(op);
+        const auto fixed = luma::opcode_fixed_stack_effect(op);
 
-        if (!fixed || (opcode_flags(op) & op_flag::k_terminator) != 0) {
+        if (!fixed || (luma::opcode_flags(op) & luma::op_flag::k_terminator) != 0) {
             continue;
         }
 
         std::vector<std::uint8_t> code(8, 0);
         code[0] = static_cast<std::uint8_t>(op);
-        const auto effect = instruction_stack_effect(code, 0);
+        const auto effect = luma::instruction_stack_effect(code, 0);
 
         ASSERT_EQ(effect.pushes - effect.pops, *fixed);
     }
@@ -805,7 +798,7 @@ static void test_compiled_program_verifies() {
 // no instruction to run there.
 static void test_jump_to_code_end_is_rejected() {
     // clang-format off
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::True),
         static_cast<std::uint8_t>(Op::JumpIfFalse),
         0x00, 0x00, 0x00, 0x01,                // → offset 7 == code size
@@ -821,7 +814,7 @@ static void test_jump_to_code_end_is_rejected() {
 
 // Regression: control falling through the last instruction was never reported.
 static void test_fall_off_end_is_rejected() {
-    auto func = make_func({
+    const auto func = make_func({
         static_cast<std::uint8_t>(Op::True),
         static_cast<std::uint8_t>(Op::Pop),
     });

@@ -1,9 +1,14 @@
 // Standard library tests: Encoder.
 
+#include <array>
+#include <cstdint>
 #include <string>
-#include <vector>
 
 #include "stdlib_test_helpers.hpp"
+
+using luma::SourceLocation;
+using luma::Value;
+using luma::test::eval;
 
 static void test_encoder_base64_decode() {
     ASSERT_EVAL_STR("Encoder.decode_base64(\"aGVsbG8=\")", "hello");
@@ -127,8 +132,8 @@ static void test_encoder_url_decode_invalid() {
 
 static void test_encoder_rejects_non_string() {
     // Every Encoder function expects a string argument.
-    ASSERT_TRUE(luma::test::eval_throws("Encoder.encode_base64(123)"));
-    ASSERT_TRUE(luma::test::eval_throws("Encoder.decode_url(true)"));
+    ASSERT_EVAL_THROWS("Encoder.encode_base64(123)", "Encoder.encode_base64: expected string");
+    ASSERT_EVAL_THROWS("Encoder.decode_url(true)", "Encoder.decode_url: expected string");
 }
 
 static void test_encoder_module() {
@@ -196,13 +201,17 @@ static void test_encoder_text_rejects_ill_formed_utf8_cleanly() {
     const auto encode = env->get("Encoder.encode_text", loc);
     const auto latin1 = eval("Encoder.Encoding.Latin1");
 
-    for (const std::string bytes : {std::string{"A\xE2\x82"}, std::string{"A\x80"
-                                                                          "B"}}) {
-        std::vector<Value> args{Value{bytes}, latin1};
+    const std::string truncated_sequence{"A\xE2\x82"};
+    // Appending "B" separately keeps the hex escape from swallowing it.
+    const std::string stray_continuation = std::string{"A\x80"} + "B";
+    const std::array<std::string, 2> ill_formed{truncated_sequence, stray_continuation};
+
+    for (const auto& bytes : ill_formed) {
+        const std::array<Value, 2> args{Value{bytes}, latin1};
         const auto v = encode.as_native_function()->function(args, loc);
 
         ASSERT_RESULT_FAILURE(v);
-        ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("U+FFFD") != std::string::npos);
+        ASSERT_NE(v.as_result()->owned_inner->as_string().find("U+FFFD"), std::string::npos);
     }
 }
 

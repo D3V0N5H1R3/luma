@@ -276,6 +276,29 @@ struct UnaryExpression : Expression {
     ExpressionPtr operand;
 };
 
+/// The value of an integer literal, also seeing through a unary minus: Luma has
+/// no negative integer literals, so `-3` parses as the negation of `3`.
+/// Returns std::nullopt for anything else.
+[[nodiscard]] inline std::optional<std::int64_t>
+get_signed_integer_value(const Expression& expr) noexcept {
+    if (expr.kind == ExpressionKind::Unary) {
+        const auto& unary = static_cast<const UnaryExpression&>(expr);
+
+        if (unary.op != TokenType::Minus) {
+            return std::nullopt;
+        }
+
+        // The lexer bounds integer literals to INT64_MAX, so negation cannot overflow.
+        if (const auto magnitude = get_integer_value(*unary.operand)) {
+            return -*magnitude;
+        }
+
+        return std::nullopt;
+    }
+
+    return get_integer_value(expr);
+}
+
 struct CallExpression : Expression {
     explicit CallExpression(SourceLocation loc, ExpressionPtr callee,
                             std::vector<ExpressionPtr> arguments,

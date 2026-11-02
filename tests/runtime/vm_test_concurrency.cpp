@@ -12,6 +12,7 @@
 
 #include "analysis/errors/error.hpp"
 #include "common/resource_limits.hpp"
+#include "common/scope_guard.hpp"
 #include "runtime/compiler/compiled_function.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/environment.hpp"
@@ -19,6 +20,17 @@
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_introspection.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ArrayValue;
+using luma::BindingCopyCache;
+using luma::Environment;
+using luma::ResourceLimits;
+using luma::ScopeGuard;
+using luma::TaskScope;
+using luma::Value;
+using luma::VM;
+using luma::VMTaskManager;
+using luma::test::eval;
 
 // ─── Concurrency tests ───
 
@@ -135,28 +147,30 @@ LUMA_TEST(vm_task_is_cancelled_initially_false) {
 // exception dispatch retires it via unwind_task_scopes_to (cancelling the
 // spawned child on the way out).
 LUMA_TEST(vm_task_scope_body_error_unwinds_scope) {
-    ASSERT_TRUE(throws_runtime("function integer work(integer x) { return x * 2 }\n"
-                               "function integer f() {\n"
-                               "    task_scope {\n"
-                               "        task<integer> _t = spawn work(5)\n"
-                               "        integer _bad = [1, 2, 3][10]\n"
-                               "    }\n"
-                               "    return 0\n"
-                               "}\n"
-                               "f()"));
+    ASSERT_EVAL_THROWS("function integer work(integer x) { return x * 2 }\n"
+                       "function integer f() {\n"
+                       "    task_scope {\n"
+                       "        task<integer> _t = spawn work(5)\n"
+                       "        integer _bad = [1, 2, 3][10]\n"
+                       "    }\n"
+                       "    return 0\n"
+                       "}\n"
+                       "f()",
+                       "Index 10 out of bounds");
 }
 
 // A spawned child that fails but is never awaited surfaces its error from
 // join_all() at scope end, driving handle_task_scope_end's catch-path teardown.
 LUMA_TEST(vm_task_scope_unawaited_child_error_propagates) {
-    ASSERT_TRUE(throws_runtime("function integer boom() { return [1, 2, 3][10] }\n"
-                               "function integer f() {\n"
-                               "    task_scope {\n"
-                               "        task<integer> _t = spawn boom()\n"
-                               "    }\n"
-                               "    return 0\n"
-                               "}\n"
-                               "f()"));
+    ASSERT_EVAL_THROWS("function integer boom() { return [1, 2, 3][10] }\n"
+                       "function integer f() {\n"
+                       "    task_scope {\n"
+                       "        task<integer> _t = spawn boom()\n"
+                       "    }\n"
+                       "    return 0\n"
+                       "}\n"
+                       "f()",
+                       "Index 10 out of bounds");
 }
 
 // ─── Review regressions: cancellation, fail-fast, pool, scope unwinding ───
@@ -438,7 +452,7 @@ LUMA_TEST(vm_task_scope_fail_fast_cancels_blocked_sibling) {
                              "f()");
 
     ASSERT_TRUE(result.is_string());
-    ASSERT_TRUE(result.as_string().find("out of bounds") != std::string::npos);
+    ASSERT_NE(result.as_string().find("out of bounds"), std::string::npos);
 }
 
 // Review #1: tasks that open their own task_scope block a pool worker while
@@ -534,8 +548,9 @@ LUMA_TEST(vm_task_global_write_is_rejected) {
                              "f()");
 
     ASSERT_TRUE(result.is_string());
-    ASSERT_TRUE(result.as_string().find("cannot assign to global variable 'counter' from a "
-                                        "spawned task") != std::string::npos);
+    ASSERT_NE(result.as_string().find("cannot assign to global variable 'counter' from a "
+                                      "spawned task"),
+              std::string::npos);
 }
 
 // Code review (task global snapshot): re-snapshotting after a global write
@@ -566,32 +581,31 @@ LUMA_TEST(vm_task_snapshot_sees_latest_global_writes) {
 // copy, a binding with a new write_version is re-copied, and a binding written
 // outside the VM (k_unversioned) is always re-copied.
 LUMA_TEST(vm_task_snapshot_reuses_unchanged_binding_copies) {
-    auto env = std::make_shared<Environment>(nullptr);
-    auto big = std::make_shared<ArrayValue>();
+    const auto env = std::make_shared<Environment>(nullptr);
+    const auto big = std::make_shared<ArrayValue>();
     big->elements->assign(1000, Value{std::int64_t{1}});
-    env->define("big", Value{big}, true);
-    env->define("n", Value{std::int64_t{0}}, true);
-    env->define("Math.pi", Value{3.14}, false);
+    env->define("big", Value{big}, /*is_mutable=*/true);
+    env->define("n", Value{std::int64_t{0}}, /*is_mutable=*/true);
+    env->define("Math.pi", Value{3.14}, /*is_mutable=*/false);
 
     BindingCopyCache cache;
     const auto first = env->copy_bindings(nullptr, /*mutable_bindings=*/true, cache);
 
-    auto* n = env->find_binding("n");
+    auto* const n = env->find_binding("n");
     n->value = Value{std::int64_t{1}};
     n->write_version = 1;
     const auto second = env->copy_bindings(nullptr, /*mutable_bindings=*/true, cache);
 
-    const auto* big_first = first->find_binding("big")->value.as_array().get();
-    const auto* big_second = second->find_binding("big")->value.as_array().get();
-    ASSERT_TRUE(big_first != big.get());  // Still an isolated deep copy...
-    ASSERT_TRUE(big_first == big_second); // ...made once and then shared.
+    const auto* const big_first = first->find_binding("big")->value.as_array().get();
+    const auto* const big_second = second->find_binding("big")->value.as_array().get();
+    ASSERT_NE(big_first, big.get());  // Still an isolated deep copy...
+    ASSERT_EQ(big_first, big_second); // ...made once and then shared.
     ASSERT_EQ(second->find_binding("n")->value.as_integer(), 1);
     ASSERT_FALSE(second->has_local("Math.pi")); // Immutable bindings live in the base layer.
 
     env->set("big", Value{std::make_shared<ArrayValue>()}, {}); // Written outside the VM.
     const auto third = env->copy_bindings(nullptr, /*mutable_bindings=*/true, cache);
-    ASSERT_EQ(third->find_binding("big")->value.as_array()->elements->size(),
-              static_cast<std::size_t>(0));
+    ASSERT_EQ(third->find_binding("big")->value.as_array()->elements->size(), 0);
 }
 
 // Perf guard for the same review finding: one global write per spawn used to
@@ -627,7 +641,7 @@ LUMA_TEST(vm_task_snapshot_after_global_write_does_not_recopy_unchanged_globals)
     const auto without_writes = time_run("spawn_all(false)");
     const auto with_writes = time_run("spawn_all(true)");
 
-    ASSERT_TRUE(with_writes < (without_writes * 4) + std::chrono::milliseconds{250});
+    ASSERT_LT(with_writes, (without_writes * 4) + std::chrono::milliseconds{250});
 }
 
 // Review #4: ~VM used to null the thread's current task_scope unconditionally,
@@ -635,17 +649,18 @@ LUMA_TEST(vm_task_snapshot_after_global_write_does_not_recopy_unchanged_globals)
 // debugger's scratch VM evaluating a conditional breakpoint inside a scope).
 LUMA_TEST(vm_destructor_preserves_foreign_task_scope) {
     TaskScope scope;
+    auto* const outer_scope = VMTaskManager::current_scope;
     VMTaskManager::current_scope = &scope;
+    // Restore the thread-local even if VM construction throws, so it never
+    // dangles at the stack-local scope.
+    const ScopeGuard restore_scope{[outer_scope] { VMTaskManager::current_scope = outer_scope; }};
 
     {
         const auto env = luma::test::make_std_env();
         const VM scratch{env};
     }
 
-    const bool preserved = VMTaskManager::current_scope == &scope;
-    VMTaskManager::current_scope = nullptr;
-
-    ASSERT_TRUE(preserved);
+    ASSERT_EQ(VMTaskManager::current_scope, &scope);
 }
 
 // ─── Main ───

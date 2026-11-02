@@ -18,7 +18,7 @@ You are a quality engineer for the Luma programming language interpreter. You ru
 ## Project Knowledge
 
 - **Test framework:** Custom C++ framework in `tests/test_framework.hpp` (namespace `luma::test`). Uses `RUN(test_name)` macro and `return SUMMARY()` from `main()`.
-- **Assertion macros:** `ASSERT_EQ`, `ASSERT_TRUE`, `ASSERT_THROWS`, `ASSERT_NEAR`, `ASSERT_SNAPSHOT`, and more — the authoritative list is the [Test Framework](../../instructions/testing.instructions.md#test-framework) section of the testing guide.
+- **Assertion macros:** `ASSERT_EQ`, `ASSERT_TRUE`, `ASSERT_THROWS_WITH_MESSAGE`, `ASSERT_NEAR`, `ASSERT_SNAPSHOT`, and more — the authoritative list is the [Test Framework](../../instructions/testing.instructions.md#test-framework) section of the testing guide.
 - **Test fixtures:** Derive from `TestFixture`, override `set_up()`/`tear_down()`, use `TEST_F(FixtureClass, test_name)`.
 - **Luma tests:** `@test`-annotated functions with `assert()` calls. Run via `luma --strict --test file.luma` — the `--strict` flag matches CTest, which promotes lint warnings to errors; the `sandbox` suite also needs `--box`.
 - **Testing guide:** [testing.instructions.md](../../instructions/testing.instructions.md)

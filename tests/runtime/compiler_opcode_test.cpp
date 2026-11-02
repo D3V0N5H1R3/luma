@@ -4,44 +4,28 @@
 
 #include <array>
 #include <cstddef>
-#include <optional>
 #include <string>
 
+#include "analysis/types/type_checker.hpp"
 #include "compiler_test_helpers.hpp"
 #include "runtime/compiler/chunk.hpp"
 #include "runtime/compiler/compiler.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/compiler/opcode_metadata.hpp"
-#include "shared_eval.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::Compiler;
+using luma::CompileResult;
+using luma::Op;
+using luma::OperandCategory;
+using luma::OperandLayout;
+using luma::TypeChecker;
+using luma::test::any_function_has_opcode;
+using luma::test::compile;
+using luma::test::compile_script;
+using luma::test::count_opcode;
+using luma::test::decode_instructions;
 using luma::test::has_opcode;
-
-// ─── Helpers ───
-
-static CompileResult compile(const std::string& source, bool repl_mode = true) {
-    const auto program = luma::test::lex_and_parse(source);
-
-    Compiler compiler;
-
-    return compiler.compile(program, repl_mode);
-}
-
-// Search for an opcode in any compiled function, including the top-level chunk.
-static bool any_func_has_opcode(const CompileResult& result, Op op) {
-    if (has_opcode(result.top_level.chunk(), op)) {
-        return true;
-    }
-
-    for (const auto& fn : result.functions) {
-        if (has_opcode(fn.chunk(), op)) {
-            return true;
-        }
-    }
-
-    return false;
-}
 
 // ═══════════════════════════════════════════════════════════
 // Records
@@ -54,7 +38,7 @@ static void test_compile_make_record() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::MakeRecord));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::MakeRecord));
 }
 
 static void test_compile_get_field() {
@@ -65,7 +49,7 @@ static void test_compile_get_field() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::GetField));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::GetField));
 }
 
 static void test_compile_set_field() {
@@ -76,7 +60,7 @@ static void test_compile_set_field() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::SetField));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::SetField));
 }
 
 static void test_compile_record_with() {
@@ -87,7 +71,7 @@ static void test_compile_record_with() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::RecordWith));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::RecordWith));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -105,7 +89,7 @@ static void test_compile_make_choice() {
 
     ASSERT_TRUE(result.success);
     // Choice construction compiles as a regular call to the variant constructor.
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Call));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Call));
 }
 
 static void test_compile_make_choice_constructor() {
@@ -121,7 +105,7 @@ static void test_compile_make_choice_constructor() {
 
     ASSERT_TRUE(result.success);
     // The top-level chunk registers each data variant constructor via MakeChoiceConstructor.
-    ASSERT_TRUE(any_func_has_opcode(result, Op::MakeChoiceConstructor));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::MakeChoiceConstructor));
 }
 
 static void test_disassemble_make_choice_constructor() {
@@ -144,8 +128,8 @@ static void test_disassemble_make_choice_constructor() {
         listing += fn.chunk().disassemble(fn.name);
     }
 
-    ASSERT_TRUE(listing.find("MakeChoiceConstructor") != std::string::npos);
-    ASSERT_TRUE(listing.find("UNKNOWN") == std::string::npos);
+    ASSERT_NE(listing.find("MakeChoiceConstructor"), std::string::npos);
+    ASSERT_EQ(listing.find("UNKNOWN"), std::string::npos);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -162,8 +146,8 @@ static void test_compile_match_start_end() {
 
     ASSERT_TRUE(result.success);
     // Match compiles to equality checks and conditional jumps.
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Equal));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::JumpIfFalse));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Equal));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::JumpIfFalse));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -176,7 +160,7 @@ static void test_compile_pipe() {
 
     ASSERT_TRUE(result.success);
     // Pipe compiles the left value and right callee, then emits a Call.
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Call));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Call));
 }
 
 static void test_compile_error_pipe() {
@@ -187,8 +171,8 @@ static void test_compile_error_pipe() {
 
     ASSERT_TRUE(result.success);
     // Error pipe compiles as Dup + IsSuccess + JumpIfFalse + Unwrap + Call.
-    ASSERT_TRUE(any_func_has_opcode(result, Op::IsSuccess));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Unwrap));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::IsSuccess));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Unwrap));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -199,21 +183,21 @@ static void test_compile_make_success() {
     const auto result = compile("function result<integer> f() { return success(42) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::MakeSuccess));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::MakeSuccess));
 }
 
 static void test_compile_make_failure() {
     const auto result = compile("function result<integer> f() { return failure(\"err\") }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::MakeFailure));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::MakeFailure));
 }
 
 static void test_compile_make_some() {
     const auto result = compile("function optional<integer> f() { return some(42) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::MakeSome));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::MakeSome));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -227,7 +211,7 @@ static void test_compile_null_coalesce() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::NullCoalesce));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::NullCoalesce));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -242,7 +226,9 @@ static void test_compile_pop() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Pop));
+    ASSERT_EQ(result.functions.size(), 1U);
+    // One Pop per discarded expression statement.
+    ASSERT_EQ(count_opcode(result.functions[0].chunk(), Op::Pop), 2U);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -269,8 +255,8 @@ static void test_compile_for_iter_kv() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::ForIterInit));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::ForIterStepKV));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::ForIterInit));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::ForIterStepKV));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -335,35 +321,35 @@ static void test_compile_subtract() {
     const auto result = compile("function integer f(integer a, integer b) { return a - b }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Subtract));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Subtract));
 }
 
 static void test_compile_multiply() {
     const auto result = compile("function integer f(integer a, integer b) { return a * b }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Multiply));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Multiply));
 }
 
 static void test_compile_divide() {
     const auto result = compile("function number f(number a, number b) { return a / b }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Divide));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Divide));
 }
 
 static void test_compile_int_divide() {
     const auto result = compile("function integer f(integer a, integer b) { return a // b }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::IntDivide));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::IntDivide));
 }
 
 static void test_compile_modulo() {
     const auto result = compile("function integer f(integer a, integer b) { return a % b }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Modulo));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Modulo));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -375,8 +361,8 @@ static void test_compile_print() {
     const auto result = compile("function void f() { print(42) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::GetGlobal));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Call));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::GetGlobal));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Call));
 }
 
 static void test_compile_assert() {
@@ -384,8 +370,8 @@ static void test_compile_assert() {
     const auto result = compile("function void f() { assert(true) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::GetGlobal));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Call));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::GetGlobal));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Call));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -399,7 +385,7 @@ static void test_compile_index_set() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::IndexSet));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::IndexSet));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -413,7 +399,7 @@ static void test_compile_get_upvalue() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::GetUpvalue));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::GetUpvalue));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -422,22 +408,27 @@ static void test_compile_get_upvalue() {
 
 static void test_compile_end_module() {
     // In non-REPL mode, the top-level chunk ends with a terminator.
-    const auto result = compile("42", /*repl_mode=*/false);
+    const auto result = compile_script("42");
 
     ASSERT_TRUE(result.success);
+
+    const auto instructions = decode_instructions(result.top_level.chunk());
     // The chunk must contain at least one instruction.
-    ASSERT_TRUE(!result.top_level.chunk().code.empty());
-    // The last opcode should be a terminator (Return or EndModule).
-    auto last_op = static_cast<Op>(result.top_level.chunk().code.back());
+    ASSERT_FALSE(instructions.empty());
+    // The last instruction should be a terminator (Return or EndModule).
+    const auto last_op = instructions.back().op;
     ASSERT_TRUE(last_op == Op::Return || last_op == Op::EndModule);
 }
 
 // ═══════════════════════════════════════════════════════════
-// Dup (duplicate top of stack)
+// Assignment statement (SetLocalPop)
 // ═══════════════════════════════════════════════════════════
 
-static void test_compile_dup_via_set_local() {
-    // SetLocal peeks — compiler may emit Dup in some patterns.
+static void test_compile_assignment_statement_uses_set_local_pop() {
+    // An assignment used as a statement discards its value, so the compiler
+    // emits the fused SetLocalPop rather than SetLocal + Pop; the later read is
+    // a plain GetLocal (no Dup: the unoptimised compile does not apply the
+    // SetLocal+GetLocal → SetLocal+Dup peephole).
     const auto result = compile("function integer f() {\n"
                                 "    mutable integer x = 0\n"
                                 "    x = 5\n"
@@ -445,10 +436,13 @@ static void test_compile_dup_via_set_local() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    // After peephole: SetLocal+GetLocal → SetLocal+Dup (optimizer).
-    // The compiled bytecode should have the SetLocal at minimum.
-    ASSERT_TRUE(any_func_has_opcode(result, Op::SetLocal) ||
-                any_func_has_opcode(result, Op::SetLocalPop));
+    ASSERT_EQ(result.functions.size(), 1U);
+
+    const auto& chunk = result.functions[0].chunk();
+    ASSERT_EQ(count_opcode(chunk, Op::SetLocalPop), 1U);
+    ASSERT_FALSE(has_opcode(chunk, Op::SetLocal));
+    ASSERT_TRUE(has_opcode(chunk, Op::GetLocal));
+    ASSERT_FALSE(has_opcode(chunk, Op::Dup));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -460,7 +454,7 @@ static void test_compile_call_named() {
                                 "function string f() { return greet(name: \"Alice\", age: 30) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::CallNamed));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::CallNamed));
 }
 
 static void test_compile_call_named_mixed() {
@@ -469,7 +463,7 @@ static void test_compile_call_named_mixed() {
                 "function string f() { return greet(\"Alice\", active: true, age: 30) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::CallNamed));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::CallNamed));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -481,7 +475,7 @@ static void test_compile_downcast() {
         compile("function result<string> f(integer x) { return downcast<string>(x) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Downcast));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Downcast));
 }
 
 static void test_compile_trusted_downcast() {
@@ -489,14 +483,14 @@ static void test_compile_trusted_downcast() {
         compile("function string f(integer x) { return trusted_downcast<string>(x) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::TrustedDowncast));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::TrustedDowncast));
 }
 
 static void test_compile_is_type() {
     const auto result = compile("function boolean f(integer x) { return is<integer>(x) }");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::IsType));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::IsType));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -510,7 +504,7 @@ static void test_compile_tail_call() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::TailCall));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::TailCall));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -524,7 +518,7 @@ static void test_compile_clone_mutable() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Clone));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Clone));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -541,8 +535,8 @@ static void test_compile_field_write_through_index_uses_unique_ops() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::UniqueLocal));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::IndexGetUnique));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::UniqueLocal));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::IndexGetUnique));
 }
 
 static void test_compile_nested_field_write_uses_unique_ops() {
@@ -564,8 +558,8 @@ static void test_compile_reads_emit_no_unique_ops() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_FALSE(any_func_has_opcode(result, Op::UniqueLocal));
-    ASSERT_FALSE(any_func_has_opcode(result, Op::IndexGetUnique));
+    ASSERT_FALSE(any_function_has_opcode(result, Op::UniqueLocal));
+    ASSERT_FALSE(any_function_has_opcode(result, Op::IndexGetUnique));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -585,7 +579,8 @@ static CompileResult compile_checked(const std::string& source) {
     const auto program = luma::test::lex_and_parse(source);
 
     TypeChecker checker;
-    (void)checker.check(program, /*require_main=*/false);
+    const auto diagnostics = checker.check(program, /*require_main=*/false);
+    ASSERT_TRUE(diagnostics.empty());
 
     Compiler compiler;
 
@@ -622,7 +617,7 @@ static void test_compile_get_field_opt() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::GetFieldOpt));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::GetFieldOpt));
 }
 
 static void test_compile_index_get_opt() {
@@ -632,7 +627,7 @@ static void test_compile_index_get_opt() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::IndexGetOpt));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::IndexGetOpt));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -651,8 +646,8 @@ static void test_compile_try_finally_emits_rethrow() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::TryCatch));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Rethrow));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::TryCatch));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Rethrow));
 }
 
 static void test_compile_try_catch_finally_emits_rethrow() {
@@ -670,8 +665,8 @@ static void test_compile_try_catch_finally_emits_rethrow() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::TryCatch));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Rethrow));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::TryCatch));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Rethrow));
 }
 
 static void test_compile_try_catch_has_no_rethrow() {
@@ -686,8 +681,8 @@ static void test_compile_try_catch_has_no_rethrow() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::TryCatch));
-    ASSERT_FALSE(any_func_has_opcode(result, Op::Rethrow));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::TryCatch));
+    ASSERT_FALSE(any_function_has_opcode(result, Op::Rethrow));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -701,7 +696,7 @@ static void test_compile_spawn() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Spawn));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Spawn));
 }
 
 static void test_compile_await() {
@@ -712,7 +707,7 @@ static void test_compile_await() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::Await));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::Await));
 }
 
 static void test_compile_task_scope() {
@@ -724,8 +719,8 @@ static void test_compile_task_scope() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(any_func_has_opcode(result, Op::TaskScopeBegin));
-    ASSERT_TRUE(any_func_has_opcode(result, Op::TaskScopeEnd));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::TaskScopeBegin));
+    ASSERT_TRUE(any_function_has_opcode(result, Op::TaskScopeEnd));
 }
 
 // ─── main ───
@@ -1007,8 +1002,8 @@ int main() {
     // EndModule.
     RUN(test_compile_end_module);
 
-    // Dup.
-    RUN(test_compile_dup_via_set_local);
+    // Assignment statement.
+    RUN(test_compile_assignment_statement_uses_set_local_pop);
 
     // Named arguments.
     RUN(test_compile_call_named);

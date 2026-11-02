@@ -12,7 +12,12 @@
 #include "test_framework.hpp"
 #include "variable_inspector.hpp"
 
-using namespace luma::dap;
+using luma::dap::GenerationalEntry;
+using luma::dap::ScopeRef;
+using luma::dap::ScopeType;
+using luma::dap::ThreadState;
+using luma::dap::ValueRef;
+using luma::dap::VariableInspector;
 using luma::json::JsonValue;
 
 namespace {

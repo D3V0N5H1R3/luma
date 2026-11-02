@@ -1,6 +1,17 @@
 // Type checker unit tests — basic type checking fundamentals.
 
+#include <algorithm>
+#include <string>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::TypeChecker;
+using luma::test::fails;
+using luma::test::fails_with;
+using luma::test::parse;
+using luma::test::passes;
 
 // ─── Basic valid programs ───
 
@@ -401,10 +412,14 @@ static void test_main_with_params_error() {
 
 static void test_missing_main_is_error() {
     // A program with no @main should be a type error (require_main = true).
-    const auto errors = check("function integer add(integer a, integer b) { return a + b }\n",
-                              /*require_main=*/true);
+    const auto program = parse("function integer add(integer a, integer b) { return a + b }\n");
 
-    ASSERT_FALSE(errors.empty());
+    TypeChecker checker;
+    const auto errors = checker.check(program, /*require_main=*/true);
+
+    ASSERT_TRUE(std::ranges::any_of(errors, [](const Diagnostic& d) {
+        return d.message.find("no @main function found") != std::string::npos;
+    }));
 }
 
 static void test_missing_main_ok_for_tests() {

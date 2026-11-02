@@ -1,14 +1,30 @@
 // UTF-8 utility function unit tests.
 
+#include <array>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
+#include <string_view>
 
 #include "common/utf8.hpp"
 #include "common/utf8_iterator.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::decode_surrogate_pair;
+using luma::is_utf8_continuation;
+using luma::k_utf8_replacement_char;
+using luma::utf8_advance;
+using luma::utf8_byte_offset;
+using luma::utf8_char_at_byte;
+using luma::utf8_codepoint_count;
+using luma::utf8_codepoint_index;
+using luma::utf8_codepoint_len;
+using luma::utf8_count;
+using luma::utf8_decode;
+using luma::utf8_decode_at;
+using luma::utf8_encode;
+using luma::utf8_seek_to_codepoint;
+using luma::UTF8Iterator;
 
 // ═══════════════════════════════════════════════════════════
 // utf8_codepoint_len
@@ -89,16 +105,16 @@ static void test_count_empty() {
 
 static void test_count_multibyte() {
     // "Ä" = 2 bytes (U+00C4), "€" = 3 bytes (U+20AC).
-    std::string s = "\xC3\x84"; // Ä
+    const std::string s = "\xC3\x84"; // Ä
     ASSERT_EQ(utf8_count(s), 1);
 
-    std::string euro = "\xE2\x82\xAC"; // €
+    const std::string euro = "\xE2\x82\xAC"; // €
     ASSERT_EQ(utf8_count(euro), 1);
 }
 
 static void test_count_mixed() {
     // "Aä" = 1 ASCII + 1 two-byte = 3 bytes, 2 codepoints.
-    std::string s = "A\xC3\xA4";
+    const std::string s = "A\xC3\xA4";
     ASSERT_EQ(utf8_count(s), 2);
 }
 
@@ -114,8 +130,8 @@ static void test_byte_offset_ascii() {
 
 static void test_byte_offset_multibyte() {
     // "äb" = 2-byte + 1-byte = byte offsets: ä at 0, b at 2.
-    std::string s = "\xC3\xA4"
-                    "b";
+    const std::string s = "\xC3\xA4"
+                          "b";
     ASSERT_EQ(utf8_byte_offset(s, 0), 0U);
     ASSERT_EQ(utf8_byte_offset(s, 1), 2U); // 'b' starts at byte 2.
 }
@@ -131,8 +147,8 @@ static void test_codepoint_index_ascii() {
 
 static void test_codepoint_index_multibyte() {
     // "äb" = ä(2 bytes) + b(1 byte).
-    std::string s = "\xC3\xA4"
-                    "b";
+    const std::string s = "\xC3\xA4"
+                          "b";
     ASSERT_EQ(utf8_codepoint_index(s, 0), 0); // byte 0 = codepoint 0.
     ASSERT_EQ(utf8_codepoint_index(s, 2), 1); // byte 2 = codepoint 1 ('b').
 }
@@ -147,8 +163,8 @@ static void test_char_at_byte_ascii() {
 }
 
 static void test_char_at_byte_multibyte() {
-    std::string s = "\xC3\xA4"
-                    "b";                            // äb
+    const std::string s = "\xC3\xA4"
+                          "b";                      // äb
     ASSERT_EQ(utf8_char_at_byte(s, 0), "\xC3\xA4"); // ä (2 bytes).
     ASSERT_EQ(utf8_char_at_byte(s, 2), "b");
 }
@@ -166,17 +182,17 @@ static void test_decode_ascii() {
 }
 
 static void test_decode_two_byte() {
-    std::string s = "\xC3\xA4"; // ä = U+00E4
+    const std::string s = "\xC3\xA4"; // ä = U+00E4
     ASSERT_EQ(utf8_decode_at(s, 0), 0x00E4U);
 }
 
 static void test_decode_three_byte() {
-    std::string s = "\xE2\x82\xAC"; // € = U+20AC
+    const std::string s = "\xE2\x82\xAC"; // € = U+20AC
     ASSERT_EQ(utf8_decode_at(s, 0), 0x20ACU);
 }
 
 static void test_decode_four_byte() {
-    std::string s = "\xF0\x9F\x98\x80"; // 😀 = U+1F600
+    const std::string s = "\xF0\x9F\x98\x80"; // 😀 = U+1F600
     ASSERT_EQ(utf8_decode_at(s, 0), 0x1F600U);
 }
 
@@ -189,17 +205,17 @@ static void test_encode_ascii() {
 }
 
 static void test_encode_two_byte() {
-    std::string expected = "\xC3\xA4"; // ä = U+00E4
+    const std::string expected = "\xC3\xA4"; // ä = U+00E4
     ASSERT_EQ(utf8_encode(0x00E4), expected);
 }
 
 static void test_encode_three_byte() {
-    std::string expected = "\xE2\x82\xAC"; // € = U+20AC
+    const std::string expected = "\xE2\x82\xAC"; // € = U+20AC
     ASSERT_EQ(utf8_encode(0x20AC), expected);
 }
 
 static void test_encode_four_byte() {
-    std::string expected = "\xF0\x9F\x98\x80"; // 😀 = U+1F600
+    const std::string expected = "\xF0\x9F\x98\x80"; // 😀 = U+1F600
     ASSERT_EQ(utf8_encode(0x1F600), expected);
 }
 
@@ -215,11 +231,11 @@ static void test_encode_invalid_codepoint() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_round_trip() {
-    const std::uint32_t codepoints[] = {0x41, 0xE4, 0x20AC, 0x1F600};
+    const std::array<std::uint32_t, 4> codepoints = {0x41, 0xE4, 0x20AC, 0x1F600};
 
-    for (auto cp : codepoints) {
-        auto encoded = utf8_encode(cp);
-        auto decoded = utf8_decode_at(encoded, 0);
+    for (const auto cp : codepoints) {
+        const auto encoded = utf8_encode(cp);
+        const auto decoded = utf8_decode_at(encoded, 0);
         ASSERT_EQ(decoded, cp);
     }
 }
@@ -250,19 +266,19 @@ static void test_codepoint_len_invalid_bytes() {
 
 static void test_decode_truncated_two_byte() {
     // Two-byte start byte with no continuation — decodes as U+FFFD.
-    std::string s{static_cast<char>(0xC3)};
+    const std::string s{static_cast<char>(0xC3)};
     ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_truncated_three_byte() {
     // Three-byte start byte with only one continuation.
-    std::string s{static_cast<char>(0xE2), static_cast<char>(0x82)};
+    const std::string s{static_cast<char>(0xE2), static_cast<char>(0x82)};
     ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_truncated_four_byte() {
     // Four-byte start byte with only two continuations.
-    std::string s{static_cast<char>(0xF0), static_cast<char>(0x9F), static_cast<char>(0x98)};
+    const std::string s{static_cast<char>(0xF0), static_cast<char>(0x9F), static_cast<char>(0x98)};
     ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
@@ -270,33 +286,34 @@ static void test_decode_invalid_continuation_two_byte() {
     // Two-byte leader followed by a non-continuation byte ('A', 0x41). The
     // sequence is malformed, so decoding yields U+FFFD rather than masking
     // the following byte into a bogus codepoint.
-    std::string s{static_cast<char>(0xC3), 'A'};
+    const std::string s{static_cast<char>(0xC3), 'A'};
     ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_invalid_continuation_three_byte() {
     // Three-byte leader with a valid first continuation but an invalid second
     // (0x41 is not 10xxxxxx) — decodes as U+FFFD.
-    std::string s{static_cast<char>(0xE2), static_cast<char>(0x82), 'A'};
+    const std::string s{static_cast<char>(0xE2), static_cast<char>(0x82), 'A'};
     ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_decode_invalid_continuation_four_byte() {
     // Four-byte leader whose final byte is not a continuation byte — decodes
     // as U+FFFD.
-    std::string s{static_cast<char>(0xF0), static_cast<char>(0x9F), static_cast<char>(0x98), 'A'};
+    const std::string s{static_cast<char>(0xF0), static_cast<char>(0x9F), static_cast<char>(0x98),
+                        'A'};
     ASSERT_EQ(utf8_decode_at(s, 0), k_utf8_replacement_char);
 }
 
 static void test_count_bare_continuation_bytes() {
     // Each bare continuation byte is treated as a single-byte codepoint.
-    std::string s{static_cast<char>(0x80), static_cast<char>(0xBF)};
+    const std::string s{static_cast<char>(0x80), static_cast<char>(0xBF)};
     ASSERT_EQ(utf8_count(s), 2);
 }
 
 static void test_char_at_byte_truncated() {
     // Two-byte leader at end of string — should return the partial sequence.
-    std::string s{static_cast<char>(0xC3)};
+    const std::string s{static_cast<char>(0xC3)};
     ASSERT_EQ(utf8_char_at_byte(s, 0), std::string{static_cast<char>(0xC3)});
 }
 
@@ -320,11 +337,14 @@ static void test_encode_surrogates_rejected() {
 static void test_decode_surrogate_pair_helper() {
     // decode_surrogate_pair combines a high+low pair into a codepoint.
     // U+D800 + U+DC00 => U+10000
-    ASSERT_EQ(static_cast<uint32_t>(decode_surrogate_pair(0xD800, 0xDC00)), uint32_t{0x10000});
+    ASSERT_EQ(static_cast<std::uint32_t>(decode_surrogate_pair(0xD800, 0xDC00)),
+              std::uint32_t{0x10000});
     // U+DBFF + U+DFFF => U+10FFFF
-    ASSERT_EQ(static_cast<uint32_t>(decode_surrogate_pair(0xDBFF, 0xDFFF)), uint32_t{0x10FFFF});
+    ASSERT_EQ(static_cast<std::uint32_t>(decode_surrogate_pair(0xDBFF, 0xDFFF)),
+              std::uint32_t{0x10FFFF});
     // U+D83D + U+DE00 => U+1F600 (😀)
-    ASSERT_EQ(static_cast<uint32_t>(decode_surrogate_pair(0xD83D, 0xDE00)), uint32_t{0x1F600});
+    ASSERT_EQ(static_cast<std::uint32_t>(decode_surrogate_pair(0xD83D, 0xDE00)),
+              std::uint32_t{0x1F600});
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -369,7 +389,7 @@ static void test_encode_boundary_three_four_byte() {
 
 static void test_encode_maximum_codepoint() {
     // U+10FFFF is the maximum valid codepoint.
-    auto s = utf8_encode(0x10FFFF);
+    const auto s = utf8_encode(0x10FFFF);
     ASSERT_EQ(s.size(), 4U);
     ASSERT_EQ(utf8_decode_at(s, 0), 0x10FFFFU);
 
@@ -397,7 +417,7 @@ static void test_single_byte_ascii() {
     ASSERT_EQ(utf8_encode(' '), " ");
 
     // DEL (0x7F) — last single-byte value.
-    auto s = utf8_encode(0x7F);
+    const auto s = utf8_encode(0x7F);
     ASSERT_EQ(s.size(), 1U);
     ASSERT_EQ(utf8_decode_at(s, 0), 0x7FU);
 }
@@ -408,14 +428,14 @@ static void test_single_byte_ascii() {
 
 static void test_count_four_byte_chars() {
     // Two emoji: 😀😀 = 8 bytes, 2 codepoints.
-    std::string s = "\xF0\x9F\x98\x80\xF0\x9F\x98\x80";
+    const std::string s = "\xF0\x9F\x98\x80\xF0\x9F\x98\x80";
     ASSERT_EQ(utf8_count(s), 2);
 }
 
 static void test_byte_offset_four_byte() {
     // "😀b" = 4-byte emoji + 1-byte 'b'.
-    std::string s = "\xF0\x9F\x98\x80"
-                    "b";
+    const std::string s = "\xF0\x9F\x98\x80"
+                          "b";
     ASSERT_EQ(utf8_byte_offset(s, 0), 0U);
     ASSERT_EQ(utf8_byte_offset(s, 1), 4U); // 'b' starts at byte 4.
     ASSERT_EQ(utf8_byte_offset(s, 2), 5U); // Past the end.
@@ -423,28 +443,28 @@ static void test_byte_offset_four_byte() {
 
 static void test_codepoint_index_four_byte() {
     // "😀b" = emoji(4 bytes) + b(1 byte).
-    std::string s = "\xF0\x9F\x98\x80"
-                    "b";
+    const std::string s = "\xF0\x9F\x98\x80"
+                          "b";
     ASSERT_EQ(utf8_codepoint_index(s, 0), 0); // Byte 0 = codepoint 0.
     ASSERT_EQ(utf8_codepoint_index(s, 4), 1); // Byte 4 = codepoint 1 ('b').
 }
 
 static void test_char_at_byte_four_byte() {
     // "😀b" — first char is 4 bytes.
-    std::string s = "\xF0\x9F\x98\x80"
-                    "b";
+    const std::string s = "\xF0\x9F\x98\x80"
+                          "b";
     ASSERT_EQ(utf8_char_at_byte(s, 0), "\xF0\x9F\x98\x80");
     ASSERT_EQ(utf8_char_at_byte(s, 4), "b");
 }
 
 static void test_round_trip_boundaries() {
-    const std::uint32_t boundary_codepoints[] = {0x00,   0x7F,   0x80,    0x07FF,
-                                                 0x0800, 0xFFFF, 0x10000, 0x10FFFF};
+    const std::array<std::uint32_t, 8> boundary_codepoints = {0x00,   0x7F,   0x80,    0x07FF,
+                                                              0x0800, 0xFFFF, 0x10000, 0x10FFFF};
 
-    for (auto cp : boundary_codepoints) {
-        auto encoded = utf8_encode(cp);
-        ASSERT_TRUE(!encoded.empty());
-        auto decoded = utf8_decode_at(encoded, 0);
+    for (const auto cp : boundary_codepoints) {
+        const auto encoded = utf8_encode(cp);
+        ASSERT_FALSE(encoded.empty());
+        const auto decoded = utf8_decode_at(encoded, 0);
         ASSERT_EQ(decoded, cp);
     }
 }
@@ -471,7 +491,7 @@ static void test_is_utf8_continuation() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_iterator_empty() {
-    UTF8Iterator it{""};
+    const UTF8Iterator it{""};
     ASSERT_TRUE(it.at_end());
     ASSERT_EQ(it.byte_offset(), 0U);
     ASSERT_EQ(it.codepoint_index(), 0U);
@@ -479,7 +499,7 @@ static void test_iterator_empty() {
 
 static void test_iterator_mixed_sequence() {
     // "Aä€😀" = 1 + 2 + 3 + 4 = 10 bytes, 4 codepoints.
-    std::string s = "A\xC3\xA4\xE2\x82\xAC\xF0\x9F\x98\x80";
+    const std::string s = "A\xC3\xA4\xE2\x82\xAC\xF0\x9F\x98\x80";
 
     UTF8Iterator it{s};
     ASSERT_EQ(static_cast<std::uint32_t>(it.next()), static_cast<std::uint32_t>('A'));
@@ -493,7 +513,7 @@ static void test_iterator_mixed_sequence() {
 
 static void test_utf8_seek_to_codepoint() {
     // "Aä€😀" = 1 + 2 + 3 + 4 = 10 bytes.
-    std::string s = "A\xC3\xA4\xE2\x82\xAC\xF0\x9F\x98\x80";
+    const std::string s = "A\xC3\xA4\xE2\x82\xAC\xF0\x9F\x98\x80";
     ASSERT_EQ(utf8_seek_to_codepoint(s, 0), 0U);
     ASSERT_EQ(utf8_seek_to_codepoint(s, 1), 1U);  // After 'A'.
     ASSERT_EQ(utf8_seek_to_codepoint(s, 2), 3U);  // After 'ä'.

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -10,6 +11,12 @@
 #include "common/resource_limits.hpp"
 #include "runtime/stdlib/io/http_module_response.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ChunkedBodyDecoder;
+using luma::parse_response;
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
 
 namespace {
 
@@ -72,10 +79,10 @@ static void test_http_https_reaches_request_pipeline() {
     const auto message = v.as_result()->owned_inner->as_string();
 
 #if defined(LUMA_HAS_TLS) && LUMA_HAS_TLS
-    ASSERT_TRUE(message.find("requires TLS") == std::string::npos);
-    ASSERT_TRUE(message.find("blocked") != std::string::npos);
+    ASSERT_EQ(message.find("requires TLS"), std::string::npos);
+    ASSERT_NE(message.find("blocked"), std::string::npos);
 #else
-    ASSERT_TRUE(message.find("requires TLS") != std::string::npos);
+    ASSERT_NE(message.find("requires TLS"), std::string::npos);
 #endif
 }
 
@@ -205,7 +212,8 @@ static void test_http_authorization_header_bearer() {
 
 static void test_http_authorization_header_rejects_non_choice() {
     // A plain string is not an Http.Auth choice — the renderer rejects it.
-    ASSERT_TRUE(luma::test::eval_throws(R"(Http.authorization_header("Basic x"))"));
+    ASSERT_EVAL_THROWS(R"(Http.authorization_header("Basic x"))",
+                       "Http.authorization_header: expected an Http.Auth choice");
 }
 
 // ─── Http: method_to_string (Http.Method choice → verb string) ────────────────
@@ -223,7 +231,8 @@ static void test_http_method_to_string_all_verbs() {
 
 static void test_http_method_to_string_rejects_non_choice() {
     // A plain string is not an Http.Method choice — the converter rejects it.
-    ASSERT_TRUE(luma::test::eval_throws(R"(Http.method_to_string("GET"))"));
+    ASSERT_EVAL_THROWS(R"(Http.method_to_string("GET"))",
+                       "Http.method_to_string: expected an Http.Method choice");
 }
 
 // ─── Http: status_class (raw status → Http.StatusClass family) ────────────────
@@ -324,35 +333,26 @@ static void test_http_get_typed_registered() {
 }
 
 // ─── Http: is_success (2xx predicate over a response record) ──────────────────
+
+// Evaluates Http.is_success over a response record carrying `status`.
+[[nodiscard]] static bool is_success_for_status(int status) {
+    const auto v = eval("Http.is_success(Http.Response { status = " + std::to_string(status) +
+                        R"(, reason = "x", body = "", headers = {} }))");
+
+    ASSERT_TRUE(v.is_bool());
+
+    return v.as_bool();
+}
+
 static void test_http_is_success_reads_status() {
     // is_success is true only for a 2xx status.  A response record is built here
     // with a literal (the field the predicate reads is `status`); eval() ignores
     // the "record type not found at compile time" warning stdlib records emit.
-    ASSERT_EQ(
-        eval(
-            R"(Http.is_success(Http.Response { status = 204, reason = "x", body = "", headers = {} }))")
-            .as_bool(),
-        true);
-    ASSERT_EQ(
-        eval(
-            R"(Http.is_success(Http.Response { status = 200, reason = "x", body = "", headers = {} }))")
-            .as_bool(),
-        true);
-    ASSERT_EQ(
-        eval(
-            R"(Http.is_success(Http.Response { status = 404, reason = "x", body = "", headers = {} }))")
-            .as_bool(),
-        false);
-    ASSERT_EQ(
-        eval(
-            R"(Http.is_success(Http.Response { status = 500, reason = "x", body = "", headers = {} }))")
-            .as_bool(),
-        false);
-    ASSERT_EQ(
-        eval(
-            R"(Http.is_success(Http.Response { status = 100, reason = "x", body = "", headers = {} }))")
-            .as_bool(),
-        false);
+    ASSERT_TRUE(is_success_for_status(204));
+    ASSERT_TRUE(is_success_for_status(200));
+    ASSERT_FALSE(is_success_for_status(404));
+    ASSERT_FALSE(is_success_for_status(500));
+    ASSERT_FALSE(is_success_for_status(100));
 }
 
 static void test_http_new_functions_registered() {
@@ -493,28 +493,30 @@ static void test_http_query_roundtrip_reserved_chars() {
 // ─── Http: argument type validation (negative — throws) ───────────────────────
 
 static void test_http_parse_url_rejects_non_string() {
-    ASSERT_TRUE(luma::test::eval_throws("Http.parse_url(123)"));
+    ASSERT_EVAL_THROWS("Http.parse_url(123)", "Http.parse_url: expected string");
 }
 
 static void test_http_parse_query_rejects_non_string() {
-    ASSERT_TRUE(luma::test::eval_throws("Http.parse_query(123)"));
+    ASSERT_EVAL_THROWS("Http.parse_query(123)", "Http.parse_query: expected string");
 }
 
 static void test_http_build_query_rejects_non_dict() {
-    ASSERT_TRUE(luma::test::eval_throws(R"(Http.build_query("not-a-dict"))"));
+    ASSERT_EVAL_THROWS(R"(Http.build_query("not-a-dict"))",
+                       "Http.build_query: expected dictionary");
 }
 
 static void test_http_get_rejects_non_string() {
-    ASSERT_TRUE(luma::test::eval_throws("Http.get(123)"));
+    ASSERT_EVAL_THROWS("Http.get(123)", "Http.get: expected string");
 }
 
 static void test_http_basic_auth_rejects_non_string() {
-    ASSERT_TRUE(luma::test::eval_throws("Http.basic_auth(1, 2)"));
+    ASSERT_EVAL_THROWS("Http.basic_auth(1, 2)", "Http.basic_auth: expected string");
 }
 
 static void test_http_get_with_rejects_non_string_header_value() {
     // Every HTTP header value must be a string; a non-string value is rejected.
-    ASSERT_TRUE(luma::test::eval_throws(R"(Http.get_with("http://example.com", {"X": 1}))"));
+    ASSERT_EVAL_THROWS(R"(Http.get_with("http://example.com", {"X": 1}))",
+                       "HTTP header 'X': expected string value");
 }
 
 // ─── Http: request validation (negative — failure result, no network) ─────────
@@ -793,10 +795,10 @@ static void test_http_chunked_decoder_resumes_incrementally() {
             break;
         }
 
-        ASSERT_TRUE(status == ChunkedBodyDecoder::Status::NeedMore);
+        ASSERT_EQ(status, ChunkedBodyDecoder::Status::NeedMore);
     }
 
-    ASSERT_TRUE(decoder.feed(raw) == ChunkedBodyDecoder::Status::Complete);
+    ASSERT_EQ(decoder.feed(raw), ChunkedBodyDecoder::Status::Complete);
     ASSERT_EQ(decoder.body(), "abc");
 }
 
@@ -839,8 +841,8 @@ static void test_http_request_of_builds_typed_record() {
 
 static void test_http_request_with_builds_full_record() {
     // Http.request_with(method, url, headers, body, timeout_ms) captures every field.
-    const auto v = eval(
-        R"(Http.request_with(Http.Method.Post, "http://example.com", {"X-Test": "1"}, "payload", 5000))");
+    const auto v = eval(R"(Http.request_with(Http.Method.Post, "http://example.com", )"
+                        R"({"X-Test": "1"}, "payload", 5000))");
 
     ASSERT_TRUE(v.is_record());
     ASSERT_EQ(v.as_record()->type_name, "Request");
@@ -882,8 +884,8 @@ static void test_http_request_with_clamps_negative_timeout() {
 static void test_http_request_with_clamps_oversized_timeout() {
     // Regression: a timeout above INT_MAX wrapped to a negative int when
     // narrowed for select()/setsockopt; it is now clamped to INT_MAX.
-    const auto v = eval(
-        R"(Http.request_with(Http.Method.Get, "http://x", {}, "", 9223372036854775807).timeout_ms)");
+    const auto v = eval(R"(Http.request_with(Http.Method.Get, "http://x", {}, "", )"
+                        R"(9223372036854775807).timeout_ms)");
 
     ASSERT_TRUE(v.is_integer());
     ASSERT_EQ(v.as_integer(), static_cast<std::int64_t>(2147483647));
@@ -891,13 +893,16 @@ static void test_http_request_with_clamps_oversized_timeout() {
 
 static void test_http_request_of_rejects_non_choice_method() {
     // A plain string is not an Http.Method choice — request_of rejects it.
-    ASSERT_TRUE(luma::test::eval_throws(R"(Http.request_of("GET", "http://x"))"));
+    ASSERT_EVAL_THROWS(R"(Http.request_of("GET", "http://x"))",
+                       "Http.request_of: expected an Http.Method choice");
 }
 
 static void test_http_send_rejects_non_request() {
     // Http.send only accepts an Http.Request record.
-    ASSERT_TRUE(luma::test::eval_throws(R"(Http.send("not a request"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Http.send(Http.parse_url("http://example.com")))"));
+    ASSERT_EVAL_THROWS(R"(Http.send("not a request"))",
+                       "Http.send: expected an Http.Request record");
+    ASSERT_EVAL_THROWS(R"(Http.send(Http.parse_url("http://example.com")))",
+                       "Http.send: expected an Http.Request record");
 }
 
 static void test_http_send_reaches_request_pipeline() {
@@ -934,8 +939,8 @@ static void test_http_parse_cookie_basic() {
 }
 
 static void test_http_parse_cookie_flags() {
-    const auto v = eval(
-        R"(Http.parse_cookie("id=42; Domain=example.com; Path=/app; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Secure; HttpOnly"))");
+    const auto v = eval(R"(Http.parse_cookie("id=42; Domain=example.com; Path=/app; )"
+                        R"(Expires=Wed, 21 Oct 2015 07:28:00 GMT; Secure; HttpOnly"))");
     ASSERT_RESULT_SUCCESS(v);
 
     const auto& rec = v.as_result()->owned_inner->as_record();
@@ -953,15 +958,15 @@ static void test_http_parse_cookie_empty_name_fails() {
 
 static void test_http_cookie_header_roundtrip() {
     // parse_cookie then cookie_header preserves the name/value and attributes.
-    const auto v = eval(
-        R"(Http.cookie_header(Result.unwrap(Http.parse_cookie("id=42; Domain=example.com; Path=/; Secure; HttpOnly"))))");
+    const auto v = eval(R"(Http.cookie_header(Result.unwrap(Http.parse_cookie()"
+                        R"("id=42; Domain=example.com; Path=/; Secure; HttpOnly"))))");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().find("id=42") != std::string::npos);
-    ASSERT_TRUE(v.as_string().find("Domain=example.com") != std::string::npos);
-    ASSERT_TRUE(v.as_string().find("Path=/") != std::string::npos);
-    ASSERT_TRUE(v.as_string().find("Secure") != std::string::npos);
-    ASSERT_TRUE(v.as_string().find("HttpOnly") != std::string::npos);
+    ASSERT_NE(v.as_string().find("id=42"), std::string::npos);
+    ASSERT_NE(v.as_string().find("Domain=example.com"), std::string::npos);
+    ASSERT_NE(v.as_string().find("Path=/"), std::string::npos);
+    ASSERT_NE(v.as_string().find("Secure"), std::string::npos);
+    ASSERT_NE(v.as_string().find("HttpOnly"), std::string::npos);
 }
 
 static void test_http_cookie_functions_registered() {
@@ -984,7 +989,7 @@ static void test_http_parse_media_type_basic() {
 
     const auto& params = rec->find_field("parameters")->as_dictionary();
     const auto* charset = params->find("charset");
-    ASSERT_TRUE(charset != nullptr);
+    ASSERT_NE(charset, nullptr);
     ASSERT_EQ(charset->as_string(), "utf-8");
 }
 
@@ -1000,7 +1005,7 @@ static void test_http_parse_media_type_lowercases_essence() {
 
     const auto& params = rec->find_field("parameters")->as_dictionary();
     const auto* charset = params->find("charset");
-    ASSERT_TRUE(charset != nullptr);
+    ASSERT_NE(charset, nullptr);
     ASSERT_EQ(charset->as_string(), "UTF-8");
 }
 
@@ -1021,7 +1026,7 @@ static void test_http_parse_media_type_unquotes_parameter_value() {
     const auto& params =
         v.as_result()->owned_inner->as_record()->find_field("parameters")->as_dictionary();
     const auto* boundary = params->find("boundary");
-    ASSERT_TRUE(boundary != nullptr);
+    ASSERT_NE(boundary, nullptr);
     ASSERT_EQ(boundary->as_string(), "a b c");
 }
 

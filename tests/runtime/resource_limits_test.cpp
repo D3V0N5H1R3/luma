@@ -5,36 +5,53 @@
 // limit, exercises the guarded operation, and restores the original
 // value via RAII.
 
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
-#include <stdexcept>
 #include <string>
+#include <string_view>
 
-#include "analysis/errors/error.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "stdlib_test_helpers.hpp"
 
-using namespace luma;
+using luma::ResourceLimits;
+using luma::test::CapturedStream;
+using luma::test::eval;
+using luma::test::LimitGuard;
+using luma::test::ScopedEnv;
+
+namespace {
+
+// Assert that `result` is a failure result whose error message contains
+// `expected` (so the failure is the limit under test, not an unrelated one).
+void assert_failure_mentions(const luma::Value& result, std::string_view expected) {
+    ASSERT_RESULT_FAILURE(result);
+    const auto message = result.as_result()->owned_inner->to_string();
+    ASSERT_NE(message.find(expected), std::string::npos);
+}
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════
 // Call depth limit
 // ═══════════════════════════════════════════════════════════
 
 static void test_call_depth_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_call_depth, 5};
+    const LimitGuard guard{ResourceLimits::max_call_depth, 5};
 
     // Recursive function that exceeds depth 5.
-    ASSERT_TRUE(throws_runtime(R"(
+    ASSERT_EVAL_THROWS(R"(
         function integer recurse(integer n) {
             return 1 + recurse(n + 1)
         }
         recurse(0)
-    )"));
+    )",
+                       "maximum recursion depth (5) exceeded");
 }
 
 static void test_call_depth_within_limit_succeeds() {
-    LimitGuard guard{ResourceLimits::max_call_depth, 20};
+    const LimitGuard guard{ResourceLimits::max_call_depth, 20};
 
     // Only 3 levels of recursion — well within the limit.
     const auto result = eval(R"(
@@ -54,19 +71,20 @@ static void test_call_depth_within_limit_succeeds() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_while_loop_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_while_iterations, static_cast<std::int64_t>(10)};
+    const LimitGuard guard{ResourceLimits::max_while_iterations, static_cast<std::int64_t>(10)};
 
     // Infinite loop should be stopped at 10 iterations.
-    ASSERT_TRUE(throws_runtime(R"(
+    ASSERT_EVAL_THROWS(R"(
         mutable integer i = 0
         while true {
             i += 1
         }
-    )"));
+    )",
+                       "loop exceeded maximum iteration count (10)");
 }
 
 static void test_while_loop_within_limit_succeeds() {
-    LimitGuard guard{ResourceLimits::max_while_iterations, static_cast<std::int64_t>(100)};
+    const LimitGuard guard{ResourceLimits::max_while_iterations, static_cast<std::int64_t>(100)};
 
     const auto result = eval(R"(
         mutable integer i = 0
@@ -84,40 +102,29 @@ static void test_while_loop_within_limit_succeeds() {
 // Total loop iteration budget
 // ═══════════════════════════════════════════════════════════
 
-// Return the message of the runtime error `source` raises, or "" if none.
-static std::string runtime_error_message(const std::string& source) {
-    try {
-        (void)eval(source);
-    } catch (const RuntimeError& error) {
-        return error.what();
-    }
-    return "";
-}
-
-static bool exceeds_total_loop_budget(const std::string& source) {
-    return runtime_error_message(source).find("total iteration budget") != std::string::npos;
-}
-
 static void test_nested_for_loops_hit_total_budget() {
     // Each inner `for` resets the shared while budget on entry, so only the
     // total budget can bound the 10,000 iterations of this nest.
-    LimitGuard guard{ResourceLimits::max_total_loop_iterations, static_cast<std::int64_t>(1000)};
+    const LimitGuard guard{ResourceLimits::max_total_loop_iterations,
+                           static_cast<std::int64_t>(1000)};
 
-    ASSERT_TRUE(exceeds_total_loop_budget(R"(
+    ASSERT_EVAL_THROWS(R"(
         mutable integer n = 0
         for a in 0..100 {
             for b in 0..100 {
                 n += 1
             }
         }
-    )"));
+    )",
+                       "total iteration budget");
 }
 
 static void test_sequential_for_loops_accumulate_total_budget() {
-    LimitGuard guard{ResourceLimits::max_total_loop_iterations, static_cast<std::int64_t>(1000)};
+    const LimitGuard guard{ResourceLimits::max_total_loop_iterations,
+                           static_cast<std::int64_t>(1000)};
 
     // 600 + 600 back-edges: neither loop alone exceeds the budget.
-    ASSERT_TRUE(exceeds_total_loop_budget(R"(
+    ASSERT_EVAL_THROWS(R"(
         mutable integer n = 0
         for a in 0..600 {
             n += 1
@@ -125,14 +132,16 @@ static void test_sequential_for_loops_accumulate_total_budget() {
         for b in 0..600 {
             n += 1
         }
-    )"));
+    )",
+                       "total iteration budget");
 }
 
 static void test_total_budget_survives_a_caught_error() {
-    LimitGuard guard{ResourceLimits::max_total_loop_iterations, static_cast<std::int64_t>(50)};
+    const LimitGuard guard{ResourceLimits::max_total_loop_iterations,
+                           static_cast<std::int64_t>(50)};
 
     // Catching the error must not hand the program a fresh budget.
-    ASSERT_TRUE(exceeds_total_loop_budget(R"(
+    ASSERT_EVAL_THROWS(R"(
         mutable integer n = 0
         try {
             for a in 0..100 {
@@ -144,11 +153,13 @@ static void test_total_budget_survives_a_caught_error() {
         for b in 0..2 {
             n += 1
         }
-    )"));
+    )",
+                       "total iteration budget");
 }
 
 static void test_loops_within_total_budget_succeed() {
-    LimitGuard guard{ResourceLimits::max_total_loop_iterations, static_cast<std::int64_t>(1000)};
+    const LimitGuard guard{ResourceLimits::max_total_loop_iterations,
+                           static_cast<std::int64_t>(1000)};
 
     const auto result = eval(R"(
         mutable integer n = 0
@@ -169,17 +180,18 @@ static void test_loops_within_total_budget_succeed() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_array_push_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(3)};
+    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(3)};
 
     // Build an array of 3, then try to push a 4th — should throw.
-    ASSERT_TRUE(throws_runtime(R"(
+    ASSERT_EVAL_THROWS(R"(
         mutable array<integer> arr = [1, 2, 3]
         arr = Array.push(arr, 4)
-    )"));
+    )",
+                       "Array.push: exceeds maximum size");
 }
 
 static void test_array_within_limit_succeeds() {
-    LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(10)};
+    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(10)};
 
     const auto result = eval(R"(
         array<integer> arr = Array.push([1, 2, 3], 4)
@@ -195,18 +207,19 @@ static void test_array_within_limit_succeeds() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_string_concat_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(10)};
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(10)};
 
     // Concatenating strings that exceed 10 bytes should throw.
-    ASSERT_TRUE(throws_runtime(R"(
+    ASSERT_EVAL_THROWS(R"(
         string a = "hello "
         string b = "world!!"
         a + b
-    )"));
+    )",
+                       "string concatenation exceeds maximum string size");
 }
 
 static void test_string_concat_within_limit_succeeds() {
-    LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(100)};
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(100)};
 
     const auto result = eval(R"(
         "hello" + " world"
@@ -221,20 +234,15 @@ static void test_string_concat_within_limit_succeeds() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_string_repeat_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_string_repeat, static_cast<std::int64_t>(5)};
+    const LimitGuard guard{ResourceLimits::max_string_repeat, static_cast<std::int64_t>(5)};
 
     // Repeating 6 times should produce a failure result.
-    const auto result = eval(R"(
-        result<string> r = String.repeat("ab", 6)
-        Result.is_success(r)
-    )");
-
-    ASSERT_TRUE(result.is_bool());
-    ASSERT_FALSE(result.as_bool());
+    assert_failure_mentions(eval(R"(String.repeat("ab", 6))"),
+                            "String.repeat: count exceeds maximum");
 }
 
 static void test_string_repeat_within_limit_succeeds() {
-    LimitGuard guard{ResourceLimits::max_string_repeat, static_cast<std::int64_t>(10)};
+    const LimitGuard guard{ResourceLimits::max_string_repeat, static_cast<std::int64_t>(10)};
 
     const auto result = eval(R"(
         Result.unwrap(String.repeat("ab", 3))
@@ -249,17 +257,18 @@ static void test_string_repeat_within_limit_succeeds() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_dictionary_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_dictionary_size, static_cast<std::size_t>(2)};
+    const LimitGuard guard{ResourceLimits::max_dictionary_size, static_cast<std::size_t>(2)};
 
     // Creating a dictionary with 3 entries should throw.
-    ASSERT_TRUE(throws_runtime(R"(
+    ASSERT_EVAL_THROWS(R"(
         mutable dictionary<integer> d = {"a": 1, "b": 2}
         d = Dictionary.set(d, "c", 3)
-    )"));
+    )",
+                       "Dictionary.set: result exceeds maximum dictionary size");
 }
 
 static void test_dictionary_within_limit_succeeds() {
-    LimitGuard guard{ResourceLimits::max_dictionary_size, static_cast<std::size_t>(10)};
+    const LimitGuard guard{ResourceLimits::max_dictionary_size, static_cast<std::size_t>(10)};
 
     const auto result = eval(R"(
         dictionary<integer> d = Dictionary.set({"a": 1}, "b", 2)
@@ -275,17 +284,18 @@ static void test_dictionary_within_limit_succeeds() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_queue_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_queue_size, static_cast<std::size_t>(2)};
+    const LimitGuard guard{ResourceLimits::max_queue_size, static_cast<std::size_t>(2)};
 
     // Enqueuing past the limit should throw.
-    ASSERT_TRUE(throws_runtime(R"(
+    ASSERT_EVAL_THROWS(R"(
         mutable queue<integer> q = Queue.from_array([1, 2])
         q = Queue.enqueue(q, 3)
-    )"));
+    )",
+                       "Queue.enqueue: exceeds maximum size");
 }
 
 static void test_queue_within_limit_succeeds() {
-    LimitGuard guard{ResourceLimits::max_queue_size, static_cast<std::size_t>(10)};
+    const LimitGuard guard{ResourceLimits::max_queue_size, static_cast<std::size_t>(10)};
 
     const auto result = eval(R"(
         queue<integer> q = Queue.enqueue(Queue.new(), 42)
@@ -301,16 +311,17 @@ static void test_queue_within_limit_succeeds() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_stack_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_stack_size, static_cast<std::size_t>(2)};
+    const LimitGuard guard{ResourceLimits::max_stack_size, static_cast<std::size_t>(2)};
 
-    ASSERT_TRUE(throws_runtime(R"(
+    ASSERT_EVAL_THROWS(R"(
         mutable stack<integer> s = Stack.from_array([1, 2])
         s = Stack.push(s, 3)
-    )"));
+    )",
+                       "Stack.push: exceeds maximum size");
 }
 
 static void test_stack_within_limit_succeeds() {
-    LimitGuard guard{ResourceLimits::max_stack_size, static_cast<std::size_t>(10)};
+    const LimitGuard guard{ResourceLimits::max_stack_size, static_cast<std::size_t>(10)};
 
     const auto result = eval(R"(
         stack<integer> s = Stack.push(Stack.new(), 99)
@@ -326,16 +337,11 @@ static void test_stack_within_limit_succeeds() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_array_range_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(5)};
+    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(5)};
 
     // Array.range(0, 10) produces 10 elements — exceeds limit of 5.
-    const auto result = eval(R"(
-        result<array<integer>> r = Array.range(0, 10)
-        Result.is_success(r)
-    )");
-
-    ASSERT_TRUE(result.is_bool());
-    ASSERT_FALSE(result.as_bool());
+    assert_failure_mentions(eval("Array.range(0, 10)"),
+                            "Array.range: range exceeds maximum array size");
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -343,15 +349,10 @@ static void test_array_range_limit_enforced() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_array_repeat_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(3)};
+    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(3)};
 
-    const auto result = eval(R"(
-        result<array<integer>> r = Array.repeat(0, 10)
-        Result.is_success(r)
-    )");
-
-    ASSERT_TRUE(result.is_bool());
-    ASSERT_FALSE(result.as_bool());
+    assert_failure_mentions(eval("Array.repeat(0, 10)"),
+                            "Array.repeat: result exceeds maximum array size");
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -359,16 +360,11 @@ static void test_array_repeat_limit_enforced() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_string_pad_limit_enforced() {
-    LimitGuard guard{ResourceLimits::max_pad_width, static_cast<std::size_t>(5)};
+    const LimitGuard guard{ResourceLimits::max_pad_width, static_cast<std::size_t>(5)};
 
     // Padding to width 10 exceeds limit of 5.
-    const auto result = eval(R"(
-        result<string> r = String.pad_left("hi", 10, " ")
-        Result.is_success(r)
-    )");
-
-    ASSERT_TRUE(result.is_bool());
-    ASSERT_FALSE(result.as_bool());
+    assert_failure_mentions(eval(R"(String.pad_left("hi", 10, " "))"),
+                            "String.pad_left: width exceeds maximum");
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -385,7 +381,7 @@ static void test_env_override_zero_is_ignored() {
 
     // 0 would make every program fail to parse; the default is kept.
     ASSERT_EQ(ResourceLimits::max_parse_depth, 128);
-    ASSERT_TRUE(captured_err.str().find("LUMA_LIMIT_MAX_PARSE_DEPTH") != std::string::npos);
+    ASSERT_NE(captured_err.str().find("LUMA_LIMIT_MAX_PARSE_DEPTH"), std::string::npos);
 }
 
 static void test_env_override_above_ceiling_is_clamped() {
@@ -397,7 +393,7 @@ static void test_env_override_above_ceiling_is_clamped() {
 
     // A huge parse depth would defeat the native stack-overflow guard.
     ASSERT_EQ(ResourceLimits::max_parse_depth, 512);
-    ASSERT_TRUE(captured_err.str().find("clamping") != std::string::npos);
+    ASSERT_NE(captured_err.str().find("clamping"), std::string::npos);
 }
 
 static void test_env_override_in_range_is_applied() {
@@ -406,7 +402,7 @@ static void test_env_override_in_range_is_applied() {
 
     ResourceLimits::init_from_env();
 
-    ASSERT_EQ(ResourceLimits::max_array_size, static_cast<std::size_t>(1234));
+    ASSERT_EQ(ResourceLimits::max_array_size, 1234);
 }
 
 // ─── main ───

@@ -14,7 +14,13 @@
 #include "thread_state_manager.hpp"
 #include "variable_inspector.hpp"
 
-using namespace luma::dap;
+using luma::dap::k_stop_reason_breakpoint;
+using luma::dap::k_stop_reason_entry;
+using luma::dap::k_stop_reason_pause;
+using luma::dap::k_stop_reason_step;
+using luma::dap::StepMode;
+using luma::dap::ThreadState;
+using luma::dap::ThreadStateManager;
 using luma::json::JsonValue;
 
 namespace {

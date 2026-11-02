@@ -4,10 +4,12 @@
 // array/dictionary/tuple hashing, and order-independence for dictionaries.
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <future>
 #include <limits>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "runtime/concurrency/channel.hpp"
@@ -15,67 +17,101 @@
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::ArrayValue;
+using luma::Channel;
+using luma::ChannelValue;
+using luma::DictionaryValue;
+using luma::FunctionValue;
+using luma::KeyValueStoreValue;
+using luma::NativeFunctionValue;
+using luma::NullValue;
+using luma::TaskCompletion;
+using luma::TaskValue;
+using luma::TupleValue;
+using luma::Value;
+using luma::ValueHash;
+using luma::ValueSet;
 
 // ─── Basic type hashing ───
+//
+// Each basic test checks determinism (a separately constructed equal value,
+// hashed by a separate hasher, gives the same hash) and a distinction the
+// implementation guarantees for that type.
 
 static void test_hash_integer() {
-    ValueHash hasher;
+    const ValueHash hasher;
     const auto h = hasher(Value{42});
-    // Hash should be deterministic (non-zero for a non-trivial value).
-    ASSERT_TRUE(h != 0 || hasher(Value{0}) == 0);
+
+    ASSERT_EQ(h, ValueHash{}(Value{42}));
+    // Neighbouring integers and null (whose hash is 0) hash differently.
+    ASSERT_NE(h, hasher(Value{41}));
+    ASSERT_NE(h, hasher(Value{43}));
+    ASSERT_NE(h, hasher(Value{NullValue{}}));
 }
 
 static void test_hash_number() {
-    ValueHash hasher;
+    const ValueHash hasher;
     const auto h = hasher(Value{3.14});
-    (void)h; // Just verify it doesn't crash.
+
+    ASSERT_EQ(h, ValueHash{}(Value{3.14}));
+    ASSERT_NE(h, hasher(Value{3.15}));
+    // Numbers that compare equal hash equal: +0.0 and -0.0, and every NaN
+    // (NaN payloads are canonicalised before hashing).
+    ASSERT_EQ(hasher(Value{0.0}), hasher(Value{-0.0}));
+    ASSERT_EQ(hasher(Value{std::nan("")}), hasher(Value{-std::nan("1")}));
 }
 
 static void test_hash_string() {
-    ValueHash hasher;
+    const ValueHash hasher;
     const auto h = hasher(Value{"hello"});
-    ASSERT_TRUE(h != 0);
+
+    ASSERT_EQ(h, ValueHash{}(Value{"hello"}));
+    ASSERT_NE(h, 0);
+    ASSERT_NE(h, hasher(Value{"hellp"}));
 }
 
 static void test_hash_boolean_true() {
-    ValueHash hasher;
+    const ValueHash hasher;
     const auto h = hasher(Value{true});
-    (void)h;
+
+    ASSERT_EQ(h, ValueHash{}(Value{true}));
+    ASSERT_NE(h, hasher(Value{false}));
 }
 
 static void test_hash_boolean_false() {
-    ValueHash hasher;
+    const ValueHash hasher;
     const auto h = hasher(Value{false});
-    (void)h;
+
+    ASSERT_EQ(h, ValueHash{}(Value{false}));
+    ASSERT_NE(h, hasher(Value{true}));
 }
 
 static void test_hash_none() {
-    ValueHash hasher;
+    const ValueHash hasher;
     const auto h = hasher(Value{NullValue{}});
-    ASSERT_EQ(h, static_cast<std::size_t>(0));
+    ASSERT_EQ(h, 0);
 }
 
 // ─── Hash consistency ───
 
 static void test_hash_consistency_integer() {
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_EQ(hasher(Value{42}), hasher(Value{42}));
 }
 
 static void test_hash_consistency_string() {
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_EQ(hasher(Value{"hello"}), hasher(Value{"hello"}));
 }
 
 static void test_hash_consistency_boolean() {
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_EQ(hasher(Value{true}), hasher(Value{true}));
     ASSERT_EQ(hasher(Value{false}), hasher(Value{false}));
 }
 
 static void test_hash_consistency_number() {
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_EQ(hasher(Value{2.718}), hasher(Value{2.718}));
 }
 
@@ -83,17 +119,17 @@ static void test_hash_consistency_number() {
 
 static void test_hash_cross_type_int_number() {
     // int(42) and number(42.0) compare equal, so must hash the same.
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_EQ(hasher(Value{static_cast<std::int64_t>(42)}), hasher(Value{42.0}));
 }
 
 static void test_hash_cross_type_zero() {
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_EQ(hasher(Value{static_cast<std::int64_t>(0)}), hasher(Value{0.0}));
 }
 
 static void test_hash_cross_type_negative() {
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_EQ(hasher(Value{static_cast<std::int64_t>(-7)}), hasher(Value{-7.0}));
 }
 
@@ -103,7 +139,7 @@ static void test_hash_cross_type_large_integer() {
     // to number(2^53.0), so the two MUST hash identically. (Regression: the
     // hash previously branched at this boundary and gave them distinct hashes,
     // breaking ValueMap/ValueSet lookups for large integer keys.)
-    ValueHash hasher;
+    const ValueHash hasher;
     const std::int64_t big = std::int64_t{1} << 53;
     ASSERT_EQ(hasher(Value{big}), hasher(Value{static_cast<double>(big)}));
 }
@@ -111,24 +147,19 @@ static void test_hash_cross_type_large_integer() {
 // ─── Different values produce different hashes (probabilistic) ───
 
 static void test_hash_different_integers() {
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_NE(hasher(Value{1}), hasher(Value{2}));
 }
 
 static void test_hash_different_strings() {
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_NE(hasher(Value{"foo"}), hasher(Value{"bar"}));
-}
-
-static void test_hash_true_vs_false() {
-    ValueHash hasher;
-    ASSERT_NE(hasher(Value{true}), hasher(Value{false}));
 }
 
 // ─── Array hashing ───
 
 static void test_hash_array_same_elements() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto arr1 = std::make_shared<ArrayValue>();
     arr1->elements->push_back(Value{1});
@@ -144,7 +175,7 @@ static void test_hash_array_same_elements() {
 }
 
 static void test_hash_array_different_elements() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto arr1 = std::make_shared<ArrayValue>();
     arr1->elements->push_back(Value{1});
@@ -158,7 +189,7 @@ static void test_hash_array_different_elements() {
 }
 
 static void test_hash_array_different_length() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto arr1 = std::make_shared<ArrayValue>();
     arr1->elements->push_back(Value{1});
@@ -171,7 +202,7 @@ static void test_hash_array_different_length() {
 }
 
 static void test_hash_empty_array() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto arr1 = std::make_shared<ArrayValue>();
     auto arr2 = std::make_shared<ArrayValue>();
@@ -182,7 +213,7 @@ static void test_hash_empty_array() {
 // ─── Dictionary hashing (order-independent) ───
 
 static void test_hash_dictionary_order_independent() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto dict1 = std::make_shared<DictionaryValue>();
     dict1->set("a", Value{1});
@@ -196,7 +227,7 @@ static void test_hash_dictionary_order_independent() {
 }
 
 static void test_hash_dictionary_same_entries() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto dict1 = std::make_shared<DictionaryValue>();
     dict1->set("x", Value{"hello"});
@@ -210,7 +241,7 @@ static void test_hash_dictionary_same_entries() {
 }
 
 static void test_hash_dictionary_different_values() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto dict1 = std::make_shared<DictionaryValue>();
     dict1->set("a", Value{1});
@@ -222,7 +253,7 @@ static void test_hash_dictionary_different_values() {
 }
 
 static void test_hash_empty_dictionary() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto dict1 = std::make_shared<DictionaryValue>();
     auto dict2 = std::make_shared<DictionaryValue>();
@@ -233,7 +264,7 @@ static void test_hash_empty_dictionary() {
 // ─── Tuple hashing ───
 
 static void test_hash_tuple_same_elements() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto tup1 = std::make_shared<TupleValue>();
     tup1->elements.push_back(Value{1});
@@ -247,7 +278,7 @@ static void test_hash_tuple_same_elements() {
 }
 
 static void test_hash_tuple_different_size() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto tup1 = std::make_shared<TupleValue>();
     tup1->elements.push_back(Value{1});
@@ -260,7 +291,7 @@ static void test_hash_tuple_different_size() {
 }
 
 static void test_hash_tuple_different_elements() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto tup1 = std::make_shared<TupleValue>();
     tup1->elements.push_back(Value{1});
@@ -276,7 +307,7 @@ static void test_hash_tuple_different_elements() {
 // ─── Empty array vs empty dict (different types, different hashes) ───
 
 static void test_hash_empty_array_vs_empty_dict() {
-    ValueHash hasher;
+    const ValueHash hasher;
 
     auto arr = std::make_shared<ArrayValue>();
     auto dict = std::make_shared<DictionaryValue>();
@@ -302,7 +333,7 @@ static void test_equals_integer_number_exact_beyond_2_pow_53() {
     ASSERT_FALSE(exact_int.equals(next_int));
 
     // Equal values still hash identically.
-    ValueHash hasher;
+    const ValueHash hasher;
     ASSERT_EQ(hasher(exact_int), hasher(as_number));
 
     // Non-integral, non-finite, and out-of-range numbers never equal an integer.
@@ -356,7 +387,7 @@ static void test_equals_identity_types_are_reflexive() {
     set.insert(channel);
     set.insert(channel);
     set.insert(other_function);
-    ASSERT_EQ(set.size(), static_cast<std::size_t>(3));
+    ASSERT_EQ(set.size(), 3);
     ASSERT_TRUE(set.contains(function));
 }
 
@@ -367,12 +398,12 @@ static void test_equals_identity_types_are_reflexive() {
 // copy of a closure whose mutable upvalue cell is cloned — and stays
 // consistent with ValueHash.
 static void test_function_equals_its_deep_copy() {
-    auto closure = std::make_shared<FunctionValue>();
+    const auto closure = std::make_shared<FunctionValue>();
     closure->upvalue_cells.push_back(std::make_shared<Value>(std::int64_t{7}));
     const Value function{closure};
     const Value copy = function.deep_copy();
 
-    ASSERT_TRUE(copy.as_function().get() != function.as_function().get());
+    ASSERT_NE(copy.as_function().get(), function.as_function().get());
     ASSERT_TRUE(function.equals(copy));
     ASSERT_TRUE(copy.equals(function));
     ASSERT_TRUE(copy.equals(copy.deep_copy()));
@@ -387,7 +418,7 @@ static void test_function_equals_its_deep_copy() {
     ValueSet set;
     set.insert(function);
     set.insert(copy);
-    ASSERT_EQ(set.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(set.size(), 1);
 }
 
 // ─── Main ───
@@ -416,7 +447,6 @@ int main() {
     // Different values, different hashes.
     RUN(test_hash_different_integers);
     RUN(test_hash_different_strings);
-    RUN(test_hash_true_vs_false);
 
     // Array hashing.
     RUN(test_hash_array_same_elements);

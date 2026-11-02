@@ -34,12 +34,12 @@ Implement a new language feature in Luma. Follow the interpreter pipeline and mo
 7. **Review the implementation and refine it.** Check the code against the confirmed design, the documented project pitfalls in [learnings.instructions.md](../../instructions/learnings.instructions.md) (e.g. scratch-slot reservation, parser recursion guards, MSVC-vs-clang portability), security (OWASP), performance, and the C++ style guide. Address any findings before writing tests.
 8. Add tests at each level:
     - `tests/analysis/lexer_test.cpp` for new tokens.
-    - `tests/analysis/parser_test.cpp` for AST construction.
+    - The matching `tests/analysis/parser_test_*.cpp` file (declarations, statements, expressions, or errors) for AST construction.
     - The appropriate `tests/analysis/type_checker_test_*.cpp` file for type rules, using `type_checker_test_helpers.hpp`.
     - `tests/analysis/linter_test.cpp` for any new lint warnings.
     - `tests/runtime/compiler_test.cpp` for bytecode compilation.
-    - `tests/runtime/optimizer_test.cpp` and `tests/runtime/verifier_test.cpp` for new opcodes (optimisation and bytecode validation).
-    - `tests/runtime/vm_test.cpp` for runtime behaviour.
+    - The matching `tests/runtime/optimizer_test_*.cpp` file (peephole, constant fold, or control flow) and `tests/runtime/verifier_test.cpp` for new opcodes (optimisation and bytecode validation).
+    - The matching `tests/runtime/vm_test_*.cpp` file for runtime behaviour.
     - `tests/integration/integration_test.cpp` for full-pipeline (Lexer → VM) coverage.
     - `tests/features/language/` for a Luma-level test file.
     - `fuzz/corpus/{lexer,parser,type_checker}/` seed inputs and `fuzz/dictionary.txt` entries for the new syntax, so the fuzzers exercise the new parser/type-checker branches (recursion guards in particular).

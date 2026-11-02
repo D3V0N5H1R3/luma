@@ -10,6 +10,21 @@
 #include "analysis/ast/statement.hpp"
 #include "type_checker_test_helpers.hpp"
 
+using luma::BinaryExpression;
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::TypeChecker;
+using luma::VariableDeclStatement;
+using luma::test::check;
+using luma::test::check_warnings;
+using luma::test::fails;
+using luma::test::fails_with;
+using luma::test::fails_with_message;
+using luma::test::has_warnings;
+using luma::test::parse;
+using luma::test::parse_errors;
+using luma::test::passes;
+
 // ─── Statistics return-type signatures ───
 
 // Statistics functions all return result<number>, not bare number.
@@ -391,15 +406,9 @@ static void test_trusted_downcast_on_concrete_no_warn() {
     const auto warnings = check_warnings("integer val = 42\n"
                                          "integer n = trusted_downcast<integer>(val)\n");
 
-    bool has_stdlib_any_warn = false;
-
-    for (const auto& w : warnings) {
-        if (w.message.find("StdlibAny") != std::string::npos) {
-            has_stdlib_any_warn = true;
-        }
-    }
-
-    ASSERT_FALSE(has_stdlib_any_warn);
+    ASSERT_TRUE(std::ranges::none_of(warnings, [](const Diagnostic& w) {
+        return w.message.find("StdlibAny") != std::string::npos;
+    }));
 }
 
 // ─── internal keyword access control. ───
@@ -480,14 +489,12 @@ static void test_internal_not_imported_by_use() {
 }
 
 static void test_internal_at_top_level_is_syntax_error() {
-    DiagnosticCollector discarded;
-    Lexer lexer{"internal function string foo() { return \"x\" }\n", discarded};
-    auto tokens = lexer.tokenize();
+    const auto errors = parse_errors("internal function string foo() { return \"x\" }\n");
 
-    Parser parser{std::move(tokens)};
-    (void)parser.parse();
-
-    ASSERT_FALSE(parser.get_errors().empty());
+    ASSERT_TRUE(std::ranges::any_of(errors, [](const Diagnostic& d) {
+        return d.message.find("'internal' keyword is only allowed inside a namespace") !=
+               std::string::npos;
+    }));
 }
 
 static void test_non_internal_members_still_accessible() {
@@ -819,11 +826,12 @@ static void test_result_default_error_type_is_string() {
     ASSERT_TRUE(fails("result<integer> r = failure(42)\n"));
     ASSERT_TRUE(passes("result<integer> r = failure(\"bad input\")\n"
                        "result<integer, string> same = r\n"));
-    ASSERT_TRUE(fails("result<integer> r = failure(\"bad input\")\n"
-                      "match r {\n"
-                      "    case success(v) { print(v) }\n"
-                      "    case failure(e) { integer n = e }\n"
-                      "}\n"));
+    ASSERT_TRUE(fails_with_message("result<integer> r = failure(\"bad input\")\n"
+                                   "match r {\n"
+                                   "    success(v) { print(v) }\n"
+                                   "    failure(e) { integer n = e }\n"
+                                   "}\n",
+                                   "expected 'integer', got 'string'"));
 }
 
 // ─── Regression: plain '.' and '[ ]' on an optional ───
@@ -865,17 +873,34 @@ static void test_null_coalescing_on_plain_value_fails() {
     ASSERT_TRUE(fails_with("integer x = 5 ?? 0\n", DiagnosticCode::InvalidOperand));
 }
 
+// ─── Regression: stdlib parameters typed as a specific choice ───
+
+static void test_stdlib_choice_parameter_rejects_foreign_choice() {
+    // DateTime.month_*/weekday_* and Order.* take a specific choice type; a
+    // foreign choice — even one whose variant shares a name — is a type error.
+    ASSERT_TRUE(fails_with_message("choice Fake { March }\n"
+                                   "integer n = DateTime.month_number(Fake.March)\n",
+                                   "expected 'DateTime.Month', got 'Fake'"));
+    ASSERT_TRUE(fails_with_message("integer n = DateTime.weekday_number(DateTime.Month.March)\n",
+                                   "expected 'DateTime.Weekday', got 'DateTime.Month'"));
+    ASSERT_TRUE(fails_with_message("number n = Order.to_number(Log.Level.Information)\n",
+                                   "expected 'Ordering', got 'Log.Level'"));
+    ASSERT_TRUE(passes("integer m = DateTime.month_number(DateTime.Month.March)\n"
+                       "integer w = DateTime.weekday_number(DateTime.Weekday.Sunday)\n"
+                       "number o = Order.to_number(Order.of(1, 2))\n"));
+}
+
 static void test_null_coalescing_chain_widens_right_side() {
     // The right optional's integer is widened when it lands in optional<number>.
     const auto program = parse("optional<number> a = none\n"
                                "optional<integer> b = some(1)\n"
                                "optional<number> c = a ?? b\n");
     TypeChecker checker;
-    ASSERT_TRUE(checker.check(program, false).empty());
+    ASSERT_TRUE(checker.check(program, /*require_main=*/false).empty());
 
     const auto& decl = static_cast<const VariableDeclStatement&>(*program.statements[2]);
     const auto& coalesce = static_cast<const BinaryExpression&>(*decl.initializer);
-    ASSERT_TRUE(coalesce.right->numeric_widening != nullptr);
+    ASSERT_NE(coalesce.right->numeric_widening.get(), nullptr);
 }
 
 int main() {
@@ -1035,5 +1060,6 @@ int main() {
     RUN(test_for_destructuring_non_tuple_elements_fails);
     RUN(test_null_coalescing_on_plain_value_fails);
     RUN(test_null_coalescing_chain_widens_right_side);
+    RUN(test_stdlib_choice_parameter_rejects_foreign_choice);
     return SUMMARY();
 }

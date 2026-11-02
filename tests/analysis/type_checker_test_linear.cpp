@@ -14,6 +14,19 @@
 #include "analysis/ast/statement.hpp"
 #include "type_checker_test_helpers.hpp"
 
+using luma::ExpressionStatement;
+using luma::Program;
+using luma::SpawnExpression;
+using luma::TaskScopeExpression;
+using luma::TypeChecker;
+using luma::VariableDeclStatement;
+using luma::test::check;
+using luma::test::fails;
+using luma::test::fails_with_message;
+using luma::test::has_warnings;
+using luma::test::parse;
+using luma::test::passes;
+
 // ─── Linear/Affine types ───
 
 static void test_unique_variable_consumed() {
@@ -398,7 +411,7 @@ std::int64_t fastest_check_us(const Program& program) {
         TypeChecker checker;
 
         const auto start = std::chrono::steady_clock::now();
-        const auto errors = checker.check(program, false);
+        const auto errors = checker.check(program, /*require_main=*/false);
         const auto elapsed = std::chrono::steady_clock::now() - start;
 
         ASSERT_TRUE(errors.empty());
@@ -574,9 +587,9 @@ static void test_spawn_types_not_reused_across_checks() {
     };
 
     TypeChecker checker;
-    const auto first = checker.check(program, false);
+    const auto first = checker.check(program, /*require_main=*/false);
     swap_spawn_nodes();
-    const auto second = checker.check(program, false);
+    const auto second = checker.check(program, /*require_main=*/false);
 
     ASSERT_EQ(second.size(), first.size());
 

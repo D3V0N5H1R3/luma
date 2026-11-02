@@ -2,6 +2,8 @@
 
 #include "stdlib_test_helpers.hpp"
 
+using luma::test::eval;
+
 // ─────────────────────────────────────────────────────────────────
 // to_boolean
 // ─────────────────────────────────────────────────────────────────
@@ -18,8 +20,10 @@ static void test_converter_to_boolean_invalid_fails() {
 }
 
 static void test_converter_to_boolean_wrong_type_throws() {
-    ASSERT_THROWS(eval("Converter.to_boolean(42)"));
-    ASSERT_THROWS(eval("Converter.to_boolean(true)"));
+    ASSERT_EVAL_THROWS("Converter.to_boolean(42)",
+                       "Converter.to_boolean: expected string, got 'integer'");
+    ASSERT_EVAL_THROWS("Converter.to_boolean(true)",
+                       "Converter.to_boolean: expected string, got 'boolean'");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -74,8 +78,10 @@ static void test_converter_to_integer_overflow() {
 }
 
 static void test_converter_to_integer_wrong_type_throws() {
-    ASSERT_THROWS(eval("Converter.to_integer(true)"));
-    ASSERT_THROWS(eval("Converter.to_integer([1, 2])"));
+    ASSERT_EVAL_THROWS("Converter.to_integer(true)",
+                       "Converter.to_integer: expected integer, number, or string, got boolean");
+    ASSERT_EVAL_THROWS("Converter.to_integer([1, 2])",
+                       "Converter.to_integer: expected integer, number, or string, got array");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -92,8 +98,7 @@ static void test_converter_to_number_from_string() {
     const auto ok = eval(R"(Converter.to_number("3.14"))");
 
     ASSERT_RESULT_SUCCESS(ok);
-    ASSERT_TRUE(ok.as_result()->owned_inner->as_number() > 3.13 &&
-                ok.as_result()->owned_inner->as_number() < 3.15);
+    ASSERT_NEAR(ok.as_result()->owned_inner->as_number(), 3.14, 1e-12);
 
     ASSERT_EVAL_NUM(R"(Converter.to_number("-2.5"))", -2.5);
     ASSERT_EVAL_NUM(R"(Converter.to_number("1e3"))", 1000.0);
@@ -122,8 +127,10 @@ static void test_converter_to_number_rejects_non_finite() {
 }
 
 static void test_converter_to_number_wrong_type_throws() {
-    ASSERT_THROWS(eval("Converter.to_number(true)"));
-    ASSERT_THROWS(eval("Converter.to_number([1])"));
+    ASSERT_EVAL_THROWS("Converter.to_number(true)",
+                       "Converter.to_number: expected integer, number, or string, got boolean");
+    ASSERT_EVAL_THROWS("Converter.to_number([1])",
+                       "Converter.to_number: expected integer, number, or string, got array");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -137,7 +144,8 @@ static void test_converter_to_hexadecimal() {
 }
 
 static void test_converter_to_hexadecimal_wrong_type_throws() {
-    ASSERT_THROWS(eval(R"(Converter.to_hexadecimal("ff"))"));
+    ASSERT_EVAL_THROWS(R"(Converter.to_hexadecimal("ff"))",
+                       "Converter.to_hexadecimal: expected integer, got 'string'");
 }
 
 static void test_converter_from_hexadecimal() {
@@ -157,7 +165,8 @@ static void test_converter_from_hexadecimal_invalid_fails() {
 }
 
 static void test_converter_from_hexadecimal_wrong_type_throws() {
-    ASSERT_THROWS(eval("Converter.from_hexadecimal(255)"));
+    ASSERT_EVAL_THROWS("Converter.from_hexadecimal(255)",
+                       "Converter.from_hexadecimal: expected string, got 'integer'");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -175,7 +184,8 @@ static void test_converter_to_binary_negative() {
 }
 
 static void test_converter_to_binary_wrong_type_throws() {
-    ASSERT_THROWS(eval(R"(Converter.to_binary("1010"))"));
+    ASSERT_EVAL_THROWS(R"(Converter.to_binary("1010"))",
+                       "Converter.to_binary: expected integer, got 'string'");
 }
 
 static void test_converter_from_binary() {
@@ -197,7 +207,8 @@ static void test_converter_from_binary_invalid_fails() {
 }
 
 static void test_converter_from_binary_wrong_type_throws() {
-    ASSERT_THROWS(eval("Converter.from_binary(1010)"));
+    ASSERT_EVAL_THROWS("Converter.from_binary(1010)",
+                       "Converter.from_binary: expected string, got 'integer'");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -231,7 +242,8 @@ static void test_converter_ordinal_zero_and_negative() {
 }
 
 static void test_converter_ordinal_wrong_type_throws() {
-    ASSERT_THROWS(eval(R"(Converter.ordinal("3"))"));
+    ASSERT_EVAL_THROWS(R"(Converter.ordinal("3"))",
+                       "Converter.ordinal: expected integer, got 'string'");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -253,7 +265,8 @@ static void test_converter_to_roman_out_of_range_fails() {
 }
 
 static void test_converter_to_roman_wrong_type_throws() {
-    ASSERT_THROWS(eval(R"(Converter.to_roman("X"))"));
+    ASSERT_EVAL_THROWS(R"(Converter.to_roman("X"))",
+                       "Converter.to_roman: expected integer, got 'string'");
 }
 
 static void test_converter_from_roman() {
@@ -278,7 +291,8 @@ static void test_converter_from_roman_malformed_fails() {
 }
 
 static void test_converter_from_roman_wrong_type_throws() {
-    ASSERT_THROWS(eval("Converter.from_roman(14)"));
+    ASSERT_EVAL_THROWS("Converter.from_roman(14)",
+                       "Converter.from_roman: expected string, got 'integer'");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -301,7 +315,8 @@ static void test_converter_number_to_words_negative() {
 }
 
 static void test_converter_number_to_words_wrong_type_throws() {
-    ASSERT_THROWS(eval(R"(Converter.number_to_words("5"))"));
+    ASSERT_EVAL_THROWS(R"(Converter.number_to_words("5"))",
+                       "Converter.number_to_words: expected integer, got 'string'");
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -319,7 +334,8 @@ static void test_converter_character_to_codepoint_empty_fails() {
 }
 
 static void test_converter_character_to_codepoint_wrong_type_throws() {
-    ASSERT_THROWS(eval("Converter.character_to_codepoint(65)"));
+    ASSERT_EVAL_THROWS("Converter.character_to_codepoint(65)",
+                       "Converter.character_to_codepoint: expected string, got 'integer'");
 }
 
 static void test_converter_codepoint_to_character_ascii() {
@@ -342,28 +358,29 @@ static void test_converter_codepoint_to_character_surrogate_fails() {
     ASSERT_EVAL_FAILURE("Converter.codepoint_to_character(57343)"); // 0xDFFF (last surrogate)
 
     // The first codepoint past the surrogate range still encodes and round-trips.
-    ASSERT_EVAL_INT(
-        R"(Converter.character_to_codepoint(Result.unwrap(Converter.codepoint_to_character(57344))))",
-        57344); // 0xE000
+    ASSERT_EVAL_INT("Converter.character_to_codepoint("
+                    "Result.unwrap(Converter.codepoint_to_character(57344)))",
+                    57344); // 0xE000
 }
 
 static void test_converter_codepoint_to_character_wrong_type_throws() {
-    ASSERT_THROWS(eval(R"(Converter.codepoint_to_character("A"))"));
+    ASSERT_EVAL_THROWS(R"(Converter.codepoint_to_character("A"))",
+                       "Converter.codepoint_to_character: expected integer, got 'string'");
 }
 
 static void test_converter_codepoint_roundtrip_multibyte() {
     // Round-trip through both directions so the shared UTF-8 encode and decode
     // helpers agree on 2-, 3-, and 4-byte sequences without embedding raw UTF-8
     // bytes in this source file.
-    ASSERT_EVAL_INT(
-        R"(Converter.character_to_codepoint(Result.unwrap(Converter.codepoint_to_character(233))))",
-        233); // é  (2-byte)
-    ASSERT_EVAL_INT(
-        R"(Converter.character_to_codepoint(Result.unwrap(Converter.codepoint_to_character(9733))))",
-        9733); // ★ (3-byte)
-    ASSERT_EVAL_INT(
-        R"(Converter.character_to_codepoint(Result.unwrap(Converter.codepoint_to_character(128512))))",
-        128512); // 😀 (4-byte)
+    ASSERT_EVAL_INT("Converter.character_to_codepoint("
+                    "Result.unwrap(Converter.codepoint_to_character(233)))",
+                    233); // é  (2-byte)
+    ASSERT_EVAL_INT("Converter.character_to_codepoint("
+                    "Result.unwrap(Converter.codepoint_to_character(9733)))",
+                    9733); // ★ (3-byte)
+    ASSERT_EVAL_INT("Converter.character_to_codepoint("
+                    "Result.unwrap(Converter.codepoint_to_character(128512)))",
+                    128512); // 😀 (4-byte)
 }
 
 int main() {

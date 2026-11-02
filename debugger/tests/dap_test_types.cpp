@@ -7,7 +7,21 @@
 #include "test_framework.hpp"
 #include "variable_inspector.hpp"
 
-using namespace luma::dap;
+using luma::dap::Breakpoint;
+using luma::dap::BreakpointRequest;
+using luma::dap::k_output_console;
+using luma::dap::k_output_stderr;
+using luma::dap::k_output_stdout;
+using luma::dap::k_stop_reason_breakpoint;
+using luma::dap::k_stop_reason_entry;
+using luma::dap::k_stop_reason_exception;
+using luma::dap::k_stop_reason_pause;
+using luma::dap::k_stop_reason_step;
+using luma::dap::Scope;
+using luma::dap::ScopeType;
+using luma::dap::Source;
+using luma::dap::StackFrame;
+using luma::dap::Variable;
 using luma::json::JsonValue;
 
 namespace {

@@ -2,10 +2,15 @@
 // catalog is actually registered at runtime and that the declared arity
 // matches the runtime arity where testable.
 
+#include <cstdint>
 #include <iostream>
 #include <set>
 #include <string>
+#include <vector>
 
+#include "analysis/errors/error.hpp"
+#include "analysis/source/source_location.hpp"
+#include "analysis/types/stdlib_types.hpp"
 #include "runtime/interpreter/environment.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/stdlib_registry.hpp"
@@ -13,7 +18,9 @@
 #include "stdlib/stdlib_catalog.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::RuntimeError;
+using luma::SourceLocation;
+using luma::Value;
 
 // ─── Tests ───
 
@@ -23,7 +30,7 @@ static void test_all_catalog_entries_are_registered() {
 
     int missing_count = 0;
 
-    for (const auto& [name, spec] : stdlib::catalog()) {
+    for (const auto& [name, spec] : luma::stdlib::catalog()) {
         if (!env->has(name)) {
             std::cout << "  MISSING: " << name << "\n";
             ++missing_count;
@@ -37,7 +44,7 @@ static void test_all_registered_functions_are_in_catalog() {
     // Create a fully-registered environment.
     const auto env = luma::test::make_std_env();
 
-    const auto& cat = stdlib::catalog();
+    const auto& cat = luma::stdlib::catalog();
 
     // Stdlib choice variants are registered as globals but are not catalog
     // function entries: unit variants (e.g. "Log.Level.Information") as field-less
@@ -47,7 +54,7 @@ static void test_all_registered_functions_are_in_catalog() {
     // than relying on the value kind (which no longer distinguishes the
     // constructor form from an ordinary stdlib function).
     std::set<std::string> choice_variant_names;
-    for (const auto& [qualified, ch] : stdlib_choice_types()) {
+    for (const auto& [qualified, ch] : luma::stdlib_choice_types()) {
         for (const auto& variant : ch->variants) {
             choice_variant_names.insert(qualified + "." + variant.name);
         }
@@ -79,7 +86,7 @@ static void test_all_registered_functions_are_in_catalog() {
 static void test_catalog_constants_are_not_callable() {
     const auto env = luma::test::make_std_env();
 
-    const auto& consts = stdlib::constants();
+    const auto& consts = luma::stdlib::constants();
 
     for (const auto& name : consts) {
         if (!env->has(name)) {
@@ -95,7 +102,7 @@ static void test_catalog_constants_are_not_callable() {
 static void test_catalog_functions_are_callable() {
     const auto env = luma::test::make_std_env();
 
-    const auto& cat = stdlib::catalog();
+    const auto& cat = luma::stdlib::catalog();
     int non_callable_count = 0;
 
     for (const auto& [name, spec] : cat) {
@@ -119,7 +126,7 @@ static void test_catalog_functions_are_callable() {
 }
 
 static void test_sandbox_blocked_modules_are_correct() {
-    const auto& blocked = stdlib::sandbox_blocked_modules();
+    const auto& blocked = luma::stdlib::sandbox_blocked_modules();
 
     // These modules should be blocked in sandbox mode.
     ASSERT_TRUE(blocked.contains("Console"));
@@ -146,7 +153,7 @@ static void test_sandbox_blocked_modules_are_correct() {
 // module was added to one table but not the other, which would silently expose
 // it (or wrongly hide a safe one) in sandbox mode.
 static void test_registry_os_only_matches_catalog_blocked() {
-    const auto& blocked = stdlib::sandbox_blocked_modules();
+    const auto& blocked = luma::stdlib::sandbox_blocked_modules();
 
     std::set<std::string> os_only_modules;
     for (const auto& mod : luma::detail::kModules) {
@@ -170,7 +177,7 @@ static void test_registry_os_only_matches_catalog_blocked() {
 // environment must reject access to every blocked module with the sandbox
 // error, while safe modules resolve normally.
 static void test_sandbox_environment_enforces_access() {
-    const auto env = luma::test::make_std_env(/*sandbox=*/true);
+    const auto env = luma::test::make_sandboxed_std_env();
     const SourceLocation loc{};
 
     // Blocked OS modules are both unregistered and reported with the sandbox
@@ -181,9 +188,9 @@ static void test_sandbox_environment_enforces_access() {
     ASSERT_THROWS_WITH_MESSAGE(env->get("Http.get", loc), "sandbox mode");
 
     // Safe modules remain available.
-    (void)env->get("String.length", loc);
-    (void)env->get("Math.absolute", loc);
-    (void)env->get("Array.map", loc);
+    ASSERT_TRUE(env->get("String.length", loc).is_native_function());
+    ASSERT_TRUE(env->get("Math.absolute", loc).is_native_function());
+    ASSERT_TRUE(env->get("Array.map", loc).is_native_function());
 
     // File functions withheld from otherwise-safe modules report the same
     // sandbox error, while those modules' other members still resolve.
@@ -192,31 +199,35 @@ static void test_sandbox_environment_enforces_access() {
     ASSERT_THROWS_WITH_MESSAGE(env->get("Log.set_output", loc), "sandbox mode");
     ASSERT_THROWS_WITH_MESSAGE(env->get("Terminal.read_key", loc), "sandbox mode");
     ASSERT_THROWS_WITH_MESSAGE(env->get("Terminal.enable_raw_mode", loc), "sandbox mode");
-    (void)env->get("Hash.sha256", loc);
-    (void)env->get("Compression.deflate", loc);
-    (void)env->get("Log.information", loc);
-    (void)env->get("Terminal.bold", loc);
+    ASSERT_TRUE(env->get("Hash.sha256", loc).is_native_function());
+    ASSERT_TRUE(env->get("Compression.deflate", loc).is_native_function());
+    ASSERT_TRUE(env->get("Log.information", loc).is_native_function());
+    ASSERT_TRUE(env->get("Terminal.bold", loc).is_native_function());
 }
 
-// The same blocked modules resolve normally when sandbox mode is off, proving
-// the block is sandbox-scoped rather than an unconditional removal.
+// The same blocked modules and withheld file functions are registered and
+// resolve to native functions when sandbox mode is off, proving the block is
+// sandbox-scoped rather than an unconditional removal.
 static void test_non_sandbox_environment_permits_os_modules() {
-    const auto env = luma::test::make_std_env(/*sandbox=*/false);
+    const auto env = luma::test::make_std_env();
     const SourceLocation loc{};
 
-    (void)env->get("FileSystem.read_file", loc);
-    (void)env->get("Process.run", loc);
-    (void)env->get("Socket.connect", loc);
+    for (const auto* name : {"FileSystem.read_file", "Process.run", "Socket.connect", "Http.get",
+                             "Hash.sha256_file", "Compression.gzip_file", "Log.set_output",
+                             "Terminal.read_key", "Terminal.enable_raw_mode"}) {
+        ASSERT_TRUE(env->has(name));
+        ASSERT_TRUE(env->get(name, loc).is_native_function());
+    }
 }
 
 static void test_capability_flags_are_set() {
-    const auto& cat = stdlib::catalog();
+    const auto& cat = luma::stdlib::catalog();
 
     // Spot-check capability assignments.
-    using C = stdlib::Capability;
+    using C = luma::stdlib::Capability;
 
-    auto check = [&](const std::string& name, C expected) {
-        auto it = cat.find(name);
+    const auto check = [&](const std::string& name, C expected) {
+        const auto it = cat.find(name);
         ASSERT_TRUE(it != cat.end());
         ASSERT_EQ(static_cast<uint16_t>(it->second.capabilities), static_cast<uint16_t>(expected));
     };
@@ -242,7 +253,7 @@ static void test_result_error_code_accessor() {
 static void test_catalog_arity_is_enforced() {
     const auto env = luma::test::make_std_env();
 
-    const auto& cat = stdlib::catalog();
+    const auto& cat = luma::stdlib::catalog();
     int failures = 0;
 
     for (const auto& [name, spec] : cat) {
@@ -268,7 +279,7 @@ static void test_catalog_arity_is_enforced() {
 
         // Call with zero args — should get an arity error.
         try {
-            std::vector<Value> empty_args;
+            const std::vector<Value> empty_args;
             val.as_native_function()->function(empty_args, SourceLocation{});
 
             // If we get here, the function accepted 0 args despite claiming

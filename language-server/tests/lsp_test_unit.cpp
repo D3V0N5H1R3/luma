@@ -39,26 +39,28 @@ using luma::lsp::SymbolDefinition;
 using luma::lsp::token_range;
 using luma::lsp::TokenIndexEntry;
 using luma::lsp::WorkspaceManager;
+using luma::test::TempDir;
+using luma::test::TempFile;
 
 namespace {
 
 // ─── JSON parsing edge cases ───────────────────────────────────────
 
 void test_json_rejects_trailing_decimal() {
-    ASSERT_THROWS(JsonValue::parse("1."));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse("1."), "expected digit after decimal point");
 }
 
 void test_json_rejects_trailing_exponent() {
-    ASSERT_THROWS(JsonValue::parse("1e"));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse("1e"), "expected digit in exponent");
 }
 
 void test_json_duplicate_keys_throws() {
-    ASSERT_THROWS(JsonValue::parse(R"({"a": 1, "a": 2})"));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse(R"({"a": 1, "a": 2})"), "duplicate key in object");
 }
 
 void test_json_rejects_leading_zeros() {
-    ASSERT_THROWS(JsonValue::parse("007"));
-    ASSERT_THROWS(JsonValue::parse("00"));
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse("007"), "leading zeros are not allowed");
+    ASSERT_THROWS_WITH_MESSAGE(JsonValue::parse("00"), "leading zeros are not allowed");
 
     // "0" alone is valid.
     const auto zero = JsonValue::parse("0");

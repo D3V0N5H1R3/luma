@@ -99,7 +99,11 @@ namespace luma {
 //   8 → 9: each source-map entry also stores the start line and column of the
 //          token it came from (two more u32s, 24 bytes per entry), so runtime
 //          errors put the caret on the offending token instead of one past it.
-static constexpr std::uint32_t k_bytecode_format_version = 9;
+//   9 → 10: no layout change; invalidates v9 caches of programs the type
+//          checker now rejects — a choice of the wrong type passed to
+//          DateTime.month_*/weekday_* or Order.* (they were typed `any`), and
+//          a negated literal index such as `[1, 2, 3][-1]` or `t[-1]`.
+static constexpr std::uint32_t k_bytecode_format_version = 10;
 
 // Magic bytes at the start of a .lumc file.
 static constexpr char k_bytecode_magic[4] = {'L', 'U', 'M', 'C'};

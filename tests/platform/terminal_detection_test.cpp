@@ -11,7 +11,11 @@
 #include "runtime/cli/terminal.hpp" // Deprecated forwarding header; must still compile.
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::is_stderr_terminal;
+using luma::is_stdin_terminal;
+using luma::is_stdout_terminal;
+
+namespace term = luma::term;
 
 // ═══════════════════════════════════════════════════════════
 // is_stdin_terminal / is_stdout_terminal / is_stderr_terminal

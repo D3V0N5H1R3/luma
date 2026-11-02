@@ -1,12 +1,51 @@
 // Type checker unit tests — linter warnings: unused, shadow, unreachable, hints.
 
+#include <algorithm>
+#include <cstddef>
+#include <string>
+#include <vector>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::TypeChecker;
+using luma::test::check;
+using luma::test::check_warnings;
+using luma::test::check_warnings_with_lint;
+using luma::test::has_code;
+using luma::test::has_warnings;
+using luma::test::parse;
+
+namespace {
+
+// Type-check `source` as a full program (an @main function is required) and
+// return the type checker's warnings. The shared check_warnings() checks a
+// snippet, which suppresses the program-only rules such as unused functions.
+// The program must be valid: a syntax or type error fails the test, so a typo
+// cannot drop a declaration and make a "no warning" test pass vacuously.
+[[nodiscard]] std::vector<Diagnostic> check_program_warnings(const std::string& source) {
+    const auto program = luma::test::lex_and_parse_valid(source);
+
+    TypeChecker checker;
+
+    const auto errors = checker.check(program, /*require_main=*/true);
+
+    if (!errors.empty()) {
+        luma::test::throw_assertion_error("check_program_warnings: unexpected type errors:" +
+                                          luma::test::describe_diagnostics(errors));
+    }
+
+    return checker.get_warnings();
+}
+
+} // namespace
 
 // ─── Linter warnings ───
 
 // True if the type checker + linter report `code` for `source`. The
 // variable-usage rules (W0001, W0003, W0004, W0005, W0012) live in the linter.
-static bool reports(const std::string& source, DiagnosticCode code) {
+[[nodiscard]] static bool reports(const std::string& source, DiagnosticCode code) {
     return has_code(check_warnings_with_lint(source), code);
 }
 
@@ -118,23 +157,21 @@ static void test_unused_parameter_underscore_suppressed() {
 
 static void test_unused_function_warns() {
     // Unused-function warnings only fire with require_main=true, so drive
-    // check_warnings in that mode and pin the specific warning code.
-    const auto warnings = check_warnings("@main\n"
-                                         "function void main() { print(\"hi\") }\n"
-                                         "function integer helper() { return 42 }\n",
-                                         /*require_main=*/true);
+    // check_program_warnings and pin the specific warning code.
+    const auto warnings = check_program_warnings("@main\n"
+                                                 "function void main() { print(\"hi\") }\n"
+                                                 "function integer helper() { return 42 }\n");
 
     ASSERT_TRUE(has_code(warnings, DiagnosticCode::UnusedFunction));
 }
 
 static void test_unused_function_no_warn_if_called() {
-    const auto warnings = check_warnings("@main\n"
-                                         "function void main() {\n"
-                                         "  integer x = helper()\n"
-                                         "  print(x)\n"
-                                         "}\n"
-                                         "function integer helper() { return 42 }\n",
-                                         /*require_main=*/true);
+    const auto warnings = check_program_warnings("@main\n"
+                                                 "function void main() {\n"
+                                                 "  integer x = helper()\n"
+                                                 "  print(x)\n"
+                                                 "}\n"
+                                                 "function integer helper() { return 42 }\n");
 
     ASSERT_TRUE(warnings.empty());
 }
@@ -315,15 +352,15 @@ static void test_while_true_no_warn() {
 // ─── Error hints ───
 
 static void test_type_mismatch_hint_string_to_number() {
-    auto errors = check("number x = \"hello\"\n");
+    const auto errors = check("number x = \"hello\"\n");
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(errors[0].hint.has_value());
 }
 
 static void test_immutable_assignment_hint() {
-    auto errors = check("integer x = 1\n"
-                        "x = 2\n");
+    const auto errors = check("integer x = 1\n"
+                              "x = 2\n");
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(errors[0].hint.has_value());
@@ -331,8 +368,8 @@ static void test_immutable_assignment_hint() {
 
 static void test_reassignment_type_mismatch_hint() {
     // Reassigning a mutable variable with the wrong type should carry a hint.
-    auto errors = check("mutable number x = 1.0\n"
-                        "x = \"hello\"\n");
+    const auto errors = check("mutable number x = 1.0\n"
+                              "x = \"hello\"\n");
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(errors[0].hint.has_value());
@@ -340,17 +377,17 @@ static void test_reassignment_type_mismatch_hint() {
 
 static void test_compound_assignment_type_mismatch_hint() {
     // Compound assignment with incompatible types should carry a hint.
-    auto errors = check("mutable number x = 1.0\n"
-                        "x += \"hello\"\n");
+    const auto errors = check("mutable number x = 1.0\n"
+                              "x += \"hello\"\n");
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(errors[0].hint.has_value());
 }
 
 static void test_return_type_mismatch_hint() {
-    auto errors = check("function number test() {\n"
-                        "  return \"hello\"\n"
-                        "}\n");
+    const auto errors = check("function number test() {\n"
+                              "  return \"hello\"\n"
+                              "}\n");
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(errors[0].hint.has_value());

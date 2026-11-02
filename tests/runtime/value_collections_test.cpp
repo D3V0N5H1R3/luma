@@ -5,13 +5,17 @@
 // find/set/erase semantics, lazy index build, and rebuild-after-direct-mutation)
 // so the shared EntryIndex extraction can be verified as behaviour-preserving.
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::DictionaryValue;
+using luma::RecordValue;
+using luma::Value;
 
 // ─── DictionaryValue::set / find ───
 
@@ -20,18 +24,18 @@ static void test_dict_set_and_find() {
     dict.set("a", Value{1});
     dict.set("b", Value{2});
 
-    const auto* a = dict.find("a");
-    const auto* b = dict.find("b");
-    ASSERT_TRUE(a != nullptr);
-    ASSERT_TRUE(b != nullptr);
-    ASSERT_EQ(a->as_integer(), static_cast<std::int64_t>(1));
-    ASSERT_EQ(b->as_integer(), static_cast<std::int64_t>(2));
+    const auto* const a = dict.find("a");
+    const auto* const b = dict.find("b");
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+    ASSERT_EQ(a->as_integer(), 1);
+    ASSERT_EQ(b->as_integer(), 2);
 }
 
 static void test_dict_find_missing_returns_null() {
     DictionaryValue dict;
     dict.set("a", Value{1});
-    ASSERT_TRUE(dict.find("missing") == nullptr);
+    ASSERT_EQ(dict.find("missing"), nullptr);
 }
 
 static void test_dict_set_overwrite_updates_in_place() {
@@ -39,10 +43,10 @@ static void test_dict_set_overwrite_updates_in_place() {
     dict.set("a", Value{1});
     dict.set("a", Value{99});
 
-    ASSERT_EQ(dict.entries.size(), static_cast<std::size_t>(1));
-    const auto* a = dict.find("a");
-    ASSERT_TRUE(a != nullptr);
-    ASSERT_EQ(a->as_integer(), static_cast<std::int64_t>(99));
+    ASSERT_EQ(dict.entries.size(), 1);
+    const auto* const a = dict.find("a");
+    ASSERT_NE(a, nullptr);
+    ASSERT_EQ(a->as_integer(), 99);
 }
 
 static void test_dict_preserves_insertion_order() {
@@ -51,7 +55,7 @@ static void test_dict_preserves_insertion_order() {
     dict.set("apple", Value{2});
     dict.set("mango", Value{3});
 
-    ASSERT_EQ(dict.entries.size(), static_cast<std::size_t>(3));
+    ASSERT_EQ(dict.entries.size(), 3);
     ASSERT_EQ(dict.entries[0].first, std::string{"zebra"});
     ASSERT_EQ(dict.entries[1].first, std::string{"apple"});
     ASSERT_EQ(dict.entries[2].first, std::string{"mango"});
@@ -65,9 +69,9 @@ static void test_dict_overwrite_preserves_order() {
     dict.set("z", Value{3});
     dict.set("y", Value{20}); // overwrite the middle key
 
-    ASSERT_EQ(dict.entries.size(), static_cast<std::size_t>(3));
+    ASSERT_EQ(dict.entries.size(), 3);
     ASSERT_EQ(dict.entries[1].first, std::string{"y"});
-    ASSERT_EQ(dict.entries[1].second.as_integer(), static_cast<std::int64_t>(20));
+    ASSERT_EQ(dict.entries[1].second.as_integer(), 20);
 }
 
 // Overwriting an existing key *after* the lazy index has been built exercises
@@ -77,14 +81,14 @@ static void test_dict_overwrite_after_index_built() {
     DictionaryValue dict;
     dict.set("x", Value{1});
     dict.set("y", Value{2});
-    ASSERT_TRUE(dict.find("x") != nullptr); // build the index
+    ASSERT_NE(dict.find("x"), nullptr); // build the index
 
     dict.set("y", Value{20}); // overwrite via the built-index path
 
-    ASSERT_EQ(dict.entries.size(), static_cast<std::size_t>(2));
-    const auto* y = dict.find("y");
-    ASSERT_TRUE(y != nullptr);
-    ASSERT_EQ(y->as_integer(), static_cast<std::int64_t>(20));
+    ASSERT_EQ(dict.entries.size(), 2);
+    const auto* const y = dict.find("y");
+    ASSERT_NE(y, nullptr);
+    ASSERT_EQ(y->as_integer(), 20);
     ASSERT_EQ(dict.entries[1].first, std::string{"y"});
 }
 
@@ -97,8 +101,8 @@ static void test_dict_erase_removes_key() {
     dict.set("c", Value{3});
     dict.erase("b");
 
-    ASSERT_TRUE(dict.find("b") == nullptr);
-    ASSERT_EQ(dict.entries.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(dict.find("b"), nullptr);
+    ASSERT_EQ(dict.entries.size(), 2);
     ASSERT_EQ(dict.entries[0].first, std::string{"a"});
     ASSERT_EQ(dict.entries[1].first, std::string{"c"});
 }
@@ -111,14 +115,14 @@ static void test_dict_erase_after_index_built() {
     dict.set("c", Value{3});
 
     // Force the lazy index to build.
-    ASSERT_TRUE(dict.find("a") != nullptr);
+    ASSERT_NE(dict.find("a"), nullptr);
 
     dict.erase("a");
-    ASSERT_TRUE(dict.find("a") == nullptr);
+    ASSERT_EQ(dict.find("a"), nullptr);
 
-    const auto* c = dict.find("c");
-    ASSERT_TRUE(c != nullptr);
-    ASSERT_EQ(c->as_integer(), static_cast<std::int64_t>(3));
+    const auto* const c = dict.find("c");
+    ASSERT_NE(c, nullptr);
+    ASSERT_EQ(c->as_integer(), 3);
 }
 
 // ─── DictionaryValue: lazy index + set after build ───
@@ -126,12 +130,12 @@ static void test_dict_erase_after_index_built() {
 static void test_dict_set_after_index_built() {
     DictionaryValue dict;
     dict.set("a", Value{1});
-    ASSERT_TRUE(dict.find("a") != nullptr); // builds the index
+    ASSERT_NE(dict.find("a"), nullptr); // builds the index
 
     dict.set("b", Value{2}); // exercises the built-index insert path
-    const auto* b = dict.find("b");
-    ASSERT_TRUE(b != nullptr);
-    ASSERT_EQ(b->as_integer(), static_cast<std::int64_t>(2));
+    const auto* const b = dict.find("b");
+    ASSERT_NE(b, nullptr);
+    ASSERT_EQ(b->as_integer(), 2);
 }
 
 // ─── DictionaryValue: rebuild after direct mutation ───
@@ -139,16 +143,16 @@ static void test_dict_set_after_index_built() {
 static void test_dict_rebuild_after_direct_mutation() {
     DictionaryValue dict;
     dict.set("a", Value{1});
-    ASSERT_TRUE(dict.find("a") != nullptr); // build the index
+    ASSERT_NE(dict.find("a"), nullptr); // build the index
 
     // Bypass set() with a direct push_back, then honour the documented
     // contract by rebuilding the index.
     dict.entries.emplace_back("b", Value{2});
     dict.rebuild_index();
 
-    const auto* b = dict.find("b");
-    ASSERT_TRUE(b != nullptr);
-    ASSERT_EQ(b->as_integer(), static_cast<std::int64_t>(2));
+    const auto* const b = dict.find("b");
+    ASSERT_NE(b, nullptr);
+    ASSERT_EQ(b->as_integer(), 2);
 }
 
 // ─── DictionaryValue: non-const find yields a mutable pointer ───
@@ -157,14 +161,14 @@ static void test_dict_non_const_find_mutates() {
     DictionaryValue dict;
     dict.set("a", Value{1});
 
-    Value* a = dict.find("a");
-    ASSERT_TRUE(a != nullptr);
+    Value* const a = dict.find("a");
+    ASSERT_NE(a, nullptr);
     *a = Value{42};
 
     const auto& const_dict = dict;
-    const auto* a2 = const_dict.find("a");
-    ASSERT_TRUE(a2 != nullptr);
-    ASSERT_EQ(a2->as_integer(), static_cast<std::int64_t>(42));
+    const auto* const a2 = const_dict.find("a");
+    ASSERT_NE(a2, nullptr);
+    ASSERT_EQ(a2->as_integer(), 42);
 }
 
 // ─── RecordValue::find_field ───
@@ -175,18 +179,18 @@ static void test_record_find_field() {
     rec.fields.emplace_back("x", Value{10});
     rec.fields.emplace_back("y", Value{20});
 
-    const auto* x = rec.find_field("x");
-    const auto* y = rec.find_field("y");
-    ASSERT_TRUE(x != nullptr);
-    ASSERT_TRUE(y != nullptr);
-    ASSERT_EQ(x->as_integer(), static_cast<std::int64_t>(10));
-    ASSERT_EQ(y->as_integer(), static_cast<std::int64_t>(20));
+    const auto* const x = rec.find_field("x");
+    const auto* const y = rec.find_field("y");
+    ASSERT_NE(x, nullptr);
+    ASSERT_NE(y, nullptr);
+    ASSERT_EQ(x->as_integer(), 10);
+    ASSERT_EQ(y->as_integer(), 20);
 }
 
 static void test_record_find_field_missing_returns_null() {
     RecordValue rec;
     rec.fields.emplace_back("x", Value{10});
-    ASSERT_TRUE(rec.find_field("z") == nullptr);
+    ASSERT_EQ(rec.find_field("z"), nullptr);
 }
 
 static void test_record_preserves_field_order() {
@@ -195,7 +199,7 @@ static void test_record_preserves_field_order() {
     rec.fields.emplace_back("alpha", Value{2});
     rec.fields.emplace_back("beta", Value{3});
 
-    ASSERT_EQ(rec.fields.size(), static_cast<std::size_t>(3));
+    ASSERT_EQ(rec.fields.size(), 3);
     ASSERT_EQ(rec.fields[0].first, std::string{"gamma"});
     ASSERT_EQ(rec.fields[1].first, std::string{"alpha"});
     ASSERT_EQ(rec.fields[2].first, std::string{"beta"});
@@ -205,14 +209,14 @@ static void test_record_non_const_find_field_mutates() {
     RecordValue rec;
     rec.fields.emplace_back("x", Value{10});
 
-    Value* x = rec.find_field("x");
-    ASSERT_TRUE(x != nullptr);
+    Value* const x = rec.find_field("x");
+    ASSERT_NE(x, nullptr);
     *x = Value{55};
 
     const auto& const_rec = rec;
-    const auto* x2 = const_rec.find_field("x");
-    ASSERT_TRUE(x2 != nullptr);
-    ASSERT_EQ(x2->as_integer(), static_cast<std::int64_t>(55));
+    const auto* const x2 = const_rec.find_field("x");
+    ASSERT_NE(x2, nullptr);
+    ASSERT_EQ(x2->as_integer(), 55);
 }
 
 // Repeated lookups after the lazy index builds must stay consistent.
@@ -223,10 +227,10 @@ static void test_record_repeated_lookup_consistent() {
     rec.fields.emplace_back("c", Value{3});
 
     for (int i = 0; i < 3; ++i) {
-        ASSERT_TRUE(rec.find_field("a") != nullptr);
-        ASSERT_TRUE(rec.find_field("b") != nullptr);
-        ASSERT_TRUE(rec.find_field("c") != nullptr);
-        ASSERT_TRUE(rec.find_field("d") == nullptr);
+        ASSERT_NE(rec.find_field("a"), nullptr);
+        ASSERT_NE(rec.find_field("b"), nullptr);
+        ASSERT_NE(rec.find_field("c"), nullptr);
+        ASSERT_EQ(rec.find_field("d"), nullptr);
     }
 }
 
@@ -241,17 +245,17 @@ static void test_record_repeated_lookup_consistent() {
 // every key findable, with a miss still returning null.
 static void test_dict_large_lookup_builds_index() {
     DictionaryValue dict;
-    const int count = 20; // well past linear_scan_threshold (8)
+    constexpr int count = 20; // well past linear_scan_threshold (8)
     for (int i = 0; i < count; ++i) {
         dict.set("key_" + std::to_string(i), Value{i});
     }
 
     for (int i = 0; i < count; ++i) {
-        const auto* v = dict.find("key_" + std::to_string(i));
-        ASSERT_TRUE(v != nullptr);
-        ASSERT_EQ(v->as_integer(), static_cast<std::int64_t>(i));
+        const auto* const v = dict.find("key_" + std::to_string(i));
+        ASSERT_NE(v, nullptr);
+        ASSERT_EQ(v->as_integer(), i);
     }
-    ASSERT_TRUE(dict.find("key_missing") == nullptr);
+    ASSERT_EQ(dict.find("key_missing"), nullptr);
 }
 
 // Inserting keys one at a time across the threshold, and looking up every prior
@@ -259,13 +263,13 @@ static void test_dict_large_lookup_builds_index() {
 // by the linear scan (small) or the freshly built hash index (large).
 static void test_dict_growth_across_threshold_stays_consistent() {
     DictionaryValue dict;
-    const int count = 16;
+    constexpr int count = 16;
     for (int i = 0; i < count; ++i) {
         dict.set("k" + std::to_string(i), Value{i * 10});
         for (int j = 0; j <= i; ++j) {
-            const auto* v = dict.find("k" + std::to_string(j));
-            ASSERT_TRUE(v != nullptr);
-            ASSERT_EQ(v->as_integer(), static_cast<std::int64_t>(j * 10));
+            const auto* const v = dict.find("k" + std::to_string(j));
+            ASSERT_NE(v, nullptr);
+            ASSERT_EQ(v->as_integer(), j * 10);
         }
     }
 }
@@ -274,17 +278,17 @@ static void test_dict_growth_across_threshold_stays_consistent() {
 // the built-index path without disturbing later lookups.
 static void test_dict_overwrite_after_index_built_large() {
     DictionaryValue dict;
-    const int count = 12;
+    constexpr int count = 12;
     for (int i = 0; i < count; ++i) {
         dict.set("o" + std::to_string(i), Value{i});
     }
-    ASSERT_TRUE(dict.find("o5") != nullptr); // build the index
+    ASSERT_NE(dict.find("o5"), nullptr); // build the index
 
     dict.set("o5", Value{500}); // overwrite via the built-index path
-    ASSERT_EQ(dict.entries.size(), static_cast<std::size_t>(count));
-    const auto* v = dict.find("o5");
-    ASSERT_TRUE(v != nullptr);
-    ASSERT_EQ(v->as_integer(), static_cast<std::int64_t>(500));
+    ASSERT_EQ(dict.entries.size(), count);
+    const auto* const v = dict.find("o5");
+    ASSERT_NE(v, nullptr);
+    ASSERT_EQ(v->as_integer(), 500);
 }
 
 // Building the index (size past the threshold) then erasing back below it must
@@ -292,26 +296,26 @@ static void test_dict_overwrite_after_index_built_large() {
 // container is now small.
 static void test_dict_erase_below_threshold_after_index_built() {
     DictionaryValue dict;
-    const int count = 12;
+    constexpr int count = 12;
     for (int i = 0; i < count; ++i) {
         dict.set("e" + std::to_string(i), Value{i});
     }
-    ASSERT_TRUE(dict.find("e0") != nullptr); // force the hash index to build
+    ASSERT_NE(dict.find("e0"), nullptr); // force the hash index to build
 
     for (int i = 0; i < count - 2; ++i) {
         dict.erase("e" + std::to_string(i));
     }
 
-    ASSERT_EQ(dict.entries.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(dict.entries.size(), 2);
     for (int i = 0; i < count - 2; ++i) {
-        ASSERT_TRUE(dict.find("e" + std::to_string(i)) == nullptr);
+        ASSERT_EQ(dict.find("e" + std::to_string(i)), nullptr);
     }
-    const auto* a = dict.find("e10");
-    const auto* b = dict.find("e11");
-    ASSERT_TRUE(a != nullptr);
-    ASSERT_TRUE(b != nullptr);
-    ASSERT_EQ(a->as_integer(), static_cast<std::int64_t>(10));
-    ASSERT_EQ(b->as_integer(), static_cast<std::int64_t>(11));
+    const auto* const a = dict.find("e10");
+    const auto* const b = dict.find("e11");
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+    ASSERT_EQ(a->as_integer(), 10);
+    ASSERT_EQ(b->as_integer(), 11);
 }
 
 // Records share the same EntryIndex: a record with more fields than the
@@ -319,17 +323,17 @@ static void test_dict_erase_below_threshold_after_index_built() {
 static void test_record_large_lookup_builds_index() {
     RecordValue rec;
     rec.type_name = "Wide";
-    const int count = 20;
+    constexpr int count = 20;
     for (int i = 0; i < count; ++i) {
         rec.fields.emplace_back("f" + std::to_string(i), Value{i});
     }
 
     for (int i = 0; i < count; ++i) {
-        const auto* v = rec.find_field("f" + std::to_string(i));
-        ASSERT_TRUE(v != nullptr);
-        ASSERT_EQ(v->as_integer(), static_cast<std::int64_t>(i));
+        const auto* const v = rec.find_field("f" + std::to_string(i));
+        ASSERT_NE(v, nullptr);
+        ASSERT_EQ(v->as_integer(), i);
     }
-    ASSERT_TRUE(rec.find_field("f_absent") == nullptr);
+    ASSERT_EQ(rec.find_field("f_absent"), nullptr);
 }
 
 // ─── Value::deep_copy() for dictionaries (P01) ───
@@ -344,8 +348,8 @@ static void test_record_large_lookup_builds_index() {
 // a lazy index that resolves each key (and returns null for a miss) — proving
 // the directly-built entries vector is index-consistent.
 static void test_dict_deep_copy_preserves_order_and_values() {
-    auto src = std::make_shared<DictionaryValue>();
-    const int count = 50; // well past linear_scan_threshold (8)
+    const auto src = std::make_shared<DictionaryValue>();
+    constexpr int count = 50; // well past linear_scan_threshold (8)
     for (int i = 0; i < count; ++i) {
         src->set("k" + std::to_string(i), Value{i});
     }
@@ -354,48 +358,48 @@ static void test_dict_deep_copy_preserves_order_and_values() {
     ASSERT_TRUE(copy.is_dictionary());
     const auto& dst = copy.as_dictionary();
 
-    ASSERT_EQ(dst->entries.size(), static_cast<std::size_t>(count));
+    ASSERT_EQ(dst->entries.size(), count);
     for (int i = 0; i < count; ++i) {
         ASSERT_EQ(dst->entries[static_cast<std::size_t>(i)].first, "k" + std::to_string(i));
-        const auto* v = dst->find("k" + std::to_string(i));
-        ASSERT_TRUE(v != nullptr);
-        ASSERT_EQ(v->as_integer(), static_cast<std::int64_t>(i));
+        const auto* const v = dst->find("k" + std::to_string(i));
+        ASSERT_NE(v, nullptr);
+        ASSERT_EQ(v->as_integer(), i);
     }
-    ASSERT_TRUE(dst->find("k_absent") == nullptr);
+    ASSERT_EQ(dst->find("k_absent"), nullptr);
 }
 
 // Mutating the copy — including a nested dictionary value — must leave the
 // source untouched, proving the copy is deep rather than structurally shared.
 static void test_dict_deep_copy_is_independent() {
-    auto inner = std::make_shared<DictionaryValue>();
+    const auto inner = std::make_shared<DictionaryValue>();
     inner->set("n", Value{1});
 
-    auto src = std::make_shared<DictionaryValue>();
+    const auto src = std::make_shared<DictionaryValue>();
     src->set("a", Value{10});
     src->set("inner", Value{inner});
 
     const Value copy = Value{src}.deep_copy();
     const auto& dst = copy.as_dictionary();
 
-    Value* a = dst->find("a");
-    ASSERT_TRUE(a != nullptr);
+    Value* const a = dst->find("a");
+    ASSERT_NE(a, nullptr);
     *a = Value{999};
 
-    Value* nested = dst->find("inner");
-    ASSERT_TRUE(nested != nullptr);
+    Value* const nested = dst->find("inner");
+    ASSERT_NE(nested, nullptr);
     ASSERT_TRUE(nested->is_dictionary());
     nested->as_dictionary()->set("n", Value{888});
 
-    const auto* src_a = src->find("a");
-    ASSERT_TRUE(src_a != nullptr);
-    ASSERT_EQ(src_a->as_integer(), static_cast<std::int64_t>(10));
+    const auto* const src_a = src->find("a");
+    ASSERT_NE(src_a, nullptr);
+    ASSERT_EQ(src_a->as_integer(), 10);
 
-    const auto* src_inner = src->find("inner");
-    ASSERT_TRUE(src_inner != nullptr);
+    const auto* const src_inner = src->find("inner");
+    ASSERT_NE(src_inner, nullptr);
     ASSERT_TRUE(src_inner->is_dictionary());
-    const auto* src_n = src_inner->as_dictionary()->find("n");
-    ASSERT_TRUE(src_n != nullptr);
-    ASSERT_EQ(src_n->as_integer(), static_cast<std::int64_t>(1));
+    const auto* const src_n = src_inner->as_dictionary()->find("n");
+    ASSERT_NE(src_n, nullptr);
+    ASSERT_EQ(src_n->as_integer(), 1);
 }
 
 // ─── Main ───

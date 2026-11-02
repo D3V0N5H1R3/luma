@@ -5,22 +5,17 @@
 #include "common/resource_limits.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
+using luma::test::make_std_env;
+
 LUMA_TEST(linear_algebra_identity_overflow_guarded) {
     // A size whose square overflows int64 must be rejected with a clean limit
     // error rather than bypassing the guard and attempting an absurd
     // allocation. (Regression: the guard computed n*n, which overflowed for
     // very large n and silently passed.)
-    bool threw{false};
-
-    try {
-        (void)eval("LinearAlgebra.identity(4000000000)");
-    } catch (const std::exception& e) {
-        threw = true;
-        ASSERT_TRUE(std::string{e.what()}.find("maximum matrix element count") !=
-                    std::string::npos);
-    }
-
-    ASSERT_TRUE(threw);
+    ASSERT_EVAL_THROWS("LinearAlgebra.identity(4000000000)", "maximum matrix element count");
 }
 
 LUMA_TEST(linear_algebra_multiply_overflow_guarded) {
@@ -30,18 +25,9 @@ LUMA_TEST(linear_algebra_multiply_overflow_guarded) {
     // (Regression: multiply had no result-size guard, unlike the constructors.)
     const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(8)};
 
-    bool threw{false};
-
-    try {
-        (void)eval("LinearAlgebra.multiply(LinearAlgebra.zero_matrix(3, 1), "
-                   "LinearAlgebra.zero_matrix(1, 3))");
-    } catch (const std::exception& e) {
-        threw = true;
-        ASSERT_TRUE(std::string{e.what()}.find("maximum matrix element count") !=
-                    std::string::npos);
-    }
-
-    ASSERT_TRUE(threw);
+    ASSERT_EVAL_THROWS("LinearAlgebra.multiply(LinearAlgebra.zero_matrix(3, 1), "
+                       "LinearAlgebra.zero_matrix(1, 3))",
+                       "maximum matrix element count");
 }
 
 LUMA_TEST(linear_algebra_outer_overflow_guarded) {
@@ -49,17 +35,8 @@ LUMA_TEST(linear_algebra_outer_overflow_guarded) {
     // the array limit allocated limit² doubles.
     const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(8)};
 
-    bool threw{false};
-
-    try {
-        (void)eval("LinearAlgebra.outer([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])");
-    } catch (const std::exception& e) {
-        threw = true;
-        ASSERT_TRUE(std::string{e.what()}.find("maximum matrix element count") !=
-                    std::string::npos);
-    }
-
-    ASSERT_TRUE(threw);
+    ASSERT_EVAL_THROWS("LinearAlgebra.outer([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])",
+                       "maximum matrix element count");
 
     // Within the limit (2 × 2 = 4 elements) outer still succeeds.
     ASSERT_RESULT_SUCCESS(eval("LinearAlgebra.outer([1.0, 2.0], [3.0, 4.0])"));
@@ -73,6 +50,8 @@ LUMA_TEST(linearalgebra_add) {
     const auto& arr = *v.as_result()->owned_inner->as_array()->elements;
 
     ASSERT_EQ(arr.size(), 2U);
+    ASSERT_NEAR(arr[0].to_numeric(), 4.0, 1e-9);
+    ASSERT_NEAR(arr[1].to_numeric(), 6.0, 1e-9);
 }
 
 LUMA_TEST(linearalgebra_cross) {
@@ -82,8 +61,11 @@ LUMA_TEST(linearalgebra_cross) {
 
     ASSERT_TRUE(result.is_array());
 
-    auto& elems = *result.as_array()->elements;
+    const auto& elems = *result.as_array()->elements;
 
+    ASSERT_EQ(elems.size(), 3U);
+    ASSERT_NEAR(elems[0].to_numeric(), 0.0, 1e-10);
+    ASSERT_NEAR(elems[1].to_numeric(), 0.0, 1e-10);
     ASSERT_NEAR(elems[2].to_numeric(), 1.0, 1e-10);
 }
 
@@ -98,7 +80,7 @@ LUMA_TEST(linearalgebra_determinant) {
 
     const auto n = v.as_result()->owned_inner->as_number();
 
-    ASSERT_TRUE(n > -2.1 && n < -1.9);
+    ASSERT_NEAR(n, -2.0, 1e-9);
 }
 
 LUMA_TEST(linearalgebra_dot) {
@@ -114,20 +96,29 @@ LUMA_TEST(linearalgebra_dot_fail) {
 }
 
 LUMA_TEST(linearalgebra_identity) {
-    auto result =
+    const auto result =
         eval("LinearAlgebra.identity(2) |> LinearAlgebra.determinant() |> Result.unwrap()");
 
     ASSERT_NEAR(result.to_numeric(), 1.0, 1e-10);
 }
 
 LUMA_TEST(linearalgebra_inverse) {
+    // The identity matrix is its own inverse.
     const auto v = eval("LinearAlgebra.inverse([[1.0, 0.0], [0.0, 1.0]])");
 
     ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rows = *v.as_result()->owned_inner->as_array()->elements;
+
+    ASSERT_EQ(rows.size(), 2U);
+    ASSERT_NEAR((*rows[0].as_array()->elements)[0].to_numeric(), 1.0, 1e-9);
+    ASSERT_NEAR((*rows[0].as_array()->elements)[1].to_numeric(), 0.0, 1e-9);
+    ASSERT_NEAR((*rows[1].as_array()->elements)[0].to_numeric(), 0.0, 1e-9);
+    ASSERT_NEAR((*rows[1].as_array()->elements)[1].to_numeric(), 1.0, 1e-9);
 }
 
 LUMA_TEST(linearalgebra_module) {
-    const auto env = luma::test::make_std_env();
+    const auto env = make_std_env();
 
     ASSERT_TRUE(env->has("LinearAlgebra.add"));
     ASSERT_TRUE(env->has("LinearAlgebra.dot"));
@@ -144,6 +135,14 @@ LUMA_TEST(linearalgebra_multiply) {
     const auto v = eval("LinearAlgebra.multiply([[1.0, 0.0], [0.0, 1.0]], [[2.0], [3.0]])");
 
     ASSERT_RESULT_SUCCESS(v);
+
+    // Identity × column vector leaves the 2×1 column unchanged.
+    const auto& rows = *v.as_result()->owned_inner->as_array()->elements;
+
+    ASSERT_EQ(rows.size(), 2U);
+    ASSERT_EQ(rows[0].as_array()->elements->size(), 1U);
+    ASSERT_NEAR((*rows[0].as_array()->elements)[0].to_numeric(), 2.0, 1e-9);
+    ASSERT_NEAR((*rows[1].as_array()->elements)[0].to_numeric(), 3.0, 1e-9);
 }
 
 LUMA_TEST(linearalgebra_norm) {
@@ -155,12 +154,12 @@ LUMA_TEST(linearalgebra_norm) {
 }
 
 LUMA_TEST(linearalgebra_solve) {
-    auto result =
+    const auto result =
         eval("LinearAlgebra.solve([[2.0, 1.0], [1.0, 3.0]], [5.0, 10.0]) |> Result.unwrap()");
 
     ASSERT_TRUE(result.is_array());
 
-    auto& elems = *result.as_array()->elements;
+    const auto& elems = *result.as_array()->elements;
 
     ASSERT_NEAR(elems[0].to_numeric(), 1.0, 1e-8);
     ASSERT_NEAR(elems[1].to_numeric(), 3.0, 1e-8);
@@ -480,33 +479,43 @@ LUMA_TEST(linearalgebra_solve_singular_fail) {
 }
 
 LUMA_TEST(linearalgebra_zero_vector_non_positive_throws) {
-    ASSERT_THROWS(eval("LinearAlgebra.zero_vector(0)"));
-    ASSERT_THROWS(eval("LinearAlgebra.zero_vector(-3)"));
+    ASSERT_EVAL_THROWS("LinearAlgebra.zero_vector(0)",
+                       "LinearAlgebra.zero_vector: size must be positive");
+    ASSERT_EVAL_THROWS("LinearAlgebra.zero_vector(-3)",
+                       "LinearAlgebra.zero_vector: size must be positive");
 }
 
 LUMA_TEST(linearalgebra_unit_vector_out_of_range_throws) {
-    ASSERT_THROWS(eval("LinearAlgebra.unit_vector(3, 5)"));
-    ASSERT_THROWS(eval("LinearAlgebra.unit_vector(3, -1)"));
+    ASSERT_EVAL_THROWS("LinearAlgebra.unit_vector(3, 5)",
+                       "LinearAlgebra.unit_vector: invalid dimensions");
+    ASSERT_EVAL_THROWS("LinearAlgebra.unit_vector(3, -1)",
+                       "LinearAlgebra.unit_vector: invalid dimensions");
 }
 
 LUMA_TEST(linearalgebra_identity_non_positive_throws) {
-    ASSERT_THROWS(eval("LinearAlgebra.identity(0)"));
+    ASSERT_EVAL_THROWS("LinearAlgebra.identity(0)",
+                       "LinearAlgebra.identity: size must be positive");
 }
 
 LUMA_TEST(linearalgebra_zero_matrix_non_positive_throws) {
-    ASSERT_THROWS(eval("LinearAlgebra.zero_matrix(0, 3)"));
-    ASSERT_THROWS(eval("LinearAlgebra.zero_matrix(2, -1)"));
+    ASSERT_EVAL_THROWS("LinearAlgebra.zero_matrix(0, 3)",
+                       "LinearAlgebra.zero_matrix: dimensions must be positive");
+    ASSERT_EVAL_THROWS("LinearAlgebra.zero_matrix(2, -1)",
+                       "LinearAlgebra.zero_matrix: dimensions must be positive");
 }
 
 LUMA_TEST(linearalgebra_ragged_matrix_throws) {
     // to_mat rejects matrices whose rows differ in length.
-    ASSERT_THROWS(eval("LinearAlgebra.transpose([[1.0, 2.0], [3.0]])"));
+    ASSERT_EVAL_THROWS("LinearAlgebra.transpose([[1.0, 2.0], [3.0]])",
+                       "LinearAlgebra.transpose: matrix rows have different lengths");
 }
 
 LUMA_TEST(linearalgebra_non_numeric_throws) {
     // to_vec rejects array elements that are not numbers.
-    ASSERT_THROWS(eval("LinearAlgebra.norm([\"a\", \"b\"])"));
-    ASSERT_THROWS(eval("LinearAlgebra.dot([1.0, 2.0], [\"x\", \"y\"])"));
+    ASSERT_EVAL_THROWS("LinearAlgebra.norm([\"a\", \"b\"])",
+                       "LinearAlgebra.norm: element: expected numeric, got 'string'");
+    ASSERT_EVAL_THROWS("LinearAlgebra.dot([1.0, 2.0], [\"x\", \"y\"])",
+                       "LinearAlgebra.dot: element: expected numeric, got 'string'");
 }
 
 int main() {

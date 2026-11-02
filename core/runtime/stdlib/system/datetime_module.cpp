@@ -271,6 +271,9 @@ validate_datetime_fields(std::int64_t raw_year, std::int64_t raw_month, std::int
 constexpr std::array<std::string_view, 7> k_weekday_names{
     {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}};
 
+// The runtime type name of DateTime.Weekday choice values.
+constexpr std::string_view k_weekday_type = "Weekday";
+
 constexpr std::string_view k_weekday_range_error =
     "weekday number must be between 1 (Monday) and 7 (Sunday)";
 
@@ -278,7 +281,7 @@ constexpr std::string_view k_weekday_range_error =
 // (1 = Monday … 7 = Sunday). The caller guarantees the number is in range.
 [[nodiscard]] Value make_weekday_choice(int iso_weekday) {
     auto cv = std::make_shared<ChoiceValue>();
-    cv->type_name = "Weekday";
+    cv->type_name = std::string{k_weekday_type};
     cv->variant = std::string{k_weekday_names[static_cast<std::size_t>(iso_weekday - 1)]};
 
     return Value{std::move(cv)};
@@ -305,11 +308,13 @@ constexpr std::string_view k_weekday_range_error =
                            "pass a DateTime.Weekday variant, e.g. DateTime.Weekday.Monday"};
     }
 
-    const int iso = weekday_iso_from_variant(arg.as_choice()->variant);
+    const auto& choice = *arg.as_choice();
+    const int iso =
+        choice.type_name == k_weekday_type ? weekday_iso_from_variant(choice.variant) : 0;
 
     if (iso == 0) {
-        throw RuntimeError{std::format("{}: unknown weekday 'DateTime.Weekday.{}'", func_name,
-                                       arg.as_choice()->variant),
+        throw RuntimeError{std::format("{}: expected a DateTime.Weekday, got '{}.{}'", func_name,
+                                       choice.type_name, choice.variant),
                            loc, "use a DateTime.Weekday variant: Monday … Sunday"};
     }
 
@@ -323,6 +328,9 @@ constexpr std::array<std::string_view, 12> k_month_names{
     {"January", "February", "March", "April", "May", "June", "July", "August", "September",
      "October", "November", "December"}};
 
+// The runtime type name of DateTime.Month choice values.
+constexpr std::string_view k_month_type = "Month";
+
 constexpr std::string_view k_month_range_error =
     "month number must be between 1 (January) and 12 (December)";
 
@@ -330,7 +338,7 @@ constexpr std::string_view k_month_range_error =
 // (1 = January … 12 = December). The caller guarantees the number is in range.
 [[nodiscard]] Value make_month_choice(int month) {
     auto cv = std::make_shared<ChoiceValue>();
-    cv->type_name = "Month";
+    cv->type_name = std::string{k_month_type};
     cv->variant = std::string{k_month_names[static_cast<std::size_t>(month - 1)]};
 
     return Value{std::move(cv)};
@@ -357,11 +365,13 @@ constexpr std::string_view k_month_range_error =
                            "pass a DateTime.Month variant, e.g. DateTime.Month.January"};
     }
 
-    const int month = month_number_from_variant(arg.as_choice()->variant);
+    const auto& choice = *arg.as_choice();
+    const int month =
+        choice.type_name == k_month_type ? month_number_from_variant(choice.variant) : 0;
 
     if (month == 0) {
-        throw RuntimeError{std::format("{}: unknown month 'DateTime.Month.{}'", func_name,
-                                       arg.as_choice()->variant),
+        throw RuntimeError{std::format("{}: expected a DateTime.Month, got '{}.{}'", func_name,
+                                       choice.type_name, choice.variant),
                            loc, "use a DateTime.Month variant: January … December"};
     }
 

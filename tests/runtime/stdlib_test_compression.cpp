@@ -5,11 +5,13 @@
 #include "runtime/stdlib/system/compression_codec.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::test::eval;
+
 static void test_compression_compressed_size() {
     const auto v = eval(R"(Compression.compressed_size("hello world"))");
 
     ASSERT_TRUE(v.is_integer());
-    ASSERT_TRUE(v.as_integer() > 0);
+    ASSERT_GT(v.as_integer(), 0);
 }
 
 static void test_compression_deflate_inflate() {
@@ -172,11 +174,12 @@ static void test_compression_rle_digit_safety() {
 }
 
 static void test_compression_compressed_size_smaller_than_input() {
+    // A 50-byte run of one character compresses to fewer than 50 bytes.
     const auto v = eval(
-        R"(Compression.compressed_size("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") < 50)");
+        R"(Compression.compressed_size("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))");
 
-    ASSERT_TRUE(v.is_bool());
-    ASSERT_TRUE(v.as_bool());
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_LT(v.as_integer(), 50);
 }
 
 static void test_compression_gunzip_malformed() {
@@ -375,7 +378,7 @@ static void test_codec_rle_long_run_chunking() {
 static void test_codec_gzip_structure() {
     const auto gz = luma::compression::gzip_compress("hello world");
 
-    ASSERT_GE(gz.size(), static_cast<std::size_t>(18));
+    ASSERT_GE(gz.size(), 18);
     ASSERT_EQ(static_cast<int>(static_cast<unsigned char>(gz[0])), 0x1f);
     ASSERT_EQ(static_cast<int>(static_cast<unsigned char>(gz[1])), 0x8b);
     ASSERT_EQ(static_cast<int>(static_cast<unsigned char>(gz[2])), 0x08);
@@ -454,14 +457,14 @@ static void test_codec_deflate_checked_corrupt() {
     const auto r = luma::compression::deflate_decompress_checked(std::string("\xff\xff\xff", 3));
 
     ASSERT_TRUE(r.is_err());
-    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Corrupt);
+    ASSERT_EQ(r.error(), luma::compression::DecodeError::Corrupt);
 }
 
 static void test_codec_gzip_checked_truncated_short() {
     const auto r = luma::compression::gzip_decompress_checked(std::string("\x1f\x8b\x08", 3));
 
     ASSERT_TRUE(r.is_err());
-    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Truncated);
+    ASSERT_EQ(r.error(), luma::compression::DecodeError::Truncated);
 }
 
 static void test_codec_gzip_checked_unsupported_magic() {
@@ -472,7 +475,7 @@ static void test_codec_gzip_checked_unsupported_magic() {
     const auto r = luma::compression::gzip_decompress_checked(bad);
 
     ASSERT_TRUE(r.is_err());
-    ASSERT_TRUE(r.error() == luma::compression::DecodeError::UnsupportedFormat);
+    ASSERT_EQ(r.error(), luma::compression::DecodeError::UnsupportedFormat);
 }
 
 static void test_codec_gzip_checked_unsupported_method() {
@@ -483,7 +486,7 @@ static void test_codec_gzip_checked_unsupported_method() {
     const auto r = luma::compression::gzip_decompress_checked(gz);
 
     ASSERT_TRUE(r.is_err());
-    ASSERT_TRUE(r.error() == luma::compression::DecodeError::UnsupportedFormat);
+    ASSERT_EQ(r.error(), luma::compression::DecodeError::UnsupportedFormat);
 }
 
 static void test_codec_gzip_checked_corrupt_crc() {
@@ -493,7 +496,7 @@ static void test_codec_gzip_checked_corrupt_crc() {
     const auto r = luma::compression::gzip_decompress_checked(gz);
 
     ASSERT_TRUE(r.is_err());
-    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Corrupt);
+    ASSERT_EQ(r.error(), luma::compression::DecodeError::Corrupt);
 }
 
 static void test_codec_gzip_checked_fextra_length_out_of_bounds() {
@@ -512,21 +515,21 @@ static void test_codec_gzip_checked_fextra_length_out_of_bounds() {
     const auto r = luma::compression::gzip_decompress_checked(gz);
 
     ASSERT_TRUE(r.is_err());
-    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Truncated);
+    ASSERT_EQ(r.error(), luma::compression::DecodeError::Truncated);
 }
 
 static void test_codec_rle_checked_corrupt() {
     const auto r = luma::compression::rle_decode_checked("0a");
 
     ASSERT_TRUE(r.is_err());
-    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Corrupt);
+    ASSERT_EQ(r.error(), luma::compression::DecodeError::Corrupt);
 }
 
 static void test_codec_rle_checked_truncated() {
     const auto r = luma::compression::rle_decode_checked("3");
 
     ASSERT_TRUE(r.is_err());
-    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Truncated);
+    ASSERT_EQ(r.error(), luma::compression::DecodeError::Truncated);
 }
 
 static void test_compression_gunzip_typed_success() {
@@ -607,18 +610,23 @@ static void test_compression_gzip_file_with_non_string_path_is_catchable() {
     // (here an element of a bare `array`), that raised std::bad_variant_access,
     // which the VM's RuntimeError-only dispatch cannot catch — an uncatchable
     // abort rather than an error a Luma try/catch can handle.  The call must
-    // now raise a catchable RuntimeError so the catch block runs.
+    // now raise a catchable RuntimeError so the catch block runs.  The caught
+    // message is returned so the test cannot pass on an unrelated error (a typo
+    // would be caught as "undefined variable").
     const auto* const src =
         "array box = [42]\n"
-        "mutable boolean caught = false\n"
+        "mutable string caught = \"\"\n"
         "try {\n"
         "    result<string> _r = Compression.gzip_file_with(box[0], \"x.gz\", 5)\n"
-        "} catch (_e) {\n"
-        "    caught = true\n"
+        "} catch (e) {\n"
+        "    caught = e\n"
         "}\n"
         "caught";
 
-    ASSERT_TRUE(eval(src).as_bool());
+    const auto v = eval(src);
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_NE(v.as_string().find("Compression.gzip_file_with: expected string"), std::string::npos);
 }
 
 int main() {

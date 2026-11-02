@@ -15,7 +15,13 @@
 #include "symbols/qualified_name.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::symbols;
+using luma::symbols::is_qualified_name;
+using luma::symbols::make_qualified;
+using luma::symbols::qualified_member;
+using luma::symbols::qualified_module;
+using luma::symbols::QualifiedName;
+using luma::symbols::split_member;
+using luma::symbols::split_module;
 
 // ═══════════════════════════════════════════════════════════
 // make_qualified
@@ -222,8 +228,7 @@ static void test_parse_trailing_dot() {
 }
 
 int main() {
-    using namespace luma::test;
-    print_suite_header("qualified_name");
+    luma::test::print_suite_header("qualified_name");
 
     RUN(test_make_qualified_basic);
     RUN(test_make_qualified_empty_namespace);

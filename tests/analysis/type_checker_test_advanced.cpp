@@ -1,6 +1,15 @@
 // Type checker unit tests — namespaces, downcast, optional chains, any-warn, return analysis.
 
+#include <algorithm>
+#include <string>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::Diagnostic;
+using luma::test::check;
+using luma::test::fails;
+using luma::test::has_warnings;
+using luma::test::passes;
 
 // ─── Namespace ───
 
@@ -611,14 +620,10 @@ static void test_match_statement_reports_unknown_choice_variant() {
                              "    }\n"
                              "}\n");
 
-    bool found = false;
-    for (const auto& d : diags) {
-        if (d.message.find("has no variant") != std::string::npos &&
-            d.message.find("Ghost") != std::string::npos) {
-            found = true;
-        }
-    }
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(std::ranges::any_of(diags, [](const Diagnostic& d) {
+        return d.message.find("has no variant") != std::string::npos &&
+               d.message.find("Ghost") != std::string::npos;
+    }));
 }
 
 static void test_match_expression_silent_on_unknown_choice_variant() {
@@ -631,9 +636,9 @@ static void test_match_expression_silent_on_unknown_choice_variant() {
                              "    }\n"
                              "}\n");
 
-    for (const auto& d : diags) {
-        ASSERT_TRUE(d.message.find("has no variant") == std::string::npos);
-    }
+    ASSERT_TRUE(std::ranges::none_of(diags, [](const Diagnostic& d) {
+        return d.message.find("has no variant") != std::string::npos;
+    }));
 }
 
 // Regression: mutually-recursive interfaces used in an assignability check must
