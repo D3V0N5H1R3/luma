@@ -2,9 +2,10 @@
 # Luma — Release Workflow
 #
 # Triggered on version tags (vMAJOR.MINOR.PATCH). Builds release binaries
-# for all platforms (Linux x86_64, Linux aarch64/Raspberry Pi,
-# macOS, Windows), validates on Debian, Kali Linux, Fedora,
-# and Arch Linux, then creates a GitHub Release with an
+# for every platform the editor extensions download (Linux x86_64 and
+# aarch64/Raspberry Pi, macOS aarch64 and x86_64, Windows x86_64 and
+# aarch64 — see extensions/shared/platform-map.json), validates on Debian,
+# Kali Linux, Fedora, and Arch Linux, then creates a GitHub Release with an
 # auto-generated changelog and attached binaries.
 #
 # Each platform ships a full bundle (luma-{os}-{arch}, all three binaries)
@@ -69,6 +70,10 @@ jobs:
       # Build every platform even if one fails, so a release shows the full
       # picture rather than stopping at the first failure.
       fail-fast: false
+      # One leg per {os}-{arch} in extensions/shared/platform-map.json except
+      # linux-aarch64, which build-rpi below produces. Every leg is a native build
+      # on a GitHub-hosted runner (macos-15-intel and windows-11-arm are free for
+      # public repositories), so the tests run on the architecture that ships.
       matrix:
         include:
           - os: ubuntu-latest
@@ -79,9 +84,19 @@ jobs:
             asset_os: macos
             asset_arch: aarch64
 
+          - os: macos-15-intel
+            asset_os: macos
+            asset_arch: x86_64
+
           - os: windows-latest
             asset_os: windows
             asset_arch: x86_64
+
+          # The Visual Studio generator targets the host architecture, so this
+          # native ARM64 runner produces ARM64 binaries without a -A switch.
+          - os: windows-11-arm
+            asset_os: windows
+            asset_arch: aarch64
 
     steps:
       - name: Checkout source
@@ -116,8 +131,13 @@ jobs:
             Write-Output "::notice::WINDOWS_SIGNING_CERTIFICATE/WINDOWS_SIGNING_PASSWORD not set; publishing unsigned Windows binaries."
             exit 0
           }
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
-            Sort-Object FullName -Descending | Select-Object -First 1
+          # Prefer the host-architecture signtool (arm64 on windows-11-arm); the
+          # x64 one also runs there under emulation, so it is the fallback.
+          $hostArch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+          $signtool = @($hostArch, "x64") | Select-Object -Unique | ForEach-Object {
+            Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\$_\signtool.exe" -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending | Select-Object -First 1
+          } | Select-Object -First 1
           if (-not $signtool) {
             Write-Output "::error::signtool.exe not found in the Windows SDK."
             exit 1
@@ -240,6 +260,23 @@ jobs:
           else
             git log "${prev_tag}..HEAD" --pretty=format:"- %s (%h)" --no-merges > release-notes.md
           fi
+
+      # Every {os}-{arch} in extensions/shared/platform-map.json must ship all
+      # three archives: the editor extensions download them by that name, so a
+      # matrix leg dropped from the build job would otherwise publish a release
+      # that silently breaks the extensions on that platform.
+      - name: Verify every platform's archives are present
+        run: |
+          missing=0
+          for suffix in $(jq -r '.[][]' extensions/shared/platform-map.json); do
+            for binary in luma luma_lsp luma_dap; do
+              if [ -z "$(find artifacts -type f -name "${binary}-${suffix}")" ]; then
+                echo "::error::Missing release asset ${binary}-${suffix}"
+                missing=1
+              fi
+            done
+          done
+          exit "${missing}"
 
       # One checksum manifest covering every release archive. Editor extensions
       # download SHA256SUMS and verify their archive against it before

@@ -26,6 +26,9 @@ on:
       - "scripts/compare_benchmark_results.py"
       - "scripts/parse_benchmark_results.py"
       - "CMakeLists.txt"
+      - "cmake/**"
+      - ".github/actions/**"
+      - ".github/workflows/benchmark.yml"
   workflow_dispatch:
     inputs:
       update_baseline:
@@ -59,7 +62,11 @@ jobs:
       - name: Configure and build
         uses: ./.github/actions/cmake-build
 
+      # An explicit `shell: bash` runs with -o pipefail, so a crashed or missing
+      # binary fails this step instead of being masked by tee's exit status (the
+      # implicit default shell has no pipefail).
       - name: Run benchmark suite
+        shell: bash
         run: |
           ./build/luma benchmarks/suite.luma 2>&1 | tee benchmark-results.txt
 

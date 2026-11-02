@@ -71,7 +71,7 @@ cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --config Release --parallel
 ```
 
-- `--config <type>` — required for multi-config generators (Visual Studio, Xcode).
+- `--config <type>` — required for multi-config generators (Visual Studio, Xcode): they ignore `CMAKE_BUILD_TYPE` when building and default to Debug, so a bare `cmake --build build` there builds Debug into `<build>/Debug/` and leaves the Release binaries at `build/` stale. Ninja Multi-Config defaults to the tree's primary configuration instead. See [cmake/PRESETS.md](../cmake/PRESETS.md#build-directories-and-binaries) for `LUMA_PRIMARY_CONFIG`, which picks the configuration placed at the build-tree root.
 - `--parallel` — uses all available cores.
 
 ### Running Tests
@@ -180,9 +180,9 @@ Run a fuzzer with an optional corpus directory:
 
 ## 8 — Cross-Platform Considerations
 
-- **Windows (MSVC)** — the `default` and `debug` presets use the newest installed Visual Studio generator; the `msvc` preset pins Visual Studio 2022 for use in the IDE. When building without a build preset, always pass `--config Release` (or `Debug`) with `cmake --build` for multi-config generators.
+- **Windows (MSVC)** — the `default` and `debug` presets use the newest installed Visual Studio generator; the `msvc` preset pins Visual Studio 2022 for use in the IDE. When building without a build preset, always pass `--config Release` (or `Debug`) with `cmake --build` for multi-config generators — Visual Studio otherwise builds Debug. `python scripts/configure.py msvc --build` runs the `msvc-release` build preset (`--config Debug` selects `msvc-debug`). The C/C++ runtime is linked statically (`/MT`, `/MTd` for Debug; `CMAKE_MSVC_RUNTIME_LIBRARY` in the root `CMakeLists.txt`), so the executables need no Visual C++ Redistributable; an AddressSanitizer build (`-fsanitize=address` / `/fsanitize=address` in the global flags) keeps the DLL runtime, and an explicit `-DCMAKE_MSVC_RUNTIME_LIBRARY=...` always wins.
 - **macOS (Xcode)** — the `default` preset uses Makefiles; use the `xcode` / `xcode-release` presets to work in Xcode. The `--config` flag is required there too.
-- **Binary location** — every generator places the executables at the root of the build directory (`build/luma`, `build\luma.exe`); see [cmake/PRESETS.md](../cmake/PRESETS.md#build-directories-and-binaries).
+- **Binary location** — every generator places the executables at the root of the build directory (`build/luma`, `build\luma.exe`); in a multi-config tree that is the primary configuration (`LUMA_PRIMARY_CONFIG`) and any other goes to `<build>/<Config>/`. See [cmake/PRESETS.md](../cmake/PRESETS.md#build-directories-and-binaries).
 - **Linux** — GCC and Clang are both fully supported. The `default` preset works out of the box. The minimum is **GCC 13** (or Clang 15): Luma uses `std::format` and `std::chrono::clock_cast`, which libstdc++ ships only from GCC 13, so GCC 12 and earlier — such as the default `g++` on Raspberry Pi OS and Debian 12 "bookworm" — cannot build the project. Install GCC 13+ and pass `-DCMAKE_CXX_COMPILER=g++-13` when configuring.
 
 ---
@@ -197,6 +197,9 @@ Run a fuzzer with an optional corpus directory:
 | `LUMA_FEATURE_SANITIZERS` | `OFF`   | Enable ASan + UBSan (Clang/GCC only)              |
 | `LUMA_FEATURE_COVERAGE`   | `OFF`   | Enable code coverage instrumentation (Clang/GCC)  |
 | `LUMA_FEATURE_LTO`        | `OFF`   | Enable link-time optimisation for Release builds  |
+| `LUMA_PRIMARY_CONFIG`     | Release | Multi-config: configuration placed at build root  |
+
+`LUMA_PRIMARY_CONFIG` defaults to `CMAKE_DEFAULT_BUILD_TYPE`, else `CMAKE_BUILD_TYPE`, else Release, and must be one of `CMAKE_CONFIGURATION_TYPES`; single-config generators ignore it.
 
 ---
 

@@ -71,12 +71,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The first three entries are the primary per-platform builds: normal
+        # The first five entries are the primary per-platform builds: normal
         # optimized executables that are tested and uploaded as the downloadable
         # binaries (luma-<os>-<compiler>). Only the Ubuntu GCC 14 job also runs
         # the headless example sweep (scripts/run_luma_examples.py).
         #
-        # The fourth entry (Ubuntu GCC 13 + sanitizers) is a runtime-safety
+        # The last entry (Ubuntu GCC 13 + sanitizers) is a runtime-safety
         # check, NOT a build meant for use: it enables AddressSanitizer + UBSan
         # (-DLUMA_FEATURE_SANITIZERS=ON) to catch buffer overflows,
         # use-after-free, and undefined behaviour. Its uploaded binary is
@@ -103,6 +103,27 @@ jobs:
             dap_binary: build/luma_dap
 
           - os: windows-latest
+            compiler: msvc
+            cc: cl
+            cxx: cl
+            binary: build/luma.exe
+            lsp_binary: build/luma_lsp.exe
+            dap_binary: build/luma_dap.exe
+
+          # The remaining release architectures (see release.yml), built and
+          # tested here too so a regression surfaces on the pull request rather
+          # than when a release tag is pushed. Both are native GitHub-hosted
+          # runners, free for public repositories; the Visual Studio generator
+          # targets the host, so windows-11-arm builds ARM64 without -A.
+          - os: macos-15-intel
+            compiler: clang
+            cc: clang
+            cxx: clang++
+            binary: build/luma
+            lsp_binary: build/luma_lsp
+            dap_binary: build/luma_dap
+
+          - os: windows-11-arm
             compiler: msvc
             cc: cl
             cxx: cl
@@ -152,15 +173,16 @@ jobs:
           } >> "$GITHUB_ENV"
 
       # The per-commit key always misses, so every run saves its updated cache
-      # while restore-keys resumes from the most recent one.
+      # while restore-keys resumes from the most recent one. runner.arch keeps
+      # the Apple Silicon and Intel macOS legs (same OS and compiler) apart.
       - name: Cache ccache directory
         if: runner.os != 'Windows'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-${{ runner.os }}-${{ matrix.compiler }}-${{ github.sha }}
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ matrix.compiler }}-${{ github.sha }}
           restore-keys: |
-            ccache-${{ runner.os }}-${{ matrix.compiler }}-
+            ccache-${{ runner.os }}-${{ runner.arch }}-${{ matrix.compiler }}-
 
       - name: Install GCC
         if: runner.os == 'Linux'

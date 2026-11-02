@@ -14,7 +14,7 @@ cmake --build --preset <name>   # build
 ctest --preset <name>           # test
 ```
 
-`python scripts/configure.py <name> --build` configures and builds in one step and explains when a preset is unavailable on the current host.
+`python scripts/configure.py <name> --build` configures and builds in one step and explains when a preset is unavailable on the current host. It runs the build preset of the same name; for `msvc` and `xcode`, which have one build preset per configuration, it runs `<name>-release` unless you pass `--config Debug` (which selects `<name>-debug`).
 
 ## Presets
 
@@ -41,7 +41,14 @@ There is deliberately no preset for a build without tests or for Linux ARM64: ad
 
 Each preset builds in its own directory, so configurations never clash: `default` uses `build/`, and every other preset uses `build-<name>/` (for example `build-debug/`, `build-sanitize/`, `build-msvc/`).
 
-The executables — `luma`, `luma_lsp`, `luma_dap`, and the test executables — are placed at the root of that directory on every platform and generator: `build/luma`, or `build\luma.exe` on Windows. In a multi-config tree (`msvc`, `xcode`, or any Visual Studio build) the root holds the tree's primary configuration (Release unless the preset sets another build type), and any other configuration built in the same tree goes to a subdirectory such as `build-msvc/Debug/`.
+The executables — `luma`, `luma_lsp`, `luma_dap`, and the test executables — are placed at the root of that directory on every platform and generator: `build/luma`, or `build\luma.exe` on Windows.
+
+In a multi-config tree (`msvc`, `xcode`, `windows-arm64`, any Visual Studio build, or a Ninja Multi-Config build) the root holds the tree's *primary configuration* and any other configuration built in the same tree goes to `<build>/<Config>/`. The primary configuration is the `LUMA_PRIMARY_CONFIG` cache variable, which defaults to `CMAKE_DEFAULT_BUILD_TYPE`, else `CMAKE_BUILD_TYPE` (set by `default` and `debug`), else Release; set it at configure time to choose another, e.g. `-DLUMA_PRIMARY_CONFIG=Debug`.
+
+The build presets always name the configuration, so `cmake --build --preset <name>` refreshes the root. Without a preset:
+
+- **Visual Studio and Xcode** build Debug unless told otherwise, so always pass `--config`, e.g. `cmake --build build --config Release` (and `ctest -C Release`). A bare `cmake --build build` builds Debug into `<build>/Debug/` (unless Debug is the primary configuration) and leaves the binaries at the root untouched and possibly stale.
+- **Ninja Multi-Config** builds the primary configuration by default: the build sets `CMAKE_DEFAULT_BUILD_TYPE` to it unless you set that variable yourself.
 
 ## Build Parallelism
 

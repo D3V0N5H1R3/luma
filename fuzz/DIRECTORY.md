@@ -47,14 +47,15 @@ that); `-fno-sanitize-recover=undefined` makes every finding abort.
 The suite targets Linux Clang with libFuzzer, ASan and UBSan (the configuration
 shown above), which is what CI exercises. It also builds with the Visual Studio
 `clang-cl` toolchain; the validated Windows configuration uses `RelWithDebInfo`,
-the static runtime, and coverage-only instrumentation:
+the static runtime (the project default for MSVC-ABI builds without ASan; see
+`CMAKE_MSVC_RUNTIME_LIBRARY` in the root `CMakeLists.txt`), and coverage-only
+instrumentation:
 
 ```powershell
 cmake -B build-fuzz -G Ninja `
       -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl `
       -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY `
       -DCMAKE_BUILD_TYPE=RelWithDebInfo `
-      -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
       -DLUMA_BUILD_FUZZ=ON `
       -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link"
 ```

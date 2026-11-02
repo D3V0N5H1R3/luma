@@ -41,7 +41,12 @@ jobs:
   build:
     uses: ./.github/workflows/reusable-linux-build.yml
     with:
-      image: arm64v8/debian:trixie
+      # Pinned by digest (the OCI index for the tag) so a re-run builds on the
+      # same base; the tag stays for readability. Dependabot does not track
+      # images passed as workflow inputs, so refresh the digest by hand when
+      # trixie gets a point release, e.g.:
+      #   docker buildx imagetools inspect arm64v8/debian:trixie
+      image: arm64v8/debian:trixie@sha256:9437add1e234f8c46bf61b47398ef360ccb1d08c1dc3b7e257e8c2efbc5d152a
       cc: gcc
       cxx: g++
       install-cmd: apt-get update -q && apt-get install -y cmake gcc g++ make

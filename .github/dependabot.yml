@@ -42,3 +42,17 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
+
+  # The Dev Container's base image, pinned by tag + digest in the Dockerfile;
+  # Dependabot refreshes the digest (and proposes newer tags).
+  - package-ecosystem: "docker"
+    directory: "/.devcontainer"
+    schedule:
+      interval: "weekly"
+
+  # The Dev Container features in .devcontainer/devcontainer.json, pinned to
+  # exact versions.
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: "weekly"

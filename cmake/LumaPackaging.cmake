@@ -1,10 +1,11 @@
 # cmake/LumaPackaging.cmake — CPack packaging configuration.
 #
 # Configures CPack metadata, install components, and the per-platform generators
-# (ZIP/TGZ everywhere, DEB+RPM on Linux, NSIS on Windows), then includes CPack.
+# (ZIP/TGZ everywhere, DEB on Linux plus RPM when rpmbuild is installed, NSIS on
+# Windows when makensis is installed), then includes CPack.
 #
 # Included as the final step of the root CMakeLists.txt. include() preserves the
-# including file's directory scope, so PROJECT_VERSION, CMAKE_SOURCE_DIR, and the
+# including file's directory scope, so PROJECT_VERSION, PROJECT_SOURCE_DIR, and the
 # install components defined earlier resolve exactly as they did inline.
 
 include_guard(GLOBAL)
@@ -22,9 +23,9 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
 set(CPACK_PACKAGE_VENDOR "Luma Contributors")
 set(CPACK_PACKAGE_CONTACT "d3v0n5h1r3@users.noreply.github.com")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/d3v0n5h1r3/luma")
-set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_SOURCE_DIR}/README.md")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
-set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${PROJECT_SOURCE_DIR}/README.md")
+set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${PROJECT_SOURCE_DIR}/README.md")
 
 # Component definitions.
 set(CPACK_COMPONENTS_ALL Runtime Tools Examples Documentation Development)
@@ -81,12 +82,33 @@ set(CPACK_RPM_PACKAGE_LICENSE "MIT")
 set(CPACK_RPM_PACKAGE_GROUP "Development/Languages")
 set(CPACK_RPM_PACKAGE_URL "https://github.com/d3v0n5h1r3/luma")
 
-# Generator selection.
+# Generator selection. ZIP and TGZ are built into CPack and always available.
+# DEB is too (CPack writes the archive itself), but RPM needs rpmbuild and NSIS
+# needs makensis; each is added only when its tool is found, so a bare `cpack`
+# does not fail on a host without them. Pass `cpack -G <generator>` to pick one
+# explicitly.
 set(CPACK_GENERATOR "ZIP;TGZ")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    list(APPEND CPACK_GENERATOR "DEB" "RPM")
+    list(APPEND CPACK_GENERATOR "DEB")
+    find_program(LUMA_RPMBUILD_EXE rpmbuild)
+    if(LUMA_RPMBUILD_EXE)
+        list(APPEND CPACK_GENERATOR "RPM")
+    else()
+        message(VERBOSE "rpmbuild not found; the RPM package generator is disabled")
+    endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    list(APPEND CPACK_GENERATOR "NSIS")
+    set(_luma_program_files_x86 "ProgramFiles(x86)")
+    find_program(LUMA_MAKENSIS_EXE makensis
+        PATHS
+            "[HKEY_LOCAL_MACHINE\\SOFTWARE\\NSIS]"
+            "$ENV{ProgramFiles}/NSIS"
+            "$ENV{${_luma_program_files_x86}}/NSIS")
+    unset(_luma_program_files_x86)
+    if(LUMA_MAKENSIS_EXE)
+        list(APPEND CPACK_GENERATOR "NSIS")
+    else()
+        message(VERBOSE "makensis not found; the NSIS installer generator is disabled")
+    endif()
 endif()
 
 # Source package (`package_source` target). CPack archives the whole source tree,

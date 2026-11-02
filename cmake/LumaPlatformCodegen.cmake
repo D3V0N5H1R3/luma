@@ -6,7 +6,7 @@
 #   cmake --build <dir> --target generate_platform_code
 #
 # Included from the root CMakeLists.txt after the component subdirectories.
-# include() runs in the including file's directory scope, so CMAKE_SOURCE_DIR
+# include() runs in the including file's directory scope, so PROJECT_SOURCE_DIR
 # resolves to the project root exactly as it did inline.
 
 include_guard(GLOBAL)
@@ -14,8 +14,8 @@ include_guard(GLOBAL)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 if(Python3_FOUND)
-    set(_platform_map "${CMAKE_SOURCE_DIR}/extensions/shared/platform-map.json")
-    set(_platform_gen "${CMAKE_SOURCE_DIR}/extensions/shared/generate-platform-code.py")
+    set(_platform_map "${PROJECT_SOURCE_DIR}/extensions/shared/platform-map.json")
+    set(_platform_gen "${PROJECT_SOURCE_DIR}/extensions/shared/generate-platform-code.py")
 
     # The generated platform.ts / platform.rs are checked-in sources, so they must
     # not be declared as OUTPUT or BYPRODUCTS: the clean target deletes every
@@ -28,7 +28,7 @@ if(Python3_FOUND)
         COMMAND ${Python3_EXECUTABLE} "${_platform_gen}" --all
         COMMAND ${CMAKE_COMMAND} -E touch "${_platform_stamp}"
         DEPENDS "${_platform_map}" "${_platform_gen}"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/extensions/shared"
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/extensions/shared"
         COMMENT "Regenerating platform code from platform-map.json"
     )
 

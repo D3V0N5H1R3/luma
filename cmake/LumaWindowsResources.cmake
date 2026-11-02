@@ -50,7 +50,7 @@ function(luma_add_windows_metadata target)
     set(LUMA_RC_DESCRIPTION "${_META_DESCRIPTION}")
     set(LUMA_RC_MANIFEST "${PROJECT_SOURCE_DIR}/cmake/luma.manifest")
 
-    set(_rc_file "${CMAKE_BINARY_DIR}/generated/resources/${target}.rc")
+    set(_rc_file "${PROJECT_BINARY_DIR}/generated/resources/${target}.rc")
     configure_file("${PROJECT_SOURCE_DIR}/cmake/luma_version.rc.in" "${_rc_file}" @ONLY)
     target_sources(${target} PRIVATE "${_rc_file}")
 

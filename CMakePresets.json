@@ -256,27 +256,32 @@
         {
             "name": "sanitize",
             "inherits": "_base-test",
-            "configurePreset": "sanitize"
+            "configurePreset": "sanitize",
+            "configuration": "Debug"
         },
         {
             "name": "relwithdebinfo",
             "inherits": "_base-test",
-            "configurePreset": "relwithdebinfo"
+            "configurePreset": "relwithdebinfo",
+            "configuration": "RelWithDebInfo"
         },
         {
             "name": "coverage",
             "inherits": "_base-test",
-            "configurePreset": "coverage"
+            "configurePreset": "coverage",
+            "configuration": "Debug"
         },
         {
             "name": "lto",
             "inherits": "_base-test",
-            "configurePreset": "lto"
+            "configurePreset": "lto",
+            "configuration": "Release"
         },
         {
             "name": "ninja",
             "inherits": "_base-test",
-            "configurePreset": "ninja"
+            "configurePreset": "ninja",
+            "configuration": "Release"
         }
     ]
 }

@@ -20,16 +20,19 @@
     // (ci-powershell.yml) with the PSScriptAnalyzer version pinned by
     // scripts/run_psscriptanalyzer.ps1.
     // Prebuilds absorb the one-time install cost; drop any of these features
-    // if you only work on the interpreter.
+    // if you only work on the interpreter. Each feature is pinned to an exact
+    // release (not a floating major tag) so a Codespace rebuild is reproducible;
+    // Dependabot's devcontainers ecosystem (.github/dependabot.yml) proposes
+    // updates.
     "features": {
-        "ghcr.io/devcontainers/features/node:1": {
+        "ghcr.io/devcontainers/features/node:1.7.1": {
             "version": "lts"
         },
-        "ghcr.io/devcontainers/features/rust:1": {
+        "ghcr.io/devcontainers/features/rust:1.6.0": {
             "profile": "default",
             "targets": "wasm32-wasip1"
         },
-        "ghcr.io/devcontainers/features/powershell:2": {
+        "ghcr.io/devcontainers/features/powershell:2.0.3": {
             "version": "lts",
             "modules": "PSScriptAnalyzer==1.25.0"
         }

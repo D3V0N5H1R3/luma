@@ -43,7 +43,9 @@ Download the archives and the checksum file from the [latest GitHub release](htt
 | Platform        | Interpreter                 | Language Server                 | Debug Adapter                   |
 | --------------- | --------------------------- | ------------------------------- | ------------------------------- |
 | Windows x86\_64 | `luma-windows-x86_64.zip`   | `luma_lsp-windows-x86_64.zip`   | `luma_dap-windows-x86_64.zip`   |
+| Windows aarch64 | `luma-windows-aarch64.zip`  | `luma_lsp-windows-aarch64.zip`  | `luma_dap-windows-aarch64.zip`  |
 | macOS aarch64   | `luma-macos-aarch64.tar.gz` | `luma_lsp-macos-aarch64.tar.gz` | `luma_dap-macos-aarch64.tar.gz` |
+| macOS x86\_64   | `luma-macos-x86_64.tar.gz`  | `luma_lsp-macos-x86_64.tar.gz`  | `luma_dap-macos-x86_64.tar.gz`  |
 | Linux x86\_64   | `luma-linux-x86_64.tar.gz`  | `luma_lsp-linux-x86_64.tar.gz`  | `luma_dap-linux-x86_64.tar.gz`  |
 | Linux aarch64   | `luma-linux-aarch64.tar.gz` | `luma_lsp-linux-aarch64.tar.gz` | `luma_dap-linux-aarch64.tar.gz` |
 
@@ -97,6 +99,8 @@ Expand-Archive luma_lsp-windows-x86_64.zip -DestinationPath "C:\Program Files\Lu
 Expand-Archive luma_dap-windows-x86_64.zip -DestinationPath "C:\Program Files\Luma" -Force
 ```
 
+> **Note:** On a Windows on Arm device, replace `x86_64` with `aarch64` in the archive names. The executables link the C/C++ runtime statically, so no Visual C++ Redistributable is needed.
+
 You should now have three executables in `C:\Program Files\Luma\`:
 
 - `luma.exe`
@@ -135,7 +139,7 @@ sudo tar xzf luma_lsp-macos-aarch64.tar.gz -C /usr/local/bin
 sudo tar xzf luma_dap-macos-aarch64.tar.gz -C /usr/local/bin
 ```
 
-> **Note:** Pre-built macOS binaries are provided for Apple Silicon (aarch64) only. On an Intel Mac, [build from source](#10--building-from-source) or run the aarch64 binaries under Rosetta 2.
+> **Note:** On an Intel Mac, replace `aarch64` with `x86_64` in the archive names.
 
 You should now have three binaries in `/usr/local/bin/`:
 

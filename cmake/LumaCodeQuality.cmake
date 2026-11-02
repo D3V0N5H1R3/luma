@@ -5,7 +5,7 @@
 # sources at build time so newly added files are covered without reconfiguring.
 #
 # Included from the root CMakeLists.txt. include() preserves the including file's
-# directory scope, so CMAKE_SOURCE_DIR / CMAKE_BINARY_DIR resolve to the project
+# directory scope, so PROJECT_SOURCE_DIR / PROJECT_BINARY_DIR resolve to the project
 # root and its binary dir exactly as they did inline.
 
 include_guard(GLOBAL)
@@ -33,9 +33,9 @@ if(LUMA_CLANG_FORMAT_EXE)
         COMMAND ${CMAKE_COMMAND}
             -DTOOL=format
             -DTOOL_EXE=${LUMA_CLANG_FORMAT_EXE}
-            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
-            -P ${CMAKE_SOURCE_DIR}/cmake/LumaRunClangTool.cmake
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+            -P ${PROJECT_SOURCE_DIR}/cmake/LumaRunClangTool.cmake
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running clang-format on all source files...")
 endif()
 
@@ -46,9 +46,9 @@ if(LUMA_CLANG_TIDY_EXE)
         COMMAND ${CMAKE_COMMAND}
             -DTOOL=tidy
             -DTOOL_EXE=${LUMA_CLANG_TIDY_EXE}
-            -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
-            -DBINARY_DIR=${CMAKE_BINARY_DIR}
-            -P ${CMAKE_SOURCE_DIR}/cmake/LumaRunClangTool.cmake
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+            -DBINARY_DIR=${PROJECT_BINARY_DIR}
+            -P ${PROJECT_SOURCE_DIR}/cmake/LumaRunClangTool.cmake
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running clang-tidy on all source files...")
 endif()

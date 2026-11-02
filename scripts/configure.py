@@ -8,6 +8,8 @@ Usage:
     python scripts/configure.py                  # list available presets
     python scripts/configure.py <preset>         # configure with preset
     python scripts/configure.py <preset> --build # configure and build
+    python scripts/configure.py <preset> --build --config Debug
+                                                 # build a specific configuration
     python scripts/configure.py <preset> --if-needed --build
                                                  # configure only when the build
                                                  # tree is missing or stale, then build
@@ -15,6 +17,11 @@ Usage:
 Named presets are defined in CMakePresets.json. Run this script with no
 arguments (or -h/--help) to print the current list with descriptions; the
 listing is generated from the file, so it never drifts out of date.
+
+`--build` runs the build preset that belongs to the configure preset: the one
+with the same name, or — for the multi-config `msvc` and `xcode` presets, whose
+build presets are `<name>-release` / `<name>-debug` — the Release one. `--config`
+picks a build preset by its configuration instead.
 
 A preset whose `condition` excludes the current host (for example `sanitize`
 and `coverage` on Windows) is rejected with an explanatory message instead of
@@ -38,13 +45,23 @@ USER_PRESETS_FILE = REPO_ROOT / "CMakeUserPresets.json"
 
 def load_all_presets() -> list[dict]:
     """Load every configure preset from CMakePresets.json, including hidden ones."""
+    return _load_preset_kind("configurePresets")
+
+
+def load_all_build_presets() -> list[dict]:
+    """Load every build preset from CMakePresets.json, including hidden ones."""
+    return _load_preset_kind("buildPresets")
+
+
+def _load_preset_kind(kind: str) -> list[dict]:
+    """Load one preset list (configurePresets, buildPresets, ...) from CMakePresets.json."""
     if not PRESETS_FILE.exists():
         return []
 
     with open(PRESETS_FILE, encoding="utf-8") as f:
         data = json.load(f)
 
-    return data.get("configurePresets", [])
+    return data.get(kind, [])
 
 
 def load_presets() -> list[dict]:
@@ -106,8 +123,8 @@ def preset_macros(name: str) -> dict[str, str]:
     }
 
 
-def resolve_binary_dir(name: str, presets_by_name: dict[str, dict]) -> Path | None:
-    """Resolve a preset's binaryDir, following `inherits` depth-first like CMake."""
+def resolve_field(name: str, presets_by_name: dict[str, dict], field: str) -> object | None:
+    """Return a preset field, following `inherits` depth-first like CMake."""
     pending = [name]
     seen: set[str] = set()
     while pending:
@@ -116,11 +133,61 @@ def resolve_binary_dir(name: str, presets_by_name: dict[str, dict]) -> Path | No
             continue
         seen.add(current)
         preset = presets_by_name[current]
-        if "binaryDir" in preset:
-            return Path(_expand_macros(preset["binaryDir"], preset_macros(name)))
+        if field in preset:
+            return preset[field]
         inherits = preset.get("inherits", [])
         pending[0:0] = [inherits] if isinstance(inherits, str) else list(inherits)
     return None
+
+
+def resolve_binary_dir(name: str, presets_by_name: dict[str, dict]) -> Path | None:
+    """Resolve a preset's binaryDir, following `inherits` depth-first like CMake."""
+    binary_dir = resolve_field(name, presets_by_name, "binaryDir")
+    if not isinstance(binary_dir, str):
+        return None
+    return Path(_expand_macros(binary_dir, preset_macros(name)))
+
+
+def build_presets_for(configure_preset: str, build_presets: list[dict]) -> list[tuple[str, str]]:
+    """Return (name, configuration) for each visible build preset of a configure preset.
+
+    The configuration is "" when the build preset does not name one.
+    """
+    by_name = {p["name"]: p for p in build_presets}
+    result = []
+    for preset in build_presets:
+        if preset.get("hidden", False):
+            continue
+        name = preset["name"]
+        if resolve_field(name, by_name, "configurePreset") != configure_preset:
+            continue
+        configuration = resolve_field(name, by_name, "configuration")
+        result.append((name, configuration if isinstance(configuration, str) else ""))
+    return result
+
+
+def select_build_preset(
+    configure_preset: str, build_presets: list[dict], config: str | None = None
+) -> str | None:
+    """Choose the build preset `--build` runs for a configure preset.
+
+    With `config`, the build preset whose configuration matches it
+    (case-insensitively). Otherwise the build preset sharing the configure
+    preset's name, else its Release build preset (the multi-config `msvc` and
+    `xcode` presets only have `<name>-release` and `<name>-debug`), else the only
+    one. Returns None when nothing matches.
+    """
+    candidates = build_presets_for(configure_preset, build_presets)
+    if config is not None:
+        matches = [name for name, cfg in candidates if cfg.lower() == config.lower()]
+        return matches[0] if matches else None
+    for name, _ in candidates:
+        if name == configure_preset:
+            return name
+    releases = [name for name, cfg in candidates if cfg == "Release"]
+    if releases:
+        return releases[0]
+    return candidates[0][0] if len(candidates) == 1 else None
 
 
 def configure_stamp(binary_dir: Path) -> Path:
@@ -184,7 +251,8 @@ def list_presets(presets: list[dict]) -> None:
     """Print the available presets followed by a short usage hint."""
     print(format_presets(presets))
     if presets:
-        print(f"\nUsage: python {Path(__file__).name} <preset> [--build] [--if-needed]")
+        script = Path(__file__).name
+        print(f"\nUsage: python {script} <preset> [--build [--config CONFIG]] [--if-needed]")
 
 
 def main() -> int:
@@ -204,11 +272,23 @@ def main() -> int:
     )
     parser.add_argument("--build", action="store_true", help="Build immediately after configuring")
     parser.add_argument(
+        "--config",
+        metavar="CONFIG",
+        help=(
+            "With --build, the configuration to build (e.g. Release, Debug): selects the "
+            "preset's build preset with that configuration. Default: the build preset of "
+            "the same name, else the Release one"
+        ),
+    )
+    parser.add_argument(
         "--if-needed",
         action="store_true",
         help="Skip configuring when the preset's build tree already exists and is up to date",
     )
     args = parser.parse_args()
+
+    if args.config is not None and not args.build:
+        parser.error("--config requires --build")
 
     # No preset given: list the available configurations.
     if args.preset is None:
@@ -236,6 +316,20 @@ def main() -> int:
         if host_system_name() == "Windows":
             print("Use WSL or the Dev Container (.devcontainer/) instead.", file=sys.stderr)
         return 1
+
+    # Resolve the build preset up front so a bad --config fails before configuring.
+    build_preset = None
+    if args.build:
+        build_presets = load_all_build_presets()
+        build_preset = select_build_preset(preset, build_presets, args.config)
+        if build_preset is None:
+            available = build_presets_for(preset, build_presets)
+            wanted = f" with configuration '{args.config}'" if args.config else ""
+            print(f"Error: preset '{preset}' has no build preset{wanted}.", file=sys.stderr)
+            if available:
+                listing = ", ".join(f"{name} ({cfg or 'default'})" for name, cfg in available)
+                print(f"Its build presets are: {listing}", file=sys.stderr)
+            return 1
 
     binary_dir = resolve_binary_dir(preset, presets_by_name)
     if args.if_needed and not needs_configure(binary_dir):
@@ -266,10 +360,10 @@ def main() -> int:
                 print(f"Note: could not enable Git hooks ({exc}).", file=sys.stderr)
 
     # Optionally build.
-    if args.build:
-        print(f"\n=== Building preset: {preset} ===\n")
+    if build_preset is not None:
+        print(f"\n=== Building preset: {build_preset} ===\n")
         result = subprocess.run(
-            ["cmake", "--build", "--preset", preset],
+            ["cmake", "--build", "--preset", build_preset],
             cwd=str(REPO_ROOT),
         )
         if result.returncode != 0:

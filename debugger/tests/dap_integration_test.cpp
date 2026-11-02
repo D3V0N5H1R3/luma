@@ -2638,27 +2638,22 @@ int main(int /*argc*/, char* argv[]) {
     // Determine paths based on executable location.
     std::filesystem::path exe_dir = std::filesystem::path(argv[0]).parent_path();
 
-    // luma_dap may be in the same directory (single-config generators)
-    // or in a sibling build directory (multi-config generators like MSVC).
+    // The root CMakeLists.txt puts every executable of a configuration in the
+    // same directory (the build-tree root, or <build>/<Config>/ for a
+    // non-primary multi-config configuration), so luma_dap sits next to this test.
 #ifdef _WIN32
     constexpr auto dap_name = "luma_dap.exe";
 #else
     constexpr auto dap_name = "luma_dap";
 #endif
 
-    // Search candidates: same dir, then sibling debugger dirs for multi-config.
-    for (const auto& candidate :
-         {exe_dir / dap_name,
-          exe_dir.parent_path().parent_path() / "debugger" / exe_dir.filename() / dap_name,
-          exe_dir.parent_path() / "debugger" / dap_name}) {
-        if (std::filesystem::exists(candidate)) {
-            dap_exe_path = candidate.string();
-            break;
-        }
+    if (const auto candidate = exe_dir / dap_name; std::filesystem::exists(candidate)) {
+        dap_exe_path = candidate.string();
     }
 
-    if (dap_exe_path.empty() || !std::filesystem::exists(dap_exe_path)) {
-        std::cerr << "luma_dap not found (searched from: " << exe_dir.string() << ")\n";
+    if (dap_exe_path.empty()) {
+        std::cerr << "luma_dap not found (expected next to this test in: " << exe_dir.string()
+                  << ")\n";
         return 1;
     }
 

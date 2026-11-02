@@ -33,6 +33,30 @@ find_package(Threads REQUIRED)
 # is a no-op on Windows and macOS, where code is already relocatable.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# ─────────── MSVC runtime library ───────────
+# Link the C/C++ runtime statically (/MT, /MTd for Debug) so the shipped
+# luma.exe, luma_lsp.exe, and luma_dap.exe run on a machine without the Visual
+# C++ Redistributable; the CMake default (/MD) would make them depend on
+# MSVCP140.dll / VCRUNTIME140.dll, which the release archives do not carry.
+# Set here, after project() and before any add_subdirectory() or add_library(),
+# so every target — including the vendored mbedtls_lib and miniz_lib — is
+# created with the same runtime (mixing runtimes fails to link). Requires policy
+# CMP0091 (NEW under cmake_minimum_required 3.21). Ignored by non-MSVC-ABI
+# compilers.
+#
+# An explicit -DCMAKE_MSVC_RUNTIME_LIBRARY=... always wins. AddressSanitizer
+# under MSVC or clang-cl links the DLL ASan runtime (clang_rt.asan_dynamic),
+# which requires the DLL C runtime, so a build whose global flags enable
+# -fsanitize=address or /fsanitize=address keeps /MD. (The Windows libFuzzer
+# build in fuzz/DIRECTORY.md is coverage-only and already uses the static runtime.)
+if(MSVC AND NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY)
+    if("${CMAKE_C_FLAGS} ${CMAKE_CXX_FLAGS}" MATCHES "[-/]fsanitize=([^ ]*,)?address")
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    else()
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
+endif()
+
 # ─────────── Build-system regeneration (Visual Studio generator) ───────────
 # The Visual Studio (MSBuild) generator attaches a build-system regeneration
 # check — the ZERO_CHECK mechanism, shown as "Building Custom Rule .../
@@ -91,7 +115,7 @@ set(LUMA_FUZZ_QUICK_TIME 10 CACHE STRING
 # luma_project_options (see cmake/LumaCompilerFlags.cmake). The checked-in
 # core/common/version.hpp has been removed so this generated copy is the only one.
 
-set(LUMA_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated")
+set(LUMA_GENERATED_INCLUDE_DIR "${PROJECT_BINARY_DIR}/generated")
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/core/common/version.hpp.in"
     "${LUMA_GENERATED_INCLUDE_DIR}/common/version.hpp"
@@ -140,26 +164,64 @@ message(STATUS "")
 #
 # Multi-config generators (Visual Studio, Xcode, Ninja Multi-Config) would
 # append a per-configuration subdirectory. Instead, the tree's primary
-# configuration — CMAKE_BUILD_TYPE, which every preset sets, or Release when it
-# is unset — goes at the root, and any other configuration built in the same
-# tree goes to <build>/<Config>/. Sharing the root between configurations would
-# let one overwrite the other and fool MSBuild's up-to-date check into keeping
-# the wrong binary. A generator expression in the path suppresses the automatic
-# subdirectory.
+# configuration, LUMA_PRIMARY_CONFIG, goes at the root, and any other
+# configuration built in the same tree goes to <build>/<Config>/. Sharing the
+# root between configurations would let one overwrite the other and fool
+# MSBuild's up-to-date check into keeping the wrong binary. A generator
+# expression in the path suppresses the automatic subdirectory.
+#
+# Multi-config generators ignore CMAKE_BUILD_TYPE when building, and not every
+# preset sets it (msvc, xcode, and windows-arm64 do not), so LUMA_PRIMARY_CONFIG
+# is its own cache variable. It defaults to CMAKE_DEFAULT_BUILD_TYPE (Ninja
+# Multi-Config's default configuration), then CMAKE_BUILD_TYPE, then Release.
+# Ninja Multi-Config is told to build that configuration by default, so a bare
+# `cmake --build <dir>` refreshes the root. Visual Studio and Xcode always
+# default to Debug, so pass `--config <primary>` (or use a build preset) there;
+# without it, the build lands in <build>/Debug/ and the root is left untouched.
 #
 # Set before add_subdirectory so every target inherits it. Only RUNTIME outputs
 # (executables) are redirected; static libraries keep their default locations.
+# PROJECT_BINARY_DIR rather than CMAKE_BINARY_DIR keeps the binaries in this
+# project's tree when Luma is pulled into a super-build via add_subdirectory(),
+# and an output directory the including project has already chosen is respected.
 get_property(LUMA_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(LUMA_IS_MULTI_CONFIG)
-    if(CMAKE_BUILD_TYPE)
-        set(LUMA_PRIMARY_CONFIG "${CMAKE_BUILD_TYPE}")
+    if(CMAKE_DEFAULT_BUILD_TYPE)
+        set(_luma_primary_config_default "${CMAKE_DEFAULT_BUILD_TYPE}")
+    elseif(CMAKE_BUILD_TYPE)
+        set(_luma_primary_config_default "${CMAKE_BUILD_TYPE}")
     else()
-        set(LUMA_PRIMARY_CONFIG "Release")
+        set(_luma_primary_config_default "Release")
     endif()
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY
-        "${CMAKE_BINARY_DIR}$<$<NOT:$<CONFIG:${LUMA_PRIMARY_CONFIG}>>:/$<CONFIG>>")
-else()
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+    set(LUMA_PRIMARY_CONFIG "${_luma_primary_config_default}" CACHE STRING
+        "Configuration whose executables a multi-config build places at the build-tree root")
+    unset(_luma_primary_config_default)
+    set_property(CACHE LUMA_PRIMARY_CONFIG PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES})
+    if(NOT LUMA_PRIMARY_CONFIG IN_LIST CMAKE_CONFIGURATION_TYPES)
+        message(FATAL_ERROR
+            "LUMA_PRIMARY_CONFIG is '${LUMA_PRIMARY_CONFIG}', which is not one of "
+            "CMAKE_CONFIGURATION_TYPES (${CMAKE_CONFIGURATION_TYPES}).")
+    endif()
+    if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
+        if(NOT CMAKE_DEFAULT_BUILD_TYPE)
+            set(CMAKE_DEFAULT_BUILD_TYPE "${LUMA_PRIMARY_CONFIG}")
+        elseif(NOT CMAKE_DEFAULT_BUILD_TYPE STREQUAL LUMA_PRIMARY_CONFIG)
+            message(WARNING
+                "CMAKE_DEFAULT_BUILD_TYPE (${CMAKE_DEFAULT_BUILD_TYPE}) differs from "
+                "LUMA_PRIMARY_CONFIG (${LUMA_PRIMARY_CONFIG}): a build without --config "
+                "places its executables in ${PROJECT_BINARY_DIR}/${CMAKE_DEFAULT_BUILD_TYPE}/.")
+        endif()
+    endif()
+    message(STATUS "Primary configuration (at the build-tree root): ${LUMA_PRIMARY_CONFIG}")
+endif()
+
+if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    if(LUMA_IS_MULTI_CONFIG)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY
+            "${PROJECT_BINARY_DIR}$<$<NOT:$<CONFIG:${LUMA_PRIMARY_CONFIG}>>:/$<CONFIG>>")
+    else()
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
+    endif()
 endif()
 
 # ─────────── Component subdirectories ───────────

@@ -8,8 +8,12 @@
 # extension's headless Electron tests — so this image needs no external apt
 # repositories or PPAs and builds the interpreter fully offline against the
 # vendored dependencies in external/.
+#
+# The base image is pinned by digest (the multi-arch OCI index for the tag) so
+# every rebuild starts from the same layers; Dependabot's docker ecosystem
+# (.github/dependabot.yml) proposes digest bumps.
 # ─────────────────────────────────────────────────────────────
-FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae
 
 # Build-time only (an ARG, not a persisted ENV), so debconf stays interactive
 # for the user's own apt commands later.
