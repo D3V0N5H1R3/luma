@@ -466,17 +466,88 @@ class CompileDatabaseTests(FakeToolTestCase):
 
         self.assertEqual(self.configure_runs(), 1)
 
-    def test_leaves_a_database_the_build_generator_maintains_itself(self) -> None:
-        self.write_database(modified=1000)
+    def maintained_cache(self, *, modified: float) -> None:
         self.touch(
             self.cache,
-            modified=3000,
+            modified=modified,
             text="CMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON\nCMAKE_GENERATOR:INTERNAL=Unix Makefiles\n",
         )
+
+    def test_trusts_a_maintained_database_after_the_gate_configured_build(self) -> None:
+        # CMake rewrites the database only when its content changes, so its
+        # timestamp may predate the configure that refreshed it.
+        self.touch(self.cmake_lists, modified=1000)
+        self.write_database(modified=1000)
+        self.maintained_cache(modified=3000)
+        self.pipeline._configured_build_cache_mtime = 3000
 
         self.pipeline._ensure_compile_database()
 
         self.assertEqual(self.configure_runs(), 0)
+
+    def test_reconfigures_a_maintained_build_the_gate_did_not_configure(self) -> None:
+        # A gate on another preset (build-debug/, …) or with --skip-build never
+        # touched build/, whose database may predate a phase's new source.
+        self.touch(self.cmake_lists, modified=1000)
+        self.write_database(modified=1000)
+        self.maintained_cache(modified=3000)
+
+        self.pipeline._ensure_compile_database()
+
+        calls = read_calls(self.calls)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["args"][-2:], ["-B", str(self.repo_root / "build")])
+        self.assertNotIn("-G", calls[0]["args"], "build/ keeps its own generator")
+
+        # The in-place configure counts as the gate's own: no second refresh.
+        self.pipeline._ensure_compile_database()
+        self.assertEqual(self.configure_runs(), 1)
+
+    def test_reconfigures_a_maintained_build_when_cmake_lists_changed_after_the_gate(
+        self,
+    ) -> None:
+        self.write_database(modified=1000)
+        self.maintained_cache(modified=3000)
+        self.pipeline._configured_build_cache_mtime = 3000
+        self.touch(self.cmake_lists, modified=4000)
+
+        self.pipeline._ensure_compile_database()
+
+        self.assertEqual(self.configure_runs(), 1)
+
+    def test_gate_configure_of_build_marks_the_database_current(self) -> None:
+        # A fake cmake whose configure rewrites build/CMakeCache.txt, as the
+        # default preset (binaryDir build/) does.
+        make_launcher(
+            self.tool_dir,
+            "cmake",
+            f"""\
+            import json
+            import pathlib
+            import sys
+
+            with open({str(self.calls)!r}, "a", encoding="utf-8") as handle:
+                handle.write(json.dumps({{"args": sys.argv[1:]}}) + "\\n")
+            if sys.argv[1:2] == ["--preset"]:
+                pathlib.Path({str(self.cache)!r}).write_text(
+                    "CMAKE_EXPORT_COMPILE_COMMANDS:BOOL=ON\\n"
+                    "CMAKE_GENERATOR:INTERNAL=Unix Makefiles\\n",
+                    encoding="utf-8",
+                )
+            """,
+        )
+        self.fake_tool("ctest")
+        self.touch(self.cmake_lists, modified=1000)
+        self.write_database(modified=1000)
+        self.maintained_cache(modified=2000)
+
+        self.assertIs(self.pipeline.build_and_test(skip_test=True), True)
+        self.pipeline._ensure_compile_database()
+
+        self.assertEqual(
+            [call["args"] for call in read_calls(self.calls)],
+            [["--preset", "default"], ["--build", "--preset", "default"]],
+        )
 
     def test_does_nothing_without_clang_tidy(self) -> None:
         with mock.patch.object(Pipeline, "_which", return_value=None):

@@ -1070,6 +1070,10 @@ class Pipeline:
             (name.upper() if _IS_WINDOWS else name): value for name, value in source.items()
         }
         self._is_msvc_ready = False
+        # mtime of build/CMakeCache.txt right after the gate itself configured
+        # build/, so the compile database can be trusted as current only when
+        # this run produced it (see _ensure_compile_database).
+        self._configured_build_cache_mtime: float | None = None
 
     # -- low-level runners -------------------------------------------------
 
@@ -1487,9 +1491,15 @@ class Pipeline:
             steps.append(("Testing", [ctest, *test_args], "Tests failed."))
         for label, command, failure in steps:
             self.console.line(f"    {label}: {render_command(Path(command[0]).stem, command[1:])}")
+            cache_before = self._build_cache_mtime()
             if self._run(command) != 0:
                 self.console.warn(failure)
                 return False
+            if label == "Configuring":
+                cache_after = self._build_cache_mtime()
+                if cache_after is not None and cache_after != cache_before:
+                    # This preset's binary directory is build/.
+                    self._configured_build_cache_mtime = cache_after
         return True
 
     def lint_and_format(self, *, check_only: bool = False) -> bool:
@@ -1724,12 +1734,30 @@ class Pipeline:
                     return False
         return True
 
+    def _build_cache_mtime(self) -> float | None:
+        """Modification time of ``build/CMakeCache.txt``, or ``None`` when absent."""
+        try:
+            return (self.repo_root / "build" / "CMakeCache.txt").stat().st_mtime
+        except OSError:
+            return None
+
+    def _was_build_configured_by_gate(self) -> bool:
+        """True when this run last configured ``build/`` and no CMake input changed since."""
+        configured = self._configured_build_cache_mtime
+        if configured is None or self._build_cache_mtime() != configured:
+            return False
+        for path in self._cmake_inputs():
+            with contextlib.suppress(OSError):
+                if path.stat().st_mtime > configured:
+                    return False
+        return True
+
     def _is_compile_database_maintained_by_cmake(self) -> bool:
         """True when ``build/`` uses a generator that writes the database on every configure.
 
         Ninja and Makefile generators with ``CMAKE_EXPORT_COMPILE_COMMANDS``
-        refresh ``build/compile_commands.json`` as part of the gate's configure;
-        Visual Studio and Xcode never write one.
+        refresh ``build/compile_commands.json`` whenever ``build/`` is
+        configured; Visual Studio and Xcode never write one.
         """
         cache = self.repo_root / "build" / "CMakeCache.txt"
         try:
@@ -1752,21 +1780,26 @@ class Pipeline:
 
         ``lint.py`` runs clang-tidy only on sources listed in the database, so a
         stale one silently skips every file a phase added. When ``build/``
-        uses a generator that maintains the database itself, the gate's
-        configure already refreshed it. Otherwise (Visual Studio, Xcode) a
-        missing or stale database — older than the last configure or any
-        ``CMakeLists.txt`` / ``*.cmake`` — is regenerated: a database-capable
-        generator (Ninja, else NMake / Unix Makefiles) is configured into
-        ``build-compiledb/`` and the result copied into ``build/``. Best-effort:
-        a missing tool only leaves clang-tidy skipped (or on the old database).
+        uses a generator that maintains the database itself (Ninja, Makefiles),
+        it is current only if the gate configured ``build/`` itself — a gate on
+        another preset (whose binary directory is ``build-*/``) or with
+        ``--skip-build`` never touches it — so otherwise ``build/`` is
+        reconfigured in place. CMake rewrites the database only when its content
+        changes, so for these generators its timestamp proves nothing. Visual
+        Studio and Xcode trees never write one: a missing or stale database —
+        older than the last configure or any ``CMakeLists.txt`` / ``*.cmake`` —
+        is regenerated with a database-capable generator (Ninja, else NMake /
+        Unix Makefiles) in ``build-compiledb/`` and copied into ``build/``.
+        Best-effort: a missing tool only leaves clang-tidy skipped (or on the
+        old database).
         """
         build_db = self.repo_root / "build" / "compile_commands.json"
         if not self._which("clang-tidy"):
             return
-        if build_db.is_file() and (
-            self._is_compile_database_maintained_by_cmake()
-            or self._is_compile_database_current(build_db)
-        ):
+        is_maintained = build_db.is_file() and self._is_compile_database_maintained_by_cmake()
+        if is_maintained and self._was_build_configured_by_gate():
+            return
+        if build_db.is_file() and not is_maintained and self._is_compile_database_current(build_db):
             return
         cmake = self._find_cmake()
         if cmake is None:
@@ -1774,6 +1807,18 @@ class Pipeline:
                 "cmake not found; cannot generate compile_commands.json "
                 "(clang-tidy will be skipped or use an outdated database)."
             )
+            return
+        if is_maintained:
+            self.console.line(
+                "    Refreshing compile_commands.json for clang-tidy (cmake -B build)"
+            )
+            if self._run([cmake, "-S", str(self.repo_root), "-B", str(build_db.parent)]) != 0:
+                self.console.warn(
+                    "could not reconfigure build/; clang-tidy uses the existing "
+                    "compile_commands.json."
+                )
+                return
+            self._configured_build_cache_mtime = self._build_cache_mtime()
             return
         if self._which("ninja"):
             generator = "Ninja"
