@@ -324,7 +324,7 @@ function void main() {
 | 1.1.4  | Strict mode             | `luma --strict hello.luma` (with an unused variable)                   | Lint warning promoted to error, non-zero exit              |
 | 1.1.5  | Sandbox mode            | `luma --box sandbox_test.luma`                                         | FileSystem call fails with "not available in sandbox mode" |
 | 1.1.6  | Type-check only         | `luma --check math.luma`                                               | Reports type errors without running; exits 0 if clean      |
-| 1.1.7 | Version                 | `luma --version` | Prints the version string (e.g. "Luma 0.15.0") |
+| 1.1.7 | Version                 | `luma --version` | Prints the version string (e.g. "Luma 0.16.0") |
 | 1.1.8  | Help                    | `luma --help`                                                          | Shows usage with all flags listed                          |
 | 1.1.9  | Invalid file            | `luma nonexistent.luma`                                                | Prints `error: file not found: '…'`, exits 5               |
 | 1.1.10 | Syntax error exit code  | `luma` a file with syntax error                                        | Exits with code 3 (SyntaxError)                            |

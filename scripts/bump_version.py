@@ -4,6 +4,7 @@
 Updates the version number in:
   - VERSION                                          (interpreter, language server, debugger)
   - extensions/vscode/package.json                   (VS Code extension)
+  - extensions/vscode/package-lock.json              (VS Code extension lock — root package entries)
   - extensions/zed/extension.toml                    (Zed extension manifest)
   - extensions/zed/Cargo.toml                        (Zed extension crate)
   - extensions/zed/Cargo.lock                        (Zed extension crate lock — luma-zed entry)
@@ -11,12 +12,15 @@ Updates the version number in:
 Also updates version references in documentation:
   - instructions/learnings.instructions.md           ("Alpha (X.Y)" status line)
   - .github/workflows/DIRECTORY.md                   (release tag examples)
+  - .github/ISSUE_TEMPLATE/bug_report.yml            ("Luma X.Y.Z" placeholder)
   - SECURITY.md                                      (supported-versions table)
   - documents/Luma_Tutorial.md                       ("Luma X.Y.Z" / "Luma X.Y")
   - documents/Luma_Installation_Guide.md             (luma-language-X.Y.Z.vsix)
   - documents/Luma_Language_Server.md                ("version": "X.Y.Z")
+  - documents/Luma_Manual_Tests.md                   ("Luma X.Y.Z" expected output)
   - extensions/vscode/DIRECTORY.md                   (luma-language-X.Y.Z.vsix)
   - extensions/zed/DIRECTORY.md                      (vX.Y.Z version tags)
+  - extensions/zed/scripts/Download-Binaries.ps1     (vX.Y.Z comment example)
   - extensions/shared/binary-download/SPECIFICATION.md (vX.Y.Z)
   - extensions/shared/config-schema.md               (vX.Y.Z)
   - extensions/shared/error-handling.md              (vX.Y.Z examples)
@@ -44,6 +48,7 @@ from _common import REPO_ROOT
 
 VERSION_FILE: Path = REPO_ROOT / "VERSION"
 VSCODE_PACKAGE_JSON: Path = REPO_ROOT / "extensions" / "vscode" / "package.json"
+VSCODE_PACKAGE_LOCK: Path = REPO_ROOT / "extensions" / "vscode" / "package-lock.json"
 ZED_EXTENSION_TOML: Path = REPO_ROOT / "extensions" / "zed" / "extension.toml"
 ZED_CARGO_TOML: Path = REPO_ROOT / "extensions" / "zed" / "Cargo.toml"
 ZED_CARGO_LOCK: Path = REPO_ROOT / "extensions" / "zed" / "Cargo.lock"
@@ -79,6 +84,29 @@ def render_vscode_package_json(new_version: str) -> str:
     data = json.loads(VSCODE_PACKAGE_JSON.read_text(encoding="utf-8"))
     data["version"] = new_version
     return json.dumps(data, indent=4, ensure_ascii=False) + "\n"
+
+
+def render_vscode_package_lock(new_version: str) -> str | None:
+    """Return package-lock.json with the root package version set to *new_version*.
+
+    npm records the extension's own version twice — at the top level and under
+    ``packages[""]`` — and rewrites both on the next ``npm install`` if they
+    lag behind package.json, producing a spurious diff. Dependency entries are
+    left untouched.
+
+    Returns ``None`` when the file is absent or already at *new_version*.
+    """
+    if not VSCODE_PACKAGE_LOCK.exists():
+        return None
+    content = VSCODE_PACKAGE_LOCK.read_text(encoding="utf-8")
+    data = json.loads(content)
+    root_package = data.get("packages", {}).get("")
+    if "version" not in data or root_package is None or "version" not in root_package:
+        sys.exit("Error: Could not find the root package version in package-lock.json.")
+    data["version"] = new_version
+    root_package["version"] = new_version
+    updated = json.dumps(data, indent=4, ensure_ascii=False) + "\n"
+    return None if updated == content else updated
 
 
 def render_first_version_field(path: Path, new_version: str) -> str:
@@ -127,12 +155,15 @@ def render_zed_cargo_lock(new_version: str) -> str | None:
 DOC_VERSION_FILES: list[Path] = [
     REPO_ROOT / "instructions" / "learnings.instructions.md",
     REPO_ROOT / ".github" / "workflows" / "DIRECTORY.md",
+    REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
     REPO_ROOT / "SECURITY.md",
     REPO_ROOT / "documents" / "Luma_Tutorial.md",
     REPO_ROOT / "documents" / "Luma_Installation_Guide.md",
     REPO_ROOT / "documents" / "Luma_Language_Server.md",
+    REPO_ROOT / "documents" / "Luma_Manual_Tests.md",
     REPO_ROOT / "extensions" / "vscode" / "DIRECTORY.md",
     REPO_ROOT / "extensions" / "zed" / "DIRECTORY.md",
+    REPO_ROOT / "extensions" / "zed" / "scripts" / "Download-Binaries.ps1",
     REPO_ROOT / "extensions" / "shared" / "binary-download" / "SPECIFICATION.md",
     REPO_ROOT / "extensions" / "shared" / "config-schema.md",
     REPO_ROOT / "extensions" / "shared" / "error-handling.md",
@@ -194,6 +225,10 @@ def plan_updates(current: str, new_version: str) -> list[tuple[Path, str]]:
         (ZED_EXTENSION_TOML, render_first_version_field(ZED_EXTENSION_TOML, new_version)),
         (ZED_CARGO_TOML, render_first_version_field(ZED_CARGO_TOML, new_version)),
     ]
+
+    package_lock = render_vscode_package_lock(new_version)
+    if package_lock is not None:
+        updates.append((VSCODE_PACKAGE_LOCK, package_lock))
 
     cargo_lock = render_zed_cargo_lock(new_version)
     if cargo_lock is not None:

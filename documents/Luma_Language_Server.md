@@ -1129,7 +1129,7 @@ The `initialize` response advertises these server capabilities:
             "full": true
         }
     },
-    "serverInfo": { "name": "luma-lsp", "version": "0.15.0" }
+    "serverInfo": { "name": "luma-lsp", "version": "0.16.0" }
 }
 ```
 

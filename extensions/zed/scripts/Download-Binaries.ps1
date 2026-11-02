@@ -25,7 +25,7 @@ else {
 $Suffix = "windows-${Arch}.zip"
 $AssetName = "${BinaryName}-${Suffix}"
 
-# Fetch the requested release (LUMA_VERSION, e.g. v0.15.0) or the latest one.
+# Fetch the requested release (LUMA_VERSION, e.g. v0.16.0) or the latest one.
 $Version = if ($env:LUMA_VERSION) { $env:LUMA_VERSION } else { 'latest' }
 $ReleaseUrl = if ($Version -eq 'latest') {
     "https://api.github.com/repos/${Repo}/releases/latest"

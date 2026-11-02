@@ -115,8 +115,8 @@ Releases are **tag-triggered**: pushing a tag of the form `vMAJOR.MINOR.PATCH` r
     **B. Manual.** Create an **annotated** tag whose version matches `VERSION`, prefixed with `v`, and push it:
 
     ```bash
-    git tag -a v0.15.0 -m "Release version 0.15.0"
-    git push origin v0.15.0
+    git tag -a v0.16.0 -m "Release version 0.16.0"
+    git push origin v0.16.0
     ```
 
 3. Watch the **Release** workflow run under [Actions](https://github.com/D3V0N5H1R3/luma/actions). When it finishes, the new release (with its binaries) appears on the [Releases](https://github.com/D3V0N5H1R3/luma/releases) page. It publishes immediately — there is no manual draft step.

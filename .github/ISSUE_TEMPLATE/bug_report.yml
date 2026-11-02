@@ -49,7 +49,7 @@ body:
       description: >-
         Output of `luma --version`. If you built from source, also add the
         commit SHA (`git rev-parse --short HEAD`).
-      placeholder: "e.g. Luma 0.15.0 (abc1234)"
+      placeholder: "e.g. Luma 0.16.0 (abc1234)"
     validations:
       required: true
   - type: dropdown
