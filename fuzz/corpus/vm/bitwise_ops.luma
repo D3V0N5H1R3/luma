@@ -1,24 +1,25 @@
-# VM: bitwise, shift, integer-division and null-coalescing operators
+# VM: Bits module calls (the bitwise operators were removed in favour of the
+# Bits module), integer division, compound assignment and null-coalescing
 @main
 function void main() {
     mutable integer flags = 0xFF
-    flags &= 0x0F
-    flags |= 0x30
-    flags ^= 0x05
-    flags <<= 2
-    flags >>= 1
-    flags = ~flags
+    flags = Bits.and(flags, 0x0F)
+    flags = Bits.or(flags, 0x30)
+    flags = Bits.xor(flags, 0x05)
+    flags = Bits.shift_left(flags, 2)
+    flags = Bits.shift_right(flags, 1)
+    flags = Bits.not(flags)
 
     integer quotient = 97 // 4
     integer remainder = 97 % 4
-    integer shifted = 1 << 10
+    integer shifted = Bits.shift_left(1, 10)
 
-    boolean masked = (flags & 1) == 1
-    integer fallback = String.parse_integer("nope") ?? -1
+    boolean masked = Bits.and(flags, 1) == 1
+    integer fallback = Converter.to_integer("nope") ?? -1
 
     mutable integer total = 0
     for i in 0 ..= 8 {
-        total += i & 3
+        total += Bits.and(i, 3)
     }
 
     print("${quotient} ${remainder} ${shifted} ${masked} ${fallback} ${total}")

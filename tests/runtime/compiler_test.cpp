@@ -1,28 +1,34 @@
 // Compiler unit tests — opcode emission patterns.
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
 #include "compiler_test_helpers.hpp"
+#include "runtime/compiler/chunk.hpp"
 #include "runtime/compiler/compiler.hpp"
 #include "runtime/compiler/compiler_limits.hpp"
+#include "runtime/compiler/opcode.hpp"
+#include "runtime/compiler/verifier.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "shared_eval.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::BytecodeVerifier;
+using luma::Chunk;
+using luma::CompiledFunction;
+using luma::CompileResult;
+using luma::CompilerLimits;
+using luma::Op;
+using luma::Value;
+using luma::test::compile;
+using luma::test::compile_script;
+using luma::test::count_opcode;
+using luma::test::decode_instructions;
+using luma::test::eval;
 using luma::test::has_opcode;
-
-// ─── Helper ───
-
-static CompileResult compile(const std::string& source, bool repl_mode = true) {
-    const auto program = luma::test::lex_and_parse(source);
-
-    Compiler compiler;
-
-    return compiler.compile(program, repl_mode);
-}
 
 // ─── Tests ───
 
@@ -63,13 +69,22 @@ static void test_compile_addition() {
     ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Constant));
 }
 
+// Returns true when the chunk's constant pool holds the integer `value`.
+static bool has_integer_constant(const Chunk& chunk, std::int64_t value) {
+    return std::ranges::any_of(chunk.constants, [value](const Value& constant) {
+        return constant.is_integer() && constant.as_integer() == value;
+    });
+}
+
 static void test_compile_constant_folding_integer() {
     const auto result = compile("3 * 4 + 2");
 
     ASSERT_TRUE(result.success);
-    // 3 * 4 should be folded to 12, then 12 + 2 folded to 14.
-    // Note: depends on parse tree shape — at minimum one fold occurs.
-    ASSERT_TRUE(result.top_level.chunk().constants.size() >= 1);
+    // Only literal-literal operations fold at compile time: 3 * 4 folds to 12,
+    // but `12 + 2` has a folded (non-literal) left operand, so its Add remains.
+    ASSERT_FALSE(has_opcode(result.top_level.chunk(), Op::Multiply));
+    ASSERT_TRUE(has_integer_constant(result.top_level.chunk(), 12));
+    ASSERT_EQ(count_opcode(result.top_level.chunk(), Op::Add), 1U);
 }
 
 static void test_compile_string_interpolation() {
@@ -137,6 +152,8 @@ static void test_compile_empty_program() {
     const auto result = compile("");
 
     ASSERT_TRUE(result.success);
+    ASSERT_TRUE(result.functions.empty());
+    ASSERT_TRUE(result.diagnostics.empty());
 }
 
 static void test_compile_comparison() {
@@ -274,6 +291,12 @@ static void test_compile_for_in_loop() {
     ASSERT_TRUE(has_opcode(result.functions[0].chunk(), Op::ForIterStep));
 }
 
+// Returns true when any compiled function (not the top-level chunk) contains `op`.
+static bool any_compiled_function_has_opcode(const CompileResult& result, Op op) {
+    return std::ranges::any_of(
+        result.functions, [op](const CompiledFunction& fn) { return has_opcode(fn.chunk(), op); });
+}
+
 static void test_compile_closure() {
     const auto result = compile("function void f() {\n"
                                 "    integer x = 10\n"
@@ -281,15 +304,8 @@ static void test_compile_closure() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    // At least one function should be compiled as a closure.
-    bool found_closure = false;
-    for (const auto& fn : result.functions) {
-        if (has_opcode(fn.chunk(), Op::MakeClosure)) {
-            found_closure = true;
-            break;
-        }
-    }
-    ASSERT_TRUE(found_closure);
+    // The lambda inside f is created with MakeClosure in f's own chunk.
+    ASSERT_TRUE(any_compiled_function_has_opcode(result, Op::MakeClosure));
 }
 
 static void test_compile_block_body_closure() {
@@ -303,14 +319,7 @@ static void test_compile_block_body_closure() {
                                 "}");
 
     ASSERT_TRUE(result.success);
-    bool found_closure = false;
-    for (const auto& fn : result.functions) {
-        if (has_opcode(fn.chunk(), Op::MakeClosure)) {
-            found_closure = true;
-            break;
-        }
-    }
-    ASSERT_TRUE(found_closure);
+    ASSERT_TRUE(any_compiled_function_has_opcode(result, Op::MakeClosure));
 }
 
 static void test_compile_nested_closure() {
@@ -326,18 +335,14 @@ static void test_compile_nested_closure() {
 
     ASSERT_TRUE(single.success);
     ASSERT_TRUE(nested.success);
-    ASSERT_TRUE(nested.functions.size() > single.functions.size());
+    ASSERT_GT(nested.functions.size(), single.functions.size());
 }
 
 // Returns true when any emitted diagnostic message contains `needle`.
 static bool has_diagnostic(const CompileResult& result, std::string_view needle) {
-    for (const auto& diag : result.diagnostics) {
-        if (diag.message.find(needle) != std::string::npos) {
-            return true;
-        }
-    }
-
-    return false;
+    return std::ranges::any_of(result.diagnostics, [needle](const auto& diag) {
+        return diag.message.find(needle) != std::string::npos;
+    });
 }
 
 static void test_compile_too_many_functions_fails_cleanly() {
@@ -418,31 +423,58 @@ static void test_compile_logical_or_short_circuit() {
 
 // ─── Const folder overflow guard tests ───
 // These verify that expressions involving INT64_MIN with -1 don't trigger UB
-// at compile time.  The const folder should either fold safely (to a double) or
-// bail out and leave the expression for the VM.
+// at compile time.  The const folder must bail out and leave the expression for
+// the VM (which raises the overflow at runtime).  INT64_MIN is spelled
+// `(-9223372036854775807 - 1)` because the literal 9223372036854775808 is out of
+// integer range (a syntax error, which would leave nothing to fold).
+
+static constexpr std::string_view k_int64_min_expr = "(-9223372036854775807 - 1)";
 
 static void test_const_fold_int64_min_div_neg1() {
-    // INT64_MIN / -1 overflows int64_t.  The const folder must not crash.
-    const auto result = compile("-9223372036854775808 // -1");
+    // INT64_MIN // -1 overflows int64_t.  The const folder must leave it alone.
+    const std::string source = std::string{k_int64_min_expr} + " // -1";
+    ASSERT_TRUE(luma::test::parse_errors(source).empty());
+
+    const auto result = compile(source);
     ASSERT_TRUE(result.success);
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::IntDivide));
+
+    ASSERT_EVAL_THROWS(source, "integer division overflow");
 }
 
 static void test_const_fold_int64_min_mul_neg1() {
-    // INT64_MIN * -1 overflows int64_t.  The const folder must not crash.
-    const auto result = compile("-9223372036854775808 * -1");
+    // INT64_MIN * -1 overflows int64_t.  The const folder must leave it alone.
+    const std::string source = std::string{k_int64_min_expr} + " * -1";
+    ASSERT_TRUE(luma::test::parse_errors(source).empty());
+
+    const auto result = compile(source);
     ASSERT_TRUE(result.success);
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Multiply));
+
+    ASSERT_EVAL_THROWS(source, "integer overflow in multiplication");
 }
 
 static void test_const_fold_int64_min_mod_neg1() {
     // INT64_MIN % -1 is UB in C++.  The const folder must bail out.
-    const auto result = compile("-9223372036854775808 % -1");
+    const std::string source = std::string{k_int64_min_expr} + " % -1";
+    ASSERT_TRUE(luma::test::parse_errors(source).empty());
+
+    const auto result = compile(source);
     ASSERT_TRUE(result.success);
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Modulo));
+
+    const auto value = eval(source);
+    ASSERT_TRUE(value.is_integer());
+    ASSERT_EQ(value.as_integer(), 0);
 }
 
 static void test_const_fold_division_by_zero() {
-    // Division by zero should not crash the const folder.
+    // Division by zero is not folded: it stays a runtime error.
     const auto result = compile("42 // 0");
     ASSERT_TRUE(result.success);
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::IntDivide));
+
+    ASSERT_EVAL_THROWS("42 // 0", "division by zero");
 }
 
 // Two integer literals differing by 1 but both > 2^53.  A double-based compare
@@ -466,38 +498,293 @@ static void test_const_fold_large_integer_comparison_is_exact() {
     ASSERT_FALSE(has_opcode(greater.top_level.chunk(), Op::False));
 }
 
-// ─── Const folder overflow promotion characterization (R01) ───
-// Signed + and * that overflow int64 promote to a double constant at compile
-// time (matching the VM), so the folded chunk carries a number constant and no
-// arithmetic opcode.  This pins the "promote, don't decline" half of the
-// overflow contract shared with common/overflow.hpp; the // and % INT64_MIN / -1
-// cases above pin the "decline" half.
+// ─── Const folder integer overflow (R01) ───
+// Signed +, - and * whose exact result does not fit in an int64 are NOT folded:
+// the VM raises "integer overflow in <operation>" for them instead of widening
+// to `number`, so the folder leaves the operator in place for the runtime to
+// raise.  (With the type checker enabled such a constant expression is already a
+// compile error; unchecked compilation — REPL, debugger — relies on this.)
 
 // Returns true if any constant in the chunk is a floating-point (number) value.
 static bool has_number_constant(const Chunk& chunk) {
-    for (const auto& constant : chunk.constants) {
-        if (constant.is_number()) {
-            return true;
-        }
-    }
-
-    return false;
+    return std::ranges::any_of(chunk.constants,
+                               [](const Value& constant) { return constant.is_number(); });
 }
 
-static void test_const_fold_add_overflow_promotes_to_double() {
-    // INT64_MAX + 1 overflows int64 and folds to a double constant.
+static void test_const_fold_add_overflow_is_left_for_runtime() {
     const auto result = compile("9223372036854775807 + 1");
     ASSERT_TRUE(result.success);
-    ASSERT_FALSE(has_opcode(result.top_level.chunk(), Op::Add));
-    ASSERT_TRUE(has_number_constant(result.top_level.chunk()));
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Add));
+    ASSERT_FALSE(has_number_constant(result.top_level.chunk()));
+
+    ASSERT_EVAL_THROWS("9223372036854775807 + 1", "integer overflow in addition");
 }
 
-static void test_const_fold_mul_overflow_promotes_to_double() {
-    // INT64_MAX * 2 overflows int64 and folds to a double constant.
+static void test_const_fold_mul_overflow_is_left_for_runtime() {
     const auto result = compile("9223372036854775807 * 2");
     ASSERT_TRUE(result.success);
-    ASSERT_FALSE(has_opcode(result.top_level.chunk(), Op::Multiply));
-    ASSERT_TRUE(has_number_constant(result.top_level.chunk()));
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Multiply));
+    ASSERT_FALSE(has_number_constant(result.top_level.chunk()));
+
+    ASSERT_EVAL_THROWS("9223372036854775807 * 2", "integer overflow in multiplication");
+}
+
+static void test_const_fold_sub_overflow_is_left_for_runtime() {
+    const auto result = compile("-9223372036854775807 - 2");
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Subtract));
+    ASSERT_FALSE(has_number_constant(result.top_level.chunk()));
+
+    ASSERT_EVAL_THROWS("-9223372036854775807 - 2", "integer overflow in subtraction");
+}
+
+// Non-overflowing integer arithmetic still folds to an integer constant.
+static void test_const_fold_in_range_integer_arithmetic_still_folds() {
+    const auto result = compile("9223372036854775806 + 1");
+    ASSERT_TRUE(result.success);
+    ASSERT_FALSE(has_opcode(result.top_level.chunk(), Op::Add));
+    ASSERT_FALSE(has_number_constant(result.top_level.chunk()));
+    ASSERT_TRUE(has_integer_constant(result.top_level.chunk(), 9223372036854775807));
+}
+
+// Integer/number equality folds with the VM's exact rule (Value::equals): a
+// number equals an integer only when it is exactly that whole value.  Routing
+// the comparison through double made `2^53 + 1 == 2^53.0` fold to true.
+static void test_const_fold_integer_number_equality_is_exact() {
+    const auto above = compile("9007199254740993 == 9007199254740992.0");
+    ASSERT_TRUE(above.success);
+    ASSERT_TRUE(has_opcode(above.top_level.chunk(), Op::False));
+    ASSERT_FALSE(has_opcode(above.top_level.chunk(), Op::True));
+
+    const auto above_ne = compile("9007199254740992.0 != 9007199254740993");
+    ASSERT_TRUE(above_ne.success);
+    ASSERT_TRUE(has_opcode(above_ne.top_level.chunk(), Op::True));
+    ASSERT_FALSE(has_opcode(above_ne.top_level.chunk(), Op::False));
+
+    const auto whole = compile("9007199254740992 == 9007199254740992.0");
+    ASSERT_TRUE(whole.success);
+    ASSERT_TRUE(has_opcode(whole.top_level.chunk(), Op::True));
+
+    const auto fraction = compile("3 == 3.5");
+    ASSERT_TRUE(fraction.success);
+    ASSERT_TRUE(has_opcode(fraction.top_level.chunk(), Op::False));
+
+    const auto same = compile("3 != 3.0");
+    ASSERT_TRUE(same.success);
+    ASSERT_TRUE(has_opcode(same.top_level.chunk(), Op::False));
+
+    // The folded result agrees with the unfolded runtime comparison.
+    const auto runtime = eval("integer i = 9007199254740993\n"
+                              "number n = 9007199254740992.0\n"
+                              "i == n\n");
+    ASSERT_TRUE(runtime.is_bool());
+    ASSERT_FALSE(runtime.as_bool());
+}
+
+// ─── Code-generation regressions ───
+
+static const CompiledFunction* find_function(const CompileResult& result, std::string_view name) {
+    const auto it = std::ranges::find(result.functions, name, &CompiledFunction::name);
+
+    return it == result.functions.end() ? nullptr : &*it;
+}
+
+// Regression: the implicit `None; Return` was skipped whenever the last emitted
+// opcode was a Return, even though the then-branch's Jump was later patched to
+// land on the end of the code. A zero-parameter function (no scope-exit Pops)
+// then ran off the end of its bytecode ("bytecode truncated").
+static void test_compile_branch_ending_in_return_keeps_implicit_return() {
+    const auto result = compile_script("function boolean ready() { return true }\n"
+                                       "function void go() {\n"
+                                       "    if ready() {\n"
+                                       "        print(\"work\")\n"
+                                       "    } else {\n"
+                                       "        return\n"
+                                       "    }\n"
+                                       "}\n");
+
+    ASSERT_TRUE(result.success);
+
+    const auto* go = find_function(result, "go");
+    ASSERT_NE(go, nullptr);
+
+    const auto instructions = decode_instructions(go->chunk());
+    ASSERT_GE(instructions.size(), 2U);
+    ASSERT_EQ(instructions[instructions.size() - 2].op, Op::None);
+    ASSERT_EQ(instructions.back().op, Op::Return);
+
+    BytecodeVerifier verifier;
+    ASSERT_TRUE(verifier.verify(*go).empty());
+
+    // Runs to completion through the then-branch instead of falling past the
+    // last instruction.
+    const auto value = eval("mutable string trace = \"start\"\n"
+                            "function boolean ready() { return true }\n"
+                            "function void go() {\n"
+                            "    if ready() { trace = \"work\" } else { return }\n"
+                            "}\n"
+                            "go()\n"
+                            "trace\n");
+    ASSERT_TRUE(value.is_string());
+    ASSERT_EQ(value.as_string(), std::string{"work"});
+}
+
+// A block-bodied lambda that already ends in `return` gets no unreachable
+// `None; Return` tail (it used to defeat the -O2 inliner's terminator check).
+static void test_compile_block_lambda_ending_in_return_has_no_dead_tail() {
+    const auto result = compile("function() -> integer f = () -> { return 1 }");
+
+    ASSERT_TRUE(result.success);
+    ASSERT_FALSE(result.functions.empty());
+    ASSERT_EQ(count_opcode(result.functions[0].chunk(), Op::Return), 1U);
+}
+
+// Regression: `return <expr>` inside try/finally compiled the finally body while
+// the return value sat untracked on the operand stack, so a local declared in
+// the finally body was assigned the return value's slot and read it back.
+static void test_return_through_finally_keeps_finally_locals_apart() {
+    const auto value = eval("mutable string seen = \"\"\n"
+                            "function integer f() {\n"
+                            "    try {\n"
+                            "        return 42\n"
+                            "    } finally {\n"
+                            "        string message = \"done\"\n"
+                            "        seen = message\n"
+                            "    }\n"
+                            "}\n"
+                            "integer r = f()\n"
+                            "\"${seen}:${r}\"\n");
+
+    ASSERT_TRUE(value.is_string());
+    ASSERT_EQ(value.as_string(), std::string{"done:42"});
+}
+
+// Same invariant for the failure path of the `?` operator.
+static void test_question_mark_through_finally_keeps_finally_locals_apart() {
+    const auto value = eval("mutable string seen = \"\"\n"
+                            "function result<integer> parse() { return failure(\"bad\") }\n"
+                            "function result<integer> f() {\n"
+                            "    try {\n"
+                            "        integer v = parse()?\n"
+                            "        return success(v)\n"
+                            "    } finally {\n"
+                            "        string message = \"cleanup\"\n"
+                            "        seen = message\n"
+                            "    }\n"
+                            "}\n"
+                            "result<integer> r = f()\n"
+                            "\"${seen}:${r}\"\n");
+
+    ASSERT_TRUE(value.is_string());
+    ASSERT_TRUE(value.as_string().starts_with("cleanup:"));
+}
+
+// Regression: break/continue popped the loop body's locals *before* compiling
+// the enclosing finally bodies, which still addressed those locals by slot.
+static void test_break_through_finally_reads_loop_body_locals() {
+    const auto value = eval("mutable string seen = \"\"\n"
+                            "mutable integer i = 0\n"
+                            "while i < 3 {\n"
+                            "    string label = \"x${i}\"\n"
+                            "    try {\n"
+                            "        if i == 1 { break }\n"
+                            "    } finally {\n"
+                            "        string suffix = \"!\"\n"
+                            "        seen = \"${seen}${label}${suffix}\"\n"
+                            "    }\n"
+                            "    i += 1\n"
+                            "}\n"
+                            "seen\n");
+
+    ASSERT_TRUE(value.is_string());
+    ASSERT_EQ(value.as_string(), std::string{"x0!x1!"});
+}
+
+// Regression: `?` inside @main returned silently from main, bypassing any
+// enclosing try/catch and exiting 0. It must raise a RuntimeError instead.
+static void test_question_mark_in_main_raises_catchable_error() {
+    const auto value = eval("function result<integer> parse() { return failure(\"bad input\") }\n"
+                            "@main\n"
+                            "function string main() {\n"
+                            "    try {\n"
+                            "        integer v = parse()?\n"
+                            "        return \"unreached ${v}\"\n"
+                            "    } catch (err) {\n"
+                            "        return \"caught: ${err}\"\n"
+                            "    }\n"
+                            "}\n"
+                            "main()\n");
+
+    ASSERT_TRUE(value.is_string());
+    ASSERT_TRUE(value.as_string().starts_with("caught: "));
+    ASSERT_NE(value.as_string().find("bad input"), std::string::npos);
+
+    // Uncaught, the failure terminates the program with the failure's message.
+    ASSERT_EVAL_THROWS("function result<integer> parse() {\n"
+                       "    return failure(\"uncaught parse failure\")\n"
+                       "}\n"
+                       "@main\n"
+                       "function void main() {\n"
+                       "    integer v = parse()?\n"
+                       "    print(v)\n"
+                       "}\n"
+                       "main()\n",
+                       "uncaught parse failure");
+
+    // A success value is still unwrapped.
+    const auto ok = eval("function result<integer> parse() { return success(7) }\n"
+                         "@main\n"
+                         "function integer main() {\n"
+                         "    return parse()? + 1\n"
+                         "}\n"
+                         "main()\n");
+    ASSERT_TRUE(ok.is_integer());
+    ASSERT_EQ(ok.as_integer(), 8);
+}
+
+// Regression: an interpolation made only of empty string literals pushed no
+// value at all.
+static void test_interpolation_of_only_empty_literals_pushes_empty_string() {
+    const auto value = eval("string s = \"${\"\"}\"\n\"[${s}]\"\n");
+
+    ASSERT_TRUE(value.is_string());
+    ASSERT_EQ(value.as_string(), std::string{"[]"});
+}
+
+// A full constant pool must be reported as a located compile error instead of
+// letting std::overflow_error escape Compiler::compile.
+static void test_compile_too_many_constants_fails_cleanly() {
+    std::string source;
+    source.reserve((CompilerLimits::k_max_constants + 2) * 8);
+    for (std::size_t i = 0; i <= CompilerLimits::k_max_constants; ++i) {
+        source += std::to_string(i + 1000);
+        source += '\n';
+    }
+
+    const auto result = compile(source);
+
+    ASSERT_FALSE(result.success);
+    ASSERT_TRUE(has_diagnostic(result, "too many distinct constants"));
+
+    // Reported once, not once per overflowing constant.
+    const auto reports = std::ranges::count_if(result.diagnostics, [](const auto& diag) {
+        return diag.message.find("too many distinct constants") != std::string::npos;
+    });
+    ASSERT_EQ(reports, 1);
+}
+
+// Same for a full name table.
+static void test_compile_too_many_names_fails_cleanly() {
+    std::string source;
+    source.reserve((CompilerLimits::k_max_names + 2) * 8);
+    for (std::size_t i = 0; i <= CompilerLimits::k_max_names; ++i) {
+        source += "g" + std::to_string(i) + '\n';
+    }
+
+    const auto result = compile(source);
+
+    ASSERT_FALSE(result.success);
+    ASSERT_TRUE(has_diagnostic(result, "too many distinct global and field names"));
 }
 
 // ─── Main ───
@@ -549,8 +836,20 @@ int main() {
     RUN(test_const_fold_int64_min_mod_neg1);
     RUN(test_const_fold_division_by_zero);
     RUN(test_const_fold_large_integer_comparison_is_exact);
-    RUN(test_const_fold_add_overflow_promotes_to_double);
-    RUN(test_const_fold_mul_overflow_promotes_to_double);
+    RUN(test_const_fold_add_overflow_is_left_for_runtime);
+    RUN(test_const_fold_mul_overflow_is_left_for_runtime);
+    RUN(test_const_fold_sub_overflow_is_left_for_runtime);
+    RUN(test_const_fold_in_range_integer_arithmetic_still_folds);
+    RUN(test_const_fold_integer_number_equality_is_exact);
+    RUN(test_compile_branch_ending_in_return_keeps_implicit_return);
+    RUN(test_compile_block_lambda_ending_in_return_has_no_dead_tail);
+    RUN(test_return_through_finally_keeps_finally_locals_apart);
+    RUN(test_question_mark_through_finally_keeps_finally_locals_apart);
+    RUN(test_break_through_finally_reads_loop_body_locals);
+    RUN(test_question_mark_in_main_raises_catchable_error);
+    RUN(test_interpolation_of_only_empty_literals_pushes_empty_string);
+    RUN(test_compile_too_many_constants_fails_cleanly);
+    RUN(test_compile_too_many_names_fails_cleanly);
 
     return SUMMARY();
 }

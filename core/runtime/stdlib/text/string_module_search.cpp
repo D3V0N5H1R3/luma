@@ -9,12 +9,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
@@ -89,19 +91,212 @@ template <typename ParseFn>
     return make_failure_value(std::format("cannot parse '{}' as {}", s, type_name));
 }
 
+// Throw the shared String.<fn> "result exceeds maximum string size" error.
+[[noreturn]] static void throw_string_too_large(std::string_view function_name,
+                                                const SourceLocation& loc, std::string_view hint) {
+    throw RuntimeError{error_msg("String", function_name, "result exceeds maximum string size"),
+                       loc, std::string{hint}};
+}
+
+// String.indent: prepend `prefix` to every non-empty line start.  The output
+// is s.size() + line_starts * prefix.size(), which can vastly exceed both
+// inputs (a string of newlines times a long prefix), so the exact size is
+// computed and checked — overflow-safe — before allocating.
+[[nodiscard]] static std::string indent_impl(const std::string& s, const std::string& prefix,
+                                             const SourceLocation& loc) {
+    // A prefix is emitted before the first byte and after every '\n' that is
+    // followed by more text.
+    std::size_t line_starts{s.empty() ? 0U : 1U};
+
+    if (!s.empty()) {
+        line_starts += static_cast<std::size_t>(std::count(s.begin(), std::prev(s.end()), '\n'));
+    }
+
+    const auto max = ResourceLimits::max_string_size;
+
+    if (s.size() > max || (!prefix.empty() && line_starts > (max - s.size()) / prefix.size())) {
+        throw_string_too_large("indent", loc, "use a shorter prefix or fewer lines");
+    }
+
+    std::string result{};
+    result.reserve(s.size() + (line_starts * prefix.size()));
+
+    bool at_start{true};
+
+    for (const char ch : s) {
+        if (at_start) {
+            result += prefix;
+            at_start = false;
+        }
+
+        result += ch;
+
+        if (ch == '\n') {
+            at_start = true;
+        }
+    }
+
+    return result;
+}
+
+// Leading indentation recognised by String.dedent: spaces and tabs.
+[[nodiscard]] static std::string_view leading_indent(std::string_view line) {
+    const auto end = line.find_first_not_of(" \t");
+
+    return end == std::string_view::npos ? line : line.substr(0, end);
+}
+
+// A line with no visible content (empty, or only spaces, tabs, CR, and the
+// line's own '\n' terminator).
+[[nodiscard]] static bool is_blank_line(std::string_view line) {
+    return line.find_first_not_of(" \t\r\n") == std::string_view::npos;
+}
+
+// String.dedent: remove the leading whitespace (spaces and tabs) common to
+// every non-blank line.  Like Python's textwrap.dedent the common prefix is
+// compared character-by-character, so a tab never matches a space.  Line
+// terminators are preserved exactly — including a trailing newline — and
+// blank lines do not constrain the common prefix (they lose as much of it as
+// they share).
+[[nodiscard]] static std::string dedent_impl(const std::string& s) {
+    std::vector<std::string_view> lines{};
+    const std::string_view text{s};
+
+    for (std::size_t pos{0}; pos < text.size();) {
+        const auto newline = text.find('\n', pos);
+        const auto end = newline == std::string_view::npos ? text.size() : newline + 1;
+
+        lines.push_back(text.substr(pos, end - pos));
+        pos = end;
+    }
+
+    std::optional<std::string_view> common{};
+
+    for (const auto line : lines) {
+        if (is_blank_line(line)) {
+            continue;
+        }
+
+        const auto indent = leading_indent(line);
+
+        if (!common) {
+            common = indent;
+            continue;
+        }
+
+        const auto mismatch = std::ranges::mismatch(*common, indent).in1;
+        common = common->substr(0, static_cast<std::size_t>(mismatch - common->begin()));
+    }
+
+    const auto strip = common ? *common : std::string_view{};
+
+    std::string result{};
+    result.reserve(s.size());
+
+    for (const auto line : lines) {
+        const auto mismatch = std::ranges::mismatch(strip, line).in1;
+        result.append(line.substr(static_cast<std::size_t>(mismatch - strip.begin())));
+    }
+
+    return result;
+}
+
+// String.template: substitute `{name}` placeholders in a single left-to-right
+// pass over the *original* template.  Substituted values are appended
+// literally and never re-scanned, so a value containing `{other}` cannot
+// trigger a further expansion (template injection) and the result does not
+// depend on dictionary insertion order.  Unknown placeholders are kept
+// verbatim.  The output size is bounded before every append.
+//
+// The scan is linear in the template length: the position of the next '}' is
+// cached and reused while it still lies after the current '{' (so a run of
+// many '{' before one '}' does not re-search the tail for each of them), and a
+// candidate name whose length matches no dictionary key — in particular one
+// longer than the longest key — is rejected without hashing it.  The names
+// tried against one '}' all differ in length, so at most one per key length
+// is hashed.
+[[nodiscard]] static std::string template_impl(const std::string& tmpl, const DictionaryValue& dict,
+                                               const SourceLocation& loc) {
+    std::string result{};
+    result.reserve(tmpl.size());
+
+    std::unordered_set<std::size_t> key_lengths{};
+
+    for (const auto& entry : dict.entries) {
+        key_lengths.insert(entry.first.size());
+    }
+
+    const auto append_bounded = [&result, &loc](std::string_view piece) {
+        if (piece.size() > ResourceLimits::max_string_size - result.size()) {
+            throw_string_too_large("template", loc,
+                                   "reduce the number or size of the template substitutions");
+        }
+
+        result.append(piece);
+    };
+
+    std::size_t pos{0};
+    // Position of the first '}' after the most recent search; it stays valid
+    // for every later '{' that precedes it.
+    std::size_t close{0};
+
+    while (pos < tmpl.size()) {
+        const auto open = tmpl.find('{', pos);
+
+        if (open == std::string::npos) {
+            append_bounded(std::string_view{tmpl}.substr(pos));
+            break;
+        }
+
+        append_bounded(std::string_view{tmpl}.substr(pos, open - pos));
+
+        if (close <= open) {
+            close = tmpl.find('}', open + 1);
+        }
+
+        if (close == std::string::npos) {
+            append_bounded(std::string_view{tmpl}.substr(open));
+            break;
+        }
+
+        const auto name = std::string_view{tmpl}.substr(open + 1, close - open - 1);
+        const Value* value = key_lengths.contains(name.size()) ? dict.find(name) : nullptr;
+
+        if (value == nullptr) {
+            // Not a known placeholder: emit the '{' literally and resume just
+            // after it, so a nested "{{name}" still resolves its inner "{name}".
+            append_bounded("{");
+            pos = open + 1;
+            continue;
+        }
+
+        if (value->is_string()) {
+            append_bounded(value->as_string());
+        } else {
+            append_bounded(value->to_string());
+        }
+
+        pos = close + 1;
+    }
+
+    return result;
+}
+
 void register_string_search(const EnvPtr& env) {
     ModuleBuilder{"String", env}
         .func("split", 2)
         .extract_body(expect_string,
                       [](const auto& s, const Args& args, SourceLocation loc) -> Value {
-                          return split_impl(s, args[1].as_string(), std::nullopt, "split", loc);
+                          return split_impl(s, expect_string(args[1], "String.split", loc),
+                                            std::nullopt, "split", loc);
                       })
 
         .func("split_n", 3)
         .extract_body(expect_string,
                       [](const auto& s, const Args& args, SourceLocation loc) -> Value {
-                          return split_impl(s, args[1].as_string(), args[2].as_integer(), "split_n",
-                                            loc);
+                          return split_impl(s, expect_string(args[1], "String.split_n", loc),
+                                            expect_integer(args[2], "String.split_n", loc),
+                                            "split_n", loc);
                       })
 
         // String.lines(string) -> array<string>
@@ -154,11 +349,9 @@ void register_string_search(const EnvPtr& env) {
         .func("join", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& elems_arr = expect_array(args[0], "String.join", loc);
-
-            (void)expect_string(args[1], "String.join", loc);
+            const auto& sep = expect_string(args[1], "String.join", loc);
 
             const auto& elems = *elems_arr->elements;
-            const auto& sep = args[1].as_string();
 
             std::vector<std::string> converted;
             converted.reserve(elems.size());
@@ -217,8 +410,8 @@ void register_string_search(const EnvPtr& env) {
 
         .func("character_at", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto i = args[1].as_integer();
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto i = expect_integer(args[1], "String.character_at", loc);
                           const auto cp_count = utf8_count(s);
 
                           if (i < 0 || i >= cp_count) {
@@ -233,26 +426,27 @@ void register_string_search(const EnvPtr& env) {
 
         .func("substring", 3)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto raw_start = expect_integer(args[1], "String.substring", loc);
+                          const auto raw_end = expect_integer(args[2], "String.substring", loc);
                           const auto cp_count = utf8_count(s);
-                          const auto start = std::max(std::int64_t{0}, args[1].as_integer());
-                          const auto end =
-                              std::max(std::int64_t{0}, std::min(cp_count, args[2].as_integer()));
+                          const auto start = std::max(std::int64_t{0}, raw_start);
+                          const auto end = std::max(std::int64_t{0}, std::min(cp_count, raw_end));
 
                           if (start >= end) {
                               return Value{std::string{}};
                           }
 
-                          const auto byte_start = utf8_byte_offset(s, start);
-                          const auto byte_end = utf8_byte_offset(s, end);
+                          const auto byte_start = std::min(utf8_byte_offset(s, start), s.size());
+                          const auto byte_end = std::min(utf8_byte_offset(s, end), s.size());
 
                           return Value{s.substr(byte_start, byte_end - byte_start)};
                       })
 
         .func("format_number", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto n = args[0].to_numeric();
-            const auto decimals = args[1].as_integer();
+            const auto n = expect_numeric(args[0], "String.format_number", loc);
+            const auto decimals = expect_integer(args[1], "String.format_number", loc);
 
             if (decimals < 0 || decimals > 100) {
                 throw RuntimeError{
@@ -266,13 +460,13 @@ void register_string_search(const EnvPtr& env) {
         .func("truncate", 2)
         .extract_body(
             expect_string,
-            [](const auto& s, const Args& args, SourceLocation) -> Value {
+            [](const auto& s, const Args& args, SourceLocation loc) -> Value {
                 // Clamp negative max_length to 0, consistent with String.substring's
                 // index clamping.  Both functions treat out-of-range values as
                 // boundary values rather than errors — friendlier for beginners and
                 // standard in most string libraries.
-                const auto max_len =
-                    static_cast<std::size_t>(std::max(std::int64_t{0}, args[1].as_integer()));
+                const auto max_len = static_cast<std::size_t>(
+                    std::max(std::int64_t{0}, expect_integer(args[1], "String.truncate", loc)));
                 const auto cp_count = utf8_count_size(s);
 
                 if (cp_count <= max_len) {
@@ -323,8 +517,9 @@ void register_string_search(const EnvPtr& env) {
 
         .func("wrap", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto width = static_cast<std::size_t>(args[1].as_integer());
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto width =
+                              static_cast<std::size_t>(expect_integer(args[1], "String.wrap", loc));
 
                           std::string result{};
                           std::size_t col{0};
@@ -367,86 +562,21 @@ void register_string_search(const EnvPtr& env) {
 
         .func("indent", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto& prefix = args[1].as_string();
-
-                          std::string result{};
-
-                          bool at_start{true};
-
-                          for (auto ch : s) {
-                              if (at_start) {
-                                  result += prefix;
-
-                                  at_start = false;
-                              }
-
-                              result += ch;
-
-                              if (ch == '\n') {
-                                  at_start = true;
-                              }
-                          }
-
-                          return Value{std::move(result)};
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          return Value{
+                              indent_impl(s, expect_string(args[1], "String.indent", loc), loc)};
                       })
 
         .func("dedent", 1)
         .extract_body(expect_string,
                       [](const auto& s, const Args&, SourceLocation) -> Value {
-                          std::vector<std::string> lines{};
-                          std::istringstream iss{s};
-                          std::string line{};
-
-                          while (std::getline(iss, line)) {
-                              lines.push_back(line);
-                          }
-
-                          std::size_t min_indent{std::numeric_limits<std::size_t>::max()};
-
-                          for (const auto& l : lines) {
-                              if (l.empty()) {
-                                  continue;
-                              }
-
-                              std::size_t indent{0};
-
-                              while (indent < l.size() && l[indent] == ' ') {
-                                  ++indent;
-                              }
-
-                              if (indent < l.size()) {
-                                  min_indent = std::min(min_indent, indent);
-                              }
-                          }
-
-                          if (min_indent == std::numeric_limits<std::size_t>::max()) {
-                              min_indent = 0;
-                          }
-
-                          std::string result{};
-
-                          bool first{true};
-
-                          for (const auto& l : lines) {
-                              if (!first) {
-                                  result += '\n';
-                              }
-
-                              first = false;
-
-                              if (l.size() > min_indent) {
-                                  result += l.substr(min_indent);
-                              }
-                          }
-
-                          return Value{std::move(result)};
+                          return Value{dedent_impl(s)};
                       })
 
         .func("matches", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto& pattern = args[1].as_string();
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& pattern = expect_string(args[1], "String.matches", loc);
 
                           // Linear, backtracking-free glob match — safe to run on
                           // untrusted patterns/subjects (no ReDoS).  Every string is a
@@ -457,64 +587,10 @@ void register_string_search(const EnvPtr& env) {
 
         .func("template", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            auto s = args[0].as_string();
+            const auto& tmpl = expect_string(args[0], "String.template", loc);
+            const auto& dict = expect_dict(args[1], "String.template", loc);
 
-            (void)expect_dict(args[1], "String.template", loc);
-
-            const auto& dict = args[1].as_dictionary();
-
-            for (const auto& [key, val] : dict->entries) {
-                const std::string placeholder{"{" + key + "}"};
-
-                std::size_t pos = s.find(placeholder);
-                if (pos == std::string::npos) {
-                    continue;
-                }
-
-                // The replacement is constant across this key's occurrences, so
-                // compute it once and rewrite the string in a single forward
-                // pass into a fresh buffer. An in-place std::string::replace per
-                // occurrence shifts the whole tail every time (quadratic); the
-                // appending builder keeps each key's pass linear in the length.
-                const auto replacement = val.to_string();
-
-                std::string result;
-                result.reserve(s.size());
-                std::size_t last{0};
-
-                // Track the length the in-place rewrite would have reached so
-                // the resource-limit guard fires at exactly the same point, with
-                // the same overflow-safe arithmetic (projected >= placeholder
-                // size holds because find() located a placeholder within it).
-                std::size_t projected{s.size()};
-
-                while (pos != std::string::npos) {
-                    // Bound the result *before* growing it, using overflow-safe
-                    // arithmetic. A post-replace check would still permit a large
-                    // transient allocation — and a std::bad_alloc rather than a
-                    // clean RuntimeError — under a self-expanding "billion laughs"
-                    // input.
-                    if (replacement.size() > ResourceLimits::max_string_size ||
-                        projected - placeholder.size() >
-                            ResourceLimits::max_string_size - replacement.size()) {
-                        throw RuntimeError{
-                            error_msg("String", "template", "result exceeds maximum string size"),
-                            loc, "reduce the number or size of the template substitutions"};
-                    }
-
-                    result.append(s, last, pos - last);
-                    result.append(replacement);
-                    projected = projected - placeholder.size() + replacement.size();
-
-                    last = pos + placeholder.size();
-                    pos = s.find(placeholder, last);
-                }
-
-                result.append(s, last, s.size() - last);
-                s = std::move(result);
-            }
-
-            return Value{std::move(s)};
+            return Value{template_impl(tmpl, *dict, loc)};
         });
 }
 

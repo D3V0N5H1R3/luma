@@ -1,22 +1,23 @@
 # ═══════════════════════════════════════════════════════════
 # Luma v1.0 — Feature Tests — Reference Module Functions
 #
-# Covers the Reference stdlib module (new / get / set / update /
-# swap / inspect) and the shared-identity semantics of reference
-# cells from user code. Language-level reference behaviour is
-# covered by language/reference.luma.
-#
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
+#
+# Covers the Reference stdlib module (new / get / set / update /
+# swap / inspect / read-modify-write / equals / same) and the
+# shared-identity semantics of reference cells from user code.
+# Language-level reference behaviour is covered by
+# language/reference.luma.
 # ═══════════════════════════════════════════════════════════
 
 # ─── new / get ───────────────────────────────────────────
 
 @test
 function void test_reference_new_and_get() {
-    reference<integer> r = Reference.new(42)
+    reference<integer> cell = Reference.new(42)
 
-    assert(Reference.get(r) == 42)
+    assert(Reference.get(cell) == 42)
 }
 
 @test
@@ -28,63 +29,63 @@ function void test_reference_get_via_pipe() {
 
 @test
 function void test_reference_set_updates_value() {
-    reference<integer> r = Reference.new(1)
+    reference<integer> cell = Reference.new(1)
 
-    Reference.set(r, 99)
+    Reference.set(cell, 99)
 
-    assert(Reference.get(r) == 99)
+    assert(Reference.get(cell) == 99)
 }
 
 @test
 function void test_reference_holds_array() {
-    reference<array<integer>> r = Reference.new([1, 2, 3])
+    reference<array<integer>> cell = Reference.new([1, 2, 3])
 
-    Reference.set(r, [1, 2, 3, 4, 5])
+    Reference.set(cell, [1, 2, 3, 4, 5])
 
-    assert(Array.length(Reference.get(r)) == 5)
+    assert(Reference.get(cell) == [1, 2, 3, 4, 5])
 }
 
 # ─── update ──────────────────────────────────────────────
 
 @test
 function void test_reference_update_applies_function() {
-    reference<integer> r = Reference.new(10)
+    reference<integer> cell = Reference.new(10)
 
-    Reference.update(r, (integer x) -> x + 5)
+    Reference.update(cell, (integer x) -> x + 5)
 
-    assert(Reference.get(r) == 15)
+    assert(Reference.get(cell) == 15)
 }
 
 @test
 function void test_reference_update_error_preserves_value() {
     # A throwing update callback must leave the stored value untouched.
-    reference<integer> r = Reference.new(7)
-    mutable boolean threw = false
+    reference<integer> cell = Reference.new(7)
+    mutable boolean has_thrown = false
 
     try {
-        Reference.update(r, (integer x) -> {
+        Reference.update(cell, (integer x) -> {
             assert(false, "boom")
             return x
         })
     } catch(_e) {
-        threw = true
+        has_thrown = true
     }
 
-    assert(threw)
-    assert(Reference.get(r) == 7)
+    assert(has_thrown)
+    assert(Reference.get(cell) == 7)
 }
 
 # ─── swap ────────────────────────────────────────────────
 
 @test
 function void test_reference_swap_exchanges_values() {
-    reference<integer> a = Reference.new(1)
-    reference<integer> b = Reference.new(2)
+    reference<integer> first = Reference.new(1)
+    reference<integer> second = Reference.new(2)
 
-    Reference.swap(a, b)
+    Reference.swap(first, second)
 
-    assert(Reference.get(a) == 2)
-    assert(Reference.get(b) == 1)
+    assert(Reference.get(first) == 2)
+    assert(Reference.get(second) == 1)
 }
 
 # ─── inspect ─────────────────────────────────────────────
@@ -131,23 +132,27 @@ function void test_reference_type_name() {
     assert(type_of(Reference.new(42)) == "reference")
 }
 
-# ─── read-modify-write / comparison additions ────────────
+# ─── read-modify-write / comparison ──────────────────────
 
 @test
-function void test_reference_rmw_returning() {
-    reference<integer> r = Reference.new(10)
-    assert(Reference.update_and_get(r, (integer x) -> x + 5) == 15)
-    assert(Reference.get_and_update(r, (integer x) -> x * 2) == 15)
-    assert(Reference.get(r) == 30)
-    assert(Reference.get_and_set(r, 100) == 30)
-    assert(Reference.get(r) == 100)
+function void test_reference_read_modify_write_returns_values() {
+    reference<integer> cell = Reference.new(10)
+
+    # update_and_get returns the new value, get_and_update / get_and_set the
+    # previous one.
+    assert(Reference.update_and_get(cell, (integer x) -> x + 5) == 15)
+    assert(Reference.get_and_update(cell, (integer x) -> x * 2) == 15)
+    assert(Reference.get(cell) == 30)
+    assert(Reference.get_and_set(cell, 100) == 30)
+    assert(Reference.get(cell) == 100)
 }
 
 @test
-function void test_reference_equals_same() {
-    reference<integer> a = Reference.new(1)
-    reference<integer> b = Reference.new(1)
-    assert(Reference.equals(a, b))
-    assert(!Reference.same(a, b))
-    assert(Reference.same(a, a))
+function void test_reference_equals_compares_values_same_compares_identity() {
+    reference<integer> first = Reference.new(1)
+    reference<integer> second = Reference.new(1)
+
+    assert(Reference.equals(first, second))
+    assert(!Reference.same(first, second))
+    assert(Reference.same(first, first))
 }

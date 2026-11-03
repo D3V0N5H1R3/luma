@@ -2,13 +2,15 @@
 #define LUMA_DAP_PROTOCOL_HANDLER_HPP
 
 #include <atomic>
+#include <format>
 #include <functional>
-#include <iostream>
 #include <mutex>
 #include <optional>
 #include <string>
 
 #include "dap_error_handler.hpp"
+#include "debugger_messages.hpp"
+#include "diagnostic_log.hpp"
 #include "json/json.hpp"
 #include "protocol/error_recovery.hpp"
 #include "protocol/handler_registry.hpp"
@@ -102,7 +104,7 @@ public:
             try {
                 message = transport_.read_message();
             } catch (const protocol::ConnectionClosed& e) {
-                std::cerr << "DAP: connection closed: " << e.what() << '\n';
+                write_adapter_diagnostic(std::string{"DAP: connection closed: "} + e.what());
                 break;
             } catch (const protocol::ParseError& e) {
                 // Route through classify_read_error so a ResyncError (the resync
@@ -110,21 +112,25 @@ public:
                 // treated as fatal, while an ordinary framing ParseError stays
                 // transient and recoverable.
                 auto action = recovery.on_error(protocol::classify_read_error(e));
-                if (action == protocol::RecoveryAction::shutdown) {
-                    std::cerr << "DAP: shutting down after read error: " << e.what() << '\n';
+                if (action == protocol::RecoveryAction::Shutdown) {
+                    write_adapter_diagnostic(std::string{"DAP: shutting down after read error: "} +
+                                             e.what());
                     break;
                 }
-                std::cerr << "DAP: skipping malformed message: " << e.what() << '\n';
+                write_adapter_diagnostic(std::string{"DAP: skipping malformed message: "} +
+                                         e.what());
                 continue;
             } catch (const protocol::TransportError& e) {
-                std::cerr << "DAP: transport error: " << e.what() << '\n';
+                write_adapter_diagnostic(std::string{"DAP: transport error: "} + e.what());
                 break;
             } catch (const std::exception& e) {
-                std::cerr << "DAP: unexpected error reading message: " << e.what() << '\n';
+                write_adapter_diagnostic(std::string{"DAP: unexpected error reading message: "} +
+                                         e.what());
                 auto action = recovery.on_error(protocol::classify_read_error(e));
-                if (action == protocol::RecoveryAction::shutdown) {
-                    std::cerr << "DAP: shutting down after " << recovery.consecutive_errors()
-                              << " consecutive read errors\n";
+                if (action == protocol::RecoveryAction::Shutdown) {
+                    write_adapter_diagnostic(
+                        std::format("DAP: shutting down after {} consecutive read errors",
+                                    recovery.consecutive_errors()));
                     break;
                 }
                 continue;
@@ -132,8 +138,8 @@ public:
 
             if (!message.has_value()) {
                 if (transport_.had_recoverable_read_error()) {
-                    auto action = recovery.on_error(protocol::ErrorSeverity::transient);
-                    if (action == protocol::RecoveryAction::shutdown) {
+                    auto action = recovery.on_error(protocol::ErrorSeverity::Transient);
+                    if (action == protocol::RecoveryAction::Shutdown) {
                         break;
                     }
                     continue;
@@ -276,27 +282,36 @@ private:
 
         if (!handler) {
             send_response(seq, command, JsonValue(JsonValue::ObjectType{}), false,
-                          "Unsupported command");
+                          std::string{messages::request::unsupported_command});
             return;
         }
+
+        std::function<void()> post_response_action;
 
         try {
             auto result = (*handler)(arguments);
 
             send_response(seq, command, result.body, result.success, result.error_message);
-
-            if (result.post_response_action) {
-                result.post_response_action();
-            }
+            post_response_action = std::move(result.post_response_action);
         } catch (...) {
-            // Single dispatch-level error boundary.  Handler exceptions,
-            // send_response failures, and post-response actions are all
-            // classified here through the shared classifier so the
-            // exception-to-message mapping lives in exactly one place
-            // (see classify_exception in dap_error_handler.hpp).
+            // Single dispatch-level error boundary for the handler itself.  The
+            // exception-to-message mapping lives in exactly one place (see
+            // classify_exception in dap_error_handler.hpp).
             const auto classified = classify_exception(command, std::current_exception());
             send_response(seq, command, JsonValue(JsonValue::ObjectType{}), false,
                           classified.message);
+            return;
+        }
+
+        // The response has already been sent, so a failing post-response action
+        // must not produce a second response for the same request_seq; it is
+        // logged as an adapter diagnostic instead.
+        if (post_response_action) {
+            try {
+                post_response_action();
+            } catch (...) {
+                (void)classify_exception(command, std::current_exception());
+            }
         }
     }
 

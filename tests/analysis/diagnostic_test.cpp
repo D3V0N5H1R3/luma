@@ -1,6 +1,9 @@
 // Diagnostics unit tests.
 
+#include <cstddef>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/diagnostics/renderer.hpp"
@@ -8,44 +11,59 @@
 #include "analysis/source/source_manager.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::category_of;
+using luma::category_prefix;
+using luma::Diagnostic;
+using luma::DiagnosticCategory;
+using luma::DiagnosticCode;
+using luma::DiagnosticRenderer;
+using luma::Fix;
+using luma::Severity;
+using luma::SourceLocation;
+using luma::SourceManager;
+using luma::test::TempFile;
+
+namespace diag = luma::diag;
+
+namespace {
+
+struct CodeStringCase {
+    DiagnosticCode code;
+    std::string_view expected;
+};
+
+// The lowest and highest diagnostic code numbers of one category's range.
+struct CategoryRangeCase {
+    int first_code;
+    int last_code;
+    DiagnosticCategory category;
+};
+
+const std::vector<CodeStringCase> code_string_cases = {
+    {.code = DiagnosticCode::TypeMismatch, .expected = "E0001"},
+    {.code = DiagnosticCode::StdlibArgCount, .expected = "E0009"},
+    {.code = DiagnosticCode::UnexpectedToken, .expected = "E1001"},
+    {.code = DiagnosticCode::CompileError, .expected = "E2001"},
+    {.code = DiagnosticCode::UnusedVariable, .expected = "W0001"},
+    {.code = DiagnosticCode::ShadowedVariable, .expected = "W0012"},
+};
+
+const std::vector<CategoryRangeCase> category_range_cases = {
+    {.first_code = 1, .last_code = 999, .category = DiagnosticCategory::Type},
+    {.first_code = 1001, .last_code = 1999, .category = DiagnosticCategory::Syntax},
+    {.first_code = 2001, .last_code = 2999, .category = DiagnosticCategory::Compile},
+    {.first_code = 4001, .last_code = 4999, .category = DiagnosticCategory::Runtime},
+    {.first_code = 5001, .last_code = 5999, .category = DiagnosticCategory::Warning},
+};
+
+} // namespace
 
 // ─── DiagnosticCode string tests ───
 
-static void test_error_code_e0001() {
+static void test_code_string(const CodeStringCase& test_case) {
     Diagnostic d;
-    d.code = DiagnosticCode::TypeMismatch;
-    ASSERT_EQ(d.code_string(), "E0001");
-}
-
-static void test_error_code_e0009() {
-    Diagnostic d;
-    d.code = DiagnosticCode::StdlibArgCount;
-    ASSERT_EQ(d.code_string(), "E0009");
-}
-
-static void test_error_code_e1001() {
-    Diagnostic d;
-    d.code = DiagnosticCode::UnexpectedToken;
-    ASSERT_EQ(d.code_string(), "E1001");
-}
-
-static void test_error_code_e2001() {
-    Diagnostic d;
-    d.code = DiagnosticCode::CompileError;
-    ASSERT_EQ(d.code_string(), "E2001");
-}
-
-static void test_warning_code_w0001() {
-    Diagnostic d;
-    d.code = DiagnosticCode::UnusedVariable;
-    ASSERT_EQ(d.code_string(), "W0001");
-}
-
-static void test_warning_code_w0012() {
-    Diagnostic d;
-    d.code = DiagnosticCode::ShadowedVariable;
-    ASSERT_EQ(d.code_string(), "W0012");
+    d.code = test_case.code;
+    ASSERT_EQ(d.code_string(), test_case.expected);
 }
 
 static void test_code_none() {
@@ -56,29 +74,9 @@ static void test_code_none() {
 
 // ─── Diagnostic code category tests ───
 
-static void test_category_of_type_error() {
-    ASSERT_EQ(*category_of(1), DiagnosticCategory::Type);
-    ASSERT_EQ(*category_of(999), DiagnosticCategory::Type);
-}
-
-static void test_category_of_syntax_error() {
-    ASSERT_EQ(*category_of(1001), DiagnosticCategory::Syntax);
-    ASSERT_EQ(*category_of(1999), DiagnosticCategory::Syntax);
-}
-
-static void test_category_of_compile_error() {
-    ASSERT_EQ(*category_of(2001), DiagnosticCategory::Compile);
-    ASSERT_EQ(*category_of(2999), DiagnosticCategory::Compile);
-}
-
-static void test_category_of_runtime_error() {
-    ASSERT_EQ(*category_of(4001), DiagnosticCategory::Runtime);
-    ASSERT_EQ(*category_of(4999), DiagnosticCategory::Runtime);
-}
-
-static void test_category_of_lint_warning() {
-    ASSERT_EQ(*category_of(5001), DiagnosticCategory::Warning);
-    ASSERT_EQ(*category_of(5999), DiagnosticCategory::Warning);
+static void test_category_of_range(const CategoryRangeCase& test_case) {
+    ASSERT_EQ(REQUIRE_VALUE(category_of(test_case.first_code)), test_case.category);
+    ASSERT_EQ(REQUIRE_VALUE(category_of(test_case.last_code)), test_case.category);
 }
 
 static void test_category_of_unknown() {
@@ -101,13 +99,13 @@ static void test_category_prefix_warning() {
 // ─── Diagnostic builder tests ───
 
 static void test_diagnostic_builder() {
-    auto d = diag::error("something went wrong")
-                 .category(DiagnosticCategory::Type)
-                 .error_code(DiagnosticCode::TypeMismatch)
-                 .primary(SourceLocation{.file_id = 1, .line = 5},
-                          SourceLocation{.file_id = 1, .line = 10}, "here")
-                 .hint("try this instead")
-                 .build();
+    const auto d = diag::error("something went wrong")
+                       .category(DiagnosticCategory::Type)
+                       .error_code(DiagnosticCode::TypeMismatch)
+                       .primary(SourceLocation{.file_id = 1, .line = 5},
+                                SourceLocation{.file_id = 1, .line = 10}, "here")
+                       .hint("try this instead")
+                       .build();
 
     ASSERT_EQ(d.severity, Severity::Error);
     ASSERT_EQ(d.category, DiagnosticCategory::Type);
@@ -120,10 +118,10 @@ static void test_diagnostic_builder() {
 }
 
 static void test_diagnostic_warning_builder() {
-    auto d = diag::warning("unused variable")
-                 .category(DiagnosticCategory::Warning)
-                 .error_code(DiagnosticCode::UnusedVariable)
-                 .build();
+    const auto d = diag::warning("unused variable")
+                       .category(DiagnosticCategory::Warning)
+                       .error_code(DiagnosticCode::UnusedVariable)
+                       .build();
 
     ASSERT_EQ(d.severity, Severity::Warning);
     ASSERT_EQ(d.code, DiagnosticCode::UnusedVariable);
@@ -133,29 +131,55 @@ static void test_diagnostic_warning_builder() {
 // ─── Severity and category coverage ───
 
 static void test_primary_location() {
-    auto d = diag::error("test")
-                 .primary(SourceLocation{.line = 3, .column = 7},
-                          SourceLocation{.line = 3, .column = 12}, "here")
-                 .build();
+    const auto d = diag::error("test")
+                       .primary(SourceLocation{.line = 3, .column = 7},
+                                SourceLocation{.line = 3, .column = 12}, "here")
+                       .build();
 
-    auto loc = d.primary_location();
+    const auto loc = d.primary_location();
     ASSERT_EQ(loc.line, 3);
     ASSERT_EQ(loc.column, 7);
 }
 
 static void test_primary_location_empty() {
     const Diagnostic d;
-    auto loc = d.primary_location();
+    const auto loc = d.primary_location();
     ASSERT_EQ(loc.line, 1);
     ASSERT_EQ(loc.column, 1);
 }
 
+static void test_builder_anchors_token_location_at_its_start() {
+    // A location copied from a token points one past it and records its start.
+    // The span must start at the token and end one past it, so the caret and
+    // the reported column name the token itself.
+    const SourceLocation token_loc{
+        .file_id = 1, .line = 4, .column = 18, .start_line = 4, .start_column = 13};
+
+    const auto d = diag::error("type mismatch").primary(token_loc).build();
+
+    ASSERT_EQ(d.primary_location().line, 4);
+    ASSERT_EQ(d.primary_location().column, 13);
+    ASSERT_EQ(d.spans[0].end.column, 18);
+    ASSERT_FALSE(d.spans[0].start.has_start());
+}
+
+static void test_builder_keeps_location_without_start() {
+    // Hand-built locations carry no start and stay exactly where they were put.
+    const SourceLocation loc{.file_id = 1, .line = 2, .column = 7};
+
+    const auto d = diag::error("no start").primary(loc).secondary(loc, "also here").build();
+
+    ASSERT_EQ(d.spans[0].start.column, 7);
+    ASSERT_EQ(d.spans[0].end.column, 7);
+    ASSERT_EQ(d.spans[1].start.column, 7);
+}
+
 static void test_has_errors_and_warnings() {
-    auto err = diag::error("test error").build();
+    const auto err = diag::error("test error").build();
     ASSERT_EQ(err.severity, Severity::Error);
     ASSERT_EQ(err.message, "test error");
 
-    auto warn = diag::warning("test warning").build();
+    const auto warn = diag::warning("test warning").build();
     ASSERT_EQ(warn.severity, Severity::Warning);
     ASSERT_EQ(warn.message, "test warning");
 }
@@ -163,14 +187,14 @@ static void test_has_errors_and_warnings() {
 // ─── Fix helper tests ───
 
 static void test_fix_replace() {
-    auto fix = Fix::replace(SourceLocation{.line = 1, .column = 1},
-                            SourceLocation{.line = 1, .column = 5}, "new_text", "replace it");
+    const auto fix = Fix::replace(SourceLocation{.line = 1, .column = 1},
+                                  SourceLocation{.line = 1, .column = 5}, "new_text", "replace it");
     ASSERT_EQ(fix.replacement, "new_text");
     ASSERT_EQ(fix.description, "replace it");
 }
 
 static void test_fix_insert() {
-    auto fix = Fix::insert(SourceLocation{.line = 2, .column = 3}, "inserted", "add it");
+    const auto fix = Fix::insert(SourceLocation{.line = 2, .column = 3}, "inserted", "add it");
     ASSERT_EQ(fix.replacement, "inserted");
     ASSERT_EQ(fix.start.line, 2);
     ASSERT_EQ(fix.start.column, 3);
@@ -184,27 +208,27 @@ static void test_renderer_format_produces_output() {
     const SourceManager sm;
     const DiagnosticRenderer renderer{sm};
 
-    auto d = diag::error("type mismatch")
-                 .category(DiagnosticCategory::Type)
-                 .error_code(DiagnosticCode::TypeMismatch)
-                 .build();
+    const auto d = diag::error("type mismatch")
+                       .category(DiagnosticCategory::Type)
+                       .error_code(DiagnosticCode::TypeMismatch)
+                       .build();
 
     const auto output = renderer.format(d);
     ASSERT_FALSE(output.empty());
-    ASSERT_TRUE(output.find("type mismatch") != std::string::npos);
+    ASSERT_NE(output.find("type mismatch"), std::string::npos);
 }
 
 static void test_renderer_format_includes_code() {
     const SourceManager sm;
     const DiagnosticRenderer renderer{sm};
 
-    auto d = diag::error("wrong count")
-                 .category(DiagnosticCategory::Type)
-                 .error_code(DiagnosticCode::WrongArgCount)
-                 .build();
+    const auto d = diag::error("wrong count")
+                       .category(DiagnosticCategory::Type)
+                       .error_code(DiagnosticCode::WrongArgCount)
+                       .build();
 
     const auto output = renderer.format(d);
-    ASSERT_TRUE(output.find("E0002") != std::string::npos);
+    ASSERT_NE(output.find("E0002"), std::string::npos);
 }
 
 static void test_renderer_caret_hostile_column_is_bounded() {
@@ -221,7 +245,7 @@ static void test_renderer_caret_hostile_column_is_bounded() {
 
     // Negative start column wraps to a huge size_t when cast; the huge end column
     // makes end - start overflow signed int and the underline width enormous.
-    auto d =
+    const auto d =
         diag::error("hostile span")
             .category(DiagnosticCategory::Runtime)
             .primary(SourceLocation{.file_id = file_id, .line = 1, .column = -2147483647},
@@ -230,8 +254,28 @@ static void test_renderer_caret_hostile_column_is_bounded() {
 
     // Must return promptly with bounded output — no multi-gigabyte allocation.
     const auto output = renderer.format(d);
-    ASSERT_TRUE(output.find("hostile span") != std::string::npos);
-    ASSERT_TRUE(output.size() < static_cast<std::size_t>(64 * 1024));
+    ASSERT_NE(output.find("hostile span"), std::string::npos);
+    ASSERT_LT(output.size(), static_cast<std::size_t>(64 * 1024));
+}
+
+static void test_renderer_caret_underlines_token_from_its_start() {
+    // Regression: type-checker, linter and runtime diagnostics are anchored on
+    // AST/source-map locations copied from tokens, which point one past the
+    // token, so the caret used to sit just after it.  It must start at the
+    // token and underline all of it.
+    const TempFile file{"    integer value = 1\n"};
+    SourceManager sm;
+    const auto file_id = sm.load(file.path().string()).file_id;
+    const DiagnosticRenderer renderer{sm};
+
+    const SourceLocation value_loc{
+        .file_id = file_id, .line = 1, .column = 18, .start_line = 1, .start_column = 13};
+    const auto d =
+        diag::error("unused").category(DiagnosticCategory::Type).primary(value_loc).build();
+
+    const auto output = renderer.format(d);
+    ASSERT_NE(output.find(":1:13"), std::string::npos);
+    ASSERT_NE(output.find("| " + std::string(12, ' ') + "^^^^^\n"), std::string::npos);
 }
 
 static void test_renderer_hostile_line_is_safe() {
@@ -246,7 +290,7 @@ static void test_renderer_hostile_line_is_safe() {
 
     const DiagnosticRenderer renderer{sm};
 
-    auto d =
+    const auto d =
         diag::error("hostile line")
             .category(DiagnosticCategory::Runtime)
             .primary(SourceLocation{.file_id = file_id, .line = 2147483647, .column = 1},
@@ -255,8 +299,8 @@ static void test_renderer_hostile_line_is_safe() {
 
     // Must render without triggering line + 1 overflow; output stays bounded.
     const auto output = renderer.format(d);
-    ASSERT_TRUE(output.find("hostile line") != std::string::npos);
-    ASSERT_TRUE(output.size() < static_cast<std::size_t>(64 * 1024));
+    ASSERT_NE(output.find("hostile line"), std::string::npos);
+    ASSERT_LT(output.size(), static_cast<std::size_t>(64 * 1024));
 }
 
 // ─── Snapshot tests ───
@@ -271,10 +315,10 @@ static void test_snapshot_error_type_mismatch() {
     const SourceManager sm;
     const DiagnosticRenderer renderer{sm};
 
-    auto d = diag::error("expected 'integer' but got 'string'")
-                 .category(DiagnosticCategory::Type)
-                 .error_code(DiagnosticCode::TypeMismatch)
-                 .build();
+    const auto d = diag::error("expected 'integer' but got 'string'")
+                       .category(DiagnosticCategory::Type)
+                       .error_code(DiagnosticCode::TypeMismatch)
+                       .build();
 
     ASSERT_SNAPSHOT("error_type_mismatch", renderer.format(d), kTestFile);
 }
@@ -283,11 +327,11 @@ static void test_snapshot_error_with_hint() {
     const SourceManager sm;
     const DiagnosticRenderer renderer{sm};
 
-    auto d = diag::error("cannot assign to immutable variable 'x'")
-                 .category(DiagnosticCategory::Type)
-                 .error_code(DiagnosticCode::ImmutableAssignment)
-                 .hint("declare with 'mutable' to allow assignment")
-                 .build();
+    const auto d = diag::error("cannot assign to immutable variable 'x'")
+                       .category(DiagnosticCategory::Type)
+                       .error_code(DiagnosticCode::ImmutableAssignment)
+                       .hint("declare with 'mutable' to allow assignment")
+                       .build();
 
     ASSERT_SNAPSHOT("error_with_hint", renderer.format(d), kTestFile);
 }
@@ -296,10 +340,10 @@ static void test_snapshot_warning_unused_variable() {
     const SourceManager sm;
     const DiagnosticRenderer renderer{sm};
 
-    auto d = diag::warning("variable 'temp' is declared but never used")
-                 .category(DiagnosticCategory::Warning)
-                 .error_code(DiagnosticCode::UnusedVariable)
-                 .build();
+    const auto d = diag::warning("variable 'temp' is declared but never used")
+                       .category(DiagnosticCategory::Warning)
+                       .error_code(DiagnosticCode::UnusedVariable)
+                       .build();
 
     ASSERT_SNAPSHOT("warning_unused_variable", renderer.format(d), kTestFile);
 }
@@ -308,30 +352,21 @@ static void test_snapshot_error_with_fix() {
     const SourceManager sm;
     const DiagnosticRenderer renderer{sm};
 
-    auto d = diag::error("unknown type 'intger'")
-                 .category(DiagnosticCategory::Type)
-                 .error_code(DiagnosticCode::TypeMismatch)
-                 .fix(Fix::replace(SourceLocation{.line = 1, .column = 10},
-                                   SourceLocation{.line = 1, .column = 16}, "integer",
-                                   "did you mean 'integer'?"))
-                 .build();
+    const auto d = diag::error("unknown type 'intger'")
+                       .category(DiagnosticCategory::Type)
+                       .error_code(DiagnosticCode::TypeMismatch)
+                       .fix(Fix::replace(SourceLocation{.line = 1, .column = 10},
+                                         SourceLocation{.line = 1, .column = 16}, "integer",
+                                         "did you mean 'integer'?"))
+                       .build();
 
     ASSERT_SNAPSHOT("error_with_fix", renderer.format(d), kTestFile);
 }
 
 int main() {
-    RUN(test_error_code_e0001);
-    RUN(test_error_code_e0009);
-    RUN(test_error_code_e1001);
-    RUN(test_error_code_e2001);
-    RUN(test_warning_code_w0001);
-    RUN(test_warning_code_w0012);
+    RUN_PARAMETERIZED(test_code_string, code_string_cases);
     RUN(test_code_none);
-    RUN(test_category_of_type_error);
-    RUN(test_category_of_syntax_error);
-    RUN(test_category_of_compile_error);
-    RUN(test_category_of_runtime_error);
-    RUN(test_category_of_lint_warning);
+    RUN_PARAMETERIZED(test_category_of_range, category_range_cases);
     RUN(test_category_of_unknown);
     RUN(test_category_prefix_errors);
     RUN(test_category_prefix_warning);
@@ -339,12 +374,15 @@ int main() {
     RUN(test_diagnostic_warning_builder);
     RUN(test_primary_location);
     RUN(test_primary_location_empty);
+    RUN(test_builder_anchors_token_location_at_its_start);
+    RUN(test_builder_keeps_location_without_start);
     RUN(test_has_errors_and_warnings);
     RUN(test_fix_replace);
     RUN(test_fix_insert);
     RUN(test_renderer_format_produces_output);
     RUN(test_renderer_format_includes_code);
     RUN(test_renderer_caret_hostile_column_is_bounded);
+    RUN(test_renderer_caret_underlines_token_from_its_start);
     RUN(test_renderer_hostile_line_is_safe);
     RUN(test_snapshot_error_type_mismatch);
     RUN(test_snapshot_error_with_hint);

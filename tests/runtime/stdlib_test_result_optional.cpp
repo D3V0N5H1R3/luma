@@ -1,7 +1,8 @@
 // Standard library tests: Result, Optional.
 
-#include "analysis/errors/error.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::test::eval;
 
 static void test_optional_filter() {
     const auto v = eval("Optional.filter(some(10), (integer x) -> x > 5)");
@@ -58,7 +59,8 @@ static void test_optional_map_none() {
 static void test_optional_map_throws_on_null() {
     // map must not return none — a RuntimeError is expected, and the message
     // must steer the user towards Optional.flat_map.
-    ASSERT_THROWS_WITH_MESSAGE(eval("Optional.map(some(5), (integer x) -> none)"), "flat_map");
+    ASSERT_EVAL_THROWS("Optional.map(some(5), (integer x) -> none)",
+                       "callback must not return none; use Optional.flat_map");
 }
 
 static void test_optional_or() {
@@ -86,7 +88,7 @@ static void test_optional_unwrap() {
 
 static void test_optional_unwrap_none_throws() {
     // unwrap on none throws a RuntimeError whose message names the cause.
-    ASSERT_THROWS_WITH_MESSAGE(eval("Optional.unwrap(none)"), "called on none");
+    ASSERT_EVAL_THROWS("Optional.unwrap(none)", "Optional.unwrap: called on none");
 }
 
 static void test_optional_unwrap_or() {
@@ -157,7 +159,8 @@ static void test_optional_contains() {
 
 static void test_optional_filter_non_boolean_throws() {
     // The filter predicate must return boolean — a non-boolean result throws.
-    ASSERT_THROWS_WITH_MESSAGE(eval("Optional.filter(some(5), (integer x) -> x)"), "boolean");
+    ASSERT_EVAL_THROWS("Optional.filter(some(5), (integer x) -> x)",
+                       "predicate must return boolean, got 'integer'");
 }
 
 static void test_result_collect() {
@@ -180,7 +183,7 @@ static void test_result_collect_empty() {
 static void test_result_error() {
     ASSERT_EQ(eval("Result.error(failure(\"msg\"))").as_string(), "msg");
 
-    ASSERT_THROWS(eval("Result.error(success(42))"));
+    ASSERT_EVAL_THROWS("Result.error(success(42))", "Result.error: called on success value");
 }
 
 static void test_result_filter() {
@@ -278,11 +281,9 @@ static void test_result_expect_success() {
 static void test_result_expect_failure_throws() {
     // On failure, expect throws a RuntimeError combining the message with the
     // underlying error text.
-    ASSERT_TRUE(luma::test::eval_throws("Result.expect(failure(\"boom\"), \"expected a value\")"));
-    ASSERT_THROWS_WITH_MESSAGE(eval("Result.expect(failure(\"boom\"), \"expected a value\")"),
-                               "expected a value");
-    ASSERT_THROWS_WITH_MESSAGE(eval("Result.expect(failure(\"boom\"), \"expected a value\")"),
-                               "boom");
+    ASSERT_EVAL_THROWS("Result.expect(failure(\"boom\"), \"expected a value\")",
+                       "expected a value");
+    ASSERT_EVAL_THROWS("Result.expect(failure(\"boom\"), \"expected a value\")", "boom");
 }
 
 static void test_result_unwrap_or() {
@@ -398,25 +399,28 @@ static void test_result_error_code_empty_for_success() {
 }
 
 static void test_result_unwrap_on_failure_throws() {
-    ASSERT_THROWS(eval("Result.unwrap(failure(\"boom\"))"));
+    ASSERT_EVAL_THROWS("Result.unwrap(failure(\"boom\"))", "Result.unwrap: called on fail");
 }
 
 static void test_result_unwrap_non_result_throws() {
-    ASSERT_THROWS(eval("Result.unwrap(42)"));
+    ASSERT_EVAL_THROWS("Result.unwrap(42)", "Result.unwrap: expected result, got 'integer'");
 }
 
 static void test_result_is_success_non_result_throws() {
-    ASSERT_THROWS(eval("Result.is_success(42)"));
+    ASSERT_EVAL_THROWS("Result.is_success(42)",
+                       "Result.is_success: expected result, got 'integer'");
 }
 
 static void test_result_flat_map_non_result_callback_throws() {
     // flat_map requires the callback to return a result value.
-    ASSERT_THROWS(eval("Result.flat_map(success(1), (integer x) -> x + 1)"));
+    ASSERT_EVAL_THROWS("Result.flat_map(success(1), (integer x) -> x + 1)",
+                       "Result.flat_map: callback must return a result value");
 }
 
 static void test_result_or_else_non_result_callback_throws() {
     // or_else requires the callback to return a result value.
-    ASSERT_THROWS(eval("Result.or_else(failure(\"x\"), (string e) -> 7)"));
+    ASSERT_EVAL_THROWS("Result.or_else(failure(\"x\"), (string e) -> 7)",
+                       "Result.or_else: callback must return a result value");
 }
 
 static void test_result_map_on_failure_passthrough() {
@@ -466,22 +470,24 @@ static void test_result_tap_runs_callback_on_success() {
 
 static void test_result_collect_non_result_element_throws() {
     // collect requires every element to be a result value.
-    ASSERT_THROWS(eval("Result.collect([success(1), 42])"));
+    ASSERT_EVAL_THROWS("Result.collect([success(1), 42])",
+                       "Result.collect: element is not a result, got 'integer'");
 }
 
 static void test_result_collect_non_array_throws() {
     // collect requires its argument to be an array.
-    ASSERT_THROWS(eval("Result.collect(42)"));
+    ASSERT_EVAL_THROWS("Result.collect(42)", "Result.collect: expected array, got 'integer'");
 }
 
 static void test_result_zip_non_result_second_throws() {
     // zip validates the second argument is a result once the first succeeds.
-    ASSERT_THROWS(eval("Result.zip(success(1), 42)"));
+    ASSERT_EVAL_THROWS("Result.zip(success(1), 42)", "Result.zip: expected result, got 'integer'");
 }
 
 static void test_result_typed_map_arity_throws() {
     // The typed map_* variants validate their argument count.
-    ASSERT_THROWS(eval("Result.map_integer(success(1))"));
+    ASSERT_EVAL_THROWS("Result.map_integer(success(1))",
+                       "Result.map_integer: expected exactly 2 argument(s), got 1");
 }
 
 int main() {

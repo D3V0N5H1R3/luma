@@ -32,12 +32,12 @@
 //     (parse_store(serialize_store(entries)) == entries).  escape renders the
 //     tab, newline and backslash bytes harmless, so each record stays on one
 //     line and the first literal tab remains the key/value separator.  The
-//     fuzz input cap (max_input_size) is far below the dictionary-size and
+//     fuzz input cap (k_max_input_size) is far below the dictionary-size and
 //     string-size limits, so a successful first parse cannot be re-rejected by
 //     a limit on the second pass.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             using namespace luma::kvs;
 
             // ── Oracle: the escape codec is exactly invertible. ──

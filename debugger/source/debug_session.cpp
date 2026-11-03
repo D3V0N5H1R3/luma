@@ -5,6 +5,8 @@
 #include "analysis/source/source_manager.hpp"
 #include "dap_error_handler.hpp"
 #include "debug_execution_engine.hpp"
+#include "debugger_messages.hpp"
+#include "diagnostic_log.hpp"
 #include "expression_evaluator.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_introspection.hpp"
@@ -22,9 +24,10 @@ DebugSession::DebugSession(EventCallback event_cb, OutputCallback output_cb)
 }
 
 void DebugSession::initialize_components() {
-    expression_evaluator_ =
-        std::make_unique<ExpressionEvaluator>([this](std::shared_ptr<Value> val) {
-            return variable_inspector_.alloc_ref(ValueRef{.value = std::move(val)});
+    expression_evaluator_ = std::make_unique<ExpressionEvaluator>(
+        [this](std::shared_ptr<Value> val, std::string evaluate_name) {
+            return variable_inspector_.alloc_ref(ValueRef{
+                .value = std::move(val), .depth = 0, .evaluate_name = std::move(evaluate_name)});
         });
 
     execution_engine_ = std::make_unique<DebugExecutionEngine>(
@@ -37,7 +40,13 @@ void DebugSession::initialize_components() {
 }
 
 DebugSession::~DebugSession() noexcept {
-    execution_engine_->terminate();
+    // The engine's own destructor terminates too; doing it here first stops the
+    // execution thread while every other component is still alive.
+    try {
+        execution_engine_->terminate();
+    } catch (const std::exception& e) {
+        write_adapter_diagnostic(std::string{"DAP: error terminating session: "} + e.what());
+    }
 }
 
 // --- Thread resolver ---
@@ -195,52 +204,48 @@ Variable DebugSession::evaluate(int frame_id, const std::string& expression,
     const auto evaluation_failed = [&expression] {
         Variable result;
         result.name = expression;
-        result.value = "<evaluation failed>";
+        result.value = std::string{messages::expression::evaluation_failed};
         result.type = "unknown";
         return result;
     };
 
-    auto mapping = variable_inspector_.resolve_frame(frame_id);
+    std::shared_ptr<ThreadState> state;
 
-    VM* target_vm = nullptr;
-    int actual_index = frame_id;
+    // Out-of-range index: the evaluator then uses the innermost frame.
+    int frame_index = -1;
 
-    if (mapping) {
-        auto state = thread_state_manager_.get_thread(mapping->thread_id);
-
-        if (state) {
-            // Hold the lock for the entire evaluate() call so that target_vm
-            // cannot be destroyed between capture and use (TOCTOU race).
-            const auto lock = thread_state_manager_.lock_state(*state);
-            if (!state->is_paused || state->vm == nullptr) {
-                return evaluation_failed();
-            }
-            target_vm = state->vm;
-            actual_index = mapping->frame_index;
-            return expression_evaluator_->evaluate(target_vm, actual_index, expression, context);
-        }
-
-        actual_index = mapping->frame_index;
+    if (frame_id == 0) {
+        // DAP: no frameId means "global scope" — evaluate against the main
+        // thread's current (innermost) frame.
+        state = thread_state_manager_.get_thread(k_main_thread_id);
     } else {
-        // No frame mapping (e.g. a stale or zero frame_id): fall back to the
-        // main thread. Lock the main thread's state for the same reason as
-        // the mapping-hit path above — reading state->vm under its lock
-        // ensures target_vm cannot be destroyed between capture and use
-        // (TOCTOU race), since terminate() nulls it under this same lock
-        // (ThreadStateManager::null_all_vms) before destroying the VM.
-        auto main_state = thread_state_manager_.get_thread(k_main_thread_id);
+        // A frameId that no longer resolves (from an earlier stop) must fail
+        // rather than be reinterpreted as a raw VM frame index, which would
+        // silently evaluate in an unrelated frame.
+        const auto mapping = variable_inspector_.resolve_frame(frame_id);
 
-        if (main_state) {
-            const auto lock = thread_state_manager_.lock_state(*main_state);
-            if (!main_state->is_paused || main_state->vm == nullptr) {
-                return evaluation_failed();
-            }
-            target_vm = main_state->vm;
-            return expression_evaluator_->evaluate(target_vm, actual_index, expression, context);
+        if (!mapping) {
+            return evaluation_failed();
         }
+
+        state = thread_state_manager_.get_thread(mapping->thread_id);
+        frame_index = mapping->frame_index;
     }
 
-    return expression_evaluator_->evaluate(target_vm, actual_index, expression, context);
+    if (!state) {
+        return evaluation_failed();
+    }
+
+    // Hold the thread's lock for the whole evaluation: terminate() and task
+    // exit null ThreadState::vm under this lock before destroying the VM, so
+    // the captured pointer stays valid until evaluate() returns.
+    const auto lock = thread_state_manager_.lock_state(*state);
+
+    if (!state->is_paused || state->vm == nullptr) {
+        return evaluation_failed();
+    }
+
+    return expression_evaluator_->evaluate(state->vm, frame_index, expression, context);
 }
 
 Variable DebugSession::set_variable(int variables_reference, const std::string& name,

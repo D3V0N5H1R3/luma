@@ -16,28 +16,28 @@
         "stopOnEntry": true
     },
     {
-        "label": "C++: Interpreter - Release (Windows)",
+        "label": "C++: Interpreter - RelWithDebInfo (Windows)",
         "adapter": "CodeLLDB",
         "request": "launch",
-        "program": "$ZED_WORKTREE_ROOT/build/Release/luma.exe",
+        "program": "$ZED_WORKTREE_ROOT/build-relwithdebinfo/luma.exe",
         "args": ["$ZED_WORKTREE_ROOT/examples/language-features/hello.luma"],
         "cwd": "$ZED_WORKTREE_ROOT",
-        "build": "CMake: Build"
+        "build": "CMake: Build (RelWithDebInfo)"
     },
     {
-        "label": "C++: Interpreter - Release (Unix)",
+        "label": "C++: Interpreter - RelWithDebInfo (Unix)",
         "adapter": "CodeLLDB",
         "request": "launch",
-        "program": "$ZED_WORKTREE_ROOT/build/luma",
+        "program": "$ZED_WORKTREE_ROOT/build-relwithdebinfo/luma",
         "args": ["$ZED_WORKTREE_ROOT/examples/language-features/hello.luma"],
         "cwd": "$ZED_WORKTREE_ROOT",
-        "build": "CMake: Build"
+        "build": "CMake: Build (RelWithDebInfo)"
     },
     {
         "label": "C++: Interpreter - Debug (Windows)",
         "adapter": "CodeLLDB",
         "request": "launch",
-        "program": "$ZED_WORKTREE_ROOT/build-debug/Debug/luma.exe",
+        "program": "$ZED_WORKTREE_ROOT/build-debug/luma.exe",
         "args": ["$ZED_WORKTREE_ROOT/examples/language-features/hello.luma"],
         "cwd": "$ZED_WORKTREE_ROOT",
         "build": "CMake: Build (Debug)"
@@ -55,7 +55,7 @@
         "label": "C++: Language Server - Debug (Windows)",
         "adapter": "CodeLLDB",
         "request": "launch",
-        "program": "$ZED_WORKTREE_ROOT/build-debug/Debug/luma_lsp.exe",
+        "program": "$ZED_WORKTREE_ROOT/build-debug/luma_lsp.exe",
         "args": [],
         "cwd": "$ZED_WORKTREE_ROOT",
         "build": "CMake: Build (Debug)"
@@ -73,7 +73,7 @@
         "label": "C++: DAP Debugger - Debug (Windows)",
         "adapter": "CodeLLDB",
         "request": "launch",
-        "program": "$ZED_WORKTREE_ROOT/build-debug/Debug/luma_dap.exe",
+        "program": "$ZED_WORKTREE_ROOT/build-debug/luma_dap.exe",
         "args": [],
         "cwd": "$ZED_WORKTREE_ROOT",
         "build": "CMake: Build (Debug)"
@@ -91,7 +91,7 @@
         "label": "C++: REPL - Debug (Windows)",
         "adapter": "CodeLLDB",
         "request": "launch",
-        "program": "$ZED_WORKTREE_ROOT/build-debug/Debug/luma.exe",
+        "program": "$ZED_WORKTREE_ROOT/build-debug/luma.exe",
         "args": [],
         "cwd": "$ZED_WORKTREE_ROOT",
         "build": "CMake: Build (Debug)"

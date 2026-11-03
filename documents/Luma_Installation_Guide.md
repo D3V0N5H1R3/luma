@@ -17,7 +17,8 @@
 9. [Verify the Installation](#9--verify-the-installation)
 10. [Building from Source](#10--building-from-source)
 11. [Troubleshooting](#11--troubleshooting)
-12. [See Also](#see-also)
+
+- [See Also](#see-also)
 
 ---
 
@@ -25,10 +26,10 @@
 
 A Luma installation consists of three binaries and an editor extension:
 
-| Binary     | Purpose                                            |
-| ---------- | -------------------------------------------------- |
-| `luma`     | The interpreter — runs, tests, and type-checks programs. |
-| `luma_lsp` | Language server — provides diagnostics, completions, hover, go-to-definition, and more. |
+| Binary     | Purpose                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| `luma`     | The interpreter — runs, tests, and type-checks programs.                                    |
+| `luma_lsp` | Language server — provides diagnostics, completions, hover, go-to-definition, and more.     |
 | `luma_dap` | Debug adapter — provides breakpoints, stepping, variable inspection, and watch expressions. |
 
 The binaries are standalone executables with no runtime dependencies. Download them from a GitHub release, place them in a directory on your `PATH`, and point your editor at them.
@@ -39,17 +40,19 @@ The binaries are standalone executables with no runtime dependencies. Download t
 
 Download the archives and the checksum file from the [latest GitHub release](https://github.com/d3v0n5h1r3/luma/releases/latest). Pick the assets for your platform:
 
-| Platform        | Interpreter                 | Language Server                  | Debug Adapter                  |
-| --------------- | --------------------------- | -------------------------------- | ------------------------------ |
-| Windows x86\_64 | `luma-windows-x86_64.zip`   | `luma_lsp-windows-x86_64.zip`   | `luma_dap-windows-x86_64.zip`  |
-| macOS aarch64   | `luma-macos-aarch64.tar.gz` | `luma_lsp-macos-aarch64.tar.gz` | `luma_dap-macos-aarch64.tar.gz`|
-| Linux x86\_64   | `luma-linux-x86_64.tar.gz`  | `luma_lsp-linux-x86_64.tar.gz`  | `luma_dap-linux-x86_64.tar.gz` |
-| Linux aarch64   | `luma-linux-aarch64.tar.gz` | `luma_lsp-linux-aarch64.tar.gz` | `luma_dap-linux-aarch64.tar.gz`|
+| Platform        | Interpreter                 | Language Server                 | Debug Adapter                   |
+| --------------- | --------------------------- | ------------------------------- | ------------------------------- |
+| Windows x86\_64 | `luma-windows-x86_64.zip`   | `luma_lsp-windows-x86_64.zip`   | `luma_dap-windows-x86_64.zip`   |
+| Windows aarch64 | `luma-windows-aarch64.zip`  | `luma_lsp-windows-aarch64.zip`  | `luma_dap-windows-aarch64.zip`  |
+| macOS aarch64   | `luma-macos-aarch64.tar.gz` | `luma_lsp-macos-aarch64.tar.gz` | `luma_dap-macos-aarch64.tar.gz` |
+| macOS x86\_64   | `luma-macos-x86_64.tar.gz`  | `luma_lsp-macos-x86_64.tar.gz`  | `luma_dap-macos-x86_64.tar.gz`  |
+| Linux x86\_64   | `luma-linux-x86_64.tar.gz`  | `luma_lsp-linux-x86_64.tar.gz`  | `luma_dap-linux-x86_64.tar.gz`  |
+| Linux aarch64   | `luma-linux-aarch64.tar.gz` | `luma_lsp-linux-aarch64.tar.gz` | `luma_dap-linux-aarch64.tar.gz` |
 
 Also download:
 
-- **`SHA256SUMS`** — checksum file for verifying archive integrity.
-- **`luma-language-0.15.0.vsix`** — VS Code extension (if using VS Code).
+- `SHA256SUMS` — checksum file for verifying archive integrity.
+- `luma-language-0.16.0.vsix` — VS Code extension (if using VS Code).
 
 ---
 
@@ -96,6 +99,8 @@ Expand-Archive luma_lsp-windows-x86_64.zip -DestinationPath "C:\Program Files\Lu
 Expand-Archive luma_dap-windows-x86_64.zip -DestinationPath "C:\Program Files\Luma" -Force
 ```
 
+> **Note:** On a Windows on Arm device, replace `x86_64` with `aarch64` in the archive names. The executables link the C/C++ runtime statically, so no Visual C++ Redistributable is needed.
+
 You should now have three executables in `C:\Program Files\Luma\`:
 
 - `luma.exe`
@@ -134,7 +139,7 @@ sudo tar xzf luma_lsp-macos-aarch64.tar.gz -C /usr/local/bin
 sudo tar xzf luma_dap-macos-aarch64.tar.gz -C /usr/local/bin
 ```
 
-> **Note:** Pre-built macOS binaries are provided for Apple Silicon (aarch64) only. On an Intel Mac, [build from source](#10--building-from-source) or run the aarch64 binaries under Rosetta 2.
+> **Note:** On an Intel Mac, replace `aarch64` with `x86_64` in the archive names.
 
 You should now have three binaries in `/usr/local/bin/`:
 
@@ -224,7 +229,7 @@ Add the line to `~/.bashrc`, `~/.zshrc`, or `~/.profile` to make it permanent.
 Install the extension from the `.vsix` file:
 
 ```bash
-code --install-extension luma-language-0.15.0.vsix
+code --install-extension luma-language-0.16.0.vsix
 ```
 
 Alternatively, in VS Code: open the Command Palette (`Ctrl+Shift+P`), select **Extensions: Install from VSIX…**, and choose the `.vsix` file.
@@ -235,11 +240,11 @@ If you added the binaries to your `PATH` (steps above), the extension finds them
 
 To use explicit paths instead, open VS Code Settings (`Ctrl+,` / `Cmd+,`) and set:
 
-| Setting        | Description                                                 |
-| -------------- | ----------------------------------------------------------- |
-| `luma.path`    | Absolute path to the `luma` binary (interpreter).           |
-| `luma.lsp.path`| Absolute path to the `luma_lsp` binary (language server).   |
-| `luma.dap.path`| Absolute path to the `luma_dap` binary (debug adapter).     |
+| Setting         | Description                                               |
+| --------------- | --------------------------------------------------------- |
+| `luma.path`     | Absolute path to the `luma` binary (interpreter).         |
+| `luma.lsp.path` | Absolute path to the `luma_lsp` binary (language server). |
+| `luma.dap.path` | Absolute path to the `luma_dap` binary (debug adapter).   |
 
 Or add these entries directly to your `settings.json` (`Ctrl+Shift+P` → **Preferences: Open User Settings (JSON)**):
 
@@ -337,27 +342,27 @@ cmake --build --preset default
 ctest --preset default          # optional: run the test suite
 ```
 
-This produces `luma`, `luma_lsp`, and `luma_dap` in the `build/` directory (or `build\Release\` on Windows with the Visual Studio generator).
+This produces `luma`, `luma_lsp`, and `luma_dap` in the `build/` directory (with an `.exe` extension on Windows).
 
 ---
 
 ## 11 — Troubleshooting
 
-| Problem | Cause | Fix |
-| --- | --- | --- |
-| `luma: command not found` (Linux/macOS) or `'luma' is not recognized` (Windows). | Installation directory is not on `PATH`. | Add it to `PATH` (see platform sections above) and restart your terminal. |
-| `luma --version` works in a terminal, but VS Code does not detect it. | VS Code was started before the `PATH` change. | Restart VS Code so it picks up the updated `PATH`. |
-| Windows: `Windows protected your PC` (SmartScreen popup). | The binaries are unsigned and downloaded from the internet. | Click **More info** → **Run anyway**. |
-| Windows: antivirus quarantines a binary. | Some antivirus engines flag unsigned executables as false positives. | Add the installation directory (e.g. `C:\Program Files\Luma`) as an exclusion in your antivirus settings, then re-extract the binary. |
-| macOS: `"luma" cannot be opened because the developer cannot be verified.` | Gatekeeper quarantine on downloaded binaries. | Run `xattr -d com.apple.quarantine /usr/local/bin/luma` (and for `luma_lsp`, `luma_dap`). See [§5.2](#52--remove-the-quarantine-attribute). |
-| macOS: `"luma" is damaged and can't be opened.` | Quarantine attribute still present after moving or copying the binary. | Run `xattr -cr /usr/local/bin/luma /usr/local/bin/luma_lsp /usr/local/bin/luma_dap` to remove all extended attributes. |
-| Linux: `Permission denied` when running `luma`. | The binary is not executable. | Run `chmod +x /usr/local/bin/luma` (and for `luma_lsp`, `luma_dap`). |
-| VS Code extension installed but no diagnostics or hover. | Language server binary not found. | Set `luma.lsp.path` in VS Code settings to the absolute path of `luma_lsp`. Check **Output → Luma Language Server** for details. |
-| VS Code shows "Restricted mode — LSP disabled". | The workspace is not trusted. | Open the Command Palette → **Workspaces: Manage Workspace Trust** and trust the folder. |
-| VS Code debugging does not start. | Debug adapter binary not found. | Set `luma.dap.path` in VS Code settings to the absolute path of `luma_dap`. |
-| `no @main function found` when running a `.luma` file. | The source file has no `@main`-annotated function. | Add `@main` on the line immediately before your entry-point function. |
-| Checksum verification fails. | Corrupted or incomplete download. | Re-download the failing archive from the release page. |
-| Behind a corporate proxy — auto-download fails. | The extension cannot reach GitHub to download binaries. | Download the binaries manually (see [§2](#2--download)), then set `luma.lsp.path` and `luma.dap.path` in VS Code settings. |
+| Problem                                                                          | Cause                                                                  | Fix                                                                                                                                         |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `luma: command not found` (Linux/macOS) or `'luma' is not recognized` (Windows). | Installation directory is not on `PATH`.                               | Add it to `PATH` (see platform sections above) and restart your terminal.                                                                   |
+| `luma --version` works in a terminal, but VS Code does not detect it.            | VS Code was started before the `PATH` change.                          | Restart VS Code so it picks up the updated `PATH`.                                                                                          |
+| Windows: `Windows protected your PC` (SmartScreen popup).                        | The binaries are not code-signed (or the signature has no reputation yet) and were downloaded from the internet. | Click **More info** → **Run anyway**.                                                                                                       |
+| Windows: antivirus quarantines a binary (e.g. Defender reports `Trojan:Win32/Wacatac!ml`). | A false positive: machine-learning heuristics flag unsigned, little-known executables. | Verify the archive against `SHA256SUMS` from the release page, then report the file as a false positive at the [Microsoft Security Intelligence submission portal](https://www.microsoft.com/en-us/wdsi/filesubmission) (submit as a software developer and report it as an incorrect detection). Until the detection is removed, add the installation directory (e.g. `C:\Program Files\Luma`) — or your `build\` directory when building from source — as an exclusion, then re-extract or rebuild the binary. |
+| macOS: `"luma" cannot be opened because the developer cannot be verified.`       | Gatekeeper quarantine on downloaded binaries.                          | Run `xattr -d com.apple.quarantine /usr/local/bin/luma` (and for `luma_lsp`, `luma_dap`). See [§5.2](#52--remove-the-quarantine-attribute). |
+| macOS: `"luma" is damaged and can't be opened.`                                  | Quarantine attribute still present after moving or copying the binary. | Run `xattr -cr /usr/local/bin/luma /usr/local/bin/luma_lsp /usr/local/bin/luma_dap` to remove all extended attributes.                      |
+| Linux: `Permission denied` when running `luma`.                                  | The binary is not executable.                                          | Run `chmod +x /usr/local/bin/luma` (and for `luma_lsp`, `luma_dap`).                                                                        |
+| VS Code extension installed but no diagnostics or hover.                         | Language server binary not found.                                      | Set `luma.lsp.path` in VS Code settings to the absolute path of `luma_lsp`. Check **Output → Luma Language Server** for details.            |
+| VS Code shows "Restricted mode — LSP disabled".                                  | The workspace is not trusted.                                          | Open the Command Palette → **Workspaces: Manage Workspace Trust** and trust the folder.                                                     |
+| VS Code debugging does not start.                                                | Debug adapter binary not found.                                        | Set `luma.dap.path` in VS Code settings to the absolute path of `luma_dap`.                                                                 |
+| `no @main function found` when running a `.luma` file.                           | The source file has no `@main`-annotated function.                     | Add `@main` on the line immediately before your entry-point function.                                                                       |
+| Checksum verification fails.                                                     | Corrupted or incomplete download.                                      | Re-download the failing archive from the release page.                                                                                      |
+| Behind a corporate proxy — auto-download fails.                                  | The extension cannot reach GitHub to download binaries.                | Download the binaries manually (see [§2](#2--download)), then set `luma.lsp.path` and `luma.dap.path` in VS Code settings.                  |
 
 ---
 
@@ -371,3 +376,4 @@ This produces `luma`, `luma_lsp`, and `luma_dap` in the `build/` directory (or `
 - [Language Server](Luma_Language_Server.md) — language server features and architecture
 - [Syntax Highlighting](Luma_Syntax_Highlighting.md) — editor extension design and grammars
 - [Contributing](../CONTRIBUTING.md) — building from source and the contribution workflow
+- [Development Environment](Luma_Development_Environment.md) — setting up VS Code or Zed to work on Luma itself

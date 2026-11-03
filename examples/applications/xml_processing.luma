@@ -5,13 +5,11 @@
 # querying, and serialisation of XML documents.
 # ═══════════════════════════════════════════════════════════
 
-# Read an attribute of the <db> element from a parsed config document.
-function string db_attribute(xml config, string name) {
-    return config
-    |> Xml.find("db")
-    |> Result.unwrap()
-    |> Xml.attribute(name)
-    |> Result.unwrap()
+# Read an attribute of the <db> element; fails if either the element or
+# the attribute is missing.
+function result<string> db_attribute(xml config, string name) {
+    xml database = Xml.find(config, "db")?
+    return Xml.attribute(database, name)
 }
 
 # Build a small element tree and render it with indentation.
@@ -19,30 +17,30 @@ function void build_elements() {
     print("=== Build Elements ===")
 
     string html = Xml.element("div")
-    |> Xml.set_attribute("class", "container")
-    |> Xml.add_child(
-        Xml.element("h1") |> Xml.set_text("Hello, Luma!")
-    )
-    |> Xml.add_child(
-        Xml.element("p") |> Xml.set_text("XML processing is easy.")
-    )
-    |> Xml.serialize_pretty()
+        |> Xml.set_attribute("class", "container")
+        |> Xml.add_child(
+            Xml.element("h1") |> Xml.set_text("Hello, Luma!")
+        )
+        |> Xml.add_child(
+            Xml.element("p") |> Xml.set_text("XML processing is easy.")
+        )
+        |> Xml.serialize_pretty()
 
     print(html)
 }
 
 # Render elements as compact single-line markup.
 function void compact_serialisation() {
-    print("=== Compact ===")
+    print("\n=== Compact ===")
 
     string compact = Xml.element("br") |> Xml.serialize()
 
     print(compact)
 
     string link = Xml.element("a")
-    |> Xml.set_attribute("href", "https://luma-language.org")
-    |> Xml.set_text("Luma")
-    |> Xml.serialize()
+        |> Xml.set_attribute("href", "https://luma-language.org")
+        |> Xml.set_text("Luma")
+        |> Xml.serialize()
 
     print(link)
 }
@@ -52,14 +50,19 @@ function void parse_and_query() {
     print("\n=== Parse and Query ===")
 
     string xml_input = "<config><db host=\"localhost\" port=\"5432\"/><cache ttl=\"300\"/></config>"
-    xml config = Xml.deserialize(xml_input) |> Result.unwrap()
 
-    string root_tag = Xml.tag(config)
-    string host = db_attribute(config, "host")
-    string port = db_attribute(config, "port")
+    match Xml.deserialize(xml_input) {
+        success(config) {
+            string host = db_attribute(config, "host") ?? "(no host)"
+            string port = db_attribute(config, "port") ?? "(no port)"
 
-    print("Root tag: ${root_tag}")
-    print("Database: ${host}:${port}")
+            print("Root tag: ${Xml.tag(config)}")
+            print("Database: ${host}:${port}")
+        }
+        failure(message) {
+            print("Could not parse config: ${message}")
+        }
+    }
 }
 
 # Report structural facts about parsed and constructed nodes.
@@ -68,11 +71,14 @@ function void tree_inspection() {
 
     string items_xml = "<list><item>Alpha</item><item>Bravo</item><item>Charlie</item></list>"
 
-    number child_count = Xml.deserialize(items_xml)
-    |> Result.unwrap()
-    |> Xml.child_count()
-
-    print("Child elements: ${child_count}")
+    match Xml.deserialize(items_xml) {
+        success(list) {
+            print("Child elements: ${Xml.child_count(list)}")
+        }
+        failure(message) {
+            print("Could not parse list: ${message}")
+        }
+    }
 
     boolean is_leaf = Xml.element("empty") |> Xml.is_leaf()
 

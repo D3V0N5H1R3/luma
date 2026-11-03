@@ -18,7 +18,7 @@ void Linter::visit_binary(const BinaryExpression& bin) {
             warn("Comparison to boolean literal", bin.location,
                  "use the boolean expression directly: 'x' instead of 'x == true', "
                  "or '!x' instead of 'x == false'",
-                 DiagnosticCode::AlwaysTrueFalse);
+                 DiagnosticCode::BooleanLiteralComparison);
         }
     }
 

@@ -71,6 +71,28 @@ private:
     [[nodiscard]] static bool matches_simple_type(const Value& val, const TypePattern& pattern);
 };
 
+// Stateless helper that converts `integer` values to `number` wherever a type
+// pattern expects `number`, recursing through tuples and containers.  The
+// type checker marks every expression whose static type holds `integer` where
+// its context expects `number` (e.g. an array<integer> assigned to an
+// array<number>); Op::WidenNumber then calls this so the value's runtime
+// representation matches its static type.  Pattern components the widener
+// does not recognise (e.g. "_", "string", record names) are left untouched.
+class NumericWidener {
+public:
+    [[nodiscard]] static Value widen(Value val, std::string_view type_pattern);
+
+private:
+    // Returns the widened value, or nullopt when nothing changed, so that
+    // unchanged containers keep sharing their storage instead of being copied.
+    [[nodiscard]] static std::optional<Value> widen_impl(const Value& val,
+                                                         std::string_view type_pattern, int depth);
+    [[nodiscard]] static std::optional<std::vector<Value>>
+    widen_elements(const std::vector<Value>& elements, std::string_view element_pattern, int depth);
+    [[nodiscard]] static std::optional<Value>
+    widen_parameterized(const Value& val, const TypePattern& pattern, int depth);
+};
+
 } // namespace luma
 
 #endif // LUMA_RUNTIME_VM_VM_TYPES_HPP

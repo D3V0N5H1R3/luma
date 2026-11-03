@@ -1,11 +1,16 @@
 // Standard library tests: Json (Luma stdlib module).
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 #include "common/resource_limits.hpp"
 #include "runtime/stdlib/text/json_module.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
 
 static void test_json_rejects_out_of_double_range_numbers() {
     // JSON numbers outside the runtime's finite double domain must not become
@@ -116,10 +121,15 @@ static void test_json_get_path_missing() {
 }
 
 static void test_json_set_path_simple() {
-    const auto v = eval(
-        R"(Json.set_path("{\"a\": 1}", "a", 99) |> Result.unwrap() |> Json.deserialize() |> Result.unwrap())");
+    const auto v = eval(R"(Json.set_path("{\"a\": 1}", "a", 99) |> Result.unwrap())"
+                        R"( |> Json.deserialize() |> Result.unwrap())");
 
     ASSERT_TRUE(v.is_dictionary());
+
+    const auto* a = v.as_dictionary()->find("a");
+
+    ASSERT_TRUE(a && a->is_integer());
+    ASSERT_EQ(a->as_integer(), 99);
 }
 
 static void test_json_set_path_nested() {
@@ -239,6 +249,15 @@ static void test_json_deserialize_object() {
     const auto v = eval(R"(Json.deserialize("{\"a\": 1, \"b\": 2}") |> Result.unwrap())");
 
     ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->entries.size(), static_cast<std::size_t>(2));
+
+    const auto* a = v.as_dictionary()->find("a");
+    const auto* b = v.as_dictionary()->find("b");
+
+    ASSERT_TRUE(a && a->is_integer());
+    ASSERT_EQ(a->as_integer(), 1);
+    ASSERT_TRUE(b && b->is_integer());
+    ASSERT_EQ(b->as_integer(), 2);
 }
 
 static void test_json_deserialize_unicode_escape() {
@@ -256,6 +275,15 @@ static void test_json_roundtrip_dictionary() {
     )");
 
     ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->entries.size(), static_cast<std::size_t>(2));
+
+    const auto* x = v.as_dictionary()->find("x");
+    const auto* y = v.as_dictionary()->find("y");
+
+    ASSERT_TRUE(x && x->is_integer());
+    ASSERT_EQ(x->as_integer(), 1);
+    ASSERT_TRUE(y && y->is_integer());
+    ASSERT_EQ(y->as_integer(), 2);
 }
 
 // ─── get / set / merge (dot-path API) ───
@@ -294,8 +322,8 @@ static void test_json_merge_right_wins() {
 // ─── get_path / set_path (bracket-index API) ───
 
 static void test_json_get_path_bracket_nested() {
-    const auto v = eval(
-        R"(Json.get_path("{\"items\": [{\"id\": 10}, {\"id\": 20}]}", "items[1].id") |> Result.unwrap())");
+    const auto v = eval(R"(Json.get_path("{\"items\": [{\"id\": 10}, {\"id\": 20}]}", )"
+                        R"("items[1].id") |> Result.unwrap())");
 
     ASSERT_TRUE(v.is_integer());
     ASSERT_EQ(v.as_integer(), 20);
@@ -378,11 +406,11 @@ static void test_json_set_path_out_of_bounds() {
 }
 
 static void test_json_deserialize_non_string_throws() {
-    ASSERT_TRUE(luma::test::eval_throws("Json.deserialize(42)"));
+    ASSERT_EVAL_THROWS("Json.deserialize(42)", "Json.deserialize: expected string");
 }
 
 static void test_json_is_valid_non_string_throws() {
-    ASSERT_TRUE(luma::test::eval_throws("Json.is_valid(42)"));
+    ASSERT_EVAL_THROWS("Json.is_valid(42)", "Json.is_valid: expected string");
 }
 
 // ── Json.Value typed ADT (parse / to_string / accessors) ────────────────────
@@ -430,20 +458,8 @@ static void test_json_value_parse_invalid_fails() {
 }
 
 // Build a JSON document nested `depth` arrays deep, e.g. depth=3 -> "[[[0]]]".
-static std::string make_nested_json_array(int depth) {
-    std::string text;
-
-    for (int i = 0; i < depth; ++i) {
-        text += '[';
-    }
-
-    text += '0';
-
-    for (int i = 0; i < depth; ++i) {
-        text += ']';
-    }
-
-    return text;
+[[nodiscard]] static std::string make_nested_json_array(std::size_t depth) {
+    return std::string(depth, '[') + '0' + std::string(depth, ']');
 }
 
 static void test_json_value_parse_respects_nesting_depth_limit() {
@@ -468,8 +484,7 @@ static void test_json_parse_detailed_respects_nesting_depth_limit() {
     const std::string over_limit = "Json.parse_detailed(\"" + make_nested_json_array(10) + "\")";
 
     const auto v = eval(over_limit);
-    ASSERT_TRUE(v.is_result());
-    ASSERT_FALSE(v.as_result()->is_success);
+    ASSERT_RESULT_FAILURE(v);
 }
 
 static void test_json_parse_detailed_success() {
@@ -484,20 +499,19 @@ static void test_json_parse_detailed_failure_has_location() {
     // A malformed object: the parser reports a structured ParseError record with
     // the failing line and column, not a bare string.
     const auto v = eval(R"(Json.parse_detailed("{ bad"))");
-    ASSERT_TRUE(v.is_result());
-    ASSERT_FALSE(v.as_result()->is_success);
+    ASSERT_RESULT_FAILURE(v);
 
     const auto& err = v.as_result()->owned_inner->as_record();
     ASSERT_EQ(err->type_name, std::string{"ParseError"});
     ASSERT_EQ(err->find_field("line")->as_integer(), static_cast<std::int64_t>(1));
-    ASSERT_TRUE(err->find_field("column")->as_integer() >= 1);
+    ASSERT_GE(err->find_field("column")->as_integer(), 1);
     ASSERT_FALSE(err->find_field("message")->as_string().empty());
 }
 
 static void test_json_parse_detailed_reports_line_on_multiline() {
     // The error is on the third line; the record must report line 3.
     const auto v = eval(R"(Json.parse_detailed("[\n  1,\n  bad\n]"))");
-    ASSERT_FALSE(v.as_result()->is_success);
+    ASSERT_RESULT_FAILURE(v);
 
     const auto& err = v.as_result()->owned_inner->as_record();
     ASSERT_EQ(err->find_field("line")->as_integer(), static_cast<std::int64_t>(3));
@@ -536,6 +550,11 @@ static void test_json_value_as_object_success() {
     const auto v = eval(
         R"(Json.parse("{\"a\": 1}") |> Result.unwrap() |> Json.as_object() |> Result.unwrap())");
     ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->entries.size(), static_cast<std::size_t>(1));
+
+    const auto* a = v.as_dictionary()->find("a");
+    ASSERT_TRUE(a && a->is_choice());
+    ASSERT_EQ(a->as_choice()->variant, "JsonNumber");
 }
 
 static void test_json_value_field_some() {
@@ -609,7 +628,98 @@ static void test_json_value_module_registered() {
     ASSERT_TRUE(env->has("Json.index"));
 }
 
+static void test_json_value_to_string_enforces_depth_limit() {
+    // Regression: Json.to_string recursed over a runtime-built Json.Value with
+    // no depth bound, so `v = JsonArray([v])` in a loop could overflow the
+    // native stack (uncatchable, even under --box).
+    const LimitGuard guard{ResourceLimits::max_json_nesting_depth, static_cast<std::size_t>(4)};
+
+    ASSERT_EVAL_THROWS(R"(
+        mutable Json.Value v = Json.Value.JsonNull
+        for _ in 0..10 {
+            v = Json.Value.JsonArray([v])
+        }
+        Json.to_string(v)
+    )",
+                       "Json.Value nesting exceeds the maximum depth of 4");
+
+    const auto shallow = eval(R"(
+        mutable Json.Value v = Json.Value.JsonNull
+        for _ in 0..3 {
+            v = Json.Value.JsonArray([v])
+        }
+        Json.to_string(v)
+    )");
+    ASSERT_EQ(shallow.as_string(), "[[[null]]]");
+}
+
+static void test_json_value_to_string_enforces_element_limit() {
+    // Regression: sharing one node twice per level (JsonArray([v, v]) x N)
+    // expands to 2^N nodes; the element count is now bounded.
+    const LimitGuard guard{ResourceLimits::max_json_elements, static_cast<std::size_t>(100)};
+
+    ASSERT_EVAL_THROWS(R"(
+        mutable Json.Value v = Json.Value.JsonNull
+        for _ in 0..10 {
+            v = Json.Value.JsonArray([v, v])
+        }
+        Json.to_string(v)
+    )",
+                       "Json.Value exceeds the maximum of 100 elements");
+}
+
+static void test_json_value_to_string_bounds_serialised_size() {
+    // Regression: only the raw string bytes were charged against
+    // max_string_size, so escaping ('"' -> 2 bytes, control characters -> 6)
+    // and structure (quotes, brackets, commas, literals, numbers) let the
+    // serialised text exceed the limit.
+    const std::string value_source = R"(
+        Json.Value.JsonObject({
+            "k": Json.Value.JsonArray([
+                Json.Value.JsonNumber(1.0), Json.Value.JsonNumber(2.5),
+                Json.Value.JsonNumber(-1e300),
+                Json.Value.JsonBool(true), Json.Value.JsonBool(false), Json.Value.JsonNull,
+                Json.Value.JsonString("q\"\n\tz")
+            ]),
+            "e": Json.Value.JsonObject({"inner": Json.Value.JsonNull}),
+            "a": Json.Value.JsonArray([Json.Value.JsonNumber(123456789.0)])
+        })
+    )";
+    const std::string serialised = eval("Json.to_string(" + value_source + ")").as_string();
+
+    // The budget charged during conversion matches the output exactly.
+    {
+        const LimitGuard guard{ResourceLimits::max_string_size, serialised.size()};
+        ASSERT_EQ(eval("Json.to_string(" + value_source + ")").as_string(), serialised);
+    }
+
+    {
+        const LimitGuard guard{ResourceLimits::max_string_size, serialised.size() - 1};
+        ASSERT_EVAL_THROWS("Json.to_string(" + value_source + ")",
+                           "Json.to_string: result exceeds maximum string size");
+    }
+
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(16)};
+
+    // 10 quote characters are 10 string bytes but serialise to 22.
+    ASSERT_EVAL_THROWS(R"(Json.to_string(Json.Value.JsonString("\"\"\"\"\"\"\"\"\"\"")))",
+                       "Json.to_string: result exceeds maximum string size");
+    // No string data at all, but "[null,null,null,null,null]" is 26 bytes.
+    ASSERT_EVAL_THROWS(R"(Json.to_string(Json.Value.JsonArray([
+        Json.Value.JsonNull, Json.Value.JsonNull, Json.Value.JsonNull,
+        Json.Value.JsonNull, Json.Value.JsonNull])))",
+                       "Json.to_string: result exceeds maximum string size");
+    // 14 characters plus the two quotes fit exactly; 15 do not.
+    ASSERT_EQ(eval(R"(Json.to_string(Json.Value.JsonString("abcdefghijklmn")))").as_string(),
+              "\"abcdefghijklmn\"");
+    ASSERT_EVAL_THROWS(R"(Json.to_string(Json.Value.JsonString("abcdefghijklmno")))",
+                       "Json.to_string: result exceeds maximum string size");
+}
+
 int main() {
+    RUN(test_json_value_to_string_enforces_depth_limit);
+    RUN(test_json_value_to_string_enforces_element_limit);
+    RUN(test_json_value_to_string_bounds_serialised_size);
     RUN(test_json_get_path_array_index);
     RUN(test_json_get_path_bracket_index_lenient);
     RUN(test_json_get_path_missing);

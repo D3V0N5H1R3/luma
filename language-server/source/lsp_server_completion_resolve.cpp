@@ -309,7 +309,7 @@ JsonValue LspCompletionHandler::handle_completion_resolve(const JsonValue& param
         // LOCK INVARIANT: ctx_.stdlib_registry is immutable after construction —
         // no lock required for read-only access.
         const auto qualified = data->substr(k_stdlib_prefix_len);
-        const auto split = split_module(qualified);
+        const auto split = symbols::split_module(qualified);
         if (!split) {
             return result;
         }

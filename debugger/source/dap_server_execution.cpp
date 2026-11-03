@@ -1,5 +1,6 @@
 #include <optional>
 
+#include "dap_error_handler.hpp"
 #include "dap_execution_handler.hpp"
 #include "dap_helpers.hpp"
 #include "dap_response_builders.hpp"
@@ -24,10 +25,15 @@ HandlerResult DapExecutionHandler::execute_thread_action(const JsonValue& args,
     const int thread_id = extract_thread_id(args);
     const bool all_threads = (action == ExecutionAction::Continue && thread_id == 0);
 
+    // Reject an unknown thread before announcing that it continued.
+    if (!all_threads && !session.is_thread_valid(thread_id)) {
+        return HandlerResult::error(error_messages::unknown_thread_id(thread_id));
+    }
+
     // Emit continued event BEFORE resuming to prevent ordering race:
     // if the thread hits a breakpoint immediately, the stopped event
     // must arrive after the continued event.
-    ctx_.protocol_handler.send_event(std::string{kEventContinued},
+    ctx_.protocol_handler.send_event(std::string{k_event_continued},
                                      make_continued_event_body(thread_id, all_threads));
 
     ctx_.invalidate_watches();

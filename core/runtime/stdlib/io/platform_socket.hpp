@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -32,8 +33,11 @@
 #define MSG_NOSIGNAL 0
 #endif
 
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <string>
 
@@ -63,12 +67,61 @@ inline void close(SocketHandle h) {
 #endif
 }
 
+// ─── Creation (never inherited by child processes) ───
+
+// Create a socket that child processes do NOT inherit: close-on-exec on POSIX
+// (SOCK_CLOEXEC where available, else FD_CLOEXEC right after creation) and a
+// non-inheritable handle on Windows.  Otherwise every Process.* child would hold
+// a copy of every open connection, keeping it alive after the program closes it.
+[[nodiscard]] inline SocketHandle create_socket(int family, int socktype, int protocol) {
+#ifdef _WIN32
+    return ::WSASocketW(family, socktype, protocol, nullptr, 0,
+                        WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+#elif defined(SOCK_CLOEXEC)
+    return ::socket(family, socktype | SOCK_CLOEXEC, protocol);
+#else
+    const SocketHandle h = ::socket(family, socktype, protocol);
+
+    if (h != invalid_socket_handle) {
+        ::fcntl(h, F_SETFD, ::fcntl(h, F_GETFD) | FD_CLOEXEC);
+    }
+
+    return h;
+#endif
+}
+
+// accept() counterpart of create_socket: the accepted connection is likewise
+// not inherited by child processes.
+[[nodiscard]] inline SocketHandle accept_socket(SocketHandle listener, struct sockaddr* addr,
+                                                socklen_t* addr_len) {
+#ifdef _WIN32
+    const SocketHandle h = ::accept(listener, addr, addr_len);
+
+    if (h != invalid_socket_handle) {
+        SetHandleInformation(reinterpret_cast<HANDLE>(h), HANDLE_FLAG_INHERIT, 0);
+    }
+
+    return h;
+#elif defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+    return ::accept4(listener, addr, addr_len, SOCK_CLOEXEC);
+#else
+    const SocketHandle h = ::accept(listener, addr, addr_len);
+
+    if (h != invalid_socket_handle) {
+        ::fcntl(h, F_SETFD, ::fcntl(h, F_GETFD) | FD_CLOEXEC);
+    }
+
+    return h;
+#endif
+}
+
 // ─── Error reporting ───
 
-// Return the last socket error as a human-readable string.
-inline std::string last_error() {
+// Describe a platform-native socket error code (errno on POSIX,
+// WSAGetLastError() on Windows) as a human-readable string.
+inline std::string error_string(int code) {
 #ifdef _WIN32
-    const int err = WSAGetLastError();
+    const int err = code;
 
     std::array<char, 256> buf{};
 
@@ -85,8 +138,17 @@ inline std::string last_error() {
 
     return msg;
 #else
-    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative; errno is thread-local.
-    return std::string{strerror(errno)};
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative.
+    return std::string{strerror(code)};
+#endif
+}
+
+// Return the last socket error as a human-readable string.
+inline std::string last_error() {
+#ifdef _WIN32
+    return error_string(WSAGetLastError());
+#else
+    return error_string(errno);
 #endif
 }
 
@@ -203,6 +265,25 @@ enum class ErrorCategory {
     return err;
 }
 
+// ─── Listening-address policy ───
+
+// Prepare a socket that will listen: allow an immediate restart on a port
+// still in TIME_WAIT, but never share a port another socket is bound to.
+// POSIX SO_REUSEADDR gives exactly that.  On Windows SO_REUSEADDR instead lets
+// a second socket hijack a port that is already in use (so a bind clash would
+// silently succeed), and SO_EXCLUSIVEADDRUSE is the equivalent of the POSIX
+// behaviour.
+inline void set_listen_address_policy(SocketHandle h) {
+    const int opt{1};
+
+#ifdef _WIN32
+    setsockopt(h, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&opt),
+               sizeof(opt));
+#else
+    setsockopt(h, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#endif
+}
+
 // ─── Timeout ───
 
 // Set send and receive timeouts on a socket.
@@ -215,7 +296,7 @@ inline bool set_timeout(SocketHandle h, int ms) {
            setsockopt(h, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout),
                       sizeof(timeout)) == 0;
 #else
-    struct timeval tv {};
+    struct timeval tv{};
 
     tv.tv_sec = ms / 1000;
     tv.tv_usec = static_cast<decltype(tv.tv_usec)>(ms % 1000) * 1000;
@@ -265,20 +346,6 @@ inline void set_blocking(SocketHandle h, [[maybe_unused]] int saved_flags) {
     ioctlsocket(h, FIONBIO, &mode);
 #else
     fcntl(h, F_SETFL, saved_flags);
-#endif
-}
-
-// ─── select() helpers ───
-
-// First argument for select().
-// Windows ignores nfds; POSIX requires the highest fd + 1.
-inline int select_nfds(SocketHandle h) {
-#ifdef _WIN32
-    (void)h;
-
-    return 0;
-#else
-    return static_cast<int>(h) + 1;
 #endif
 }
 
@@ -344,6 +411,11 @@ namespace luma {
         return false;
     }
 
+#ifdef _WIN32
+    // Winsock's fd_set is a counted array of SOCKET handles (FD_SET ignores
+    // additions past FD_SETSIZE), so select() has no descriptor-value overflow
+    // here.  It is kept over WSAPoll, which failed to report refused connects
+    // before Windows 10 2004.
     fd_set wr{};
     FD_ZERO(&wr);
     FD_SET(sock, &wr);
@@ -352,21 +424,48 @@ namespace luma {
     FD_ZERO(&ex);
     FD_SET(sock, &ex);
 
-    struct timeval tv {};
+    struct timeval tv{};
 
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = static_cast<decltype(tv.tv_usec)>(timeout_ms % 1000) * 1000;
 
-    const int sel = select(platform_socket::select_nfds(sock), nullptr, &wr, &ex, &tv);
+    const int sel = select(0, nullptr, &wr, &ex, &tv);
+#else
+    // POSIX: poll(), NOT select().  An fd_set is a fixed bitmap of FD_SETSIZE
+    // (usually 1024) bits, and FD_SET on a larger descriptor writes past the end
+    // of it — reachable once the process holds ~1024 descriptors.  poll() has no
+    // such limit.  POLLOUT signals connect completion; POLLERR / POLLHUP signal
+    // failure, which get_pending_error() below then reports.
+    pollfd pfd{.fd = sock, .events = POLLOUT, .revents = 0};
 
-    // Read the select() error before set_blocking() can overwrite it.
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds{std::max(timeout_ms, 0)};
+
+    int sel{0};
+
+    while (true) {
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   deadline - std::chrono::steady_clock::now())
+                                   .count();
+
+        sel = ::poll(&pfd, 1, static_cast<int>(std::max<std::int64_t>(remaining, 0)));
+
+        if (sel == -1 && errno == EINTR) {
+            continue;
+        }
+
+        break;
+    }
+#endif
+
+    // Read the select()/poll() error before set_blocking() can overwrite it.
     const int select_err = platform_socket::last_error_code();
 
     platform_socket::set_blocking(sock, saved_flags);
 
     if (sel <= 0) {
         // sel == 0 means the connect did not complete within the timeout window;
-        // sel < 0 is a select() error.  Report the timeout distinctly so callers
+        // sel < 0 is a select()/poll() error.  Report the timeout distinctly so callers
         // can classify it separately from a refused/failed connection.
         if (sel == 0) {
             if (timed_out != nullptr) {

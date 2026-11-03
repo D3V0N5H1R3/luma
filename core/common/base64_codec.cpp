@@ -111,9 +111,7 @@ std::optional<std::string> base64_decode_with(const std::string& input,
     const auto padded_size = input.size() + padding_needed;
     out.reserve((padded_size / 4) * 3);
 
-    auto char_at = [&](std::size_t i) -> char {
-        return i < input.size() ? input[i] : '=';
-    };
+    auto char_at = [&](std::size_t i) -> char { return i < input.size() ? input[i] : '='; };
 
     for (std::size_t i{0}; i < padded_size; i += 4) {
         if (!decode_quad(out, char_at(i), char_at(i + 1), char_at(i + 2), char_at(i + 3),

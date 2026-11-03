@@ -1,6 +1,17 @@
 // Type checker unit tests — basic type checking fundamentals.
 
+#include <algorithm>
+#include <string>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::TypeChecker;
+using luma::test::fails;
+using luma::test::fails_with;
+using luma::test::parse;
+using luma::test::passes;
 
 // ─── Basic valid programs ───
 
@@ -306,6 +317,50 @@ static void test_if_condition_boolean_ok() {
                        "}\n"));
 }
 
+// ─── String repeat count ───
+
+// Luma has no negative integer literals (`-3` is negation of `3`), so the
+// literal check must see through the unary minus.
+static void test_string_repeat_negative_literal_count_fails() {
+    ASSERT_TRUE(fails_with("string repeated = \"ab\" * -3\n", DiagnosticCode::InvalidRepeatCount));
+}
+
+static void test_string_repeat_computed_negative_count_passes() {
+    ASSERT_TRUE(passes("integer count = 2 - 5\n"
+                       "string repeated = \"ab\" * count\n"));
+}
+
+// ─── assert argument checks ───
+
+static void test_assert_condition_must_be_boolean() {
+    ASSERT_TRUE(fails("function void foo() {\n"
+                      "    assert(1)\n"
+                      "}\n"));
+    ASSERT_TRUE(fails("function void foo() {\n"
+                      "    assert(\"text\")\n"
+                      "}\n"));
+}
+
+// A failure(...) value is truthy at runtime, so asserting on a result could never fail.
+static void test_assert_condition_rejects_result() {
+    ASSERT_TRUE(fails("function void foo() {\n"
+                      "    assert(Array.all([1, 2], (integer x) -> x > 5))\n"
+                      "}\n"));
+}
+
+static void test_assert_message_must_be_string() {
+    ASSERT_TRUE(fails("function void foo() {\n"
+                      "    assert(true, 42)\n"
+                      "}\n"));
+}
+
+static void test_assert_boolean_condition_ok() {
+    ASSERT_TRUE(passes("function void foo() {\n"
+                       "    integer total = 2 + 2\n"
+                       "    assert(total == 4, \"expected 4 but got ${total}\")\n"
+                       "}\n"));
+}
+
 // ─── Increment/decrement type checks ───
 
 static void test_increment_requires_numeric() {
@@ -357,10 +412,14 @@ static void test_main_with_params_error() {
 
 static void test_missing_main_is_error() {
     // A program with no @main should be a type error (require_main = true).
-    const auto errors = check("function integer add(integer a, integer b) { return a + b }\n",
-                              /*require_main=*/true);
+    const auto program = parse("function integer add(integer a, integer b) { return a + b }\n");
 
-    ASSERT_FALSE(errors.empty());
+    TypeChecker checker;
+    const auto errors = checker.check(program, /*require_main=*/true);
+
+    ASSERT_TRUE(std::ranges::any_of(errors, [](const Diagnostic& d) {
+        return d.message.find("no @main function found") != std::string::npos;
+    }));
 }
 
 static void test_missing_main_ok_for_tests() {
@@ -513,6 +572,12 @@ int main() {
 
     RUN(test_if_condition_must_be_boolean);
     RUN(test_if_condition_boolean_ok);
+    RUN(test_assert_condition_must_be_boolean);
+    RUN(test_string_repeat_negative_literal_count_fails);
+    RUN(test_string_repeat_computed_negative_count_passes);
+    RUN(test_assert_condition_rejects_result);
+    RUN(test_assert_message_must_be_string);
+    RUN(test_assert_boolean_condition_ok);
 
     // ─── Increment/decrement ───
 

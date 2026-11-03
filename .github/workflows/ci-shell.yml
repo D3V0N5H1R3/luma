@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────────
 # Luma — Shell Script Lint Workflow
 #
-# Runs ShellCheck on all shell scripts (*.sh and the pre-commit
-# hook) on every push and PR targeting main that touches them.
+# Runs ShellCheck on all shell scripts (*.sh and the Git hooks)
+# on every push and PR targeting main that touches them.
 # ShellCheck is pre-installed on GitHub-hosted ubuntu runners.
 # ─────────────────────────────────────────────────────────────
 
@@ -15,7 +15,7 @@ on:
       - ".github/workflows/ci-shell.yml"
       - "**/*.sh"
       - "**/*.bash"
-      - "scripts/git-hooks/pre-commit"
+      - "scripts/git-hooks/**"
   pull_request:
     branches: [main]
     paths: *paths
@@ -42,9 +42,11 @@ jobs:
       - name: Run ShellCheck
         run: |
           # Discover every tracked shell script (excluding vendored external/),
-          # then append the extensionless git hook that no glob would match.
+          # then append the extensionless git hooks that no glob would match.
           mapfile -t scripts < <(git ls-files '*.sh' '*.bash' ':!:external/**')
-          [[ -f scripts/git-hooks/pre-commit ]] && scripts+=(scripts/git-hooks/pre-commit)
+          for hook in scripts/git-hooks/pre-commit scripts/git-hooks/commit-msg; do
+            [[ -f "$hook" ]] && scripts+=("$hook")
+          done
           printf 'Linting %d shell script(s):\n' "${#scripts[@]}"
           printf '  %s\n' "${scripts[@]}"
           shellcheck "${scripts[@]}"

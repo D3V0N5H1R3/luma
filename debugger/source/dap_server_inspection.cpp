@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cctype>
 #include <format>
 
 #include "dap_helpers.hpp"
@@ -5,6 +7,7 @@
 #include "dap_response_builders.hpp"
 #include "dap_types.hpp"
 #include "debug_session.hpp"
+#include "protocol/position_utils.hpp"
 
 namespace luma::dap {
 
@@ -262,23 +265,50 @@ HandlerResult DapInspectionHandler::handle_set_variable(const JsonValue& args) {
             make_set_variable_body(result.value, result.type, result.variables_reference));
     }
 
-    return HandlerResult::ok(make_set_variable_body(value, "", 0));
+    // Nothing can be modified without a session; do not echo the value back as
+    // if it had been set.
+    return HandlerResult::error(std::string{messages::session::no_active_session});
 }
 
 // ─── Completions ───
 
+namespace {
+
+// The identifier being typed: the run of identifier characters ending at the
+// cursor.  `column` is the DAP cursor position (1-based, in UTF-16 code units,
+// so text such as a string literal with non-ASCII characters before the cursor
+// is converted to a byte offset first); <= 0 means the end of the text.
+[[nodiscard]] std::string completion_prefix(const std::string& text, int column) {
+    const std::size_t cursor =
+        (column > 0) ? protocol::utf16_column_to_byte_offset(text, column - 1) : text.size();
+    std::size_t start = cursor;
+
+    const auto is_identifier_char = [](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '_';
+    };
+
+    while (start > 0 && is_identifier_char(text[start - 1])) {
+        --start;
+    }
+
+    return text.substr(start, cursor - start);
+}
+
+} // namespace
+
 HandlerResult DapInspectionHandler::handle_completions(const JsonValue& args) {
     int frame_id{0};
-    std::string text;
+    std::string prefix;
 
     if (args.is_object()) {
         frame_id = args.get_or<int>("frameId", 0);
-        text = args.get_or<std::string>("text", "");
+        prefix =
+            completion_prefix(args.get_or<std::string>("text", ""), args.get_or<int>("column", 0));
     }
 
     return build_session_array_response(
         ctx_.session,
-        [frame_id, &text](DebugSession& s) { return s.get_completions(frame_id, text); },
+        [frame_id, &prefix](DebugSession& s) { return s.get_completions(frame_id, prefix); },
         [](const auto& c) { return make_completion_item(c.first, c.second); },
         make_targets_response);
 }
@@ -333,32 +363,6 @@ HandlerResult DapInspectionHandler::handle_exception_info(const JsonValue& args)
     body["details"] = JsonValue(std::move(details));
 
     return HandlerResult::ok(JsonValue(std::move(body)));
-}
-
-// ─── Step-in targets ───
-
-HandlerResult DapInspectionHandler::handle_step_in_targets(const JsonValue& args) {
-    JsonValue::ArrayType targets_array;
-
-    if (args.is_object() && ctx_.has_session()) {
-        const int frame_id = args.get_or<int>("frameId", 0);
-
-        // Get the current line's callable expressions as step-in targets.
-        auto completions = ctx_.session->get_completions(frame_id, "");
-
-        int target_id = 1;
-
-        for (const auto& [name, type] : completions) {
-            if (type == "function" || type == "method") {
-                JsonValue::ObjectType target;
-                target["id"] = JsonValue(target_id++);
-                target["label"] = JsonValue(name);
-                targets_array.emplace_back(std::move(target));
-            }
-        }
-    }
-
-    return HandlerResult::ok(make_targets_response(std::move(targets_array)));
 }
 
 } // namespace luma::dap

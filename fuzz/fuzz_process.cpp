@@ -53,7 +53,7 @@ namespace {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             // ── Never-crash: arbitrary bytes are tokenized (an unclosed quote
             //    raises RuntimeError, which the harness treats as expected). ──
             const auto argv = luma::tokenize_command(input);

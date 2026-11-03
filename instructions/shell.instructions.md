@@ -84,29 +84,29 @@ script_dir="$(readlink -f "$(dirname "$0")")"
 
 ### Common Linux vs macOS Differences
 
-| Utility    | Linux (GNU)              | macOS (BSD)              | Portable Alternative                     |
-| ---------- | ------------------------ | ------------------------ | ---------------------------------------- |
-| `sed -i`   | `sed -i 's/a/b/'`       | `sed -i '' 's/a/b/'`    | Write to temp file and `mv`              |
-| `readlink` | `readlink -f`            | No `-f` flag             | `cd "$(dirname "$0")" && pwd`            |
-| `date`     | `date -d '1 day ago'`   | `date -v-1d`             | Use Python for complex date math         |
-| `grep -P`  | Perl-compatible regex    | Not available            | Use `grep -E` (extended regex)           |
-| `find`     | `-printf`, `-regextype` | Not available            | Use `-print` and pipe to `awk`           |
-| `mktemp`   | `mktemp`                | `mktemp` (needs `XXXX`) | `mktemp /tmp/prefix.XXXXXX`             |
-| `stat`     | `stat -c '%s'`          | `stat -f '%z'`           | Use `wc -c < file`                       |
+| Utility    | Linux (GNU)             | macOS (BSD)             | Portable Alternative             |
+| ---------- | ----------------------- | ----------------------- | -------------------------------- |
+| `sed -i`   | `sed -i 's/a/b/'`       | `sed -i '' 's/a/b/'`    | Write to temp file and `mv`      |
+| `readlink` | `readlink -f`           | No `-f` flag            | `cd "$(dirname "$0")" && pwd`    |
+| `date`     | `date -d '1 day ago'`   | `date -v-1d`            | Use Python for complex date math |
+| `grep -P`  | Perl-compatible regex   | Not available           | Use `grep -E` (extended regex)   |
+| `find`     | `-printf`, `-regextype` | Not available           | Use `-print` and pipe to `awk`   |
+| `mktemp`   | `mktemp`                | `mktemp` (needs `XXXX`) | `mktemp /tmp/prefix.XXXXXX`      |
+| `stat`     | `stat -c '%s'`          | `stat -f '%z'`          | Use `wc -c < file`               |
 
 ---
 
 ## 3 — Naming Conventions
 
-| Entity             | Convention     | Examples                                         |
-| ------------------ | -------------- | ------------------------------------------------ |
-| Variables          | `snake_case`   | `total_count`, `output_dir`, `is_verbose`        |
-| Functions          | `snake_case`   | `build_project`, `check_dependencies`            |
-| Constants          | `UPPER_CASE`   | `MAX_RETRIES`, `DEFAULT_TIMEOUT`, `VERSION`      |
-| Environment vars   | `UPPER_CASE`   | `LUMA_HOME`, `BUILD_DIR`                         |
-| File names         | `kebab-case`   | `run-tests.sh`, `build-release.sh`               |
-| Boolean variables  | question       | `is_dry_run`, `has_errors`, `should_clean`       |
-| Local variables    | `local` prefix | Always declare with `local` inside functions     |
+| Entity            | Convention     | Examples                                     |
+| ----------------- | -------------- | -------------------------------------------- |
+| Variables         | `snake_case`   | `total_count`, `output_dir`, `is_verbose`    |
+| Functions         | `snake_case`   | `build_project`, `check_dependencies`        |
+| Constants         | `UPPER_CASE`   | `MAX_RETRIES`, `DEFAULT_TIMEOUT`, `VERSION`  |
+| Environment vars  | `UPPER_CASE`   | `LUMA_HOME`, `BUILD_DIR`                     |
+| File names        | `kebab-case`   | `run-tests.sh`, `build-release.sh`           |
+| Boolean variables | question       | `is_dry_run`, `has_errors`, `should_clean`   |
+| Local variables   | `local` prefix | Always declare with `local` inside functions |
 
 - Name what the value represents, not its type. `output_dir` — good. `d` — bad.
 - Avoid abbreviations unless universally understood (`tmp`, `dir`, `pid`, `fd`).
@@ -159,10 +159,10 @@ set -euo pipefail
 
 ### `set` Options
 
-| Option       | Effect                                                         |
-| ------------ | -------------------------------------------------------------- |
-| `set -e`     | Exit immediately on command failure (non-zero exit code)       |
-| `set -u`     | Treat unset variables as errors                                |
+| Option            | Effect                                                   |
+| ----------------- | -------------------------------------------------------- |
+| `set -e`          | Exit immediately on command failure (non-zero exit code) |
+| `set -u`          | Treat unset variables as errors                          |
 | `set -o pipefail` | Propagate failure from any command in a pipeline         |
 
 ---

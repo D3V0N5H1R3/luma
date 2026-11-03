@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_DIAGNOSTICS_DIAGNOSTIC_COLLECTOR_HPP
+#define LUMA_DIAGNOSTICS_DIAGNOSTIC_COLLECTOR_HPP
 
 #include <cstddef>
 #include <utility>
@@ -65,3 +66,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_DIAGNOSTICS_DIAGNOSTIC_COLLECTOR_HPP

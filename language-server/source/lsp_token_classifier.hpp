@@ -24,6 +24,7 @@
 #include <array>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "analysis/lexer/token.hpp"
@@ -100,7 +101,41 @@ namespace token_class {
     return std::ranges::find(operator_types, type) != operator_types.end();
 }
 
+// Built-in type names the lexer emits as Identifier tokens: `void` and the
+// demoted container/handle types (`set`, `queue`, `task`, …).
+[[nodiscard]] inline bool is_builtin_type_name(std::string_view name) {
+    return name == "void" || is_builtin_type_identifier(name);
+}
+
 } // namespace token_class
+
+// The tokens around the one being classified, when known. Identifiers whose
+// meaning depends on their position (built-in type names that are also valid
+// field and variable names) are classified from them.
+struct TokenNeighbours {
+    const Token* previous{nullptr};
+    const Token* next{nullptr};
+};
+
+// Whether an identifier between `n.previous` and `n.next` sits where a type is
+// written: not after `.` (a field or member), and followed on the same line by
+// `<`, a name, `>`, or `?` (`set<T>`, `socket s`, `function void main`,
+// `array<socket>`), or right after `<` or `->` (`optional<xml>`, `-> void`).
+[[nodiscard]] inline bool in_type_position(const TokenNeighbours& n) {
+    if (n.previous != nullptr && n.previous->type == TokenType::Dot) {
+        return false;
+    }
+    if (n.next != nullptr && !n.next->preceded_by_newline) {
+        const auto next = n.next->type;
+        if (next == TokenType::Less || next == TokenType::Identifier ||
+            next == TokenType::Greater || next == TokenType::GreaterGreater ||
+            next == TokenType::QuestionMark) {
+            return true;
+        }
+    }
+    return n.previous != nullptr &&
+           (n.previous->type == TokenType::Less || n.previous->type == TokenType::Arrow);
+}
 
 // ─── Symbol classifier ─────────────────────────────────────
 // Maps identifier tokens to semantic token types using analysis
@@ -110,7 +145,7 @@ struct SymbolClassifier {
     // Classify an identifier token, returning (type_index, modifier_flags).
     [[nodiscard]] static std::pair<int, int>
     classify_identifier(const Token& tok, const AnalysisResult& result,
-                        const StdlibRegistry& stdlib_registry) {
+                        const StdlibRegistry& stdlib_registry, const TokenNeighbours& neighbours) {
         // Stdlib module name → Namespace + Readonly.
         if (stdlib_registry.has_module(tok.lexeme)) {
             return {static_cast<int>(SemanticTokenType::Namespace),
@@ -151,18 +186,31 @@ struct SymbolClassifier {
         }
 
         // Type definition (record, choice, interface, type_alias).
+        bool is_user_symbol = false;
         if (auto def = result.find_definition(tok.lexeme)) {
             if (constants::type_kind::is_type_definition(def->type_string)) {
                 return {static_cast<int>(SemanticTokenType::Type), 0};
             }
 
+            is_user_symbol = true;
             if (!def->is_mutable) {
                 modifiers |= static_cast<int>(SemanticTokenModifier::Readonly);
             }
         } else if (result.semantic.locals.local_variable_types.contains(tok.lexeme)) {
+            is_user_symbol = true;
             if (!is_mutable_symbol(result, tok.lexeme)) {
                 modifiers |= static_cast<int>(SemanticTokenModifier::Readonly);
             }
+        }
+
+        // Built-in type names that lex as identifiers: the `void` return type
+        // and the demoted container/handle types (`set`, `queue`, `task`, …).
+        // Those are also valid variable, field, and argument names, so they are
+        // types only when no user symbol claims the name and they sit where a
+        // type is written.
+        if (!is_user_symbol && token_class::is_builtin_type_name(tok.lexeme) &&
+            in_type_position(neighbours)) {
+            return {static_cast<int>(SemanticTokenType::Type), 0};
         }
 
         // Function parameter check.
@@ -188,7 +236,24 @@ struct SymbolClassifier {
 
 [[nodiscard]] inline std::pair<int, int> classify_token(const Token& tok,
                                                         const AnalysisResult& result,
-                                                        const StdlibRegistry& stdlib_registry) {
+                                                        const StdlibRegistry& stdlib_registry,
+                                                        const TokenNeighbours& neighbours = {}) {
+    // Word literals (`true`, `false`, `none`) and the value constructors
+    // (`success`, `failure`, `some`) are lexer keywords, but the grammars give
+    // them their own scopes (constant.language / support.function.builtin, see
+    // Luma_Syntax_Highlighting.md). LSP has no standard "constant" token type,
+    // and a `keyword` token would override those scopes, so they are left to
+    // the grammar.
+    switch (tok.type) {
+        case TokenType::BooleanLiteral:
+        case TokenType::NoneLiteral:
+        case TokenType::Success:
+        case TokenType::Failure:
+        case TokenType::Some:
+            return {-1, 0};
+        default:
+            break;
+    }
     if (token_class::is_keyword(tok.type)) {
         return {static_cast<int>(SemanticTokenType::Keyword), 0};
     }
@@ -198,7 +263,10 @@ struct SymbolClassifier {
     if (token_class::is_numeric_literal(tok.type)) {
         return {static_cast<int>(SemanticTokenType::Number), 0};
     }
-    if (tok.type == TokenType::StringLiteral) {
+    // A whole string literal, or one literal segment of an interpolated string
+    // ("text ${…} more"). The ${ and } delimiters are left to the grammar.
+    if (tok.type == TokenType::StringLiteral || tok.type == TokenType::StringStart ||
+        tok.type == TokenType::StringMiddle || tok.type == TokenType::StringEnd) {
         return {static_cast<int>(SemanticTokenType::String), 0};
     }
     if (tok.type == TokenType::Annotation) {
@@ -208,7 +276,7 @@ struct SymbolClassifier {
         return {static_cast<int>(SemanticTokenType::Operator), 0};
     }
     if (tok.type == TokenType::Identifier) {
-        return SymbolClassifier::classify_identifier(tok, result, stdlib_registry);
+        return SymbolClassifier::classify_identifier(tok, result, stdlib_registry, neighbours);
     }
     return {-1, 0};
 }

@@ -33,3 +33,7 @@ select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
 
 [format]
 quote-style = "double"
+# Ruff 0.16+ also formats Python code blocks inside Markdown by default. The
+# docs (e.g. instructions/python.instructions.md) contain deliberate "Bad"
+# examples whose shape is the point, so Markdown is never reformatted.
+exclude = ["*.md"]

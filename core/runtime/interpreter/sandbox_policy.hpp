@@ -2,6 +2,8 @@
 #define LUMA_INTERPRETER_SANDBOX_POLICY_HPP
 
 #include <format>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -23,37 +25,53 @@ namespace luma {
 // sandbox policy from scope storage keeps each concern independently testable.
 class SandboxPolicy {
 public:
-    // Replace the set of blocked module prefixes (e.g. "FileSystem", "Process").
-    void set_blocked(StringSet prefixes) {
+    // Replace the blocked sets: whole module prefixes (e.g. "FileSystem",
+    // "Process") and individual functions withheld from otherwise available
+    // modules (e.g. "Hash.sha256_file").
+    void set_blocked(StringSet prefixes, StringSet functions = {}) {
         blocked_ = std::move(prefixes);
+        blocked_functions_ = std::move(functions);
     }
 
-    // True if `name`'s module prefix (the text before the first '.') is blocked.
+    // True if `name` is a blocked function, or its module prefix (the text
+    // before the first '.') is blocked.
     [[nodiscard]] bool is_blocked(std::string_view name) const {
-        if (blocked_.empty()) {
-            return false;
+        return denial_hint(name).has_value();
+    }
+
+    // The hint explaining why `name` is blocked, or nullopt if it is not.
+    [[nodiscard]] std::optional<std::string> denial_hint(std::string_view name) const {
+        if (blocked_functions_.contains(name)) {
+            return std::format("{} reads or writes files, which sandbox mode disables; the "
+                               "rest of the {} module stays available",
+                               name, symbols::qualified_module(name));
         }
 
-        const auto split = split_module(name);
-        return split && blocked_.contains(split->first);
+        const auto split = symbols::split_module(name);
+
+        if (split && blocked_.contains(split->first)) {
+            return std::format("the {} module is disabled in sandbox mode to "
+                               "prevent access to system resources",
+                               split->first);
+        }
+
+        return std::nullopt;
     }
 
     // Throw a RuntimeError if `name` is sandbox-blocked; otherwise no-op.
     void verify_access(std::string_view name, const SourceLocation& loc) const {
-        if (!is_blocked(name)) {
-            return;
+        if (auto hint = denial_hint(name)) {
+            throw RuntimeError{access_denied_message(name), loc, std::move(*hint)};
         }
+    }
 
-        const auto module = qualified_module(name);
-
-        throw RuntimeError{std::format("'{}' is not available in sandbox mode (--box)", name), loc,
-                           std::format("the {} module is disabled in sandbox mode to "
-                                       "prevent access to system resources",
-                                       module)};
+    [[nodiscard]] static std::string access_denied_message(std::string_view name) {
+        return std::format("'{}' is not available in sandbox mode (--box)", name);
     }
 
 private:
     StringSet blocked_;
+    StringSet blocked_functions_;
 };
 
 } // namespace luma

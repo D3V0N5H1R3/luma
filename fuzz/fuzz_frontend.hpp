@@ -1,35 +1,30 @@
-#pragma once
+#ifndef LUMA_FUZZ_FUZZ_FRONTEND_HPP
+#define LUMA_FUZZ_FUZZ_FRONTEND_HPP
 
-#include <algorithm>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/diagnostics/diagnostic_collector.hpp"
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/lexer/token.hpp"
-#include "analysis/linter/linter.hpp"
 #include "analysis/parser/parser.hpp"
-#include "analysis/resolver/resolver.hpp"
+#include "analysis/pipeline/lint_pass.hpp"
+#include "analysis/pipeline/pipeline.hpp"
+#include "analysis/pipeline/type_checker_pass.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "fuzz_harness.hpp"
 
 // Front-end pipeline-stage helpers shared by every fuzz target.
 //
-// These wrappers depend only on luma_analysis (lexer → parser → resolver →
-// type checker → linter), so the analysis-only targets can include this
-// header without pulling in any runtime/VM headers.  Compile/optimise/execute
-// helpers live in fuzz_pipeline.hpp.
+// These wrappers depend only on luma_analysis (lexer → parser → type checker →
+// linter), so the analysis-only targets can include this header without
+// pulling in any runtime/VM headers.  Compile/optimise/execute helpers live in
+// fuzz_pipeline.hpp.
 
 namespace luma::fuzz {
-
-// True if any diagnostic is an error.  Mirrors PipelineResult::has_errors()
-// but operates on a raw diagnostic list, which is what the analysis stages
-// return.
-[[nodiscard]] inline bool has_error(const std::vector<Diagnostic>& diagnostics) {
-    return std::ranges::any_of(diagnostics,
-                               [](const Diagnostic& d) { return d.severity == Severity::Error; });
-}
 
 // Touch every token so the work that produced them cannot be elided.
 inline void consume_tokens(const std::vector<Token>& tokens) {
@@ -69,13 +64,17 @@ struct ParseResult {
     return ParseResult{std::move(program), parser.get_errors().empty()};
 }
 
-// Stage 3 — resolve names in place.  Returns the resolver diagnostics.
-[[nodiscard]] inline std::vector<Diagnostic> resolve(Program& program) {
-    NameResolver resolver;
-    return resolver.resolve(program);
+// Stage 1 + 2 with the production gate applied: like compile_program(), refuse
+// to go further when the parser reported syntax errors.
+[[nodiscard]] inline std::optional<Program> parse_clean(const std::string& input) {
+    auto parsed = parse(input);
+    if (!parsed.ok) {
+        return std::nullopt;
+    }
+    return std::move(parsed.program);
 }
 
-// Stage 4 — type-check.  Returns the type diagnostics and exercises the
+// Stage 3 — type-check.  Returns the type diagnostics and exercises the
 // warning accessor as a side effect.
 [[nodiscard]] inline std::vector<Diagnostic> type_check(Program& program) {
     TypeChecker checker;
@@ -84,10 +83,15 @@ struct ParseResult {
     return diagnostics;
 }
 
-// Lint pass — returns the linter warnings.
-[[nodiscard]] inline std::vector<Diagnostic> lint(Program& program) {
-    Linter linter;
-    return linter.lint(program);
+// Stages 3 + 4 exactly as production runs them: the linter relies on the
+// annotations the type checker leaves on the AST, and LintPass still runs after
+// a type-check failure, so lint always follows a type check.
+[[nodiscard]] inline PipelineResult type_check_and_lint(Program& program) {
+    auto pipeline =
+        Pipeline::builder().add<TypeCheckerPass>(/*require_main=*/false).add<LintPass>().build();
+    return pipeline.run(program);
 }
 
 } // namespace luma::fuzz
+
+#endif // LUMA_FUZZ_FUZZ_FRONTEND_HPP

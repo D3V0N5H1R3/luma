@@ -35,7 +35,7 @@ struct ModuleJsonPolicy {
     }
 
     static constexpr json_writer::JsonChoiceMode choice_mode =
-        json_writer::JsonChoiceMode::nullary_string;
+        json_writer::JsonChoiceMode::NullaryString;
     static constexpr bool result_increments_depth = false;
 };
 

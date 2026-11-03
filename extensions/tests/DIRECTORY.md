@@ -8,13 +8,14 @@ All scripts are plain Node.js and require **Node.js 18 or newer** (CI runs them 
 
 | File or directory                      | Purpose                                                                                                                         |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `fixtures/`                            | Representative `.luma` source files covering keywords, literals, generics, interfaces, concurrency, and standard library usage. |
+| `fixtures/`                            | Representative `.luma` source files covering keywords, literals, generics, interfaces, concurrency, and standard library usage. `manual_grammar_constructs.luma` covers the User Manual's formal grammar (§32) forms the grammar once missed: if-expressions, tuple destructuring, comparison patterns and `when` guards, record patterns, qualified type names, and a literal `$` in strings. |
 | `parse-fixtures.js`                    | Parses every fixture with the Tree-sitter grammar and fails on `ERROR` or `MISSING` nodes.                                      |
-| `validate-queries.js`                  | Validates the Tree-sitter query files (`.scm`) for Zed: syntax and expected highlight captures. |
+| `validate-queries.js`                  | Validates the Tree-sitter query files (`.scm`) for Zed: syntax, expected highlight captures, which capture wins for a token (Zed applies the last matching pattern), and regex injections. |
 | `validate-defaults.test.mjs`           | Checks each editor's generated config defaults against [`../shared/defaults.json`](../shared/defaults.json).                    |
 | `validate-download.test.mjs`           | Checks each editor's generated platform map against [`../shared/platform-map.json`](../shared/platform-map.json) and parses the [`../shared/sha256sums-sample.txt`](../shared/sha256sums-sample.txt) fixture. |
 | `validate-download-constants.test.mjs` | Checks each editor's generated download constants against [`../shared/download-constants.json`](../shared/download-constants.json). |
 | `validate-resolution-order.test.mjs`   | Checks each editor's binary resolution order against [`../shared/resolution-order.json`](../shared/resolution-order.json).      |
+| `validate-snippets.test.mjs`           | Checks the shared snippets (keyword-free placeholders, dictionary and result-arm syntax, interfaces as field lists, `spawn` inside `task_scope`), that each editor's copy matches, and — when a built `luma` is found (`$LUMA_BIN` or the CMake build tree) — that every snippet expands to syntactically valid Luma. |
 | `package.json`                         | Marks this directory as a private (unpublished) Node package.                                                                   |
 
 ## Usage
@@ -55,7 +56,7 @@ Each validator compares the per-editor generated code against its canonical sour
 
 These checks also run automatically:
 
-- `parse-fixtures.js` runs in the Zed workflow ([`.github/workflows/ci-zed.yml`](../../.github/workflows/ci-zed.yml)).
-- The four `validate-*.test.mjs` validators run in the VS Code workflow ([`.github/workflows/ci-vscode.yml`](../../.github/workflows/ci-vscode.yml)).
+- `parse-fixtures.js` and `validate-snippets.test.mjs` run in the Zed workflow ([`.github/workflows/ci-zed.yml`](../../.github/workflows/ci-zed.yml)).
+- The `validate-*.test.mjs` validators run in the VS Code workflow ([`.github/workflows/ci-vscode.yml`](../../.github/workflows/ci-vscode.yml)).
 
 These fixtures and validators exist to catch grammar and configuration regressions in editor tooling; interpreter behaviour is still covered by the C++ and Luma tests under [`../../tests`](../../tests).

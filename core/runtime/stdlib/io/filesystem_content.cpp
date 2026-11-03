@@ -21,6 +21,7 @@
 
 #include "analysis/source/source_location.hpp"
 #include "common/file_time.hpp"
+#include "common/path_utils.hpp"
 #include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -187,40 +188,59 @@ void register_filesystem_content(const EnvPtr& env) {
                         return make_failure_value(
                             error_msg("FileSystem", "read_lines",
                                       std::format("cannot determine the size of '{}': {}",
-                                                  safe_path.string(), size_ec.message())));
+                                                  path_to_utf8(safe_path), size_ec.message())));
                     }
                     if (file_bytes > ResourceLimits::max_string_size) {
                         return make_failure_value(error_msg(
                             "FileSystem", "read_lines",
                             std::format("file '{}' exceeds the maximum size of {} bytes",
-                                        safe_path.string(), ResourceLimits::max_string_size)));
+                                        path_to_utf8(safe_path), ResourceLimits::max_string_size)));
                     }
 
-                    std::ifstream ifs{safe_path};
+                    // The size check above is only a fast path: the bounded read
+                    // enforces the limit even if the file grows in the meantime.
+                    const auto read =
+                        file_helpers::read_file_bounded(safe_path, ResourceLimits::max_string_size);
 
-                    if (!ifs) {
-                        return make_failure_value(
-                            error_msg("FileSystem", "read_lines",
-                                      std::format("cannot read file '{}'", safe_path.string())));
+                    if (read.status == file_helpers::BoundedReadStatus::OpenFailed) {
+                        return make_failure_value(error_msg(
+                            "FileSystem", "read_lines",
+                            std::format("cannot read file '{}'", path_to_utf8(safe_path))));
+                    }
+
+                    if (read.status == file_helpers::BoundedReadStatus::TooLarge) {
+                        return make_failure_value(error_msg(
+                            "FileSystem", "read_lines",
+                            std::format("file '{}' exceeds the maximum size of {} bytes",
+                                        path_to_utf8(safe_path), ResourceLimits::max_string_size)));
+                    }
+
+                    if (read.status == file_helpers::BoundedReadStatus::ReadError) {
+                        return make_failure_value(error_msg(
+                            "FileSystem", "read_lines",
+                            std::format("error reading file '{}'", path_to_utf8(safe_path))));
                     }
 
                     auto arr = std::make_shared<ArrayValue>();
 
-                    std::string line{};
+                    // Split like std::getline: '\n' terminates a line, and a
+                    // trailing newline does not produce an extra empty line.
+                    const std::string_view text{read.data};
+                    std::size_t start{0};
 
-                    while (std::getline(ifs, line)) {
+                    while (start < text.size()) {
+                        const auto newline = text.find('\n', start);
+                        const auto stop =
+                            (newline == std::string_view::npos) ? text.size() : newline;
+
                         if (arr->elements->size() >= ResourceLimits::max_array_size) {
                             return make_failure_value(
                                 "FileSystem.read_lines: file has too many lines");
                         }
 
-                        arr->elements->emplace_back(line);
-                    }
+                        arr->elements->emplace_back(std::string{text.substr(start, stop - start)});
 
-                    if (ifs.fail() && !ifs.eof()) {
-                        return make_failure_value(
-                            error_msg("FileSystem", "read_lines",
-                                      std::format("error reading file '{}'", safe_path.string())));
+                        start = stop + 1;
                     }
 
                     return make_success_value(Value{std::move(arr)});
@@ -278,9 +298,9 @@ void register_filesystem_content(const EnvPtr& env) {
                     // treated as absent.
                     const auto sym_status = std::filesystem::symlink_status(safe_path, ec);
                     if (ec || !std::filesystem::exists(sym_status)) {
-                        return make_failure_value(
-                            error_msg("FileSystem", "metadata",
-                                      std::format("path does not exist '{}'", safe_path.string())));
+                        return make_failure_value(error_msg(
+                            "FileSystem", "metadata",
+                            std::format("path does not exist '{}'", path_to_utf8(safe_path))));
                     }
 
                     const bool symlink = std::filesystem::is_symlink(sym_status);
@@ -341,9 +361,9 @@ void register_filesystem_content(const EnvPtr& env) {
                     // treated as absent — mirroring FileSystem.metadata.
                     const auto sym_status = std::filesystem::symlink_status(safe_path, ec);
                     if (ec || !std::filesystem::exists(sym_status)) {
-                        return make_failure_value(
-                            error_msg("FileSystem", "permissions",
-                                      std::format("path does not exist '{}'", safe_path.string())));
+                        return make_failure_value(error_msg(
+                            "FileSystem", "permissions",
+                            std::format("path does not exist '{}'", path_to_utf8(safe_path))));
                     }
 
                     // Follow symlinks for the permission bits so they describe the
@@ -361,9 +381,9 @@ void register_filesystem_content(const EnvPtr& env) {
                 [](const std::filesystem::path& safe_path) -> Value {
                     const auto variant = classify_file_kind(safe_path);
                     if (!variant) {
-                        return make_failure_value(
-                            error_msg("FileSystem", "kind",
-                                      std::format("path does not exist '{}'", safe_path.string())));
+                        return make_failure_value(error_msg(
+                            "FileSystem", "kind",
+                            std::format("path does not exist '{}'", path_to_utf8(safe_path))));
                     }
                     return make_success_value(make_file_kind_choice(*variant));
                 });
@@ -388,7 +408,7 @@ void register_filesystem_content(const EnvPtr& env) {
                         }
 
                         const auto rel = std::filesystem::relative(entry.path(), safe_path);
-                        arr->elements->emplace_back(rel.string());
+                        arr->elements->emplace_back(path_to_utf8(rel));
                     }
 
                     return make_success_value(Value{std::move(arr)});

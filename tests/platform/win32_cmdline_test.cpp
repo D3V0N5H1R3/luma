@@ -11,21 +11,37 @@
 // exact original arguments.
 
 #include <cstddef>
+#include <memory>
+#include <span>
 #include <string>
 #include <vector>
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+// shellapi.h must follow windows.h, which declares the types it uses.
+#include <shellapi.h>
 
 #include "common/platform_utils.hpp"
 #include "runtime/stdlib/system/platform_process.hpp"
 #include "test_framework.hpp"
 
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <shellapi.h>
-#include <windows.h>
-
-using namespace luma::platform_process;
+using luma::platform_process::build_windows_cmdline;
 
 namespace {
+
+// Frees the argument block that CommandLineToArgvW allocates.
+struct LocalFreeDeleter {
+    void operator()(wchar_t** block) const noexcept {
+        (void)LocalFree(block);
+    }
+};
+
+using ParsedArgv = std::unique_ptr<wchar_t*, LocalFreeDeleter>;
 
 // Round-trip an argv vector through build_windows_cmdline and the OS command
 // line parser. A synthetic program name is prepended because CommandLineToArgvW
@@ -38,25 +54,16 @@ void check_roundtrip(const std::vector<std::string>& argv) {
     const std::wstring wide(cmdline.begin(), cmdline.end());
 
     int argc = 0;
-    wchar_t** parsed = CommandLineToArgvW(wide.c_str(), &argc);
-    ASSERT_TRUE(parsed != nullptr);
+    const ParsedArgv parsed{CommandLineToArgvW(wide.c_str(), &argc)};
+    ASSERT_NE(parsed.get(), nullptr);
 
-    // Copy the parsed arguments out before freeing so an assertion failure below
-    // cannot leak the OS-allocated block.
-    std::vector<std::string> got;
-    got.reserve(static_cast<std::size_t>(argc));
+    const std::span<wchar_t* const> parsed_args{parsed.get(), static_cast<std::size_t>(argc)};
 
-    for (int i = 0; i < argc; ++i) {
-        got.push_back(luma::wstring_to_utf8(parsed[i]));
-    }
-
-    LocalFree(parsed);
-
-    // got[0] is the synthetic program name; the remainder must match the input.
-    ASSERT_EQ(got.size(), argv.size() + 1);
+    // parsed_args[0] is the synthetic program name; the remainder must match the input.
+    ASSERT_EQ(parsed_args.size(), argv.size() + 1);
 
     for (std::size_t i = 0; i < argv.size(); ++i) {
-        ASSERT_EQ(got[i + 1], argv[i]);
+        ASSERT_EQ(luma::wstring_to_utf8(parsed_args[i + 1]), argv[i]);
     }
 }
 

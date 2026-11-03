@@ -43,9 +43,7 @@ namespace {
 }
 
 // A predicate that always permits eviction.
-const auto always_evict = [](const std::string&) {
-    return true;
-};
+const auto always_evict = [](const std::string&) { return true; };
 
 // ─── Basic storage ─────────────────────────────────────────────────
 

@@ -19,6 +19,14 @@ record Todo {
 
 # ─── Formatting ───
 
+function string priority_color(Priority priority) {
+    return match priority {
+    case Priority.High   { "red" }
+    case Priority.Medium { "yellow" }
+    case Priority.Low    { "green" }
+    }
+}
+
 function string get_priority_label(Priority priority) {
     string label = match priority {
     case Priority.High   { "HIGH" }
@@ -26,15 +34,12 @@ function string get_priority_label(Priority priority) {
     case Priority.Low    { "LOW " }
     }
 
-    if Terminal.is_terminal() {
-        return match priority {
-        case Priority.High   { Result.unwrap(Terminal.color("red", label)) }
-        case Priority.Medium { Result.unwrap(Terminal.color("yellow", label)) }
-        case Priority.Low    { Result.unwrap(Terminal.color("green", label)) }
-        }
+    # Colour codes would corrupt piped or redirected output.
+    if !Terminal.is_terminal() {
+        return label
     }
 
-    return label
+    return Terminal.color(priority_color(priority), label) ?? label
 }
 
 function string format_todo(Todo todo) {
@@ -86,49 +91,43 @@ function array<Todo> remove_done(array<Todo> todos) {
 }
 
 function boolean has_todo(array<Todo> todos, integer id) {
-    array<Todo> matches = Result.unwrap_or(
-        Array.filter(todos, (Todo todo) -> todo.id == id), [])
-    return !Array.is_empty(matches)
+    return Array.any(todos, (Todo todo) -> todo.id == id) ?? false
 }
 
 function number count_done(array<Todo> todos) {
-    array<Todo> completed = Result.unwrap_or(
-        Array.filter(todos, (Todo todo) -> todo.is_done), [])
-    return Array.length(completed)
+    return Array.count(todos, (Todo todo) -> todo.is_done) ?? 0
 }
 
 function void show_todos(array<Todo> todos) {
     if Array.is_empty(todos) {
         print("  (no todos)")
-    } else {
-        array<Todo> pending = Result.unwrap_or(
-            Array.filter(todos, (Todo todo) -> !todo.is_done), []
-        )
-        array<Todo> completed = Result.unwrap_or(
-            Array.filter(todos, (Todo todo) -> todo.is_done), []
-        )
-
-        if !Array.is_empty(pending) {
-            print("  Pending:")
-
-            for todo in pending {
-                print(format_todo(todo))
-            }
-        }
-
-        if !Array.is_empty(completed) {
-            print("  Completed:")
-
-            for todo in completed {
-                print(format_todo(todo))
-            }
-        }
-
-        number total = Array.length(todos)
-        number done_count = Array.length(completed)
-
-        print("\n  ${done_count}/${total} completed")
+        return
     }
+
+    array<Todo> pending = Result.unwrap_or(
+        Array.filter(todos, (Todo todo) -> !todo.is_done), []
+    )
+    array<Todo> completed = Result.unwrap_or(
+        Array.filter(todos, (Todo todo) -> todo.is_done), []
+    )
+
+    if !Array.is_empty(pending) {
+        print("  Pending:")
+
+        for todo in pending {
+            print(format_todo(todo))
+        }
+    }
+
+    if !Array.is_empty(completed) {
+        print("  Completed:")
+
+        for todo in completed {
+            print(format_todo(todo))
+        }
+    }
+
+    print("\n  ${Array.length(completed)}/${Array.length(todos)} completed")
 }
 
 function void show_help() {
@@ -148,6 +147,17 @@ function string todo_prompt() {
 
 function string unknown_command_hint() {
     return "Unknown command. Try: add \"Buy milk\", add! \"Fix router\", done 3, list, quit."
+}
+
+# Matches the command word alone too, so a bare "add" reaches the
+# "please provide a title" hint instead of "Unknown command".
+function boolean is_command(string lowercase_line, string word) {
+    return lowercase_line == word || String.starts_with(lowercase_line, "${word} ")
+}
+
+# The trimmed text after the command word; empty when no argument was given.
+function string command_argument(string line, string word) {
+    return String.substring(line, String.length(word), String.length(line)) |> String.trim()
 }
 
 # ─── Main Loop ───
@@ -175,8 +185,8 @@ function void main() {
         string line = String.trim(raw_input)
         string lower = String.lowercase(line)
 
-        if String.starts_with(lower, "add! ") {
-            string title = String.trim(String.substring(line, 5, String.length(line)))
+        if is_command(lower, "add!") {
+            string title = command_argument(line, "add!")
 
             if String.is_empty(title) {
                 print("Please provide a task title, e.g. 'add! Buy milk'.")
@@ -185,8 +195,8 @@ function void main() {
 
                 print("Added: ${title} (high priority)")
             }
-        } else if String.starts_with(lower, "add ") {
-            string title = String.trim(String.substring(line, 4, String.length(line)))
+        } else if is_command(lower, "add") {
+            string title = command_argument(line, "add")
 
             if String.is_empty(title) {
                 print("Please provide a task title, e.g. 'add Buy milk'.")
@@ -195,36 +205,41 @@ function void main() {
 
                 print("Added: ${title}")
             }
-        } else if String.starts_with(lower, "done ") {
-            string id_text = String.trim(String.substring(line, 5, String.length(line)))
+        } else if is_command(lower, "done") {
+            string id_text = command_argument(line, "done")
 
-            match String.parse_integer(id_text) {
-                success(id) {
-                    if has_todo(todos, id) {
-                        todos = toggle_todo(todos, id)
+            if String.is_empty(id_text) {
+                print("Please provide a todo id, e.g. 'done 3'.")
+            } else {
+                match String.parse_integer(id_text) {
+                    success(id) {
+                        if has_todo(todos, id) {
+                            todos = toggle_todo(todos, id)
 
-                        print("Toggled #${id}")
-                    } else {
-                        print("No todo found with id #${id}.")
+                            print("Toggled #${id}")
+                        } else {
+                            print("No todo found with id #${id}.")
+                        }
                     }
-                }
-                failure(_) {
-                    print("Invalid id: ${id_text}")
+                    failure(_) {
+                        print("Invalid id: ${id_text}")
+                    }
                 }
             }
         } else if lower == "clean" {
             number completed = count_done(todos)
+            string completed_text = String.format_number(completed, 0)
 
             if completed == 0 {
                 print("No completed todos to remove.")
             } else {
                 string answer = Result.unwrap_or(
-                    Console.prompt("Remove ${completed} completed todos? (y/n): "), "n")
+                    Console.prompt("Remove ${completed_text} completed todos? (y/n): "), "n")
 
                 if String.lowercase(String.trim(answer)) == "y" {
                     todos = remove_done(todos)
 
-                    print("Removed ${completed} completed todos")
+                    print("Removed ${completed_text} completed todos")
                 } else {
                     print("Kept all todos.")
                 }
@@ -235,7 +250,7 @@ function void main() {
             show_help()
         } else if lower == "quit" || lower == "q" {
             is_running = false
-        } else if String.length(line) > 0 {
+        } else if !String.is_empty(line) {
             print(unknown_command_hint())
         }
     }

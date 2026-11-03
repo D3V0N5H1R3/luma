@@ -344,6 +344,87 @@ pub(crate) fn download_binary(
     Ok(binary_path)
 }
 
+// ─── Cached versions ──────────────────────────────────────────────
+// Each download lands in `{binary}-{version}/`. When GitHub is unreachable the
+// newest of these directories still holds a working binary, and once a newer
+// version is installed the older directories are dead weight.
+
+/// Parses the numeric components of a release version (`v0.15.2` → [0, 15, 2]).
+/// Non-numeric components (e.g. a `-rc1` suffix) end the parse.
+fn version_key(version: &str) -> Vec<u64> {
+    version
+        .trim_start_matches(['v', 'V'])
+        .split(['.', '-', '+'])
+        .map_while(|part| part.parse::<u64>().ok())
+        .collect()
+}
+
+/// Lists the directories holding cached versions of `binary_name`
+/// (`luma_lsp-v0.15.0`, …), newest version first.
+pub(crate) fn cached_version_dirs_newest_first(
+    dir_names: &[String],
+    binary_name: &str,
+) -> Vec<String> {
+    let prefix = format!("{binary_name}-");
+    let mut versions: Vec<(&String, &str)> = dir_names
+        .iter()
+        .filter_map(|name| name.strip_prefix(&prefix).map(|version| (name, version)))
+        .collect();
+    versions.sort_by(|(_, a), (_, b)| version_key(b).cmp(&version_key(a)).then_with(|| b.cmp(a)));
+    versions.into_iter().map(|(name, _)| name.clone()).collect()
+}
+
+/// Lists the directory names in `root`.
+fn dir_entries(root: &std::path::Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .collect()
+}
+
+/// Returns the newest previously downloaded binary, for use when the latest
+/// release cannot be fetched or downloaded (offline, rate-limited).
+pub(crate) fn find_cached_binary(binary_name: &str, platform: zed::Os) -> Option<String> {
+    find_cached_binary_in(std::path::Path::new("."), binary_name, platform)
+}
+
+/// [`find_cached_binary`] for the cache directory `root`; returns the binary's
+/// path relative to `root`.
+///
+/// A failed download leaves its version directory behind without a binary,
+/// so the newest directory is not necessarily usable: try each, newest first.
+pub(crate) fn find_cached_binary_in(
+    root: &std::path::Path,
+    binary_name: &str,
+    platform: zed::Os,
+) -> Option<String> {
+    let filename = binary_filename(binary_name, platform);
+    cached_version_dirs_newest_first(&dir_entries(root), binary_name)
+        .into_iter()
+        .map(|version_dir| format!("{version_dir}/{filename}"))
+        .find(|relative| root.join(relative).is_file())
+}
+
+/// Removes every cached version of `binary_name` except the directory that
+/// holds `current_binary_path`. Failures are logged and otherwise ignored.
+pub(crate) fn remove_stale_versions(binary_name: &str, current_binary_path: &str) {
+    let current_dir = current_binary_path
+        .split_once('/')
+        .map_or(current_binary_path, |(dir, _)| dir);
+    let prefix = format!("{binary_name}-");
+    for name in dir_entries(std::path::Path::new(".")) {
+        if name.starts_with(&prefix) && name != current_dir {
+            if let Err(e) = std::fs::remove_dir_all(&name) {
+                eprintln!("{LOG_PREFIX}could not remove stale {name}: {e}");
+            }
+        }
+    }
+}
+
 // ─── Checksum verification ────────────────────────────────────────
 // Binary resolution order: see extensions/shared/resolution-order.json.
 // CHECKSUMS_FILENAME is generated from extensions/shared/download-constants.json.

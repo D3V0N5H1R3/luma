@@ -1,23 +1,49 @@
 #!/bin/sh
 # Luma pre-commit hook
 # Runs clang-format (and optionally clang-tidy) on staged C++ files.
+#
+# The checks read the content that is about to be committed (the index), not
+# the working tree: otherwise a partially staged file (git add -p), or one fixed
+# after staging but not re-staged, could commit unformatted code while passing —
+# or block a commit over changes that are not part of it.
+#
+# The file scope mirrors the CI Formatting and Static Analysis jobs
+# (.github/workflows/ci.yml) and cmake/LumaRunClangTool.cmake, so the hook never
+# fails a file that CI accepts or misses one that CI checks.
 
-# Staged C++ files for clang-format — translation units and headers — emitted
-# NUL-delimited so that paths containing spaces or other whitespace stay intact.
+set -eu
+
+# Staged C++ files for clang-format: translation units and headers under the
+# directories CI formats. Renames (R) are included so that a moved-and-edited
+# file is still checked. Git pathspec wildcards match across "/", so "core/*.cpp"
+# covers every *.cpp below core/. Extra arguments (e.g. -z for NUL-delimited
+# output, which keeps paths with whitespace intact) are passed to git diff.
 staged_format_files() {
-    git diff --cached --name-only -z --diff-filter=ACM -- '*.cpp' '*.hpp'
+    git diff --cached --name-only "$@" --diff-filter=ACMR -- \
+        'core/*.cpp' 'core/*.hpp' \
+        'shared/*.cpp' 'shared/*.hpp' \
+        'language-server/source/*.cpp' 'language-server/source/*.hpp' \
+        'debugger/source/*.cpp' 'debugger/source/*.hpp' \
+        'tests/*.cpp' 'tests/*.hpp' \
+        'fuzz/*.cpp' 'fuzz/*.hpp'
 }
 
-# Staged translation units for clang-tidy (*.cpp only). Headers are not part of
-# compile_commands.json, so tidying them directly is unreliable; this matches
-# cmake/LumaRunClangTool.cmake, which likewise tidies only *.cpp.
+# Staged translation units for clang-tidy: *.cpp only (headers are not in
+# compile_commands.json), under the directories CI tidies. *_win32.cpp is
+# excluded as in CI, which never analyses it; other files absent from the
+# local compile database (e.g. *_posix.cpp in a Windows build tree) are
+# filtered out later.
 staged_tidy_files() {
-    git diff --cached --name-only -z --diff-filter=ACM -- '*.cpp'
+    git diff --cached --name-only "$@" --diff-filter=ACMR -- \
+        'core/*.cpp' 'shared/*.cpp' \
+        'language-server/source/*.cpp' 'debugger/source/*.cpp' \
+        ':(exclude)*_win32.cpp'
 }
 
 # Nothing staged to check. (Newline-delimited here so the command substitution
 # never embeds a NUL byte; the NUL-delimited lists are only piped to xargs.)
-if [ -z "$(git diff --cached --name-only --diff-filter=ACM -- '*.cpp' '*.hpp')" ]; then
+# The tidy scope is a subset of the format scope, so one check covers both.
+if [ -z "$(staged_format_files)" ]; then
     exit 0
 fi
 
@@ -25,43 +51,152 @@ fi
 # clang-format check
 # ---------------------------------------------------------------------------
 
-# Locate clang-format and verify the version is 18+.
+# Locate clang-format and verify the version is 20+ (the minimum that parses
+# the repository's .clang-format).
 CLANG_FORMAT="$(command -v clang-format 2>/dev/null || true)"
+
+# Visual Studio's "C++ Clang tools for Windows" component ships clang-format but
+# puts it on PATH only inside a Developer prompt, so on Windows fall back to the
+# copy from the newest installation that has the component. vswhere -sort lists
+# every installation newest first; -latest would search only the newest, which
+# may lack the component. The installer directory comes from ProgramFiles(x86),
+# which is not a valid shell name, hence printenv. The tree formats identically
+# with clang-format 20 (CI) and 22.
+find_visual_studio_clang_format() {
+    case "$(uname -s)" in
+        MINGW* | MSYS* | CYGWIN*) ;;
+        *) return 0 ;;
+    esac
+    command -v cygpath >/dev/null 2>&1 || return 0
+    # MSYS upper-cases inherited Windows variable names; Cygwin keeps them.
+    program_files="$(printenv 'PROGRAMFILES(X86)' 2>/dev/null ||
+        printenv 'ProgramFiles(x86)' 2>/dev/null || true)"
+    [ -n "$program_files" ] || return 0
+    vswhere="$(cygpath -u "$program_files")/Microsoft Visual Studio/Installer/vswhere.exe"
+    [ -f "$vswhere" ] || return 0
+    # An ARM64 binary does not start on an x64 host, so pick by architecture.
+    case "${PROCESSOR_ARCHITECTURE:-}" in
+        ARM64) arch=ARM64 ;;
+        *) arch=x64 ;;
+    esac
+    found="$("$vswhere" -sort -prerelease -products '*' -utf8 \
+        -find "VC\\Tools\\Llvm\\$arch\\bin\\clang-format.exe" 2>/dev/null | head -n 1 | tr -d '\r')"
+    [ -n "$found" ] || return 0
+    found="$(cygpath -u "$found")"
+    [ -f "$found" ] && printf '%s\n' "$found"
+    return 0
+}
+
+if [ -z "$CLANG_FORMAT" ]; then
+    CLANG_FORMAT="$(find_visual_studio_clang_format)"
+fi
 
 if [ -z "$CLANG_FORMAT" ]; then
     echo "Warning: clang-format not found — skipping format check." >&2
+    echo "Install clang-format 20+ (or Visual Studio's \"C++ Clang tools for Windows\")." >&2
 else
-    CF_VERSION="$("$CLANG_FORMAT" --version 2>/dev/null | grep -oE '[0-9]+' | head -1)"
-    if [ -n "$CF_VERSION" ] && [ "$CF_VERSION" -lt 18 ] 2>/dev/null; then
-        echo "Warning: clang-format version ${CF_VERSION} found, 18+ required — skipping format check." >&2
+    # Take the number after "version" so a vendor prefix (e.g. "Ubuntu") or a
+    # distro suffix in the banner cannot be mistaken for the major version.
+    CF_VERSION="$("$CLANG_FORMAT" --version 2>/dev/null | sed -n 's/.*version \([0-9][0-9]*\).*/\1/p' | head -n 1)"
+    if [ -n "$CF_VERSION" ] && [ "$CF_VERSION" -lt 20 ] 2>/dev/null; then
+        echo "Warning: clang-format version ${CF_VERSION} found, 20+ required — skipping format check." >&2
         CLANG_FORMAT=""
     fi
 fi
 
 if [ -n "$CLANG_FORMAT" ]; then
-    if ! staged_format_files | xargs -0 "$CLANG_FORMAT" --dry-run --Werror; then
+    # Each file's staged blob is piped to clang-format, with --assume-filename
+    # so .clang-format is found and diagnostics name the real path. xargs exits
+    # non-zero when any invocation fails.
+    # shellcheck disable=SC2016 # $1/$file expand in the inner shell, not here.
+    if ! staged_format_files -z | xargs -0 sh -c '
+        clang_format=$1
+        shift
+        status=0
+        for file; do
+            if ! git show ":$file" | "$clang_format" --assume-filename="$file" --dry-run --Werror; then
+                printf "clang-format: staged %s is not formatted.\n" "$file" >&2
+                status=1
+            fi
+        done
+        exit "$status"
+    ' sh "$CLANG_FORMAT"; then
+        # Under Git for Windows the path is an MSYS one (/c/...); show the
+        # Windows form, which also works when pasted into PowerShell or cmd.
+        display_path="$CLANG_FORMAT"
+        if command -v cygpath >/dev/null 2>&1; then
+            display_path="$(cygpath -w "$CLANG_FORMAT")"
+        fi
         echo "" >&2
         echo "Commit blocked: clang-format found formatting issues (listed above)." >&2
-        echo "Run 'clang-format -i <file>' on the affected files to fix them," >&2
+        echo "Run \"$display_path\" -i <file> on the affected files to fix them," >&2
         echo "then stage the changes and try again." >&2
         exit 1
     fi
 fi
 
 # ---------------------------------------------------------------------------
-# clang-tidy check (optional — only if compile_commands.json exists)
+# clang-tidy check (optional — only if a compile_commands.json exists)
 # ---------------------------------------------------------------------------
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-COMPILE_DB="$REPO_ROOT/build/compile_commands.json"
 
-# Only run clang-tidy when a compile database exists and at least one *.cpp is
-# staged (an all-header change has no translation unit to tidy). The explicit
-# *.cpp check also keeps xargs from running with empty input on GNU systems.
-if [ -f "$COMPILE_DB" ] && [ -n "$(git diff --cached --name-only --diff-filter=ACM -- '*.cpp')" ]; then
+# Use the first build tree that has a compile database: build/ (the default
+# preset) first, then the other preset trees (build-debug, build-ninja, ...).
+# Multi-config generators (Visual Studio, Xcode) do not write one.
+COMPILE_DB_DIR=""
+for dir in "$REPO_ROOT/build" "$REPO_ROOT"/build-*; do
+    if [ -f "$dir/compile_commands.json" ]; then
+        COMPILE_DB_DIR="$dir"
+        break
+    fi
+done
+
+# Only run clang-tidy when a compile database exists and at least one in-scope
+# *.cpp is staged (an all-header change has no translation unit to tidy). The
+# explicit check also keeps xargs from running with empty input on GNU systems.
+if [ -n "$COMPILE_DB_DIR" ] && [ -n "$(staged_tidy_files)" ]; then
     CLANG_TIDY="$(command -v clang-tidy 2>/dev/null || true)"
-    if [ -n "$CLANG_TIDY" ]; then
-        if ! staged_tidy_files | xargs -0 "$CLANG_TIDY" -p "$REPO_ROOT/build" --quiet; then
+    if [ -n "$CLANG_TIDY" ] && DB_FILES="$(mktemp 2>/dev/null)"; then
+        trap 'rm -f "$DB_FILES"' EXIT
+
+        # The sources the compile database lists, one per line, with the
+        # closing quote kept as an end anchor for the suffix match below.
+        # JSON-escaped Windows backslashes are normalised to "/" so a database
+        # generated on any platform matches a git path.
+        sed -n 's/.*"file"[[:space:]]*:[[:space:]]*"\(.*"\).*/\1/p' \
+            "$COMPILE_DB_DIR/compile_commands.json" | sed 's#\\\\#/#g' > "$DB_FILES"
+
+        # Files missing from the compile database (*_posix.cpp in a Windows
+        # build tree, or a new file the build tree has not been reconfigured
+        # for) are skipped: clang-tidy would parse them with
+        # default flags and report spurious errors. clang-tidy can only analyse
+        # files on disk, so it checks the working tree; that matches the staged
+        # content unless the file also has unstaged changes, so such files are
+        # skipped rather than judged on code that is not being committed. CI
+        # still analyses every skipped file.
+        # shellcheck disable=SC2016 # $1/$2/$3/$file expand in the inner shell.
+        if ! staged_tidy_files -z | xargs -0 sh -c '
+            clang_tidy=$1
+            compile_db_dir=$2
+            db_files=$3
+            shift 3
+            status=0
+            for file; do
+                if ! grep -qF -- "/$file\"" "$db_files"; then
+                    printf "Note: %s is not in the compile database — skipping clang-tidy for it.\n" "$file" >&2
+                    continue
+                fi
+                if ! git diff --quiet -- "$file"; then
+                    printf "Note: %s has unstaged changes — skipping clang-tidy for it.\n" "$file" >&2
+                    continue
+                fi
+                if ! "$clang_tidy" -p "$compile_db_dir" --quiet "$file"; then
+                    status=1
+                fi
+            done
+            exit "$status"
+        ' sh "$CLANG_TIDY" "$COMPILE_DB_DIR" "$DB_FILES"; then
             echo "" >&2
             echo "Commit blocked: clang-tidy found issues (listed above)." >&2
             echo "Fix the reported problems and try again." >&2

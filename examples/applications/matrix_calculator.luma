@@ -7,7 +7,7 @@
 # multiply / transpose / determinant / inverse / solve
 # operations, result<T> error handling for singular systems,
 # Math.approximately_equal for floating-point comparisons (the
-# language forbids '==' on numbers), and @test annotations.
+# linter warns about '==' on numbers), and @test annotations.
 #
 # Usage: luma examples/applications/matrix_calculator.luma
 # Tests: luma --test examples/applications/matrix_calculator.luma
@@ -45,29 +45,30 @@ function boolean matrices_close(array<array<number>> a, array<array<number>> b) 
 
 # ─── Rendering ───────────────────────────────────────────
 
+# Rounding through an integer hides floating-point noise and, unlike
+# Math.round_to, turns tiny negative residues into 0.0 rather than -0.0.
 function string show_number(number value) {
     integer scaled = Result.unwrap_or(Math.round(value * 1000000.0), 0)
     number restored = Result.unwrap_or(Converter.to_number(scaled), value) / 1000000.0
     return Converter.to_string(restored)
 }
 
+function string format_values(array<number> values) {
+    return values
+        |> Array.map(show_number)
+        |> Result.unwrap_or([])
+        |> String.join(", ")
+}
+
 function void print_matrix(string label, array<array<number>> matrix) {
-    print("${label}")
+    print(label)
     for row in matrix {
-        mutable array<string> cells = []
-        for value in row {
-            cells = Array.push(cells, show_number(value))
-        }
-        print("  [ ${String.join(cells, ", ")} ]")
+        print("  [ ${format_values(row)} ]")
     }
 }
 
 function void print_vector(string label, array<number> vector) {
-    mutable array<string> cells = []
-    for value in vector {
-        cells = Array.push(cells, show_number(value))
-    }
-    print("${label} [ ${String.join(cells, ", ")} ]")
+    print("${label} [ ${format_values(vector)} ]")
 }
 
 # ─── Demo ────────────────────────────────────────────────
@@ -109,14 +110,17 @@ function void main() {
     print_matrix("A =", system)
     print_vector("b =", constants)
 
-    array<number> solution = Result.unwrap_or(LinearAlgebra.solve(system, constants), [])
-    if Array.length(solution) > 0 {
-        print_vector("x =", solution)
-        array<number> check = Result.unwrap_or(LinearAlgebra.multiply_vector(system, solution), [])
-        string verified = if vectors_close(check, constants) { "yes" } else { "no" }
-        print("Verified A·x = b: ${verified}")
-    } else {
-        print("The system has no unique solution.")
+    match LinearAlgebra.solve(system, constants) {
+        success(solution) {
+            print_vector("x =", solution)
+            array<number> check =
+                Result.unwrap_or(LinearAlgebra.multiply_vector(system, solution), [])
+            string verified = if vectors_close(check, constants) { "yes" } else { "no" }
+            print("Verified A·x = b: ${verified}")
+        }
+        failure(_) {
+            print("The system has no unique solution.")
+        }
     }
 }
 

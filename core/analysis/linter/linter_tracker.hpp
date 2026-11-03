@@ -47,10 +47,10 @@ public:
 
     // ─── Scope management ───────────────────────────────────────────
     // push_scope / pop_scope maintain a flat ScopeStack<ScopeData>.  The Linter
-    // brackets them with the shared ScopeManager<Linter> guard (see
-    // analysis/common/scope_manager.hpp); this flat storage stays distinct from
-    // NameResolver's shared_ptr parent chain, which is why only the guard
-    // lifecycle is unified — see common/scope_stack.hpp §Component Usage.
+    // brackets them with the ScopeManager<Linter> guard (see
+    // analysis/common/scope_manager.hpp); the flat storage differs from the
+    // type checker's shared_ptr-linked TypeScope chain, which is why only the
+    // guard lifecycle is shared — see common/scope_stack.hpp §Component Usage.
     void push_scope();
     // Pops the current scope WITHOUT reporting unused variables.
     // The caller (Linter::pop_scope) must call report helpers first.

@@ -2,7 +2,7 @@
     "name": "luma-language",
     "displayName": "Luma Language Support",
     "description": "Syntax highlighting, language configuration, and language server integration for the Luma programming language.",
-    "version": "0.15.0",
+    "version": "0.16.0",
     "publisher": "D3V0N5H1R3",
     "license": "MIT",
     "repository": {
@@ -290,33 +290,20 @@
                 "fileLocation": [
                     "absolute"
                 ],
-                "pattern": [
-                    {
-                        "regexp": "^(SyntaxError|TypeError|CompileError|RuntimeError|Warning)(?:\\[([^\\]]+)\\])? in (.+):(\\d+):(\\d+)",
-                        "severity": 1,
-                        "code": 2,
-                        "file": 3,
-                        "line": 4,
-                        "column": 5
-                    },
-                    {
-                        "regexp": "^\\s+(.+)$",
-                        "message": 1
-                    }
-                ]
+                "pattern": {
+                    "regexp": "^((SyntaxError|TypeError|CompileError|RuntimeError|Warning)(?:\\[([^\\]]+)\\])?) in (.+):(\\d+):(\\d+)$",
+                    "message": 1,
+                    "severity": 2,
+                    "code": 3,
+                    "file": 4,
+                    "line": 5,
+                    "column": 6
+                }
             },
             {
                 "name": "luma-test",
                 "label": "Luma Test",
-                "owner": "luma",
-                "fileLocation": [
-                    "absolute"
-                ],
-                "pattern": {
-                    "regexp": "^\\s*FAIL\\s+(\\w+):\\s+(.+)$",
-                    "message": 2,
-                    "code": 1
-                }
+                "base": "$luma"
             }
         ],
         "semanticTokenScopes": [

@@ -1,32 +1,32 @@
 {
-  "include": [
-    {
-      "distro": "Debian (trixie)",
-      "image": "debian:trixie",
-      "cc": "gcc",
-      "cxx": "g++",
-      "install-cmd": "apt-get update -q && apt-get install -y cmake gcc g++ make"
-    },
-    {
-      "distro": "Kali Linux",
-      "image": "kalilinux/kali-rolling",
-      "cc": "gcc",
-      "cxx": "g++",
-      "install-cmd": "apt-get update -q && apt-get install -y cmake gcc g++ make"
-    },
-    {
-      "distro": "Fedora",
-      "image": "fedora:latest",
-      "cc": "gcc",
-      "cxx": "g++",
-      "install-cmd": "dnf install -y cmake gcc gcc-c++ make"
-    },
-    {
-      "distro": "Arch Linux",
-      "image": "archlinux:latest",
-      "cc": "gcc",
-      "cxx": "g++",
-      "install-cmd": "pacman -Syu --noconfirm cmake gcc make"
-    }
-  ]
+    "include": [
+        {
+            "distro": "Debian (trixie)",
+            "image": "debian:trixie",
+            "cc": "gcc",
+            "cxx": "g++",
+            "install-cmd": "apt-get update -q && apt-get install -y cmake gcc g++ make"
+        },
+        {
+            "distro": "Kali Linux",
+            "image": "kalilinux/kali-rolling",
+            "cc": "gcc",
+            "cxx": "g++",
+            "install-cmd": "apt-get update -q && apt-get install -y cmake gcc g++ make"
+        },
+        {
+            "distro": "Fedora",
+            "image": "fedora:44",
+            "cc": "gcc",
+            "cxx": "g++",
+            "install-cmd": "dnf install -y cmake gcc gcc-c++ make"
+        },
+        {
+            "distro": "Arch Linux",
+            "image": "archlinux:latest",
+            "cc": "gcc",
+            "cxx": "g++",
+            "install-cmd": "pacman -Syu --noconfirm cmake gcc make"
+        }
+    ]
 }

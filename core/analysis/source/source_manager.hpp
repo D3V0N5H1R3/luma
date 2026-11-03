@@ -27,6 +27,9 @@ struct SourceFile {
     // sufficient because ResourceLimits::max_source_size caps files well below
     // 4 GiB.
     std::vector<std::uint32_t> line_offsets;
+    // True for compiler-injected text registered via load_virtual(): it has no
+    // on-disk counterpart, so it is never a cache-invalidating dependency.
+    bool is_virtual{false};
 
     // Construct a source file from its components.
     // The line-offset index is built from source_text automatically.
@@ -131,6 +134,11 @@ public:
     // prelude injection, where matching a substring of an unrelated identifier
     // would be a false positive.
     [[nodiscard]] bool any_source_contains_word(std::string_view word) const;
+
+    // Every loaded source file (disk and virtual), in file_id order.
+    [[nodiscard]] const std::deque<SourceFile>& files() const {
+        return files_;
+    }
 
 private:
     FileId next_file_id_{1}; ///< Next file_id to assign (0 is reserved for "<input>" / "<repl>").

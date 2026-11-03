@@ -29,7 +29,7 @@ using luma::clamp_to_int;
 // Re-export the shared qualified-name predicate. A name is namespace-qualified
 // when it contains a '.', e.g. "Module.member" or "Choice.Variant" — used to
 // distinguish top-level symbols from members nested under a namespace prefix.
-using luma::is_qualified_name;
+using luma::symbols::is_qualified_name;
 
 // Convert a string to lowercase (ASCII-only). Returns a new string.
 [[nodiscard]] inline std::string to_lower(std::string s) {

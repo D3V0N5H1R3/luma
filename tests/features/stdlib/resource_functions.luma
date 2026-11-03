@@ -15,17 +15,21 @@ function void test_resource_with_returns_body_value() {
 
 @test
 function void test_resource_with_cleanup_does_not_affect_return() {
-    # Verify cleanup runs but its return value is discarded;
-    # the body's return value is what Resource.with returns.
-    integer body_value = 99
+    # Cleanup runs, but its return value is discarded; the body's return value
+    # is what Resource.with returns.
+    reference<boolean> cleanup_ran = Reference.new(false)
 
     integer out = Resource.with(
-        body_value,
+        99,
         (integer v) -> v,
-        (integer _v) -> 0
+        (integer _v) -> {
+            Reference.set(cleanup_ran, true)
+            return 0
+        }
     )
 
-    assert(out == 99)
+    assert(out == 99, "the cleanup's return value must be discarded")
+    assert(Reference.get(cleanup_ran))
 }
 
 @test
@@ -41,20 +45,23 @@ function void test_resource_with_string_transform() {
 
 @test
 function void test_resource_with_file_cleanup() {
-    # Write, read, then delete — cleanup simulates close.
-    result<boolean> _w = FileSystem.write_file("_test_resource_tmp.txt", "data")
+    # Write, read, then delete — the cleanup plays the role of "close".
+    # The file name is unique to this test so parallel suites cannot collide.
+    string path = "_test_resource_with_file_cleanup.txt"
+
+    assert(FileSystem.write_file(path, "data") == success(true))
 
     string content = Resource.with(
-        "_test_resource_tmp.txt",
-        (string path) -> Result.unwrap(FileSystem.read_file(path)),
-        (string path) -> FileSystem.delete(path)
+        path,
+        (string file_path) -> Result.unwrap(FileSystem.read_file(file_path)),
+        (string file_path) -> FileSystem.delete(file_path)
     )
 
     assert(content == "data")
-    assert(!Result.unwrap(FileSystem.exists("_test_resource_tmp.txt")))
+    assert(!Result.unwrap(FileSystem.exists(path)), "cleanup must delete the file")
 }
 
-# ─── Negative tests ─────────────────────────────────────
+# ─── Cleanup on body errors ───
 
 @test
 function void test_resource_with_cleanup_runs_on_error() {
@@ -104,6 +111,21 @@ function void test_resource_using_release_runs() {
 
     assert(out == 10)
     assert(Reference.get(released), "release must run after body")
+}
+
+@test
+function void test_resource_using_passes_acquired_value_to_release() {
+    # The value produced by acquire_fn is handed to both body_fn and release_fn.
+    reference<string> released_value = Reference.new("")
+
+    string out = Resource.using(
+        () -> "connection-1",
+        (string handle) -> String.uppercase(handle),
+        (string handle) -> Reference.set(released_value, handle)
+    )
+
+    assert(out == "CONNECTION-1")
+    assert(Reference.get(released_value) == "connection-1", "release must get the resource")
 }
 
 @test
@@ -304,7 +326,7 @@ function void test_resource_with_all_reverse_cleanup_order() {
     string done = Resource.with_all(
         ["a", "b", "c"],
         (array<string> _rs) -> "done",
-        (string r) -> Reference.set(order, Reference.get(order) + r)
+        (string r) -> Reference.set(order, "${Reference.get(order)}${r}")
     )
 
     assert(done == "done")
@@ -324,7 +346,7 @@ function void test_resource_with_all_cleanup_runs_on_error() {
                 assert(false, "force error")
                 return "unreachable"
             },
-            (string r) -> Reference.set(order, Reference.get(order) + r)
+            (string r) -> Reference.set(order, "${Reference.get(order)}${r}")
         )
     } catch(err) {
         caught = err
@@ -348,7 +370,7 @@ function void test_resource_with_all_continues_after_cleanup_error() {
                 assert(false, "cleanup boom")
             }
 
-            Reference.set(order, Reference.get(order) + r)
+            Reference.set(order, "${Reference.get(order)}${r}")
             return none
         }
     )

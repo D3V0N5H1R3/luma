@@ -327,6 +327,37 @@ inline void validate_container_size(std::size_t current_size, std::size_t max_si
     validate_container_size(current_size, 1, max_size, function_name, loc);
 }
 
+/// Ensures a dictionary of `current_size` entries can take `adding` more
+/// without exceeding ResourceLimits::max_dictionary_size.  Call BEFORE the
+/// operation that grows the dictionary.  Shared by every Dictionary.* insertion
+/// and the VM's `d[key] = value`, so all of them emit the same
+/// "<function>: result exceeds maximum dictionary size" error and hint.
+inline void ensure_dictionary_capacity(std::size_t current_size, std::size_t adding,
+                                       std::string_view function_name, const SourceLocation& loc) {
+    // Overflow-safe comparison (mirrors validate_container_size): rearranged so
+    // that current_size + adding cannot wrap past size_t max.
+    if (adding > ResourceLimits::max_dictionary_size ||
+        current_size > ResourceLimits::max_dictionary_size - adding) {
+        throw RuntimeError{std::format("{}: result exceeds maximum dictionary size", function_name),
+                           loc,
+                           std::format("the maximum dictionary size is {} entries",
+                                       ResourceLimits::max_dictionary_size)};
+    }
+}
+
+/// Ensures an array of `current_size` elements can take `adding` more without
+/// exceeding ResourceLimits::max_array_size ("<function>: result exceeds
+/// maximum array size").  Call BEFORE the operation that grows the array.
+inline void ensure_array_capacity(std::size_t current_size, std::size_t adding,
+                                  std::string_view function_name, const SourceLocation& loc) {
+    if (adding > ResourceLimits::max_array_size ||
+        current_size > ResourceLimits::max_array_size - adding) {
+        throw RuntimeError{
+            std::format("{}: result exceeds maximum array size", function_name), loc,
+            std::format("the maximum array size is {} elements", ResourceLimits::max_array_size)};
+    }
+}
+
 /// Append every element of `src` to `dest`, first checking that the resulting
 /// array stays within ResourceLimits::max_array_size.  Throws RuntimeError
 /// (qualified with `function_name`, e.g. "Array.concat") on overflow, matching
@@ -340,16 +371,8 @@ inline void validate_container_size(std::size_t current_size, std::size_t max_si
 template <typename Range>
 void append_bounded(std::vector<Value>& dest, const Range& src, const SourceLocation& loc,
                     std::string_view function_name) {
-    const auto adding = static_cast<std::size_t>(std::size(src));
-
-    // Overflow-safe comparison: `dest.size() + adding` could wrap past size_t
-    // max, so rearrange to `dest.size() > max - adding` (adding <= max first).
-    if (adding > ResourceLimits::max_array_size ||
-        dest.size() > ResourceLimits::max_array_size - adding) {
-        throw RuntimeError{
-            std::format("{}: result exceeds maximum array size", function_name), loc,
-            std::format("the maximum array size is {} elements", ResourceLimits::max_array_size)};
-    }
+    ensure_array_capacity(dest.size(), static_cast<std::size_t>(std::size(src)), function_name,
+                          loc);
 
     dest.insert(dest.end(), std::begin(src), std::end(src));
 }

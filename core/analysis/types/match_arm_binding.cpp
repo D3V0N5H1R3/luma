@@ -5,6 +5,7 @@
 #include <format>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "analysis/ast/declaration.hpp"
@@ -13,6 +14,7 @@
 #include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checking_context.hpp"
 #include "common/string_hash.hpp"
+#include "common/string_utils.hpp"
 
 namespace luma::match_arm_binding {
 
@@ -39,7 +41,7 @@ void bind_arm_names(TypeCheckingServices& tc, const MatchArm& arm, const TypeInf
             define_binding((subject_type.kind == TypeInfo::Kind::Result &&
                             subject_type.inner_types.size() >= 2)
                                ? subject_type.result_error_type()
-                               : TypeInfo::make(TypeInfo::Kind::String));
+                               : TypeInfo::make(TypeInfo::Kind::StdlibAny));
             break;
         case MatchArm::Kind::SomeCase:
             define_binding(
@@ -52,38 +54,106 @@ void bind_arm_names(TypeCheckingServices& tc, const MatchArm& arm, const TypeInf
     }
 }
 
+namespace {
+
+// The choice declaration a choice/variant pattern names.  The pattern's type
+// name is the choice's canonical name — qualified for a namespaced choice
+// (e.g. "Json.Value") — so the direct lookup resolves it unambiguously, even
+// when another choice shares its bare name.  A bare name still occurs for a
+// `use`-imported choice matched via a two-part pattern; fall back to a
+// declaration whose bare name matches, preferring one that declares the
+// pattern's variant (which disambiguates a bare-name clash).
+[[nodiscard]] const ChoiceDeclaration* find_pattern_choice(TypeCheckingServices& tc,
+                                                           const MatchPattern& pattern) {
+    if (const auto it = tc.choices().find(pattern.enum_type()); it != tc.choices().end()) {
+        return it->second;
+    }
+
+    const ChoiceDeclaration* bare_match{nullptr};
+
+    for (const auto& [key, decl] : tc.choices()) {
+        if (decl->name != pattern.enum_type()) {
+            continue;
+        }
+
+        if (std::ranges::any_of(decl->variants, [&](const ChoiceVariant& v) {
+                return v.name == pattern.enum_variant();
+            })) {
+            return decl;
+        }
+
+        bare_match = decl;
+    }
+
+    return bare_match;
+}
+
+// The choice declaration a choice-typed subject names (its canonical name, or
+// — for a `use`-imported choice — a bare name that only one declaration has).
+[[nodiscard]] const ChoiceDeclaration* find_subject_choice(TypeCheckingServices& tc,
+                                                           const TypeInfo& subject_type) {
+    if (const auto it = tc.choices().find(subject_type.name); it != tc.choices().end()) {
+        return it->second;
+    }
+
+    const ChoiceDeclaration* found{nullptr};
+
+    for (const auto& [key, decl] : tc.choices()) {
+        if (decl->name != subject_type.name) {
+            continue;
+        }
+
+        if (found != nullptr && found != decl) {
+            return nullptr; // ambiguous bare name — do not guess
+        }
+
+        found = decl;
+    }
+
+    return found;
+}
+
+// Does a pattern's type name denote the given choice declaration?  A live map
+// key is compared by declaration identity (keeping two choices that share a
+// bare name apart); any other name — e.g. the bare name of a namespaced choice
+// used inside its namespace — by the declaration's bare name.
+[[nodiscard]] bool pattern_names_choice(TypeCheckingServices& tc, std::string_view enum_type,
+                                        const ChoiceDeclaration& choice) {
+    if (const auto it = tc.choices().find(enum_type); it != tc.choices().end()) {
+        return it->second == &choice;
+    }
+
+    return enum_type == choice.name;
+}
+
+[[nodiscard]] bool declares_variant(const ChoiceDeclaration& choice, std::string_view variant) {
+    return std::ranges::any_of(choice.variants,
+                               [&](const ChoiceVariant& v) { return v.name == variant; });
+}
+
+void report_unknown_variant(TypeCheckingServices& tc, const ChoiceDeclaration& choice,
+                            std::string_view choice_name, std::string_view variant,
+                            const SourceLocation& location) {
+    std::vector<std::string_view> names;
+    names.reserve(choice.variants.size());
+
+    for (const auto& v : choice.variants) {
+        names.emplace_back(v.name);
+    }
+
+    tc.error(std::format("choice '{}' has no variant '{}'", choice_name, variant), location,
+             suggest_name(names, variant), DiagnosticCode::UndefinedField);
+}
+
+} // namespace
+
 void bind_choice_fields(TypeCheckingServices& tc, const MatchArm& arm, const TypeInfo& subject_type,
-                        const SourceLocation& location, bool report_unknown_variant) {
+                        const SourceLocation& location) {
     if (arm.kind() != MatchArm::Kind::ChoiceCase || !arm.has_choice_bindings()) {
         return;
     }
 
-    const auto ch_it = tc.choices().find(arm.enum_type());
-
-    // The arm's enum_type is the choice's canonical name — qualified for a
-    // namespaced choice (e.g. "Json.Value") — so the direct find above resolves
-    // it unambiguously, even when another choice shares its bare name.  A bare
-    // name still occurs for a `use`-imported choice matched via a two-part
-    // pattern; fall back to a declaration whose bare name matches and that
-    // actually declares the arm's variant (the variant check disambiguates any
-    // bare-name clash).
-    const ChoiceDeclaration* choice_decl_ptr =
-        ch_it != tc.choices().end() ? ch_it->second : nullptr;
-
-    if (choice_decl_ptr == nullptr) {
-        for (const auto& [key, decl] : tc.choices()) {
-            const bool bare_name_matches = decl->name == arm.enum_type();
-            const bool declares_variant =
-                std::ranges::any_of(decl->variants, [&](const ChoiceVariant& v) {
-                    return v.name == arm.enum_variant();
-                });
-
-            if (bare_name_matches && declares_variant) {
-                choice_decl_ptr = decl;
-                break;
-            }
-        }
-    }
+    const ChoiceDeclaration* choice_decl_ptr = find_pattern_choice(tc, arm);
 
     if (choice_decl_ptr == nullptr) {
         return;
@@ -119,12 +189,7 @@ void bind_choice_fields(TypeCheckingServices& tc, const MatchArm& arm, const Typ
         std::ranges::find(choice_decl.variants, arm.enum_variant(), &ChoiceVariant::name);
 
     if (variant_it == choice_decl.variants.end()) {
-        if (report_unknown_variant) {
-            tc.error(
-                std::format("choice '{}' has no variant '{}'", arm.enum_type(), arm.enum_variant()),
-                location, "check the choice type definition for available variants");
-        }
-
+        // check_arm_patterns() reports the unknown variant.
         return;
     }
 
@@ -215,28 +280,208 @@ void bind_record_fields(TypeCheckingServices& tc, std::string_view record_type,
             continue;
         }
 
-        tc.context().current_scope->define(field_name, tc.resolve_type(field_it->type),
-                                           {.is_mutable = is_mutable}, location);
+        const auto field_type = tc.resolve_type(field_it->type);
+
+        // `P { x } = p` at a REPL input's top level redefines the global `x`
+        // like `integer x = …` does (a no-op anywhere else, e.g. in a match arm).
+        type_check_helpers::check_repl_redefinition(tc, field_name, field_type, location);
+        tc.context().current_scope->define(field_name, field_type, {.is_mutable = is_mutable},
+                                           location);
     }
 }
 
-void merge_arm_ownership(TypeCheckingServices& tc, const TypeScope::OwnershipSnapshot& before,
-                         const std::vector<TypeScope::OwnershipSnapshot>& arm_snapshots) {
-    // Conservatively prevent use-after-move across arms: if any arm consumed a
-    // variable that was still live before the match, mark it consumed here too.
-    for (const auto& [name, was_consumed_before] : before) {
-        if (was_consumed_before) {
-            continue;
+void merge_branch_ownership(TypeCheckingServices& tc, const TypeScope::OwnershipSnapshot& before,
+                            const std::vector<TypeScope::OwnershipSnapshot>& branch_snapshots) {
+    // No branch falls through: the code after the if/match is unreachable, so
+    // its ownership state is irrelevant — keep the pre-branch state.
+    if (branch_snapshots.empty()) {
+        tc.context().current_scope->restore_ownership(before);
+        return;
+    }
+
+    // Conservatively prevent use-after-move across branches: a unique variable
+    // consumed on any path is consumed afterwards.  A branch that left a
+    // variable untouched keeps its pre-branch state.
+    for (const auto& entry : before) {
+        // Plain locals rather than a structured binding captured by the lambda
+        // below: clang-analyzer mis-models a captured structured-binding
+        // reference as an undefined pointer (a core.NullDereference false
+        // positive).
+        const auto& name = entry.first;
+        const bool was_consumed_before = entry.second;
+
+        const auto consumed_after = [&](const TypeScope::OwnershipSnapshot& snapshot) {
+            const auto found = std::ranges::find(snapshot, name, &TypeScope::OwnershipEntry::first);
+            return found != snapshot.end() ? found->second : was_consumed_before;
+        };
+
+        tc.context().current_scope->mark_consumed(
+            name, std::ranges::any_of(branch_snapshots, consumed_after));
+    }
+}
+
+void check_arm_patterns(TypeCheckingServices& tc, const MatchArm& arm, const TypeInfo& subject_type,
+                        const SourceLocation& match_location) {
+    const bool is_dynamic_subject = subject_type.kind == TypeInfo::Kind::StdlibAny ||
+                                    subject_type.kind == TypeInfo::Kind::Unknown;
+    const auto& arm_location = arm.location.value_or(match_location);
+
+    // Reports a pattern that can never match a subject of this type.  An
+    // interface-typed subject is left alone: its dynamic value is not known.
+    const auto require_subject = [&](bool fits, std::string_view pattern_text,
+                                     std::string_view expected) {
+        if (fits || subject_type.kind == TypeInfo::Kind::Interface) {
+            return;
         }
 
-        const bool consumed_in_any = std::ranges::any_of(arm_snapshots, [&](const auto& snap) {
-            return std::ranges::any_of(
-                snap, [&](const auto& entry) { return entry.first == name && entry.second; });
-        });
+        tc.error(std::format("match arm has {} pattern but subject is '{}'", pattern_text,
+                             subject_type.to_string()),
+                 arm_location, std::format("{} patterns can only match {}", pattern_text, expected),
+                 DiagnosticCode::TypeMismatch);
+    };
 
-        if (consumed_in_any) {
-            tc.context().current_scope->mark_consumed(name, true);
+    // A choice/variant pattern must name a variant of the subject's own
+    // choice: the runtime test compares only the variant name, so
+    // `case Badge.Circle(label)` on a `Shape` would match `Shape.Circle` and
+    // bind its fields under Badge's field types.
+    const auto check_choice_pattern = [&](const MatchPattern& pattern) {
+        const auto pattern_text =
+            std::format("'{}.{}'", pattern.enum_type(), pattern.enum_variant());
+
+        if (is_dynamic_subject || subject_type.kind == TypeInfo::Kind::Interface) {
+            if (const auto* named = find_pattern_choice(tc, pattern);
+                named != nullptr && !declares_variant(*named, pattern.enum_variant())) {
+                report_unknown_variant(tc, *named, pattern.enum_type(), pattern.enum_variant(),
+                                       arm_location);
+            }
+
+            return;
         }
+
+        if (subject_type.kind != TypeInfo::Kind::Choice) {
+            require_subject(false, std::format("choice {}", pattern_text), "values of that choice");
+            return;
+        }
+
+        const auto* subject_choice = find_subject_choice(tc, subject_type);
+
+        if (subject_choice == nullptr) {
+            return;
+        }
+
+        if (!pattern_names_choice(tc, pattern.enum_type(), *subject_choice)) {
+            tc.error(std::format("match arm pattern {} is not a variant of the subject's choice "
+                                 "type '{}'",
+                                 pattern_text, subject_type.to_string()),
+                     arm_location,
+                     std::format("match a '{}' value against its own variants, e.g. 'case "
+                                 "{}.{}'",
+                                 subject_type.to_string(), subject_type.name,
+                                 subject_choice->variants.empty()
+                                     ? std::string{"Variant"}
+                                     : subject_choice->variants.front().name),
+                     DiagnosticCode::TypeMismatch);
+            return;
+        }
+
+        if (!declares_variant(*subject_choice, pattern.enum_variant())) {
+            report_unknown_variant(tc, *subject_choice, pattern.enum_type(), pattern.enum_variant(),
+                                   arm_location);
+        }
+    };
+
+    // Checks one pattern of the arm — the arm itself or a `case A | B`
+    // alternative.  Integer, string, and range patterns carry their value
+    // in the pattern itself; only comparison patterns hold an expression.
+    const auto check_pattern = [&](const MatchPattern& pattern) {
+        std::optional<TypeInfo> value_type;
+
+        if (pattern.comparison_value()) {
+            value_type = tc.infer_expression_type(*pattern.comparison_value());
+        }
+
+        if (pattern.kind() == MatchArm::Kind::ChoiceCase ||
+            pattern.kind() == MatchArm::Kind::VariantCase) {
+            check_choice_pattern(pattern);
+            return;
+        }
+
+        if (is_dynamic_subject) {
+            return;
+        }
+
+        switch (pattern.kind()) {
+            case MatchArm::Kind::IntegerRangeCase:
+                if (subject_type.kind != TypeInfo::Kind::Integer) {
+                    tc.error(std::format("match arm has range case but subject is '{}'",
+                                         subject_type.to_string()),
+                             pattern.range_location(),
+                             "range case arms can only match integer values");
+                }
+                break;
+
+            case MatchArm::Kind::IntegerCase:
+                if (subject_type.kind != TypeInfo::Kind::Integer) {
+                    tc.error(std::format("match arm has integer case but subject is '{}'",
+                                         subject_type.to_string()),
+                             arm_location, "integer case arms can only match integer values");
+                }
+                break;
+
+            case MatchArm::Kind::StringCase:
+                if (subject_type.kind != TypeInfo::Kind::String) {
+                    tc.error(std::format("match arm has string case but subject is '{}'",
+                                         subject_type.to_string()),
+                             arm_location, "string case arms can only match string values");
+                }
+                break;
+
+            case MatchArm::Kind::BooleanCase:
+                require_subject(subject_type.kind == TypeInfo::Kind::Boolean,
+                                pattern.boolean_value() ? "'true'" : "'false'", "boolean values");
+                break;
+
+            case MatchArm::Kind::SomeCase:
+                require_subject(subject_type.kind == TypeInfo::Kind::Optional, "'some'",
+                                "optional values");
+                break;
+
+            case MatchArm::Kind::NoneCase:
+                require_subject(subject_type.kind == TypeInfo::Kind::Optional ||
+                                    subject_type.kind == TypeInfo::Kind::None,
+                                "'none'", "optional values");
+                break;
+
+            case MatchArm::Kind::SuccessResult:
+                require_subject(subject_type.kind == TypeInfo::Kind::Result, "'success'",
+                                "result values");
+                break;
+
+            case MatchArm::Kind::FailureResult:
+                require_subject(subject_type.kind == TypeInfo::Kind::Result, "'failure'",
+                                "result values");
+                break;
+
+            case MatchArm::Kind::Comparison:
+                if (value_type && !tc.is_assignable(subject_type, *value_type) &&
+                    !tc.is_assignable(*value_type, subject_type)) {
+                    tc.error(std::format("match comparison type '{}' is not compatible with "
+                                         "subject type '{}'",
+                                         value_type->to_string(), subject_type.to_string()),
+                             pattern.comparison_value()->location,
+                             "ensure the case value type matches the match subject type");
+                }
+                break;
+
+            default:
+                break;
+        }
+    };
+
+    check_pattern(arm);
+
+    for (const auto& alternative : arm.alternatives) {
+        check_pattern(alternative);
     }
 }
 

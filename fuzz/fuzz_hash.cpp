@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "common/crc32.hpp"
 #include "common/hex_codec.hpp"
@@ -46,7 +47,7 @@ extern "C" int LLVMFuzzerInitialize(int* /*argc*/, char*** /*argv*/) {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             using luma::crc32_hash;
             using luma::from_hex_digit;
             using luma::to_hex;
@@ -62,8 +63,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                 luma::fuzz::trap(); // hex output is not twice the input length.
             }
 
-            const auto hex_ptr =
-                to_hex(reinterpret_cast<const unsigned char*>(input.data()), input.size());
+            const std::vector<unsigned char> bytes(input.begin(), input.end());
+            const auto hex_ptr = to_hex(bytes.data(), bytes.size());
             if (hex_ptr != hex) {
                 luma::fuzz::trap(); // the to_hex overloads disagree.
             }

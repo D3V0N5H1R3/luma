@@ -87,8 +87,7 @@ public:
 private:
     // Platform-specific saved terminal state.  Defined in line_editor_posix.cpp
     // and line_editor_win32.cpp so <termios.h> / <windows.h> stay out of this
-    // widely-included header, mirroring how cli/terminal.hpp keeps <windows.h>
-    // confined to its .cpp.
+    // widely-included header.
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

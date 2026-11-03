@@ -4,10 +4,11 @@
 # Build via the top-level CMakeLists.txt with LUMA_BUILD_FUZZ=ON:
 #   cmake -B build-fuzz -DCMAKE_BUILD_TYPE=Debug \
 #         -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-#         -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address" \
+#         -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined \
+#                            -fno-sanitize-recover=undefined" \
 #         -DLUMA_BUILD_FUZZ=ON
-#   cmake --build build-fuzz --parallel
-#   ./build-fuzz/fuzz/fuzz_lexer corpus/lexer/ -max_total_time=300
+#   cmake --build build-fuzz --target luma_fuzzers --parallel
+#   ./build-fuzz/fuzz_lexer fuzz/corpus/lexer/ -dict=fuzz/dictionary.txt -max_total_time=300
 
 if(NOT TARGET luma_analysis)
     message(FATAL_ERROR
@@ -17,34 +18,79 @@ endif()
 # Fuzzing dictionary for guided input generation.
 set(LUMA_FUZZ_DICTIONARY "${CMAKE_CURRENT_SOURCE_DIR}/dictionary.txt")
 
-# Wall-clock seconds each *_quick CTest entry spends fuzzing.  Override with
-# -DLUMA_FUZZ_QUICK_TIME=<secs> for longer smoke runs in CI.
-set(LUMA_FUZZ_QUICK_TIME "10" CACHE STRING
-    "Seconds each fuzz *_quick CTest entry runs")
+# LUMA_FUZZ_QUICK_TIME (wall-clock seconds per *_quick CTest entry) is a cache
+# option in the root CMakeLists.txt; override with -DLUMA_FUZZ_QUICK_TIME=<secs>.
 
-# Detect whether the global flags already include address sanitizer.
-# When they don't (e.g. on Windows where ASan requires the entire TU
-# to be built consistently), omit it from the per-target flags.
+# Per-input wall-clock limit (seconds) for the *_quick CTest entries.  An input
+# that runs longer is reported as a timeout instead of silently consuming the
+# whole run.  Keep in step with the -timeout in .github/workflows/fuzz.yml.
+set(LUMA_FUZZ_UNIT_TIMEOUT 25)
+
+# Mirror the sanitizers the global flags already enable onto each target's
+# compile and link line.  A sanitizer missing from the global flags is omitted
+# here too (e.g. on Windows, where ASan requires every TU to be built
+# consistently).  UndefinedBehaviorSanitizer turns silent undefined behaviour —
+# signed overflow, invalid shifts, misaligned access — into a crash the fuzzer
+# can report; pair it with -fno-sanitize-recover=undefined in the global flags
+# so a finding aborts instead of only printing a diagnostic.
+set(LUMA_FUZZ_SANITIZERS fuzzer)
 if(CMAKE_CXX_FLAGS MATCHES "address")
-    set(LUMA_FUZZ_SANITIZERS fuzzer,address)
-else()
-    set(LUMA_FUZZ_SANITIZERS fuzzer)
+    string(APPEND LUMA_FUZZ_SANITIZERS ",address")
+endif()
+if(CMAKE_CXX_FLAGS MATCHES "undefined")
+    string(APPEND LUMA_FUZZ_SANITIZERS ",undefined")
 endif()
 
-# On Windows with clang-cl, the Clang runtime libraries may not be on
-# the default library search path.  Locate them via the compiler's
-# resource directory so that lld-link can find the fuzzer runtime.
+# On Windows with clang-cl, the linker (lld-link) does not understand
+# -fsanitize=fuzzer, so the Clang runtime libraries are linked explicitly by full
+# path. They live in the compiler's resource directory and carry the target
+# architecture in their name (clang_rt.fuzzer-<arch>.lib).
 if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     execute_process(
         COMMAND "${CMAKE_CXX_COMPILER}" /clang:--print-resource-dir
-        OUTPUT_VARIABLE CLANG_RESOURCE_DIR
+        OUTPUT_VARIABLE _clang_resource_dir
         OUTPUT_STRIP_TRAILING_WHITESPACE)
-    set(CLANG_RT_LIB_DIR "${CLANG_RESOURCE_DIR}/lib/windows")
+
+    if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "^(x64|AMD64)$")
+        set(_clang_rt_arch x86_64)
+    elseif(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "^ARM64")
+        set(_clang_rt_arch aarch64)
+    elseif(CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "X86")
+        set(_clang_rt_arch i386)
+    else()
+        message(FATAL_ERROR "Unsupported fuzzing architecture: "
+            "'${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}'")
+    endif()
+
+    set(_clang_rt_dir "${_clang_resource_dir}/lib/windows")
+    set(LUMA_FUZZ_RUNTIME_LIBS "${_clang_rt_dir}/clang_rt.fuzzer-${_clang_rt_arch}.lib")
+    if(LUMA_FUZZ_SANITIZERS MATCHES "address")
+        list(APPEND LUMA_FUZZ_RUNTIME_LIBS
+            "${_clang_rt_dir}/clang_rt.asan_dynamic-${_clang_rt_arch}.lib")
+    endif()
+    if(LUMA_FUZZ_SANITIZERS MATCHES "undefined")
+        list(APPEND LUMA_FUZZ_RUNTIME_LIBS
+            "${_clang_rt_dir}/clang_rt.ubsan_standalone-${_clang_rt_arch}.lib"
+            "${_clang_rt_dir}/clang_rt.ubsan_standalone_cxx-${_clang_rt_arch}.lib")
+    endif()
+
+    foreach(_runtime_lib IN LISTS LUMA_FUZZ_RUNTIME_LIBS)
+        if(NOT EXISTS "${_runtime_lib}")
+            message(FATAL_ERROR "Clang fuzzing runtime not found: ${_runtime_lib}")
+        endif()
+    endforeach()
 endif()
+
+# Aggregate target that builds every fuzzer and nothing else.  CI builds it
+# (`cmake --build build-fuzz --target luma_fuzzers`) instead of the default
+# "all", which would also compile every test, the language server and the
+# debugger under ASan + UBSan — enough to exhaust a hosted runner.
+add_custom_target(luma_fuzzers)
 
 # Helper — create a fuzz target with sanitizer flags on the link line.
 function(luma_add_fuzz_target name source lib)
     add_executable(${name} ${source})
+    add_dependencies(luma_fuzzers ${name})
     luma_set_compile_options(${name})
     # Match the production executables' enlarged stack so that deeply-nested
     # input reaches the parser's depth guard (a recoverable diagnostic) instead
@@ -54,14 +100,8 @@ function(luma_add_fuzz_target name source lib)
     target_link_libraries(${name} PRIVATE ${lib})
     target_compile_options(${name} PRIVATE -fsanitize=${LUMA_FUZZ_SANITIZERS})
 
-    # On Windows with clang-cl, the linker (lld-link) does not understand
-    # -fsanitize=fuzzer.  Link the Clang fuzzer runtime library explicitly.
-    if(CLANG_RT_LIB_DIR)
-        target_link_directories(${name} PRIVATE "${CLANG_RT_LIB_DIR}")
-        target_link_libraries(${name} PRIVATE clang_rt.fuzzer-x86_64)
-        if(LUMA_FUZZ_SANITIZERS MATCHES "address")
-            target_link_libraries(${name} PRIVATE clang_rt.asan_dynamic-x86_64)
-        endif()
+    if(LUMA_FUZZ_RUNTIME_LIBS)
+        target_link_libraries(${name} PRIVATE ${LUMA_FUZZ_RUNTIME_LIBS})
     else()
         target_link_options(${name} PRIVATE -fsanitize=${LUMA_FUZZ_SANITIZERS})
     endif()
@@ -74,22 +114,24 @@ function(luma_add_fuzz_target name source lib)
     set(corpus_dir "${CMAKE_CURRENT_SOURCE_DIR}/corpus/${corpus_subdir}")
 
     # Register a convenience CTest entry that uses the dictionary and the
-    # target's own seed corpus.
+    # target's own seed corpus.  -close_fd_mask=1 closes the target's stdout so
+    # the programs fuzz_vm / fuzz_structured run cannot flood the log.
     add_test(
         NAME ${name}_quick
         COMMAND ${name}
             -dict=${LUMA_FUZZ_DICTIONARY}
             -max_total_time=${LUMA_FUZZ_QUICK_TIME}
+            -timeout=${LUMA_FUZZ_UNIT_TIMEOUT}
+            -close_fd_mask=1
             ${corpus_dir}
     )
 endfunction()
 
-# Targets are listed in the same order as the README "Targets" table.
+# Every target below is documented in the DIRECTORY.md "Targets" table.
 # Analysis-only stages link luma_analysis; stages that compile or execute
 # bytecode link luma_core.
 luma_add_fuzz_target(fuzz_lexer            fuzz_lexer.cpp            luma_analysis)
 luma_add_fuzz_target(fuzz_parser           fuzz_parser.cpp           luma_analysis)
-luma_add_fuzz_target(fuzz_resolver         fuzz_resolver.cpp         luma_analysis)
 luma_add_fuzz_target(fuzz_type_checker     fuzz_type_checker.cpp     luma_analysis)
 luma_add_fuzz_target(fuzz_linter           fuzz_linter.cpp           luma_analysis)
 luma_add_fuzz_target(fuzz_compiler         fuzz_compiler.cpp         luma_core)

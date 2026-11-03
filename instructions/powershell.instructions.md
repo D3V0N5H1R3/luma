@@ -50,17 +50,17 @@ Write the simplest script that solves the problem correctly.
 
 ## 2 — Naming Conventions
 
-| Entity             | Convention           | Examples                                               |
-| ------------------ | -------------------- | ------------------------------------------------------ |
-| Functions/cmdlets  | `PascalCase`         | `Get-BuildOutput`, `Invoke-LumaTest`                   |
-| Verb-Noun pairing  | Approved verbs       | `Get-`, `Set-`, `New-`, `Remove-`, `Invoke-`, `Test-`  |
-| Variables          | `PascalCase`         | `$TotalCount`, `$OutputDir`, `$IsVerbose`              |
-| Parameters         | `PascalCase`         | `-FilePath`, `-OutputDirectory`, `-Force`              |
-| Constants          | `PascalCase`         | `$MaxRetries`, `$DefaultTimeout`                       |
-| Private functions  | `PascalCase`         | Not exported from module — visibility controls access  |
-| File names         | `PascalCase`         | `Build-Project.ps1`, `LumaHelpers.psm1`               |
-| Boolean variables  | question             | `$IsReady`, `$HasErrors`, `$ShouldClean`               |
-| Script parameters  | `PascalCase`         | `param($BuildDir, $Configuration)`                     |
+| Entity            | Convention     | Examples                                              |
+| ----------------- | -------------- | ----------------------------------------------------- |
+| Functions/cmdlets | `PascalCase`   | `Get-BuildOutput`, `Invoke-LumaTest`                  |
+| Verb-Noun pairing | Approved verbs | `Get-`, `Set-`, `New-`, `Remove-`, `Invoke-`, `Test-` |
+| Variables         | `PascalCase`   | `$TotalCount`, `$OutputDir`, `$IsVerbose`             |
+| Parameters        | `PascalCase`   | `-FilePath`, `-OutputDirectory`, `-Force`             |
+| Constants         | `PascalCase`   | `$MaxRetries`, `$DefaultTimeout`                      |
+| Private functions | `PascalCase`   | Not exported from module — visibility controls access |
+| File names        | `PascalCase`   | `Build-Project.ps1`, `LumaHelpers.psm1`               |
+| Boolean variables | question       | `$IsReady`, `$HasErrors`, `$ShouldClean`              |
+| Script parameters | `PascalCase`   | `param($BuildDir, $Configuration)`                    |
 
 - Use [approved verbs](https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/approved-verbs-for-windows-powershell-commands) for function names. Run `Get-Verb` to list them.
 - Name what the value represents, not its type. `$OutputDirectory` — good. `$d` — bad.
@@ -530,6 +530,14 @@ Invoke-Expression $UserInput
 - Use `Should` assertions: `-Be`, `-BeExactly`, `-BeNullOrEmpty`, `-Throw`, `-HaveCount`.
 - Mock external dependencies with `Mock` to isolate units.
 
+> **In this repository:** no Pester tests exist today, and the PowerShell CI
+> gate ([`ci-powershell.yml`](../.github/workflows/ci-powershell.yml)) runs only
+> PSScriptAnalyzer. Tooling with enough logic to need tests is written in Python
+> instead (for example the prompt pipeline in [`scripts/pipeline/`](../scripts/pipeline),
+> tested with `unittest`). If you add the first `*.Tests.ps1`, also add a runner
+> script, a CI job that runs it, and a Pester pin in
+> [`.devcontainer/devcontainer.json`](../.devcontainer/devcontainer.json).
+
 ```powershell
 # Build-Project.Tests.ps1
 Describe 'Build-Project' {
@@ -620,6 +628,6 @@ foreach ($Id in $TargetIds) {
 - [ ] No array `+=` in loops. `[List[T]]` or pipeline collection used.
 - [ ] Paths constructed with `Join-Path`. `$PSScriptRoot` for relative paths.
 - [ ] No `Invoke-Expression` on untrusted input. `-LiteralPath` for external paths.
-- [ ] Pester tests cover the primary success and failure paths.
+- [ ] Pester tests (run in CI) cover the primary success and failure paths of non-trivial logic.
 - [ ] Names follow the conventions in §2. Approved verbs used.
 - [ ] Files end with a single trailing newline.

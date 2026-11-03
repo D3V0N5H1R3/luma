@@ -1,57 +1,108 @@
 // Standard library tests: Log.
 
 #include <algorithm>
+#include <array>
+#include <exception>
 #include <filesystem>
+#include <iostream>
 #include <string>
+#include <string_view>
+#include <utility>
 
 #include "stdlib_test_helpers.hpp"
 
+using luma::Value;
+using luma::test::CapturedStream;
+using luma::test::eval;
+using luma::test::make_sandboxed_std_env;
+using luma::test::make_std_env;
+using luma::test::read_file_text;
+using luma::test::TempFile;
+
 namespace {
 
-// Route Log output to a private file, evaluate the Luma program, and return the
-// file's contents.  The program is wrapped with a reset + redirect prologue and
-// a reset epilogue: Log.reset() closes the file stream (flushing the bytes and
-// making the file readable) and restores the process-global LogState to its
-// defaults, so no configuration leaks into subsequent tests.  A timestamp-free
-// format keeps the captured text deterministic for exact comparison.
-[[nodiscard]] std::string capture_log_output(const std::string& program) {
+// Restore the process-global Log configuration (level, format, output sink,
+// context) to its defaults on construction and on destruction, so a test that
+// throws part-way through can never leak a redirect or level into later tests.
+// Log.reset() also closes any file sink, flushing it so the file is readable.
+class ScopedLogReset {
+public:
+    ScopedLogReset() {
+        reset();
+    }
+
+    ScopedLogReset(const ScopedLogReset&) = delete;
+    ScopedLogReset& operator=(const ScopedLogReset&) = delete;
+    ScopedLogReset(ScopedLogReset&&) = delete;
+    ScopedLogReset& operator=(ScopedLogReset&&) = delete;
+
+    ~ScopedLogReset() noexcept {
+        try {
+            reset();
+        } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+            // An exception must not escape a destructor.
+        }
+    }
+
+private:
+    static void reset() {
+        // Log.reset() returns nothing worth checking.
+        (void)eval("Log.reset()");
+    }
+};
+
+// Strip carriage returns so captured output compares equal to '\n'-terminated
+// expectations on every platform (the log file stream writes in text mode, so
+// on Windows newlines are stored as CRLF).
+[[nodiscard]] std::string without_carriage_returns(std::string text) {
+    const auto removed = std::ranges::remove(text, '\r');
+    text.erase(removed.begin(), removed.end());
+    return text;
+}
+
+// Route Log output to a private file through `set_output_expr`, evaluate the
+// Luma program, and return the file's contents. The Log configuration is reset
+// before and after, so nothing leaks into subsequent tests.
+[[nodiscard]] std::string capture_log_output_via(const std::string& set_output_expr,
+                                                 const std::string& program) {
     // Log.set_output opens the file in append mode, so a TempFile gives a clean
     // (truncated) slate up front and guarantees the file is removed on scope
-    // exit — even if the eval below throws before cleanup would otherwise run.
+    // exit — even if the eval below throws.
     const TempFile log_file{std::filesystem::path{"_test_log_capture.log"}, ""};
 
-    eval("Log.reset()\n"
-         "Log.set_output(\"_test_log_capture.log\")\n" +
-         program + "\nLog.reset()\n");
+    {
+        const ScopedLogReset log_reset;
+        // The program's last statement is a logging call, which yields nothing.
+        (void)eval(set_output_expr + "\n" + program);
+    }
 
-    // The log file stream writes in text mode, so on Windows newlines are
-    // stored as CRLF.  Strip carriage returns so captured output compares
-    // equal to '\n'-terminated expectations on every platform.
-    std::string content = read_file_text(log_file.path());
-    content.erase(std::remove(content.begin(), content.end(), '\r'), content.end());
+    return without_carriage_returns(read_file_text(log_file.path()));
+}
 
-    return content;
+// Route Log output to a private file with the string-path form of
+// Log.set_output, evaluate the program, and return the file's contents. Tests
+// that pin a format keep the captured text deterministic for exact comparison.
+[[nodiscard]] std::string capture_log_output(const std::string& program) {
+    return capture_log_output_via("Log.set_output(\"_test_log_capture.log\")", program);
+}
+
+// Evaluate the Luma program with the default Log configuration (output to
+// stderr) and return everything it wrote to std::cerr.
+[[nodiscard]] std::string capture_stderr_log(const std::string& program) {
+    const ScopedLogReset log_reset;
+    const CapturedStream captured{std::cerr};
+
+    // The program's last statement is a logging call, which yields nothing.
+    (void)eval(program);
+
+    return captured.str();
 }
 
 // Reset the global log level, apply the given set expression, and read the
 // level back.  Returns the resulting Log.Level choice value.
 [[nodiscard]] Value level_roundtrip(const std::string& set_expr) {
-    return eval("Log.reset()\n" + set_expr + "\nLog.get_level()");
-}
-
-// Like capture_log_output, but the caller supplies the exact Log.set_output(...)
-// expression instead of the default string-path form.  Used to prove the typed
-// Log.Output.File(path) variant writes to a file identically to the string form.
-[[nodiscard]] std::string capture_log_output_via(const std::string& set_output_expr,
-                                                 const std::string& program) {
-    const TempFile log_file{std::filesystem::path{"_test_log_capture.log"}, ""};
-
-    eval("Log.reset()\n" + set_output_expr + "\n" + program + "\nLog.reset()\n");
-
-    std::string content = read_file_text(log_file.path());
-    content.erase(std::remove(content.begin(), content.end(), '\r'), content.end());
-
-    return content;
+    const ScopedLogReset log_reset;
+    return eval(set_expr + "\nLog.get_level()");
 }
 
 } // namespace
@@ -59,7 +110,7 @@ namespace {
 // ─── Registration ───
 
 static void test_log_module() {
-    const auto env = luma::test::make_std_env();
+    const auto env = make_std_env();
 
     ASSERT_TRUE(env->has("Log.debug"));
     ASSERT_TRUE(env->has("Log.information"));
@@ -77,42 +128,46 @@ static void test_log_module() {
 static void test_log_set_output_disabled_in_sandbox() {
     // set_output opens files, so it is withheld from sandboxed environments;
     // the pure-configuration functions remain available.
-    const auto env = luma::test::make_std_env(/*sandbox=*/true);
+    const auto env = make_sandboxed_std_env();
 
     ASSERT_FALSE(env->has("Log.set_output"));
     ASSERT_TRUE(env->has("Log.information"));
     ASSERT_TRUE(env->has("Log.set_level"));
 }
 
-// ─── Emission smoke tests (no throw) ───
+// ─── Emission with the default configuration (stderr, default format) ───
 
 static void test_log_debug() {
-    eval("Log.debug(\"test debug\")");
+    // Debug lies below the default Information threshold, so lower the level.
+    const auto out = capture_stderr_log("Log.set_level(Log.Level.Debug)\n"
+                                        "Log.debug(\"test debug\")");
+
+    ASSERT_NE(out.find("[DEBUG] test debug\n"), std::string::npos);
 }
 
 static void test_log_info() {
-    // Log.information just prints — no throw means success.
-    eval("Log.information(\"test message\")");
+    const auto out = capture_stderr_log("Log.information(\"test message\")");
+
+    ASSERT_NE(out.find("[INFO] test message\n"), std::string::npos);
 }
 
 static void test_log_warn() {
-    eval("Log.warning(\"test warning\")");
+    const auto out = capture_stderr_log("Log.warning(\"test warning\")");
+
+    ASSERT_NE(out.find("[WARN] test warning\n"), std::string::npos);
 }
 
 static void test_log_error() {
-    eval("Log.error(\"test error\")");
+    const auto out = capture_stderr_log("Log.error(\"test error\")");
+
+    ASSERT_NE(out.find("[ERROR] test error\n"), std::string::npos);
 }
 
 // ─── Level get/set ───
 
-static void test_log_get_level() {
-    const auto v = eval("Log.get_level()");
-
-    ASSERT_TRUE(v.is_string() || v.is_choice());
-}
-
 static void test_log_get_level_returns_level_choice() {
-    const auto v = eval("Log.reset()\nLog.get_level()");
+    const ScopedLogReset log_reset;
+    const auto v = eval("Log.get_level()");
 
     ASSERT_TRUE(v.is_choice());
     ASSERT_EQ(v.as_choice()->type_name, "Level");
@@ -120,24 +175,26 @@ static void test_log_get_level_returns_level_choice() {
 }
 
 static void test_log_set_level() {
+    const ScopedLogReset log_reset;
+
     // Test with string argument (backward compatible).
-    auto result = eval(R"(
+    const auto from_string = eval(R"(
         Log.set_level("warn")
         Log.get_level()
     )");
 
-    ASSERT_TRUE(result.is_choice());
-    ASSERT_EQ(result.as_choice()->type_name, "Level");
-    ASSERT_EQ(result.as_choice()->variant, "Warning");
+    ASSERT_TRUE(from_string.is_choice());
+    ASSERT_EQ(from_string.as_choice()->type_name, "Level");
+    ASSERT_EQ(from_string.as_choice()->variant, "Warning");
 
     // Test with choice argument.
-    result = eval(R"(
+    const auto from_choice = eval(R"(
         Log.set_level(Log.Level.Error)
         Log.get_level()
     )");
 
-    ASSERT_TRUE(result.is_choice());
-    ASSERT_EQ(result.as_choice()->variant, "Error");
+    ASSERT_TRUE(from_choice.is_choice());
+    ASSERT_EQ(from_choice.as_choice()->variant, "Error");
 }
 
 static void test_log_set_level_all_choice_variants() {
@@ -151,13 +208,16 @@ static void test_log_set_level_all_choice_variants() {
 
 static void test_log_set_level_string_variants() {
     // The runtime also accepts lowercase string level names.
-    const std::pair<const char*, const char*> cases[] = {
-        {"debug", "Debug"}, {"info", "Information"}, {"warn", "Warning"},
-        {"error", "Error"}, {"off", "Off"},
-    };
+    constexpr std::array<std::pair<std::string_view, std::string_view>, 5> cases{{
+        {"debug", "Debug"},
+        {"info", "Information"},
+        {"warn", "Warning"},
+        {"error", "Error"},
+        {"off", "Off"},
+    }};
 
     for (const auto& [arg, expected] : cases) {
-        const auto v = level_roundtrip(std::string{"Log.set_level(\""} + arg + "\")");
+        const auto v = level_roundtrip("Log.set_level(\"" + std::string{arg} + "\")");
 
         ASSERT_TRUE(v.is_choice());
         ASSERT_EQ(v.as_choice()->variant, std::string{expected});
@@ -188,9 +248,9 @@ Log.set_level(Log.Level.Debug)
 Log.information("ignored"))LUMA");
 
     // The ${timestamp} placeholder is replaced by an ISO-8601 UTC stamp.
-    ASSERT_TRUE(out.find("${timestamp}") == std::string::npos);
-    ASSERT_TRUE(out.find('T') != std::string::npos);
-    ASSERT_TRUE(out.find('Z') != std::string::npos);
+    ASSERT_EQ(out.find("${timestamp}"), std::string::npos);
+    ASSERT_NE(out.find('T'), std::string::npos);
+    ASSERT_NE(out.find('Z'), std::string::npos);
     ASSERT_FALSE(out.empty());
     ASSERT_EQ(out.back(), '\n');
 }
@@ -219,8 +279,8 @@ static void test_log_default_format_after_reset() {
     // carries the [LEVEL] tag, the message, and an ISO-8601 timestamp.
     const auto out = capture_log_output(R"LUMA(Log.information("ready"))LUMA");
 
-    ASSERT_TRUE(out.find("[INFO] ready") != std::string::npos);
-    ASSERT_TRUE(out.find('Z') != std::string::npos);
+    ASSERT_NE(out.find("[INFO] ready"), std::string::npos);
+    ASSERT_NE(out.find('Z'), std::string::npos);
 }
 
 // ─── Typed Log.Output target (Stderr / Stdout / File) ───
@@ -236,16 +296,22 @@ Log.information("typed"))LUMA");
     ASSERT_EQ(out, "INFO::typed\n");
 }
 
-static void test_log_set_output_typed_streams_return_success() {
-    // The Stdout / Stderr variants are accepted and report success. Bracket each
-    // with reset() so the redirect never leaks into another test.
-    eval("Log.reset()");
-    const auto to_stdout = eval("Log.set_output(Log.Output.Stdout)");
-    ASSERT_RESULT_SUCCESS(to_stdout);
+static void test_log_set_output_typed_streams_route_output() {
+    // The Stdout / Stderr variants are accepted, report success, and route the
+    // following lines to the matching standard stream.
+    const ScopedLogReset log_reset;
+    const CapturedStream captured_out{std::cout};
+    const CapturedStream captured_err{std::cerr};
 
-    const auto to_stderr = eval("Log.set_output(Log.Output.Stderr)");
-    ASSERT_RESULT_SUCCESS(to_stderr);
-    eval("Log.reset()");
+    ASSERT_RESULT_SUCCESS(eval("Log.set_format(\"\\${message}\")\n"
+                               "Log.set_output(Log.Output.Stdout)"));
+    (void)eval("Log.information(\"to stdout\")");
+
+    ASSERT_RESULT_SUCCESS(eval("Log.set_output(Log.Output.Stderr)"));
+    (void)eval("Log.information(\"to stderr\")");
+
+    ASSERT_EQ(captured_out.str(), "to stdout\n");
+    ASSERT_EQ(captured_err.str(), "to stderr\n");
 }
 
 // ─── Level filtering ───
@@ -286,7 +352,11 @@ Log.error("d"))LUMA");
 // ─── Context ───
 
 static void test_log_set_context() {
-    eval(R"(Log.set_context("key", "value"))");
+    // With the default format, the context pairs follow the message.
+    const auto out = capture_stderr_log("Log.set_context(\"key\", \"value\")\n"
+                                        "Log.information(\"with context\")");
+
+    ASSERT_NE(out.find("[INFO] with context | key=value\n"), std::string::npos);
 }
 
 static void test_log_context_appended_to_output() {
@@ -331,17 +401,23 @@ Log.information("m"))LUMA");
 // ─── Output routing & reset ───
 
 static void test_log_set_format() {
-    eval("Log.set_format(\"text\")");
+    // A placeholder-free format replaces the whole line layout: the emitted
+    // line is the literal format text, with no timestamp, level, or message.
+    const auto out = capture_stderr_log("Log.set_format(\"text\")\n"
+                                        "Log.information(\"hidden\")");
+
+    ASSERT_EQ(out, "text\n");
 }
 
 static void test_log_set_output_standard_streams_succeed() {
+    const ScopedLogReset log_reset;
+
     ASSERT_RESULT_SUCCESS(eval(R"(Log.set_output("stderr"))"));
     ASSERT_RESULT_SUCCESS(eval(R"(Log.set_output("stdout"))"));
-
-    eval("Log.reset()");
 }
 
 static void test_log_reset_restores_info_level() {
+    const ScopedLogReset log_reset;
     const auto v = eval(R"(
         Log.set_level(Log.Level.Error)
         Log.reset()
@@ -353,102 +429,121 @@ static void test_log_reset_restores_info_level() {
 }
 
 static void test_log_reset_clears_context_and_format() {
-    // reset() in the prologue must have cleared the context and format set by a
-    // prior program; logging here with the default format shows no trailing
+    // Log.reset() must clear the context and format set earlier in the same
+    // program; logging afterwards uses the default format and shows no trailing
     // context fields.
-    eval(R"(
+    const ScopedLogReset log_reset;
+    const CapturedStream captured{std::cerr};
+
+    (void)eval(R"(
         Log.set_context("stale", "should_not_appear")
         Log.set_format("\${message}")
         Log.reset()
+        Log.information("fresh")
     )");
 
-    const auto out = capture_log_output(R"LUMA(Log.information("fresh"))LUMA");
+    const auto out = captured.str();
 
-    ASSERT_TRUE(out.find("stale") == std::string::npos);
-    ASSERT_TRUE(out.find("should_not_appear") == std::string::npos);
-    ASSERT_TRUE(out.find("[INFO] fresh") != std::string::npos);
+    ASSERT_EQ(out.find("stale"), std::string::npos);
+    ASSERT_EQ(out.find("should_not_appear"), std::string::npos);
+    ASSERT_NE(out.find("[INFO] fresh\n"), std::string::npos);
+}
+
+static void test_log_set_output_failed_open_keeps_current_file() {
+    // Regression: set_output closed the current file BEFORE opening the new one,
+    // so a failed open left the sink set to File with a closed stream and every
+    // later line was silently dropped.  The parent directory does not exist, so
+    // the open fails while the path itself passes the sandbox validation.
+    const auto out = capture_log_output(R"LUMA(Log.set_format("\${message}")
+Log.set_level(Log.Level.Debug)
+assert(Result.is_failure(Log.set_output("_luma_no_such_dir_xyz/redirect.log")))
+Log.information("still logged"))LUMA");
+
+    ASSERT_EQ(out, "still logged\n");
 }
 
 // ─── Negative tests: argument types ───
 
 static void test_log_debug_rejects_non_string() {
-    ASSERT_THROWS(eval("Log.debug(42)"));
+    ASSERT_EVAL_THROWS("Log.debug(42)", "Log.debug: expected string, got 'integer'");
 }
 
 static void test_log_info_rejects_non_string() {
-    ASSERT_THROWS(eval("Log.information(true)"));
+    ASSERT_EVAL_THROWS("Log.information(true)", "Log.information: expected string, got 'boolean'");
 }
 
 static void test_log_warn_rejects_non_string() {
-    ASSERT_THROWS(eval("Log.warning(3.14)"));
+    ASSERT_EVAL_THROWS("Log.warning(3.14)", "Log.warning: expected string, got 'number'");
 }
 
 static void test_log_error_rejects_non_string() {
-    ASSERT_THROWS(eval("Log.error([1, 2])"));
+    ASSERT_EVAL_THROWS("Log.error([1, 2])", "Log.error: expected string, got 'array'");
 }
 
 static void test_log_set_format_rejects_non_string() {
-    ASSERT_THROWS(eval("Log.set_format(99)"));
+    ASSERT_EVAL_THROWS("Log.set_format(99)", "Log.set_format: expected string, got 'integer'");
 }
 
 static void test_log_set_context_rejects_non_string_key() {
-    ASSERT_THROWS_WITH_MESSAGE(eval(R"(Log.set_context(1, "v"))"), "expected string key and value");
+    ASSERT_EVAL_THROWS(R"(Log.set_context(1, "v"))", "expected string key and value");
 }
 
 static void test_log_set_context_rejects_non_string_value() {
-    ASSERT_THROWS_WITH_MESSAGE(eval(R"(Log.set_context("k", 2))"), "expected string key and value");
+    ASSERT_EVAL_THROWS(R"(Log.set_context("k", 2))", "expected string key and value");
 }
 
 static void test_log_set_level_rejects_invalid_type() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Log.set_level(42)"), "expected a LogLevel or string");
+    ASSERT_EVAL_THROWS("Log.set_level(42)", "expected a LogLevel or string");
 }
 
 static void test_log_set_output_rejects_non_string() {
-    ASSERT_THROWS(eval("Log.set_output(123)"));
+    ASSERT_EVAL_THROWS("Log.set_output(123)", "Log.set_output: expected a Log.Output or string");
 }
 
 // ─── Negative tests: result-returning failures ───
 
 static void test_log_set_output_invalid_path_returns_failure() {
-    const auto v = eval(R"(Log.set_output("/no/such/dir/sub/missing.log"))");
+    const ScopedLogReset log_reset; // restore the default output sink afterwards
 
-    ASSERT_RESULT_FAILURE(v);
-
-    eval("Log.reset()"); // restore default output sink
+    ASSERT_RESULT_FAILURE(eval(R"(Log.set_output("/no/such/dir/sub/missing.log"))"));
 }
 
 // ─── Negative tests: arity ───
 
 static void test_log_debug_rejects_wrong_arity() {
-    ASSERT_THROWS(eval("Log.debug()"));
-    ASSERT_THROWS(eval(R"(Log.debug("a", "b"))"));
+    ASSERT_EVAL_THROWS("Log.debug()", "Log.debug: expected exactly 1 argument(s), got 0");
+    ASSERT_EVAL_THROWS(R"(Log.debug("a", "b"))",
+                       "Log.debug: expected exactly 1 argument(s), got 2");
 }
 
 static void test_log_get_level_rejects_arguments() {
-    ASSERT_THROWS(eval(R"(Log.get_level("unexpected"))"));
+    ASSERT_EVAL_THROWS(R"(Log.get_level("unexpected"))",
+                       "Log.get_level: expected exactly 0 argument(s), got 1");
 }
 
 static void test_log_clear_context_rejects_arguments() {
-    ASSERT_THROWS(eval(R"(Log.clear_context("unexpected"))"));
+    ASSERT_EVAL_THROWS(R"(Log.clear_context("unexpected"))",
+                       "Log.clear_context: expected exactly 0 argument(s), got 1");
 }
 
 static void test_log_set_context_rejects_wrong_arity() {
-    ASSERT_THROWS(eval(R"(Log.set_context("only_key"))"));
+    ASSERT_EVAL_THROWS(R"(Log.set_context("only_key"))",
+                       "Log.set_context: expected exactly 2 argument(s), got 1");
 }
 
 int main() {
     // Registration.
     RUN(test_log_module);
     RUN(test_log_set_output_disabled_in_sandbox);
+    RUN(test_log_set_output_failed_open_keeps_current_file);
 
-    // Emission smoke tests.
+    // Emission with the default configuration.
     RUN(test_log_debug);
     RUN(test_log_info);
     RUN(test_log_warn);
     RUN(test_log_error);
 
     // Level get/set.
-    RUN(test_log_get_level);
     RUN(test_log_get_level_returns_level_choice);
     RUN(test_log_set_level);
     RUN(test_log_set_level_all_choice_variants);
@@ -462,7 +557,7 @@ int main() {
     RUN(test_log_format_literal_prefix);
     RUN(test_log_default_format_after_reset);
     RUN(test_log_set_output_typed_file_writes);
-    RUN(test_log_set_output_typed_streams_return_success);
+    RUN(test_log_set_output_typed_streams_route_output);
 
     // Level filtering.
     RUN(test_log_level_filtering_suppresses_below_threshold);

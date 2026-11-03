@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_DIAGNOSTICS_DIAGNOSTIC_CODES_HPP
+#define LUMA_DIAGNOSTICS_DIAGNOSTIC_CODES_HPP
 
 #include <optional>
 #include <string_view>
@@ -182,22 +183,25 @@ enum class DiagnosticCode {
     ShiftOutOfRange = 4008,    // E4008
 
     // ─── Lint warnings (W0xxx) ───
-    UnusedVariable = 5001,        // W0001
-    UnusedFunction = 5002,        // W0002
-    UnusedParameter = 5003,       // W0003
-    MutableNeverMutated = 5004,   // W0004
-    SelfAssignment = 5005,        // W0005
-    UnreachableCode = 5006,       // W0006
-    EmptyBody = 5007,             // W0007
-    AlwaysTrueFalse = 5008,       // W0008
-    FloatingPointEquality = 5009, // W0009
-    DiscardedResult = 5010,       // W0010
-    RedundantElse = 5011,         // W0011
-    ShadowedVariable = 5012,      // W0012
-    EmptyCatch = 5013,            // W0013
-    DivisionByLiteralZero = 5014, // W0014
-    DoubleNegation = 5015,        // W0015
-    UnusedInclude = 5016,         // W0016
+    UnusedVariable = 5001,           // W0001
+    UnusedFunction = 5002,           // W0002
+    UnusedParameter = 5003,          // W0003
+    MutableNeverMutated = 5004,      // W0004
+    SelfAssignment = 5005,           // W0005
+    UnreachableCode = 5006,          // W0006
+    EmptyBody = 5007,                // W0007
+    AlwaysTrueFalse = 5008,          // W0008
+    FloatingPointEquality = 5009,    // W0009
+    DiscardedResult = 5010,          // W0010
+    RedundantElse = 5011,            // W0011
+    ShadowedVariable = 5012,         // W0012
+    EmptyCatch = 5013,               // W0013
+    DivisionByLiteralZero = 5014,    // W0014
+    DoubleNegation = 5015,           // W0015
+    UnusedInclude = 5016,            // W0016
+    BooleanLiteralComparison = 5017, // W0017
 };
 
 } // namespace luma
+
+#endif // LUMA_DIAGNOSTICS_DIAGNOSTIC_CODES_HPP

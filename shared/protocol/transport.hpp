@@ -46,9 +46,9 @@ public:
     // to handle Content-Length framing.  Mock transports may override.
     [[nodiscard]] virtual std::optional<JsonValue> read_message();
 
-    // Returns true when the previous read skipped a malformed message but
-    // successfully resynchronised to a later frame.  The flag is cleared by
-    // the next read attempt.
+    // Returns true when the previous read skipped a malformed or oversized
+    // message and the stream is still usable for the next read.  The flag is
+    // cleared by the next read attempt.
     [[nodiscard]] bool had_recoverable_read_error() const noexcept {
         return recoverable_read_error_;
     }
@@ -68,8 +68,13 @@ protected:
 
     // Parse all header lines until the blank separator line.
     // Returns the Content-Length value, or std::nullopt on EOF.
-    // Throws on malformed or missing Content-Length.
+    // Throws ParseError on a missing Content-Length or an over-long header
+    // line.  The size limit is enforced by the caller, after the headers are
+    // consumed, so an oversized body can be skipped without losing alignment.
     [[nodiscard]] std::optional<std::size_t> parse_headers();
+
+    // Read and discard exactly `count` bytes in bounded chunks.
+    void discard_exact(std::size_t count);
 
     // After a parse error, scan forward discarding input until the next
     // Content-Length: header is found and buffer it for the next read_message()
@@ -88,6 +93,10 @@ protected:
     }
 
 private:
+    // Report a skipped (but frame-aligned) message and flag it as a
+    // recoverable read error.  Always returns std::nullopt.
+    [[nodiscard]] std::optional<JsonValue> skip_message(std::string_view reason);
+
     // Configurable limits for message framing.
     TransportLimits limits_;
 

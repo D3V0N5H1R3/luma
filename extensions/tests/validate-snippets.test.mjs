@@ -18,7 +18,9 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,6 +49,80 @@ const NAME_FIRST_KEYWORDS = ["type", "record", "choice", "interface"];
 const paramsBeforeName = new RegExp(
     `\\b(${NAME_FIRST_KEYWORDS.join("|")})\\s*<`,
 );
+
+// Keywords that look like natural variable names but cannot be used as one.
+const RESERVED_VARIABLE_NAMES = new Set([
+    "result",
+    "optional",
+    "unique",
+    "borrow",
+    "type",
+    "use",
+    "with",
+    "internal",
+]);
+
+// Declarations that may start a file; anything else is a statement and is
+// checked inside a function body (`internal` ones inside a namespace).
+const TOP_LEVEL_START = /^(@|function\b|record\b|choice\b|interface\b|namespace\b|type\b|include\b|use\b)/;
+
+/**
+ * Expands a snippet body the way an editor does when every placeholder is
+ * accepted as-is: `${1:default}` becomes `default`, `${1}` / `$1` / `$0`
+ * become empty, and an escaped `\$` becomes `$`.
+ *
+ * @param {string | string[]} body  The snippet `body` field.
+ * @returns {string} The inserted text.
+ */
+function expandSnippet(body) {
+    let text = bodyText(body);
+    let previous;
+    do {
+        previous = text;
+        text = text.replace(/(?<!\\)\$\{\d+:([^{}]*)\}/g, "$1");
+    } while (text !== previous);
+    return text
+        .replace(/(?<!\\)\$\{\d+\}/g, "")
+        .replace(/(?<!\\)\$\d+/g, "")
+        .replace(/\\\$/g, "$");
+}
+
+/**
+ * Wraps expanded snippet text so it forms a complete file for `luma --check`.
+ *
+ * @param {string} text  The expanded snippet.
+ * @returns {string} A checkable Luma source file.
+ */
+function wrapForCheck(text) {
+    const trimmed = text.trimStart();
+    const indented = text
+        .split("\n")
+        .map((line) => `    ${line}`)
+        .join("\n");
+    if (trimmed.startsWith("internal")) {
+        return `namespace SnippetCheck {\n${indented}\n}\n`;
+    }
+    if (TOP_LEVEL_START.test(trimmed)) {
+        return `${text}\n`;
+    }
+    return `function void snippet_check() {\n${indented}\n}\n`;
+}
+
+/**
+ * Locates a built `luma` interpreter: $LUMA_BIN, else the CMake build tree.
+ *
+ * @returns {string | undefined} The interpreter path, if one exists.
+ */
+function findInterpreter() {
+    const exe = process.platform === "win32" ? "luma.exe" : "luma";
+    const root = path.join(__dirname, "..", "..");
+    const candidates = [
+        process.env.LUMA_BIN,
+        path.join(root, "build", "Release", exe),
+        path.join(root, "build", exe),
+    ];
+    return candidates.find((candidate) => candidate && fs.existsSync(candidate));
+}
 
 // ─── Tests ────────────────────────────────────────────────────────
 
@@ -89,6 +165,89 @@ describe("shared snippets (luma.json)", () => {
             /^type\s+\$\{\d+:[^}]+\}<\$\{\d+:[^}]+\}>\s*=/,
             `typeg body should be "type <name-stop><<param-stop>> = …", got: ${text}`,
         );
+    });
+
+    it("never defaults a placeholder to a reserved keyword", () => {
+        for (const [name, snippet] of Object.entries(snippets)) {
+            for (const [, value] of bodyText(snippet.body).matchAll(/\$\{\d+:([^}]*)\}/g)) {
+                // A placeholder that names a variable must not be a keyword:
+                // `integer result = …` is a SyntaxError (result spells result<T>).
+                if (!RESERVED_VARIABLE_NAMES.has(value)) {
+                    continue;
+                }
+                const text = expandSnippet(snippet.body);
+                assert.ok(
+                    !new RegExp(`\\b[\\w<>]+\\s+${value}\\s*=`).test(text),
+                    `snippet "${name}" names a variable "${value}", a reserved keyword`,
+                );
+            }
+        }
+    });
+
+    it("writes dictionary literals with `\"key\": value`", () => {
+        const dict = Object.values(snippets).find((s) => s.prefix === "dict");
+        assert.ok(dict, "expected a snippet with prefix 'dict'");
+        assert.match(expandSnippet(dict.body), /"key":\s*value/);
+    });
+
+    it("never prefixes a result arm with `case`", () => {
+        for (const [name, snippet] of Object.entries(snippets)) {
+            assert.doesNotMatch(
+                bodyText(snippet.body),
+                /\bcase\s+(success|failure)\s*\(/,
+                `snippet "${name}": result arms are written "success(v) { … }", without "case"`,
+            );
+        }
+    });
+
+    it("declares interfaces as field lists", () => {
+        for (const [name, snippet] of Object.entries(snippets)) {
+            const text = expandSnippet(snippet.body);
+            const body = /^interface\s[^{]*\{([\s\S]*)\}\s*$/.exec(text);
+            if (body) {
+                assert.ok(
+                    !body[1].includes("("),
+                    `snippet "${name}": an interface holds "type field" entries, not methods`,
+                );
+            }
+        }
+    });
+
+    it("only spawns inside a task_scope", () => {
+        for (const [name, snippet] of Object.entries(snippets)) {
+            const text = bodyText(snippet.body);
+            if (/\bspawn\b/.test(text)) {
+                assert.match(
+                    text,
+                    /^task_scope\s*\{/,
+                    `snippet "${name}": a bare spawn outside task_scope is a compile error`,
+                );
+            }
+        }
+    });
+
+    // Runs only where an interpreter is available (local builds; set LUMA_BIN
+    // to point at one). Placeholder names are undefined, so type errors
+    // (exit 2) are expected — only a syntax error (exit 3) is a defect.
+    const luma = findInterpreter();
+    it("expands every snippet to syntactically valid Luma", { skip: !luma && "no luma binary" }, () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "luma-snippets-"));
+        // The Include snippet names "file.luma"; provide it so only syntax is judged.
+        fs.writeFileSync(path.join(dir, "file.luma"), "");
+        try {
+            for (const [name, snippet] of Object.entries(snippets)) {
+                const file = path.join(dir, "snippet.luma");
+                fs.writeFileSync(file, wrapForCheck(expandSnippet(snippet.body)));
+                const run = spawnSync(luma, ["--check", file], { encoding: "utf-8" });
+                assert.notEqual(
+                    run.status,
+                    3,
+                    `snippet "${name}" expands to a syntax error:\n${run.stderr}`,
+                );
+            }
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 });
 

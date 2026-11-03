@@ -4,6 +4,6 @@ function integer add(integer a, integer b) {
 
 @main
 function void main() {
-    integer result = add(1, 2)
-    print(result)
+    integer sum = add(1, 2)
+    print(sum)
 }

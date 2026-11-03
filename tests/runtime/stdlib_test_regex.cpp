@@ -1,11 +1,20 @@
 // Standard library tests: RegularExpression.
 
+#include <array>
 #include <cstddef>
+#include <exception>
 #include <string>
+#include <string_view>
+#include <thread>
 
 #include "common/resource_limits.hpp"
 #include "runtime/stdlib/text/regularexpression_module.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::has_dangerous_quantifier_nesting;
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
 
 static void test_regex_find() {
     const auto v = eval("RegularExpression.find(\"abc123def\", \"[0-9]+\")");
@@ -23,7 +32,7 @@ static void test_regex_find() {
     // No capture groups — groups array should be empty.
     const auto* groups_field = inner.as_record()->find_field("groups");
 
-    ASSERT_TRUE(groups_field != nullptr);
+    ASSERT_NE(groups_field, nullptr);
     ASSERT_TRUE(groups_field->is_array());
     ASSERT_EQ(groups_field->as_array()->elements->size(), 0U);
 }
@@ -41,10 +50,10 @@ static void test_regex_find_all() {
     for (const auto& elem : elems) {
         ASSERT_TRUE(elem.is_record());
         ASSERT_EQ(elem.as_record()->type_name, "Match");
-        ASSERT_TRUE(elem.as_record()->find_field("text") != nullptr);
-        ASSERT_TRUE(elem.as_record()->find_field("position") != nullptr);
-        ASSERT_TRUE(elem.as_record()->find_field("length") != nullptr);
-        ASSERT_TRUE(elem.as_record()->find_field("groups") != nullptr);
+        ASSERT_NE(elem.as_record()->find_field("text"), nullptr);
+        ASSERT_NE(elem.as_record()->find_field("position"), nullptr);
+        ASSERT_NE(elem.as_record()->find_field("length"), nullptr);
+        ASSERT_NE(elem.as_record()->find_field("groups"), nullptr);
         ASSERT_TRUE(elem.as_record()->find_field("groups")->is_array());
         ASSERT_EQ(elem.as_record()->find_field("groups")->as_array()->elements->size(), 0u);
     }
@@ -89,7 +98,7 @@ static void test_regex_find_capture_groups() {
 
     const auto* groups_field = inner.as_record()->find_field("groups");
 
-    ASSERT_TRUE(groups_field != nullptr);
+    ASSERT_NE(groups_field, nullptr);
     ASSERT_TRUE(groups_field->is_array());
 
     const auto& groups = *groups_field->as_array()->elements;
@@ -137,12 +146,12 @@ static void test_regex_find_named_groups_dotnet_style() {
     // named_groups additionally maps name -> Capture.
     const auto* named_groups_field = inner.as_record()->find_field("named_groups");
 
-    ASSERT_TRUE(named_groups_field != nullptr);
+    ASSERT_NE(named_groups_field, nullptr);
     ASSERT_TRUE(named_groups_field->is_dictionary());
 
     const auto& named = *named_groups_field->as_dictionary();
 
-    ASSERT_TRUE(named.find("year") != nullptr);
+    ASSERT_NE(named.find("year"), nullptr);
     ASSERT_EQ(named.find("year")->as_record()->type_name, "Capture");
     ASSERT_EQ(named.find("year")->as_record()->find_field("name")->as_string(), "year");
     ASSERT_EQ(named.find("year")->as_record()->find_field("text")->as_string(), "2024");
@@ -183,11 +192,11 @@ static void test_regex_find_named_and_unnamed_groups_mixed() {
 
     const auto& named = *inner.as_record()->find_field("named_groups")->as_dictionary();
 
-    ASSERT_TRUE(named.find("value") != nullptr);
+    ASSERT_NE(named.find("value"), nullptr);
     ASSERT_EQ(named.find("value")->as_record()->find_field("text")->as_string(), "100");
 
     // The unnamed group ("width") never appears as a named_groups key.
-    ASSERT_TRUE(named.find("width") == nullptr);
+    ASSERT_EQ(named.find("width"), nullptr);
 }
 
 static void test_regex_find_no_named_groups_empty_dictionary() {
@@ -200,7 +209,7 @@ static void test_regex_find_no_named_groups_empty_dictionary() {
     const auto& inner = *v.as_result()->owned_inner;
     const auto* named_groups_field = inner.as_record()->find_field("named_groups");
 
-    ASSERT_TRUE(named_groups_field != nullptr);
+    ASSERT_NE(named_groups_field, nullptr);
     ASSERT_TRUE(named_groups_field->is_dictionary());
     ASSERT_EQ(named_groups_field->as_dictionary()->entries.size(), 0U);
 }
@@ -322,7 +331,7 @@ static void test_regex_redos_rejected() {
 
     // Every operation refuses a dangerous pattern with a failure result whose
     // message explains the rejection.
-    const char* const ops[] = {
+    constexpr std::array<const char*, 6> ops{
         "RegularExpression.matches(\"aaaa\", \"(a+)+\")",
         "RegularExpression.find(\"aaaa\", \"(a+)+\")",
         "RegularExpression.find_all(\"aaaa\", \"(a+)+\")",
@@ -335,8 +344,8 @@ static void test_regex_redos_rejected() {
         const auto v = eval(op);
 
         ASSERT_RESULT_FAILURE(v);
-        ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("nested quantifiers") !=
-                    std::string::npos);
+        ASSERT_NE(v.as_result()->owned_inner->as_string().find("nested quantifiers"),
+                  std::string::npos);
     }
 }
 
@@ -477,7 +486,8 @@ static void test_regex_find_all_match_limit_propagates() {
     // find_all/split from matches/replace/replace_all.
     const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(3)};
 
-    ASSERT_TRUE(luma::test::eval_throws("RegularExpression.find_all(\"aaaaaaaa\", \"a\")"));
+    ASSERT_EVAL_THROWS("RegularExpression.find_all(\"aaaaaaaa\", \"a\")",
+                       "RegularExpression.find_all: too many matches");
 }
 
 static void test_regex_split_token_limit_propagates() {
@@ -485,7 +495,8 @@ static void test_regex_split_token_limit_propagates() {
     // rather than be swallowed into a failure result.
     const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(3)};
 
-    ASSERT_TRUE(luma::test::eval_throws("RegularExpression.split(\"a,b,c,d,e\", \",\")"));
+    ASSERT_EVAL_THROWS("RegularExpression.split(\"a,b,c,d,e\", \",\")",
+                       "RegularExpression.split: too many tokens");
 }
 
 // ─── RegularExpression.compile_typed (typed error via the RegularExpression.Error
@@ -735,7 +746,157 @@ static void test_regex_count() {
     ASSERT_RESULT_FAILURE(eval("RegularExpression.count(\"aaaa\", \"(a+)+\")"));
 }
 
+static void test_regex_redos_guard_bypasses_closed() {
+    // Regression: the guard ran on the raw pattern, so a named group hid the
+    // ambiguous alternation the engine actually compiles ((?<n>a|aa)+ →
+    // (a|aa)+); \x escapes were recorded as the literal 'x'; and under icase
+    // (a|A)+ looked disjoint.
+    ASSERT_RESULT_FAILURE(eval(R"(RegularExpression.matches("aaaa", "(?<n>a|aa)+"))"));
+    ASSERT_RESULT_FAILURE(eval(R"(RegularExpression.matches("aaaa", "(?P<n>a|aa)+"))"));
+    ASSERT_RESULT_FAILURE(eval(R"(RegularExpression.matches("aaaa", "(\\x61|a)+"))"));
+    ASSERT_FALSE(eval(R"(RegularExpression.is_valid("(?<n>a|aa)+"))").as_bool());
+    ASSERT_RESULT_FAILURE(eval(R"(RegularExpression.matches_with("aAaA", "(a|A)+", )"
+                               R"([RegularExpression.Flags.CaseInsensitive]))"));
+    // Case-sensitively, (a|A)+ is disjoint and still accepted.
+    ASSERT_RESULT_SUCCESS(eval(R"(RegularExpression.matches_with("aAaA", "(a|A)+", []))"));
+    // Disjoint named groups are still accepted.
+    ASSERT_RESULT_SUCCESS(eval(R"(RegularExpression.matches("ab", "(?<n>a|b)+"))"));
+
+    // Direct heuristic coverage.
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(?<n>a|aa)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(?P<n>a|aa)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(\\x61|a)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(\\u0061|a)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(\\cJ|\\n)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(\\n|\n)+"));
+    ASSERT_TRUE(has_dangerous_quantifier_nesting("(a|A)+", /*case_insensitive=*/true));
+    ASSERT_FALSE(has_dangerous_quantifier_nesting("(a|A)+", /*case_insensitive=*/false));
+    ASSERT_FALSE(has_dangerous_quantifier_nesting("(?<=a)b+"));
+}
+
+static void test_regex_replace_caps_output_size() {
+    // Regression: replace/replace_all (and *_with) used std::regex_replace with
+    // no output limit; an empty-matching pattern matches at every position, so
+    // the output could be input_length × replacement_length.
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(64)};
+
+    ASSERT_EVAL_THROWS(R"(RegularExpression.replace_all("aaaaaaaaaa", "x*", "0123456789"))",
+                       "RegularExpression.replace_all: result exceeds maximum string size");
+    ASSERT_EVAL_THROWS(
+        R"(RegularExpression.replace_all_with("aaaaaaaaaa", "x*", "0123456789", []))",
+        "RegularExpression.replace_all_with: result exceeds maximum string size");
+    // $& expansion is bounded too.
+    ASSERT_EVAL_THROWS(R"(RegularExpression.replace("0123456789", ".+", "$&$&$&$&$&$&$&"))",
+                       "RegularExpression.replace: result exceeds maximum string size");
+    ASSERT_EVAL_THROWS(
+        R"(RegularExpression.replace_with("0123456789", ".+", "$&$&$&$&$&$&$&", []))",
+        "RegularExpression.replace_with: result exceeds maximum string size");
+}
+
+static void test_regex_replace_matches_std_semantics() {
+    // The bounded rewrite must keep std::regex_replace semantics, including
+    // empty matches, format_first_only, and $-substitutions.
+    const auto unwrap = [](const std::string& code) {
+        return eval(code).as_result()->owned_inner->as_string();
+    };
+
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace_all("abc", "x*", "-"))"), "-a-b-c-");
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace("abc", "x*", "-"))"), "-abc");
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace_all("a1b22c", "[0-9]+", "<$&>"))"), "a<1>b<22>c");
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace("a1b22c", "[0-9]+", "#"))"), "a#b22c");
+    ASSERT_EQ(unwrap(R"lm(RegularExpression.replace_all("2024-01", "(\\d+)-(\\d+)", "$2/$1"))lm"),
+              "01/2024");
+    ASSERT_EQ(unwrap(R"(RegularExpression.replace_all("none", "[0-9]", "#"))"), "none");
+}
+
+// Review R5: std::regex backtracks recursively.  libstdc++ recursed once per
+// repetition, so `^a*$` over a 500,000-character input overflowed the native
+// stack (a crash nothing could catch), and MSVC threw regex_error(error_stack),
+// which surfaced as an opaque engine message.  The default input limit is now
+// small enough for a task worker's stack, and the engine's resource errors
+// become a clear failure on every entry point.
+namespace {
+
+// Run `source` on a fresh thread (a 1 MiB stack on Windows, like a task
+// worker) and describe the result: "ok:<value>", "fail:<message>", or
+// "throw:<message>".
+std::string run_regex_on_worker_stack(const std::string& source) {
+    std::string outcome;
+
+    {
+        std::jthread worker{[&outcome, &source] {
+            try {
+                const auto value = eval(source);
+
+                if (!value.is_result()) {
+                    outcome = "not a result";
+                } else if (value.as_result()->is_success) {
+                    outcome = "ok:" + value.as_result()->owned_inner->to_string();
+                } else {
+                    outcome = "fail:" + value.as_result()->owned_inner->as_string();
+                }
+            } catch (const std::exception& error) {
+                outcome = std::string{"throw:"} + error.what();
+            }
+        }};
+    }
+
+    return outcome;
+}
+
+} // namespace
+
+// AddressSanitizer pads every stack frame with redzones, so libstdc++'s
+// once-per-repetition regex recursion needs several times the native stack the
+// input limit is sized for. Under ASan the test lowers the limit to keep the
+// same "at the limit" scenario within the thread's stack.
+#if defined(__SANITIZE_ADDRESS__)
+#define LUMA_REGEX_TEST_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define LUMA_REGEX_TEST_ASAN 1
+#endif
+#endif
+
+static void test_regex_long_input_at_limit_is_handled_cleanly() {
+#if defined(LUMA_REGEX_TEST_ASAN)
+    const LimitGuard guard{ResourceLimits::max_regex_input_size,
+                           ResourceLimits::max_regex_input_size / 8};
+#endif
+    const auto limit = std::to_string(ResourceLimits::max_regex_input_size);
+    const auto text = "Result.unwrap(String.repeat(\"a\", " + limit + "))";
+
+    for (const auto* const call : {"matches", "find", "count", "replace_all", "split"}) {
+        const std::string extra = std::string_view{call} == "replace_all" ? ", \"b\"" : "";
+        const auto outcome = run_regex_on_worker_stack("RegularExpression." + std::string{call} +
+                                                       "(" + text + ", \"^a*$\"" + extra + ")");
+
+        // Either the engine matched, or it declined with the clean message —
+        // never a crash, a thrown error, or the raw regex_error text.
+        const bool matched = outcome.starts_with("ok:");
+        const bool declined =
+            outcome.starts_with("fail:") &&
+            outcome.find("too complex for the regular expression engine") != std::string::npos;
+
+        ASSERT_TRUE(matched || declined);
+    }
+}
+
+static void test_regex_input_over_limit_fails() {
+    const auto over = std::to_string(ResourceLimits::max_regex_input_size + 1);
+    const auto outcome = run_regex_on_worker_stack(
+        "RegularExpression.matches(Result.unwrap(String.repeat(\"a\", " + over + ")), \"^a*$\")");
+
+    ASSERT_TRUE(outcome.starts_with("fail:"));
+    ASSERT_NE(outcome.find("input string exceeds maximum size"), std::string::npos);
+}
+
 int main() {
+    RUN(test_regex_long_input_at_limit_is_handled_cleanly);
+    RUN(test_regex_input_over_limit_fails);
+    RUN(test_regex_redos_guard_bypasses_closed);
+    RUN(test_regex_replace_caps_output_size);
+    RUN(test_regex_replace_matches_std_semantics);
     RUN(test_regex_find);
     RUN(test_regex_find_all);
     RUN(test_regex_find_all_capture_groups);

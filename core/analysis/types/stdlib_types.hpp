@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_TYPES_STDLIB_TYPES_HPP
+#define LUMA_TYPES_STDLIB_TYPES_HPP
 
 #include <string>
 
@@ -29,3 +30,5 @@ namespace luma {
 [[nodiscard]] const StringMap<const ChoiceDeclaration*>& stdlib_choice_types();
 
 } // namespace luma
+
+#endif // LUMA_TYPES_STDLIB_TYPES_HPP

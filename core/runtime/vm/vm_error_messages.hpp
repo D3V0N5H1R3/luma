@@ -90,6 +90,13 @@ constexpr std::string_view with_requires_record{"'with' requires a record"};
     return std::format("loop exceeded maximum iteration count ({})", max);
 }
 
+[[nodiscard]] inline std::string loop_exceeded_total_iterations(std::int64_t max) {
+    return std::format("loops exceeded the total iteration budget ({})", max);
+}
+
+constexpr std::string_view hint_raise_total_loop_budget{
+    "raise LUMA_LIMIT_MAX_TOTAL_LOOP_ITERATIONS if this many loop iterations are intended"};
+
 [[nodiscard]] inline std::string local_variable_out_of_bounds(std::uint16_t slot,
                                                               std::size_t offset) {
     return std::format("local variable index out of bounds (slot {} at offset {})", slot, offset);
@@ -98,6 +105,25 @@ constexpr std::string_view with_requires_record{"'with' requires a record"};
 // ─── Arithmetic / numeric errors ─────────────────────────────────────────────
 
 constexpr std::string_view number_overflow{"number overflow"};
+
+// Integer arithmetic that does not fit in a 64-bit `integer` raises instead of
+// silently widening to `number` (which would let an `integer`-typed variable
+// hold a `number` at runtime).  `operation` is the noun form: "addition",
+// "subtraction", "multiplication", "increment", "decrement", "negation".
+[[nodiscard]] inline std::string integer_overflow_in(std::string_view operation) {
+    return std::format("integer overflow in {}", operation);
+}
+
+// `number` arithmetic whose finite operands produced ±Infinity.  `operation`
+// is the noun form: "addition", "subtraction", "multiplication", "division".
+[[nodiscard]] inline std::string number_overflow_in(std::string_view operation) {
+    return std::format("number overflow in {}", operation);
+}
+
+constexpr std::string_view hint_integer_overflow{
+    "the result does not fit in a 64-bit integer \xe2\x80\x94 convert an operand to "
+    "'number' first if you need a floating-point result"};
+
 constexpr std::string_view integer_division_overflow{"integer division overflow"};
 constexpr std::string_view integer_division_requires_integers{
     "integer division requires integer operands"};
@@ -105,6 +131,11 @@ constexpr std::string_view string_concat_exceeds_max{
     "string concatenation exceeds maximum string size"};
 constexpr std::string_view string_repetition_exceeds_max{
     "string repetition exceeds maximum string size"};
+// Same wording as String.repeat ("count exceeds maximum") and the type
+// checker's literal-count check ("string repeat count exceeds maximum").
+constexpr std::string_view string_repeat_count_exceeds_max{"string repeat count exceeds maximum"};
+constexpr std::string_view hint_reduce_repeat_count{
+    "reduce the repeat count (limit: LUMA_LIMIT_MAX_STRING_REPEAT)"};
 constexpr std::string_view string_interpolation_exceeds_max{
     "string interpolation exceeds maximum string size"};
 
@@ -269,8 +300,13 @@ constexpr std::string_view await_consumed_task{"await called on an already-consu
     return std::format("await requires a task value, got '{}'", type);
 }
 
-[[nodiscard]] inline std::string tail_call_arity_mismatch(int expected, int got) {
-    return std::format("tail call arity mismatch: expected {} arguments, got {}", expected, got);
+// Raised by call_function and handle_tail_call when a user function receives
+// more arguments than it declares.  The type checker rejects this for calls in
+// the source, but the REPL and crafted bytecode can still reach the VM with
+// extra arguments.  Built-ins calling a callback drop the arguments it does
+// not declare instead (VM::init_call_fn), so they never raise this.
+[[nodiscard]] inline std::string too_many_arguments(int expected, int got) {
+    return std::format("too many arguments: function expects {} but got {}", expected, got);
 }
 
 [[nodiscard]] inline std::string unknown_named_argument(std::string_view name) {
@@ -280,6 +316,14 @@ constexpr std::string_view await_consumed_task{"await called on an already-consu
 [[nodiscard]] inline std::string cannot_assign_immutable(std::string_view name) {
     return std::format("cannot assign to immutable variable '{}'", name);
 }
+
+[[nodiscard]] inline std::string cannot_assign_global_in_task(std::string_view name) {
+    return std::format("cannot assign to global variable '{}' from a spawned task", name);
+}
+
+constexpr std::string_view hint_global_write_in_task{
+    "a spawned task sees a read-only snapshot of the global variables \xe2\x80\x94 pass "
+    "values in as arguments and return results, or communicate through a channel"};
 
 [[nodiscard]] inline std::string cannot_downcast(std::string_view from, std::string_view to) {
     return std::format("cannot downcast '{}' to '{}'", from, to);

@@ -8,7 +8,8 @@
 #include "json/json.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::dap;
+using luma::dap::CompiledBreakpointCache;
+using luma::dap::WatchCache;
 using luma::json::JsonValue;
 
 namespace {

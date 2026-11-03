@@ -2,6 +2,7 @@
 #include <format>
 #include <string_view>
 
+#include "analysis/diagnostics/display_text.hpp"
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/lexer/token_type.hpp"
 #include "analysis/source/source_location.hpp"
@@ -254,8 +255,9 @@ void Lexer::scan_operator(char character, SourceLocation location) {
             break;
 
         default:
-            emit_syntax_error(std::format("unexpected character '{}'", character), location,
-                              "only letters, digits, and standard operators are allowed",
+            emit_syntax_error(std::format("unexpected character '{}'",
+                                          sanitize_for_terminal(std::string_view{&character, 1})),
+                              location, "only letters, digits, and standard operators are allowed",
                               DiagnosticCode::UnexpectedToken);
             add_token(TokenType::Error, std::string_view{&character, 1});
             break;

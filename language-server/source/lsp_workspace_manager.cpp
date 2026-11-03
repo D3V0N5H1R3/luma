@@ -8,6 +8,7 @@
 
 #include "json/json.hpp"
 #include "lsp_config.hpp"
+#include "lsp_path_utils.hpp"
 
 namespace luma::lsp {
 
@@ -74,7 +75,7 @@ void WorkspaceManager::load_project_config(const std::string& path, LspConfig& c
     namespace fs = std::filesystem;
 
     std::error_code ec;
-    if (!fs::exists(path, ec) || ec) {
+    if (!fs::exists(utf8_path(path), ec) || ec) {
         if (log) {
             log("luma.json not found or inaccessible: " + path);
         }
@@ -82,7 +83,7 @@ void WorkspaceManager::load_project_config(const std::string& path, LspConfig& c
     }
 
     try {
-        std::ifstream file(path);
+        std::ifstream file(utf8_path(path), std::ios::in | std::ios::binary);
         if (!file.is_open()) {
             return;
         }
@@ -114,9 +115,9 @@ void WorkspaceManager::discover_project_config(LspConfig& config, const LogCallb
     namespace fs = std::filesystem;
 
     for (const auto& root : workspace_roots_) {
-        const auto config_path = (fs::path(root) / "luma.json").string();
+        const auto config_path = path_to_utf8(utf8_path(root) / "luma.json");
         std::error_code ec;
-        if (fs::exists(config_path, ec) && !ec) {
+        if (fs::exists(utf8_path(config_path), ec) && !ec) {
             load_project_config(config_path, config, log);
             break;
         }

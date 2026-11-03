@@ -4,12 +4,19 @@
 # Patterns (POSIX extended regex, one per line) for source files,
 # directories, and CMake modules that have been removed or renamed.
 # The Docs Consistency workflow (.github/workflows/docs.yml) fails
-# if any of these appear in the documentation or prompt files,
+# if any of these appear in the tracked documentation, prompt,
+# CMake-module, and Dev Container files it scans (see its paths: list),
 # catching references that outlived the thing they pointed at.
 #
 # Lines starting with '#' and blank lines are ignored. Add a pattern
 # here whenever you delete or rename a path that documentation might
 # still mention.
+#
+# A scanned line that must legitimately mention a denied name — for
+# example a learnings entry recording that something was removed —
+# is exempted by carrying the literal marker "stale-path-ok" (in
+# Markdown, as a trailing "<!-- stale-path-ok -->" comment). Use it
+# sparingly: it hides the whole line from every pattern.
 # ─────────────────────────────────────────────────────────────
 
 # Non-root README.md files were renamed to DIRECTORY.md (2026-08).
@@ -28,3 +35,22 @@ generate_prelude_asset\.mjs
 external/gui-framework
 LumaWebView\.cmake
 stylelint\.config\.mjs
+
+# Executables moved to the build-directory root on every generator (2026-11):
+# build/luma(.exe), never a per-configuration subdirectory such as the old
+# build/Release/ — in any build tree (build-debug/, build-msvc/, build-fuzz/, ...).
+# Document the non-primary multi-config location generically as <build>/<Config>/.
+build[-a-z0-9]*[/\\](Release|Debug|RelWithDebInfo|MinSizeRel)[/\\]
+
+# The unused arm64-cross, release-no-tests, and macos-universal CMake presets
+# were removed (2026-11). CHANGELOG.md is not scanned, so its history entry is
+# unaffected; a scanned line that must name them as removed carries the
+# stale-path-ok marker (see below).
+(^|[^a-z0-9-])(arm64-cross|release-no-tests|macos-universal)([^a-z0-9-]|$)
+
+# The PowerShell + bash prompt-pipeline runners and the Pester harness were
+# replaced by scripts/pipeline/luma_pipeline.py (2026-11).
+Invoke-Luma(All|Audit|Fix)\.ps1
+LumaPipeline\.(psm1|Tests\.ps1)
+luma-(all|audit|fix|pipeline)\.sh
+run_pester\.ps1

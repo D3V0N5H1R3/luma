@@ -8,24 +8,9 @@
 #include "dap_response_builders.hpp"
 #include "dap_types.hpp"
 #include "debug_session.hpp"
+#include "debugger_messages.hpp"
 
 namespace luma::dap {
-
-// ─── Pending / unverified breakpoints ───
-
-// Populate `out` with unverified pending responses for each request.
-// Uses negative IDs to avoid collision with session-assigned IDs.
-// `line_fn(req)` → the line number to report; `msg_fn(req)` → the message.
-template <typename LineFn, typename MsgFn>
-static void apply_pending_or_unverified(JsonValue::ArrayType& out,
-                                        const std::vector<BreakpointRequest>& requests,
-                                        const std::string& source, LineFn line_fn, MsgFn msg_fn) {
-    int pending_id = -1;
-    for (const auto& req : requests) {
-        out.push_back(
-            make_breakpoint_response(pending_id--, false, source, line_fn(req), msg_fn(req)));
-    }
-}
 
 // ─── Exception filter parsing ───
 
@@ -65,25 +50,33 @@ HandlerResult DapBreakpointHandler::handle_set_breakpoints(const JsonValue& args
 
     auto requests = parse_breakpoint_requests(args);
 
-    // Store pending breakpoints so they survive before session creation.
-    ctx_.pending_breakpoints[source_path] = requests;
-
     if (ctx_.has_session()) {
+        // Store pending breakpoints so a restart can re-apply them.
+        ctx_.pending_breakpoints[source_path] = requests;
+
         auto result = ctx_.session->set_breakpoints(source_path, requests);
 
         for (auto& bp : result) {
             validate_breakpoint_fields(bp, ctx_.compiled_bp_cache);
             breakpoints_array.push_back(serialise_breakpoint(bp));
         }
-    } else {
-        // No session yet — return unverified breakpoints (will be applied at launch).
-        apply_pending_or_unverified(
-            breakpoints_array, requests, source_path,
-            [](const BreakpointRequest& req) { return req.line; },
-            [](const BreakpointRequest& /*req*/) {
-                return std::string("Breakpoint will be verified when program launches");
-            });
+
+        return HandlerResult::ok(make_breakpoints_response(breakpoints_array));
     }
+
+    // No session yet — return unverified breakpoints and keep the requests for
+    // launch.  Each gets an ID unique across every file (negative, so it never
+    // collides with session-allocated IDs) and the request carries that ID, so
+    // the breakpoint keeps it once it is resolved and the later `breakpoint`
+    // event updates the very breakpoint the editor is showing.
+    for (auto& req : requests) {
+        req.id = ctx_.next_pending_breakpoint_id--;
+        breakpoints_array.push_back(
+            make_breakpoint_response(req.id, false, source_path, req.line,
+                                     std::string{messages::breakpoint::pending_launch}));
+    }
+
+    ctx_.pending_breakpoints[source_path] = std::move(requests);
 
     return HandlerResult::ok(make_breakpoints_response(breakpoints_array));
 }

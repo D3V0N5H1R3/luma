@@ -1,10 +1,12 @@
 ﻿#include "runtime/stdlib/math/calculus_module.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <format>
 #include <limits>
 #include <numbers>
+#include <optional>
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
@@ -67,10 +69,15 @@ constexpr std::int64_t k_default_integration_steps = 1000;
 // signed-integer maximum so the even-rounding `steps = n + 1` cannot overflow.
 // 1e6 subdivisions already far exceed double-precision accuracy for Simpson.
 constexpr std::int64_t k_max_integration_steps = 1000000;
-// Limit estimation: initial offset from the target point (halved each
-// iteration) and the iteration cap before giving up on convergence.
+// Limit estimation: initial offset from the target point (relative to the
+// target's magnitude when it exceeds 1, then halved each iteration), the
+// iteration cap before giving up on convergence, and the relative tolerance
+// within which successive and left/right estimates agree.
+// The cap leaves room for one-sided limits like √x at 0, whose estimates shrink
+// only as √h.
 constexpr double k_limit_initial_step = 0.1;
-constexpr int k_limit_max_iterations = 30;
+constexpr int k_limit_max_iterations = 60;
+constexpr double k_limit_tolerance = 1e-8;
 // Upper bound on the finite-difference derivative order; the stencil stays
 // usable within this inclusive limit.
 constexpr std::int64_t k_taylor_max_terms = 20;
@@ -83,6 +90,63 @@ constexpr std::int64_t k_max_series_terms = 1000000;
     const auto f_minus = call_fn(fn, x - h, loc);
 
     return (f_plus - f_minus) / (2.0 * h);
+}
+
+[[nodiscard]] bool limit_estimates_agree(double a, double b) {
+    return std::fabs(a - b) <= k_limit_tolerance * std::max({1.0, std::fabs(a), std::fabs(b)});
+}
+
+// One side of a limit, sampled at offsets that halve each step.  Richardson
+// extrapolation (2·f(h/2) − f(h)) cancels the linear error term, so smooth
+// functions settle in a few steps.  A NaN sample means this side lies outside
+// the function's domain, which discards the side's history.
+struct OneSidedLimit {
+    double previous_sample = std::numeric_limits<double>::quiet_NaN();
+    double previous_estimate = std::numeric_limits<double>::quiet_NaN();
+    double estimate = std::numeric_limits<double>::quiet_NaN();
+
+    void add(double sample) {
+        if (std::isnan(sample)) {
+            *this = OneSidedLimit{};
+            return;
+        }
+
+        previous_estimate = estimate;
+        estimate = 2.0 * sample - previous_sample;
+        previous_sample = sample;
+    }
+
+    [[nodiscard]] bool is_outside_domain() const {
+        return std::isnan(previous_sample);
+    }
+
+    [[nodiscard]] bool has_settled() const {
+        return !std::isnan(estimate) && !std::isnan(previous_estimate) &&
+               limit_estimates_agree(estimate, previous_estimate);
+    }
+};
+
+// The limit, once both sides have settled on the same value — or one side has
+// settled and the other lies outside the domain (e.g. √x at 0).
+[[nodiscard]] std::optional<double> settled_limit(const OneSidedLimit& left,
+                                                  const OneSidedLimit& right) {
+    if (left.has_settled() && right.has_settled()) {
+        if (limit_estimates_agree(left.estimate, right.estimate)) {
+            return (left.estimate + right.estimate) / 2.0;
+        }
+
+        return std::nullopt;
+    }
+
+    if (left.has_settled() && right.is_outside_domain()) {
+        return left.estimate;
+    }
+
+    if (right.has_settled() && left.is_outside_domain()) {
+        return right.estimate;
+    }
+
+    return std::nullopt;
 }
 
 // Central-difference estimate of the partial derivative of the multivariable
@@ -443,43 +507,39 @@ static void register_calculus_analysis(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto target = args[0].to_numeric();
 
-            double h{k_limit_initial_step};
-            double prev{std::numeric_limits<double>::quiet_NaN()};
+            // The sides are estimated separately: averaging the raw samples
+            // would report 0 for 1/x at 0, whose sides run off to ±infinity.
+            OneSidedLimit left{};
+            OneSidedLimit right{};
+            // The step scales with the target, so a large target still gets
+            // enough halvings before h drops below its precision.
+            double h{k_limit_initial_step * std::max(1.0, std::fabs(target))};
 
-            for (int i{0}; i < k_limit_max_iterations; ++i) {
-                const auto left = call_fn(args[1], target - h, loc);
-                const auto right = call_fn(args[1], target + h, loc);
-
-                if (std::isnan(left) && std::isnan(right)) {
-                    h /= 2.0;
-
-                    continue;
+            for (int i{0}; i < k_limit_max_iterations; ++i, h /= 2.0) {
+                // Once h is below the target's precision both sides sample the
+                // target itself, which would make a jump look continuous.
+                if (target - h == target || target + h == target) {
+                    break;
                 }
 
-                double estimate = std::numeric_limits<double>::quiet_NaN();
+                const auto left_sample = call_fn(args[1], target - h, loc);
+                const auto right_sample = call_fn(args[1], target + h, loc);
 
-                if (std::isnan(left)) {
-                    estimate = right;
-                } else if (std::isnan(right)) {
-                    estimate = left;
-                } else {
-                    estimate = (left + right) / 2.0;
+                if (std::isinf(left_sample) || std::isinf(right_sample)) {
+                    return make_failure_value(
+                        "Calculus.limit: the function diverges near the point");
                 }
 
-                if (!std::isnan(prev) && std::fabs(estimate - prev) < k_minimize_tolerance) {
-                    return make_success_value(Value{estimate});
+                left.add(left_sample);
+                right.add(right_sample);
+
+                if (const auto limit = settled_limit(left, right)) {
+                    return make_success_value(Value{*limit});
                 }
-
-                prev = estimate;
-
-                h /= 2.0;
             }
 
-            if (std::isnan(prev)) {
-                return make_failure_value("Calculus.limit: could not converge");
-            }
-
-            return make_success_value(Value{prev});
+            return make_failure_value(
+                "Calculus.limit: could not converge — the limit may not exist");
         })
         .func("sum_series", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "common/utf8.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/file_helpers.hpp"
@@ -404,22 +405,21 @@ void register_csv_ns(const EnvPtr& env) {
     ModuleBuilder{"Csv", env}
         .func("deserialize", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.deserialize", loc);
+            const auto& input = expect_string(args[0], "Csv.deserialize", loc);
 
-            return parse_csv_to_rows_result(args[0].as_string(), CsvOptions{}, "deserialize");
+            return parse_csv_to_rows_result(input, CsvOptions{}, "deserialize");
         })
         .func("deserialize_detailed", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.deserialize_detailed", loc);
+            const auto& input = expect_string(args[0], "Csv.deserialize_detailed", loc);
 
-            return parse_csv_to_detailed_result(args[0].as_string(), CsvOptions{});
+            return parse_csv_to_detailed_result(input, CsvOptions{});
         })
         .func("deserialize_records", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.deserialize_records", loc);
+            const auto& input = expect_string(args[0], "Csv.deserialize_records", loc);
 
-            return parse_csv_to_records_result(args[0].as_string(), CsvOptions{},
-                                               "deserialize_records");
+            return parse_csv_to_records_result(input, CsvOptions{}, "deserialize_records");
         })
         // ── Csv.Table (headers + positional rows) ────────────────────────────
         // Parse into a Csv.Table: the first row becomes the header, the rest the
@@ -428,9 +428,7 @@ void register_csv_ns(const EnvPtr& env) {
         // mirroring deserialize_detailed.
         .func("deserialize_table", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.deserialize_table", loc);
-
-            const auto& input = args[0].as_string();
+            const auto& input = expect_string(args[0], "Csv.deserialize_table", loc);
             auto [rows, success, error, error_offset] = parse_csv(input, CsvOptions{});
 
             if (!success) {
@@ -482,8 +480,7 @@ void register_csv_ns(const EnvPtr& env) {
                                    error_codes::type_mismatch);
             }
 
-            (void)expect_string(args[1], "Csv.column", loc);
-            const auto& name = args[1].as_string();
+            const auto& name = expect_string(args[1], "Csv.column", loc);
 
             std::size_t index{0};
             bool found{false};
@@ -614,11 +611,11 @@ void register_csv_ns(const EnvPtr& env) {
         })
         .func("deserialize_with", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.deserialize_with", loc);
+            const auto& input = expect_string(args[0], "Csv.deserialize_with", loc);
 
             const auto opts = options_from_value(args[1], "Csv.deserialize_with", loc);
 
-            return parse_csv_to_rows_result(args[0].as_string(), opts, "deserialize_with");
+            return parse_csv_to_rows_result(input, opts, "deserialize_with");
         })
         .func("default_dialect", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
@@ -658,15 +655,15 @@ void register_csv_ns(const EnvPtr& env) {
         })
         .func("read_file", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.read_file", loc);
+            const auto& path = expect_string(args[0], "Csv.read_file", loc);
 
-            const auto safe_path = validate_path(args[0].as_string(), loc);
+            const auto safe_path = validate_path(path, loc);
 
             const auto content = file_helpers::read_file_contents(safe_path);
 
             if (!content) {
                 return failure_msg("Csv", "read_file",
-                                   std::format("cannot open '{}'", safe_path.string()),
+                                   std::format("cannot open '{}'", path_to_utf8(safe_path)),
                                    error_codes::io_error);
             }
 
@@ -681,9 +678,9 @@ void register_csv_ns(const EnvPtr& env) {
         })
         .func("write_file", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.write_file", loc);
+            const auto& path = expect_string(args[0], "Csv.write_file", loc);
 
-            const auto safe_path = validate_path(args[0].as_string(), loc);
+            const auto safe_path = validate_path(path, loc);
 
             const auto& records = *expect_array(args[1], "Csv.write_file", loc)->elements;
 
@@ -693,7 +690,7 @@ void register_csv_ns(const EnvPtr& env) {
 
             if (!file_helpers::write_file_contents(safe_path, csv_text)) {
                 return failure_msg("Csv", "write_file",
-                                   std::format("cannot open '{}'", safe_path.string()),
+                                   std::format("cannot open '{}'", path_to_utf8(safe_path)),
                                    error_codes::io_error);
             }
 
@@ -701,11 +698,10 @@ void register_csv_ns(const EnvPtr& env) {
         })
         .func("header", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.header", loc);
+            const auto& input = expect_string(args[0], "Csv.header", loc);
 
             const CsvOptions opts;
-            [[maybe_unused]] auto [rows, success, error, error_offset] =
-                parse_csv(args[0].as_string(), opts);
+            [[maybe_unused]] auto [rows, success, error, error_offset] = parse_csv(input, opts);
 
             if (!success) {
                 return failure_msg("Csv", "header", error, error_codes::parse_error);
@@ -725,11 +721,10 @@ void register_csv_ns(const EnvPtr& env) {
         })
         .func("count_rows", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Csv.count_rows", loc);
+            const auto& input = expect_string(args[0], "Csv.count_rows", loc);
 
             const CsvOptions opts;
-            [[maybe_unused]] auto [rows, success, error, error_offset] =
-                parse_csv(args[0].as_string(), opts);
+            [[maybe_unused]] auto [rows, success, error, error_offset] = parse_csv(input, opts);
 
             if (!success) {
                 return failure_msg("Csv", "count_rows", error, error_codes::parse_error);

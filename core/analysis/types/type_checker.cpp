@@ -131,25 +131,8 @@ void TypeChecker::push_scope() {
 
 void TypeChecker::pop_scope() {
     if (ctx_.current_scope) {
-        // Warn about unused variables.
-        for (const auto& [name, info] : ctx_.current_scope->locals()) {
-            if (name.starts_with('_')) {
-                continue;
-            }
-
-            if (!info.is_read && !info.is_parameter) {
-                warn(std::format("unused variable '{}'", name), info.location,
-                     "prefix with '_' to suppress this warning", DiagnosticCode::UnusedVariable);
-            }
-
-            // Warn about mutable variables/parameters that are never mutated.
-            if (info.is_mutable && !info.is_written) {
-                const auto* const label = info.is_parameter ? "parameter" : "variable";
-                warn(std::format("{} '{}' is declared mutable but never mutated", label, name),
-                     info.location, "remove the 'mutable' keyword",
-                     DiagnosticCode::MutableNeverMutated);
-            }
-        }
+        // Unused (W0001) and never-mutated (W0004) variables are reported by the
+        // linter; reporting them here as well duplicated every warning.
 
         // Warn about unique variables that leave scope without being consumed.
         for (const auto& [name, info] : ctx_.current_scope->unconsumed_unique_locals()) {
@@ -191,6 +174,10 @@ void TypeChecker::check_match_exhaustiveness(const std::vector<MatchArm>& arms,
 
 bool TypeChecker::definitely_returns(const std::vector<StatementPtr>& stmts) const {
     return stmt_checker_->definitely_returns(stmts);
+}
+
+bool TypeChecker::never_falls_through(const std::vector<StatementPtr>& stmts) const {
+    return stmt_checker_->never_falls_through(stmts);
 }
 
 TypeInfo TypeChecker::infer_expression_type(const Expression& expr) {
@@ -248,9 +235,11 @@ void TypeChecker::reset_state() {
     symbols_.clear();
     resolving_aliases_.clear();
     internal_members_.clear();
+    internal_access_reported_.clear();
     called_functions_.clear();
     resolved_type_cache_.clear();
     ctx_.reset();
+    expr_checker_->reset_pass_state();
     generics_.reset();
     registry_.reset();
 }
@@ -261,55 +250,10 @@ void TypeChecker::reset_state() {
 
 std::vector<Diagnostic> TypeChecker::check(const Program& program, bool require_main) {
     reset_state();
+    incremental_.has_pending_input = false;
 
-    stdlib_handler_.initialize();
-    stdlib_signatures_cache_ = stdlib_handler_.build_signature_map();
-
-    // Register stdlib-provided record and choice types so they are
-    // visible to user programs (e.g. Http.Response, Log.Level).
-    for (const auto& [qualified, rec] : stdlib_record_types()) {
-        symbols_.records[qualified] = rec;
-        registry_.register_symbol(qualified, SuggestionCategory::Type);
-    }
-
-    for (const auto& [qualified, ch] : stdlib_choice_types()) {
-        symbols_.choices[qualified] = ch;
-        registry_.register_symbol(qualified, SuggestionCategory::Type);
-    }
-
-    // Create global scope with built-in functions.
-    ctx_.current_scope = std::make_shared<TypeScope>();
-
-    ctx_.current_scope->define("print", TypeInfo::make(TypeInfo::Kind::Func), {});
-    ctx_.current_scope->define("assert", TypeInfo::make(TypeInfo::Kind::Func), {});
-
-    {
-        auto type_of_func = TypeInfo::make(TypeInfo::Kind::Func);
-        type_of_func.return_type =
-            std::make_shared<TypeInfo>(TypeInfo::make(TypeInfo::Kind::String));
-
-        ctx_.current_scope->define("type_of", type_of_func, {});
-    }
-
-    for (const auto& ns : stdlib_handler_.namespaces()) {
-        ctx_.current_scope->define(ns, TypeInfo::make(TypeInfo::Kind::Namespace), {});
-    }
-
-    register_declarations(program.declarations);
-
-    for (const auto& decl : program.declarations) {
-        check_declaration(*decl);
-    }
-
-    for (const auto& stmt : program.statements) {
-        check_statement(*stmt);
-    }
-
-    // Validate @main count.
-    if (ctx_.main_count > 1) {
-        error("multiple @main functions found; exactly one is required", SourceLocation{},
-              "remove extra @main annotations so only one entry point remains");
-    }
+    initialize_global_scope();
+    check_program(program);
 
     if (require_main && ctx_.main_count == 0) {
         error("no @main function found", SourceLocation{},
@@ -339,6 +283,120 @@ std::vector<Diagnostic> TypeChecker::check(const Program& program, bool require_
     }
 
     return take_diagnostics();
+}
+
+std::vector<Diagnostic> TypeChecker::check_incremental(const Program& program) {
+    if (!incremental_.committed_scope) {
+        reset_state();
+        initialize_global_scope();
+
+        incremental_.committed_scope = ctx_.current_scope;
+        incremental_.committed_symbols = symbols_;
+        incremental_.committed_internal_members = internal_members_;
+        incremental_.committed_alias_params = generics_.alias_params();
+    }
+
+    // Restart from the last committed input, dropping anything an uncommitted
+    // one registered — its AST, which the symbol tables point into, may be gone.
+    clear_diagnostics();
+    warnings_.clear();
+    resolving_aliases_.clear();
+    called_functions_.clear();
+    resolved_type_cache_.clear();
+    internal_access_reported_.clear();
+    expr_checker_->reset_pass_state();
+    symbols_ = incremental_.committed_symbols;
+    internal_members_ = incremental_.committed_internal_members;
+    generics_.alias_params() = incremental_.committed_alias_params;
+
+    for (const auto& [scope, ownership] : incremental_.committed_ownership) {
+        scope->restore_local_ownership(ownership);
+    }
+
+    ctx_.reset();
+    ctx_.current_scope = std::make_shared<TypeScope>(incremental_.committed_scope);
+    ctx_.repl_input_scope = ctx_.current_scope;
+    incremental_.has_pending_input = true;
+
+    check_program(program);
+
+    return take_diagnostics();
+}
+
+void TypeChecker::commit_incremental() {
+    if (!incremental_.has_pending_input) {
+        return;
+    }
+
+    incremental_.committed_scope = ctx_.current_scope;
+    incremental_.committed_symbols = symbols_;
+    incremental_.committed_internal_members = internal_members_;
+    incremental_.committed_alias_params = generics_.alias_params();
+    incremental_.has_pending_input = false;
+
+    incremental_.committed_ownership.clear();
+
+    for (auto scope = incremental_.committed_scope; scope; scope = scope->parent()) {
+        if (auto ownership = scope->snapshot_local_ownership(); !ownership.empty()) {
+            incremental_.committed_ownership.emplace_back(scope, std::move(ownership));
+        }
+    }
+}
+
+void TypeChecker::reset_incremental() {
+    incremental_ = IncrementalState{};
+}
+
+void TypeChecker::initialize_global_scope() {
+    stdlib_handler_.initialize();
+    stdlib_signatures_cache_ = stdlib_handler_.build_signature_map();
+
+    // Register stdlib-provided record and choice types so they are
+    // visible to user programs (e.g. Http.Response, Log.Level).
+    for (const auto& [qualified, rec] : stdlib_record_types()) {
+        symbols_.records[qualified] = rec;
+        registry_.register_symbol(qualified, SuggestionCategory::Type);
+    }
+
+    for (const auto& [qualified, ch] : stdlib_choice_types()) {
+        symbols_.choices[qualified] = ch;
+        registry_.register_symbol(qualified, SuggestionCategory::Type);
+    }
+
+    // Create global scope with built-in functions.
+    ctx_.current_scope = std::make_shared<TypeScope>();
+
+    // `print` takes any number of arguments, so it has no fixed signature (a
+    // Func without a return type skips the arity check); `type_of` takes
+    // exactly one value of any type.
+    ctx_.current_scope->define("print", TypeInfo::make(TypeInfo::Kind::Func), {});
+    ctx_.current_scope->define("assert", TypeInfo::make(TypeInfo::Kind::Func), {});
+    ctx_.current_scope->define("type_of",
+                               TypeInfo::make_func({TypeInfo::make(TypeInfo::Kind::StdlibAny)},
+                                                   TypeInfo::make(TypeInfo::Kind::String)),
+                               {});
+
+    for (const auto& ns : stdlib_handler_.namespaces()) {
+        ctx_.current_scope->define(ns, TypeInfo::make(TypeInfo::Kind::Namespace), {});
+    }
+}
+
+void TypeChecker::check_program(const Program& program) {
+    register_declarations(program.declarations);
+
+    for (const auto& decl : program.declarations) {
+        check_declaration(*decl);
+    }
+
+    for (const auto& stmt : program.statements) {
+        check_statement(*stmt);
+    }
+
+    // Validate @main count.
+    if (ctx_.main_count > 1) {
+        error("multiple @main functions found; exactly one is required", SourceLocation{},
+              "remove extra @main annotations so only one entry point remains");
+    }
 }
 
 } // namespace luma

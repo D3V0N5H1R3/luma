@@ -17,8 +17,8 @@ void register_string_transform(const EnvPtr& env);
 
 // Direction for string padding operations.
 enum class PaddingDirection {
-    start,
-    end
+    Start,
+    End
 };
 
 // Build a string of exactly `codepoint_count` codepoints by cycling the UTF-8
@@ -28,7 +28,7 @@ enum class PaddingDirection {
 [[nodiscard]] std::string build_cycled_fill(const std::string& fill, std::size_t codepoint_count);
 
 // Pad input to target_width using fill as the repeating pattern.
-// PaddingDirection::start pads on the left, PaddingDirection::end pads on the right.
+// PaddingDirection::Start pads on the left, PaddingDirection::End pads on the right.
 [[nodiscard]] std::string apply_padding(const std::string& input, const std::string& fill,
                                         std::size_t target_width, PaddingDirection direction);
 

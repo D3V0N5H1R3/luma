@@ -5,6 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "common/narrow_int.hpp"
@@ -27,8 +28,8 @@ namespace {
 
 // Half-open [begin, end) element window for DAP start/count paging.
 struct ElementWindow {
-    int begin;
-    int end;
+    int begin{0};
+    int end{0};
 };
 
 // Compute the [begin, end) window into a `total`-element collection for the
@@ -44,18 +45,65 @@ struct ElementWindow {
 // make_base_variable (which formats a Value), these leaves carry raw text such
 // as a choice tag, a stringified range bound, or a boolean flag.
 [[nodiscard]] static Variable make_leaf_variable(std::string name, std::string value,
-                                                 std::string type, std::string evaluate_name = "") {
+                                                 std::string type) {
     Variable var;
     var.name = std::move(name);
     var.value = std::move(value);
     var.type = std::move(type);
-    var.evaluate_name = std::move(evaluate_name);
     return var;
 }
 
 // Render a boolean as the lowercase literal used in variable displays.
 [[nodiscard]] static std::string bool_to_string(bool value) {
     return value ? "true" : "false";
+}
+
+// Quote `text` as a Luma string literal: escape backslashes, quotes, and `$`
+// (which would otherwise start an interpolation), plus common control
+// characters, so a dictionary key always round-trips as an evaluateName.
+[[nodiscard]] static std::string quote_luma_string(std::string_view text) {
+    std::string quoted{"\""};
+
+    for (const char c : text) {
+        switch (c) {
+            case '\\':
+                quoted += "\\\\";
+                break;
+            case '"':
+                quoted += "\\\"";
+                break;
+            case '$':
+                quoted += "\\$";
+                break;
+            case '\n':
+                quoted += "\\n";
+                break;
+            case '\r':
+                quoted += "\\r";
+                break;
+            case '\t':
+                quoted += "\\t";
+                break;
+            default:
+                quoted += c;
+                break;
+        }
+    }
+
+    quoted += '"';
+    return quoted;
+}
+
+// Build a child's evaluateName from its parent's expression and the access
+// suffix; an unknown parent yields no evaluateName rather than a relative
+// fragment that would evaluate to something else (or fail to parse).
+[[nodiscard]] static std::string child_expression(const std::string& parent_expr,
+                                                  std::string_view suffix) {
+    if (parent_expr.empty()) {
+        return {};
+    }
+
+    return parent_expr + std::string{suffix};
 }
 
 // Human-readable name for an XML node's type, used as the leaf value of an
@@ -78,7 +126,8 @@ struct ElementWindow {
 
 std::vector<Variable> ValueExpander::get_value_variables(const Value& val, int value_depth,
                                                          int start, int count,
-                                                         const std::string& filter) const {
+                                                         const std::string& filter,
+                                                         const std::string& parent_expr) const {
     const int child_depth = value_depth + 1;
 
     const auto classification = classify_value(val);
@@ -89,23 +138,24 @@ std::vector<Variable> ValueExpander::get_value_variables(const Value& val, int v
 
     switch (classification.kind) {
         case ValueKind::Array:
-            return get_array_variables(val, start, count, child_depth);
+            return get_indexed_variables(*val.as_array()->elements, start, count, child_depth,
+                                         parent_expr);
         case ValueKind::Dictionary:
-            return get_dictionary_variables(val, start, count, child_depth);
+            return get_dictionary_variables(val, start, count, child_depth, parent_expr);
         case ValueKind::Tuple:
-            return get_tuple_variables(val, start, count, child_depth);
+            return get_tuple_variables(val, start, count, child_depth, parent_expr);
         case ValueKind::Record:
-            return get_record_variables(val, start, count, child_depth);
+            return get_record_variables(val, start, count, child_depth, parent_expr);
         case ValueKind::Choice:
             return get_choice_variables(val, start, count, child_depth);
         case ValueKind::Result:
             return get_result_variables(val, child_depth);
         case ValueKind::Queue:
-            return get_indexed_variables(val.as_queue()->elements, start, count, child_depth);
+            return get_indexed_variables(val.as_queue()->elements, start, count, child_depth, {});
         case ValueKind::Stack:
-            return get_indexed_variables(val.as_stack()->elements, start, count, child_depth);
+            return get_indexed_variables(val.as_stack()->elements, start, count, child_depth, {});
         case ValueKind::Set:
-            return get_indexed_variables(val.as_set()->elements, start, count, child_depth);
+            return get_indexed_variables(val.as_set()->elements, start, count, child_depth, {});
         case ValueKind::KeyValueStore:
             return get_key_value_store_variables(val);
         case ValueKind::Xml:
@@ -121,29 +171,25 @@ std::vector<Variable> ValueExpander::get_value_variables(const Value& val, int v
     return {};
 }
 
-std::vector<Variable> ValueExpander::get_array_variables(const Value& val, int start, int count,
-                                                         int child_depth) const {
-    return get_indexed_variables(*val.as_array()->elements, start, count, child_depth);
-}
-
 std::vector<Variable> ValueExpander::get_tuple_variables(const Value& val, int start, int count,
-                                                         int child_depth) const {
+                                                         int child_depth,
+                                                         const std::string& parent_expr) const {
     std::vector<Variable> result;
     const auto& elements = val.as_tuple()->elements;
     const auto [begin, end] = compute_window(start, count, clamp_to_int(elements.size()));
 
     for (int i = begin; i < end; ++i) {
-        auto var = inspector_.make_variable(
-            std::format(".{}", i), elements[static_cast<std::size_t>(i)], false, child_depth);
-        var.evaluate_name = std::format(".{}", i);
-        result.push_back(std::move(var));
+        result.push_back(inspector_.make_variable(
+            std::format(".{}", i), elements[static_cast<std::size_t>(i)], false, child_depth,
+            child_expression(parent_expr, std::format(".{}", i))));
     }
 
     return result;
 }
 
-std::vector<Variable> ValueExpander::get_dictionary_variables(const Value& val, int start,
-                                                              int count, int child_depth) const {
+std::vector<Variable>
+ValueExpander::get_dictionary_variables(const Value& val, int start, int count, int child_depth,
+                                        const std::string& parent_expr) const {
     std::vector<Variable> result;
     const auto& entries = val.as_dictionary()->entries;
     const auto [begin, end] = compute_window(start, count, clamp_to_int(entries.size()));
@@ -154,9 +200,9 @@ std::vector<Variable> ValueExpander::get_dictionary_variables(const Value& val, 
             break;
         }
         if (index >= begin) {
-            auto var = inspector_.make_variable(key, value, false, child_depth);
-            var.evaluate_name = std::format("[\"{}\"]", key);
-            result.push_back(std::move(var));
+            result.push_back(inspector_.make_variable(
+                key, value, false, child_depth,
+                child_expression(parent_expr, "[" + quote_luma_string(key) + "]")));
         }
         ++index;
     }
@@ -165,7 +211,8 @@ std::vector<Variable> ValueExpander::get_dictionary_variables(const Value& val, 
 }
 
 std::vector<Variable> ValueExpander::get_record_variables(const Value& val, int start, int count,
-                                                          int child_depth) const {
+                                                          int child_depth,
+                                                          const std::string& parent_expr) const {
     std::vector<Variable> result;
     const auto& fields = val.as_record()->fields;
     const auto [begin, end] = compute_window(start, count, clamp_to_int(fields.size()));
@@ -176,9 +223,8 @@ std::vector<Variable> ValueExpander::get_record_variables(const Value& val, int 
             break;
         }
         if (index >= begin) {
-            auto var = inspector_.make_variable(name, value, false, child_depth);
-            var.evaluate_name = name;
-            result.push_back(std::move(var));
+            result.push_back(inspector_.make_variable(name, value, false, child_depth,
+                                                      child_expression(parent_expr, "." + name)));
         }
         ++index;
     }
@@ -223,16 +269,16 @@ std::vector<Variable> ValueExpander::get_result_variables(const Value& val, int 
 }
 
 std::vector<Variable> ValueExpander::get_indexed_variables(const std::vector<Value>& elements,
-                                                           int start, int count,
-                                                           int child_depth) const {
+                                                           int start, int count, int child_depth,
+                                                           const std::string& parent_expr) const {
     std::vector<Variable> result;
     const auto [begin, end] = compute_window(start, count, clamp_to_int(elements.size()));
 
     for (int i = begin; i < end; ++i) {
-        auto var = inspector_.make_variable(
-            std::format("[{}]", i), elements[static_cast<std::size_t>(i)], false, child_depth);
-        var.evaluate_name = std::format("[{}]", i);
-        result.push_back(std::move(var));
+        const auto index = std::format("[{}]", i);
+        result.push_back(inspector_.make_variable(index, elements[static_cast<std::size_t>(i)],
+                                                  false, child_depth,
+                                                  child_expression(parent_expr, index)));
     }
 
     return result;
@@ -244,12 +290,13 @@ std::vector<Variable> ValueExpander::get_key_value_store_variables(const Value& 
     // KeyValueStore is a shared, concurrently-accessed collection guarded by its
     // own mutex (mirroring ReferenceValue::get()).  Under per-thread pausing,
     // another running task may still mutate the store, so hold the lock while
-    // snapshotting its entries.
+    // snapshotting its entries.  Entries carry no evaluateName: a store is read
+    // through KeyValueStore.get(), not by indexing.
     const auto store = val.as_key_value_store();
     const std::lock_guard lock{store->mutex};
 
     for (const auto& [key, value] : store->entries) {
-        result.push_back(make_leaf_variable(key, value, "string", std::format("[\"{}\"]", key)));
+        result.push_back(make_leaf_variable(key, value, "string"));
     }
 
     return result;

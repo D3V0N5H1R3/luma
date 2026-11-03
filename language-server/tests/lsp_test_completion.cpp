@@ -29,8 +29,8 @@ void test_completion_with_types() {
     const std::string uri = "file:///test/comptypes.luma";
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
                                                "record Point {\n"
-                                               "    x: integer\n"
-                                               "    y: integer\n"
+                                               "    integer x,\n"
+                                               "    integer y\n"
                                                "}\n"
                                                "\n"
                                                "choice Color {\n"
@@ -40,8 +40,8 @@ void test_completion_with_types() {
                                                "}\n"
                                                "\n"
                                                "@main\n"
-                                               "function main() {\n"
-                                               "    p = Point { x = 1, y = 2 }\n"
+                                               "function void main() {\n"
+                                               "    Point p = Point { x = 1, y = 2 }\n"
                                                "}\n",
                                                make_td_position(uri, 13, 4));
     ASSERT_TRUE((*resp)["result"].is_array());
@@ -69,9 +69,9 @@ void test_pipe_completion() {
     LspTestSession session;
 
     const std::string uri = "file:///test/pipe.luma";
-    const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
-                                               "let x: integer = 42\nlet y = x |>\n",
-                                               make_td_position(uri, 1, 12));
+    const auto* resp =
+        open_request_and_assert(session, "textDocument/completion", uri,
+                                "integer x = 42\ninteger y = x |>\n", make_td_position(uri, 1, 16));
 
     const auto& items = (*resp)["result"].as_array();
     bool found_qualified = false;
@@ -92,8 +92,8 @@ void test_record_field_completion() {
     const std::string uri = "file:///test/record_completion.luma";
     const auto* resp = open_request_and_assert(
         session, "textDocument/completion", uri,
-        "record Point {\n    x: integer\n    y: integer\n}\nlet p = Point { x = 1, \n",
-        make_td_position(uri, 4, 23));
+        "record Point {\n    integer x,\n    integer y\n}\nPoint p = Point { x = 1, \n",
+        make_td_position(uri, 4, 25));
     ASSERT_TRUE((*resp)["result"].is_array());
 }
 
@@ -152,7 +152,7 @@ void test_match_pattern_completion() {
 
     const std::string uri = "file:///test/match_comp.luma";
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
-                                               "function check(r: result<integer>) -> integer {\n"
+                                               "function integer check(result<integer> r) {\n"
                                                "    match r {\n"
                                                "    case \n"
                                                "    }\n"
@@ -187,11 +187,12 @@ void test_type_annotation_completion() {
     LspTestSession session;
 
     const std::string uri = "file:///test/type_comp.luma";
+    // Cursor at the first parameter's type: `function integer foo(|) {`.
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
-                                               "function foo(x: ) -> integer {\n"
+                                               "function integer foo() {\n"
                                                "    return 0\n"
                                                "}\n",
-                                               make_td_position(uri, 0, 16));
+                                               make_td_position(uri, 0, 21));
     ASSERT_TRUE((*resp)["result"].is_array());
 
     const auto& result = (*resp)["result"];
@@ -206,17 +207,18 @@ void test_completion_user_function() {
     LspTestSession session;
 
     const std::string uri = "file:///test/comp_userfn.luma";
-    const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
-                                               "function calculate_sum(a: integer, b: integer) -> "
-                                               "integer {\n"
-                                               "    return a + b\n"
-                                               "}\n"
-                                               "\n"
-                                               "@main\n"
-                                               "function main() {\n"
-                                               "    calc\n"
-                                               "}\n",
-                                               make_td_position(uri, 6, 8));
+    const auto* resp =
+        open_request_and_assert(session, "textDocument/completion", uri,
+                                "function integer calculate_sum(integer a, integer b) "
+                                "{\n"
+                                "    return a + b\n"
+                                "}\n"
+                                "\n"
+                                "@main\n"
+                                "function void main() {\n"
+                                "    calc\n"
+                                "}\n",
+                                make_td_position(uri, 6, 8));
     ASSERT_TRUE((*resp)["result"].is_array());
 
     // User-defined function availability depends on analysis timing.
@@ -243,12 +245,12 @@ void test_completion_empty_body() {
 
     const std::string uri = "file:///test/comp_empty.luma";
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
-                                               "function greet(name: string) -> string {\n"
+                                               "function string greet(string name) {\n"
                                                "    return \"hi\"\n"
                                                "}\n"
                                                "\n"
                                                "@main\n"
-                                               "function main() {\n"
+                                               "function void main() {\n"
                                                "    \n"
                                                "}\n",
                                                make_td_position(uri, 6, 4));
@@ -271,7 +273,7 @@ void test_completion_module_dot() {
 
     const std::string uri = "file:///test/comp_dot.luma";
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
-                                               "@main\nfunction main() {\n    String.\n}\n",
+                                               "@main\nfunction void main() {\n    String.\n}\n",
                                                make_td_position(uri, 2, 11));
     ASSERT_TRUE((*resp)["result"].is_array());
 
@@ -297,7 +299,7 @@ void test_completion_inside_case() {
                                                "    Blue\n"
                                                "}\n"
                                                "\n"
-                                               "function describe(c: Color) -> string {\n"
+                                               "function string describe(Color c) {\n"
                                                "    match c {\n"
                                                "        case Color.\n"
                                                "    }\n"
@@ -313,11 +315,11 @@ void test_type_annotation_container_types() {
     LspTestSession session;
 
     const std::string uri = "file:///test/type_containers.luma";
+    // Cursor at the return type: `function |void foo() {`.
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
-                                               "function foo(x: ) -> integer {\n"
-                                               "    return 0\n"
+                                               "function void foo() {\n"
                                                "}\n",
-                                               make_td_position(uri, 0, 16));
+                                               make_td_position(uri, 0, 9));
     ASSERT_TRUE((*resp)["result"].is_array());
 
     const auto& result = (*resp)["result"];
@@ -326,6 +328,36 @@ void test_type_annotation_container_types() {
     ASSERT_TRUE(has_completion_label(result, "queue"));
     ASSERT_TRUE(has_completion_label(result, "void"));
     ASSERT_TRUE(has_completion_label(result, "socket"));
+}
+
+// ─── Completion: generic arguments vs comparisons ──────────────────
+
+void test_type_completion_in_generic_argument() {
+    LspTestSession session;
+
+    const std::string uri = "file:///test/type_generic.luma";
+    const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
+                                               "function void foo() {\n"
+                                               "    array<\n"
+                                               "}\n",
+                                               make_td_position(uri, 1, 10));
+    const auto& result = (*resp)["result"];
+    ASSERT_TRUE(has_completion_label(result, "integer"));
+    ASSERT_FALSE(has_completion_label(result, "Math"));
+}
+
+void test_comparison_is_not_a_type_position() {
+    // Regression (review): `i<n` matched the generic-argument pattern, so the
+    // completion list collapsed to type names in the middle of an expression.
+    LspTestSession session;
+
+    const std::string uri = "file:///test/type_compare.luma";
+    const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
+                                               "function void foo(integer i, integer n) {\n"
+                                               "    boolean b = i<n\n"
+                                               "}\n",
+                                               make_td_position(uri, 1, 19));
+    ASSERT_TRUE(has_completion_label((*resp)["result"], "Math"));
 }
 
 // ─── Completion: inside a comment ──────────────────────────────────
@@ -338,9 +370,9 @@ void test_completion_in_comment() {
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
                                                "# This is a comment\n"
                                                "@main\n"
-                                               "function main() -> nothing\n"
-                                               "    Console.print(\"hi\")\n"
-                                               "end\n",
+                                               "function void main() {\n"
+                                               "    print(\"hi\")\n"
+                                               "}\n",
                                                make_td_position(uri, 0, 10));
 
     // B06: completion inside a comment is suppressed. The lexical guard runs on
@@ -361,7 +393,7 @@ void test_completion_in_string() {
     // array deterministically.
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
                                                "@main\n"
-                                               "function main() {\n"
+                                               "function void main() {\n"
                                                "    string s = \"hello world\"\n"
                                                "}\n",
                                                make_td_position(uri, 2, 20));
@@ -382,7 +414,7 @@ void test_completion_in_include_string_not_suppressed() {
     const auto* resp = open_request_and_assert(session, "textDocument/completion", uri,
                                                "include \"\"\n"
                                                "@main\n"
-                                               "function main() {\n"
+                                               "function void main() {\n"
                                                "}\n",
                                                make_td_position(uri, 0, 9));
 
@@ -407,6 +439,8 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_completion_module_dot);
     RUN(test_completion_inside_case);
     RUN(test_type_annotation_container_types);
+    RUN(test_type_completion_in_generic_argument);
+    RUN(test_comparison_is_not_a_type_position);
     RUN(test_completion_in_comment);
     RUN(test_completion_in_string);
     RUN(test_completion_in_include_string_not_suppressed);

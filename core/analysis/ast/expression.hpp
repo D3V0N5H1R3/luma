@@ -112,6 +112,15 @@ struct Expression {
 
     ExpressionKind kind;
     SourceLocation location;
+
+    /// Runtime widening pattern recorded by the type checker when this
+    /// expression's static type holds `integer` where its context expects
+    /// `number` — e.g. "number", "array<number>", or "(number,_)" (`_` leaves a
+    /// component untouched).  Null when no widening is needed.  The compiler
+    /// emits IntToNumber / WidenNumber after the expression so the runtime
+    /// representation matches the static type.  `mutable` because the type
+    /// checker annotates an otherwise read-only AST.
+    mutable std::unique_ptr<const std::string> numeric_widening;
 };
 
 /// Attempts to narrow a base Expression reference to a concrete node type `T`.
@@ -263,9 +272,43 @@ struct UnaryExpression : Expression {
     explicit UnaryExpression(SourceLocation loc, TokenType op, ExpressionPtr operand)
         : Expression{ExpressionKind::Unary, loc}, op{op}, operand{std::move(operand)} {}
 
+    UnaryExpression(const UnaryExpression&) = delete;
+    UnaryExpression(UnaryExpression&&) noexcept = default;
+
+    UnaryExpression& operator=(const UnaryExpression&) = delete;
+    UnaryExpression& operator=(UnaryExpression&&) noexcept = default;
+
+    // Custom destructor tears the operand spine down iteratively — a postfix
+    // '?' sits on the same spine as field accesses and calls; see
+    // release_linear_chain below.
+    ~UnaryExpression() noexcept;
+
     TokenType op;
     ExpressionPtr operand;
 };
+
+/// The value of an integer literal, also seeing through a unary minus: Luma has
+/// no negative integer literals, so `-3` parses as the negation of `3`.
+/// Returns std::nullopt for anything else.
+[[nodiscard]] inline std::optional<std::int64_t>
+get_signed_integer_value(const Expression& expr) noexcept {
+    if (expr.kind == ExpressionKind::Unary) {
+        const auto& unary = static_cast<const UnaryExpression&>(expr);
+
+        if (unary.op != TokenType::Minus) {
+            return std::nullopt;
+        }
+
+        // The lexer bounds integer literals to INT64_MAX, so negation cannot overflow.
+        if (const auto magnitude = get_integer_value(*unary.operand)) {
+            return -*magnitude;
+        }
+
+        return std::nullopt;
+    }
+
+    return get_integer_value(expr);
+}
 
 struct CallExpression : Expression {
     explicit CallExpression(SourceLocation loc, ExpressionPtr callee,
@@ -277,6 +320,16 @@ struct CallExpression : Expression {
           arguments{std::move(arguments)},
           named_arguments{std::move(named_arguments)},
           type_arguments{std::move(type_arguments)} {}
+
+    CallExpression(const CallExpression&) = delete;
+    CallExpression(CallExpression&&) noexcept = default;
+
+    CallExpression& operator=(const CallExpression&) = delete;
+    CallExpression& operator=(CallExpression&&) noexcept = default;
+
+    // Custom destructor tears the callee spine down iteratively — see
+    // release_linear_chain below.
+    ~CallExpression() noexcept;
 
     ExpressionPtr callee;
     std::vector<ExpressionPtr> arguments;
@@ -292,6 +345,16 @@ struct FieldAccessExpression : Expression {
           field_name{std::move(field_name)},
           is_optional{is_optional} {}
 
+    FieldAccessExpression(const FieldAccessExpression&) = delete;
+    FieldAccessExpression(FieldAccessExpression&&) noexcept = default;
+
+    FieldAccessExpression& operator=(const FieldAccessExpression&) = delete;
+    FieldAccessExpression& operator=(FieldAccessExpression&&) noexcept = default;
+
+    // Custom destructor tears the object spine down iteratively — see
+    // release_linear_chain below.
+    ~FieldAccessExpression() noexcept;
+
     ExpressionPtr object;
     std::string field_name;
     bool is_optional{false};
@@ -305,6 +368,16 @@ struct IndexAccessExpression : Expression {
           index{std::move(index)},
           is_optional{is_optional} {}
 
+    IndexAccessExpression(const IndexAccessExpression&) = delete;
+    IndexAccessExpression(IndexAccessExpression&&) noexcept = default;
+
+    IndexAccessExpression& operator=(const IndexAccessExpression&) = delete;
+    IndexAccessExpression& operator=(IndexAccessExpression&&) noexcept = default;
+
+    // Custom destructor tears the object spine down iteratively — see
+    // release_linear_chain below.
+    ~IndexAccessExpression() noexcept;
+
     ExpressionPtr object;
     ExpressionPtr index;
     bool is_optional{false};
@@ -312,10 +385,8 @@ struct IndexAccessExpression : Expression {
 
 /// Policy for how root_variable_of() walks an access chain down to its root.
 enum class ChainTraversal {
-    /// Descend through field accesses only; stop at an index access.  Used
-    /// where indexed-element mutation is permitted — e.g. 'a[i].x = …' mutates
-    /// the stored element rather than the 'a' binding, so the chain must not be
-    /// resolved past the '[i]'.
+    /// Descend through field accesses only; stop at an index access (the
+    /// chain then has no variable root and nullptr is returned).
     FieldsOnly,
     /// Descend through both field and index accesses to reach the binding —
     /// e.g. 'a[i]', 'p.arr[i]', and 'a[i][j]' all resolve to their root variable.
@@ -511,10 +582,13 @@ struct ErrorPipeExpression : Expression {
 
 namespace detail {
 
-// Detaches and returns the deep (left-associative) child of a linear expression
-// node, or nullptr when `node` is not one. Binary, pipe, and error-pipe chains
-// are the only node kinds a parser builds iteratively, so they are the only ones
-// whose left spine can grow past the recursive-descent depth guard.
+// Detaches and returns the deep child of a linear expression node, or nullptr
+// when `node` is not one.  The parser builds two kinds of spine iteratively, so
+// their depth is not bounded by the recursive-descent guard: the left operand
+// of binary-operator, pipe, and error-pipe chains, and the receiver of postfix
+// chains — a field access's or index's object, a call's callee, and a unary
+// (e.g. postfix '?') operand.  The two kinds can alternate (`(a.b + c).d`), so
+// all of them are released by one loop.
 [[nodiscard]] inline ExpressionPtr detach_linear_child(Expression& node) noexcept {
     switch (node.kind) {
         case ExpressionKind::Binary:
@@ -523,17 +597,26 @@ namespace detail {
             return std::move(static_cast<PipeExpression&>(node).left);
         case ExpressionKind::ErrorPipe:
             return std::move(static_cast<ErrorPipeExpression&>(node).left);
+        case ExpressionKind::FieldAccess:
+            return std::move(static_cast<FieldAccessExpression&>(node).object);
+        case ExpressionKind::IndexAccess:
+            return std::move(static_cast<IndexAccessExpression&>(node).object);
+        case ExpressionKind::Call:
+            return std::move(static_cast<CallExpression&>(node).callee);
+        case ExpressionKind::Unary:
+            return std::move(static_cast<UnaryExpression&>(node).operand);
         default:
             return nullptr;
     }
 }
 
-// Iteratively releases a left-associative chain of expression nodes. A long
-// operator or pipe chain (e.g. `a + b + c + ...` with thousands of terms) forms
-// a deeply left-leaning tree whose naive recursive destructor would overflow the
-// native stack. Walking the spine into a local and destroying one node at a time
-// keeps teardown at O(1) stack depth; each detached node's remaining (shallow)
-// children are freed by its own destructor.
+// Iteratively releases a linear chain of expression nodes. A long operator,
+// pipe, or postfix chain (e.g. `a + b + c + ...` with thousands of terms, or
+// field accesses nested through parentheses) forms a deeply one-sided tree
+// whose naive recursive destructor would overflow the native stack. Walking
+// the spine into a local and destroying one node at a time keeps teardown at
+// O(1) stack depth; each detached node's remaining (shallow) children are freed
+// by its own destructor.
 inline void release_linear_chain(ExpressionPtr head) noexcept {
     while (head) {
         ExpressionPtr next = detach_linear_child(*head);
@@ -554,6 +637,22 @@ inline PipeExpression::~PipeExpression() noexcept {
 
 inline ErrorPipeExpression::~ErrorPipeExpression() noexcept {
     detail::release_linear_chain(std::move(left));
+}
+
+inline UnaryExpression::~UnaryExpression() noexcept {
+    detail::release_linear_chain(std::move(operand));
+}
+
+inline CallExpression::~CallExpression() noexcept {
+    detail::release_linear_chain(std::move(callee));
+}
+
+inline FieldAccessExpression::~FieldAccessExpression() noexcept {
+    detail::release_linear_chain(std::move(object));
+}
+
+inline IndexAccessExpression::~IndexAccessExpression() noexcept {
+    detail::release_linear_chain(std::move(object));
 }
 
 struct RecordFieldInit {

@@ -1,4 +1,5 @@
 #include <format>
+#include <utility>
 
 #include "lsp_analysis_pipeline.hpp"
 #include "lsp_code_action_handler.hpp"
@@ -143,6 +144,27 @@ void LspServer::register_handlers() {
 //           lsp_handler_context.hpp  (resolve_token_context throw/return
 //                                     semantics).
 
+template <typename Produce>
+void LspServer::respond(const JsonValue& id, const std::string& method, Produce&& produce) {
+    try {
+        // Each handler acquires ReadStateLock (or uses resolve_token_context
+        // which does so) when it needs access to shared state.  A blanket
+        // lock here would cause deadlock via recursive shared locking when
+        // a writer (analysis worker) is waiting.
+        transport_wrapper_.send_response(id, std::forward<Produce>(produce)());
+    } catch (const InvalidParamsError& e) {
+        transport_wrapper_.send_error(id, k_json_rpc_invalid_params, e.what());
+    } catch (const std::exception& e) {
+        // A well-formed request that fails here indicates a server-side
+        // programming error.  Log the detail (the client only receives a
+        // generic message) so the failure is diagnosable.
+        transport_wrapper_.log_message(std::format("Error handling '{}': {}", method, e.what()),
+                                       constants::message_type::error);
+        transport_wrapper_.send_error(id, k_json_rpc_internal_error,
+                                      "Internal error processing request");
+    }
+}
+
 void LspServer::dispatch_request(const JsonValue& id, const std::string& method,
                                  const JsonValue& params) {
     // Early cancellation check — catches requests cancelled before dispatch begins.
@@ -151,31 +173,40 @@ void LspServer::dispatch_request(const JsonValue& id, const std::string& method,
         return;
     }
 
-    // Lifecycle handlers (not in dispatch table — they have side effects).
+    // Lifecycle (LSP 3.17 §lifecycle): `initialize` is the first request and
+    // may be sent only once; every other request — `shutdown` included — is
+    // rejected until it has succeeded, and every request after `shutdown`.
     if (method == "initialize") {
-        transport_wrapper_.send_response(id, handle_initialize(params));
+        if (initialize_received_) {
+            transport_wrapper_.send_error(id, k_json_rpc_invalid_request,
+                                          "The server is already initialized");
+            return;
+        }
+        respond(id, method, [&] {
+            auto capabilities = handle_initialize(params);
+            initialize_received_ = true;
+            return capabilities;
+        });
         return;
     }
 
-    if (method == "shutdown") {
-        transport_wrapper_.send_response(id, handle_shutdown());
-        return;
-    }
-
-    // Reject requests before initialize (LSP 3.17 §lifecycle).
-    if (!initialized_) {
+    if (!initialize_received_) {
         transport_wrapper_.send_error(id, k_json_rpc_server_not_initialized,
                                       "Server not initialized");
         return;
     }
 
-    // Reject requests after shutdown (LSP 3.17 §lifecycle).
     if (shutdown_requested_) {
         transport_wrapper_.send_error(id, k_json_rpc_invalid_request, "Server is shutting down");
         return;
     }
 
-    // Feature handlers via dispatch table — acquire shared lock.
+    if (method == "shutdown") {
+        respond(id, method, [&] { return handle_shutdown(); });
+        return;
+    }
+
+    // Feature handlers via dispatch table.
     const auto* handler = handlers_.find_request(method);
     if (handler == nullptr) {
         transport_wrapper_.send_error(id, k_json_rpc_method_not_found,
@@ -191,25 +222,39 @@ void LspServer::dispatch_request(const JsonValue& id, const std::string& method,
         return;
     }
 
-    try {
-        JsonValue response;
-        // Each handler acquires ReadStateLock (or uses resolve_token_context
-        // which does so) when it needs access to shared state.  A blanket
-        // lock here would cause deadlock via recursive shared locking when
-        // a writer (analysis worker) is waiting.
-        response = (*handler)(params);
-        transport_wrapper_.send_response(id, response);
-    } catch (const InvalidParamsError& e) {
-        transport_wrapper_.send_error(id, k_json_rpc_invalid_params, e.what());
-    } catch (const std::exception& e) {
-        // A well-formed request that fails here indicates a server-side
-        // programming error.  Log the detail (the client only receives a
-        // generic message) so the failure is diagnosable.
-        transport_wrapper_.log_message(std::format("Error handling '{}': {}", method, e.what()),
-                                       constants::message_type::error);
-        transport_wrapper_.send_error(id, k_json_rpc_internal_error,
-                                      "Internal error processing request");
+    respond(id, method, [&] { return (*handler)(params); });
+}
+
+bool LspServer::dispatch_message(const JsonValue& message) {
+    // A message carrying `result` or `error` but no `method` is a response to
+    // a request the server sent (e.g. workspace/configuration); it needs no
+    // reply.
+    if (message.is_object() && !message.has("method") &&
+        (message.has("result") || message.has("error"))) {
+        return false;
     }
+
+    // Anything else without a string `method` is not a valid request or
+    // notification (JSON-RPC 2.0 §5): answer with InvalidRequest, echoing
+    // the id when it is usable and null otherwise.
+    if (!message.is_object() || !message.has("method") || !message["method"].is_string()) {
+        JsonValue id;
+        if (message.is_object() && message.has("id") &&
+            (message["id"].is_string() || message["id"].is_integer())) {
+            id = message["id"];
+        }
+        transport_wrapper_.send_error(id, k_json_rpc_invalid_request, "Invalid Request");
+        return false;
+    }
+
+    const auto& method = message["method"].as_string();
+    const auto params = message.has("params") ? message["params"] : JsonValue();
+
+    if (message.has("id")) {
+        dispatch_request(message["id"], method, params);
+        return false;
+    }
+    return dispatch_notification(method, params);
 }
 
 bool LspServer::dispatch_notification(const std::string& method, const JsonValue& params) {

@@ -1,19 +1,24 @@
 // Unit tests for core/common/decimal.hpp — the exact base-10 Decimal type.
 
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "common/decimal.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::Decimal;
+using luma::parse_rounding_mode;
+using luma::rounding_mode_from_variant;
+using luma::RoundingMode;
 
 namespace {
 
 // Parses a literal, asserting success, for concise test setup.
 Decimal dec(std::string_view text) {
-    auto parsed = Decimal::parse(text);
+    const auto parsed = Decimal::parse(text);
     ASSERT_TRUE(parsed.has_value());
     return *parsed;
 }
@@ -21,7 +26,7 @@ Decimal dec(std::string_view text) {
 // Multiplies two Decimals, asserting the product fits the digit cap, for
 // concise test setup (multiply is fallible: it rejects over-cap products).
 Decimal mul(const Decimal& a, const Decimal& b) {
-    auto product = a.multiply(b);
+    const auto product = a.multiply(b);
     ASSERT_TRUE(product.has_value());
     return *product;
 }
@@ -338,13 +343,13 @@ static void test_rounding_mode_names() {
 
 static void test_rounding_mode_from_variant() {
     // Every PascalCase Decimal.RoundingMode variant maps to its enum value.
-    ASSERT_TRUE(rounding_mode_from_variant("HalfUp") == RoundingMode::HalfUp);
-    ASSERT_TRUE(rounding_mode_from_variant("HalfDown") == RoundingMode::HalfDown);
-    ASSERT_TRUE(rounding_mode_from_variant("HalfEven") == RoundingMode::HalfEven);
-    ASSERT_TRUE(rounding_mode_from_variant("Up") == RoundingMode::Up);
-    ASSERT_TRUE(rounding_mode_from_variant("Down") == RoundingMode::Down);
-    ASSERT_TRUE(rounding_mode_from_variant("Ceiling") == RoundingMode::Ceiling);
-    ASSERT_TRUE(rounding_mode_from_variant("Floor") == RoundingMode::Floor);
+    ASSERT_EQ(REQUIRE_VALUE(rounding_mode_from_variant("HalfUp")), RoundingMode::HalfUp);
+    ASSERT_EQ(REQUIRE_VALUE(rounding_mode_from_variant("HalfDown")), RoundingMode::HalfDown);
+    ASSERT_EQ(REQUIRE_VALUE(rounding_mode_from_variant("HalfEven")), RoundingMode::HalfEven);
+    ASSERT_EQ(REQUIRE_VALUE(rounding_mode_from_variant("Up")), RoundingMode::Up);
+    ASSERT_EQ(REQUIRE_VALUE(rounding_mode_from_variant("Down")), RoundingMode::Down);
+    ASSERT_EQ(REQUIRE_VALUE(rounding_mode_from_variant("Ceiling")), RoundingMode::Ceiling);
+    ASSERT_EQ(REQUIRE_VALUE(rounding_mode_from_variant("Floor")), RoundingMode::Floor);
 
     // The lowercase string names are NOT valid variant names, and vice versa.
     ASSERT_FALSE(rounding_mode_from_variant("half_up").has_value());
@@ -359,14 +364,14 @@ static void test_rounding_mode_from_variant() {
 
 static void test_money_arithmetic() {
     // Splitting $10.00 three ways with banker's rounding on each share.
-    Decimal total = dec("10.00");
-    Decimal share = *total.divide(dec("3"), 2, RoundingMode::HalfEven); // 3.33
+    const Decimal total = dec("10.00");
+    const Decimal share = *total.divide(dec("3"), 2, RoundingMode::HalfEven); // 3.33
     ASSERT_EQ(share.to_string(), std::string("3.33"));
-    Decimal remainder = total.subtract(mul(share, dec("3")));
+    const Decimal remainder = total.subtract(mul(share, dec("3")));
     ASSERT_EQ(remainder.to_string(), std::string("0.01"));
 
     // Tax: $19.99 * 8.25% rounded to cents.
-    Decimal tax = mul(dec("19.99"), dec("0.0825")).round(2, RoundingMode::HalfUp);
+    const Decimal tax = mul(dec("19.99"), dec("0.0825")).round(2, RoundingMode::HalfUp);
     ASSERT_EQ(tax.to_string(), std::string("1.65"));
 }
 

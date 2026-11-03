@@ -4,6 +4,8 @@
 
 #include "stdlib_test_helpers.hpp"
 
+using luma::test::eval;
+
 // ─── Order.of ───────────────────────────────────────────────────────
 
 static void test_order_of_integers() {
@@ -43,8 +45,12 @@ static void test_order_of_booleans() {
 
 static void test_order_of_rejects_incomparable() {
     // Mismatched, non-promotable types are a programmer error.
-    ASSERT_TRUE(luma::test::eval_throws(R"(Order.of(1, "a"))"));
-    ASSERT_TRUE(luma::test::eval_throws("Order.of(true, 1)"));
+    ASSERT_EVAL_THROWS(R"(Order.of(1, "a"))",
+                       "Order.of: only comparable types (integer, number, string, boolean) are "
+                       "supported, got 'integer' and 'string'");
+    ASSERT_EVAL_THROWS("Order.of(true, 1)",
+                       "Order.of: only comparable types (integer, number, string, boolean) are "
+                       "supported, got 'boolean' and 'integer'");
 }
 
 // ─── Order.reverse ──────────────────────────────────────────────────
@@ -105,10 +111,14 @@ static void test_order_number_roundtrip() {
 
 static void test_order_accessors_reject_non_ordering() {
     // The Ordering-consuming helpers reject a non-choice and a foreign choice.
-    ASSERT_TRUE(luma::test::eval_throws("Order.reverse(5)"));
-    ASSERT_TRUE(luma::test::eval_throws("Order.to_number(Log.Level.Information)"));
-    ASSERT_TRUE(luma::test::eval_throws("Order.then(Ordering.Less, 0)"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Order.from_number("x"))"));
+    ASSERT_EVAL_THROWS("Order.reverse(5)", "Order.reverse: expected an Ordering choice");
+    ASSERT_EVAL_THROWS("Order.to_number(Log.Level.Information)",
+                       "Order.to_number: expected an Ordering, got 'Level.Information'");
+    // A foreign choice whose variant shares an Ordering name is still rejected.
+    ASSERT_EVAL_THROWS("choice Fake { Less }\nOrder.to_number(Fake.Less)",
+                       "Order.to_number: expected an Ordering, got 'Fake.Less'");
+    ASSERT_EVAL_THROWS("Order.then(Ordering.Less, 0)", "Order.then: expected an Ordering choice");
+    ASSERT_EVAL_THROWS(R"(Order.from_number("x"))", "Order.from_number: expected a number");
 }
 
 int main() {

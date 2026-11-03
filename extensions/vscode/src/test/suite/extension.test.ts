@@ -35,9 +35,9 @@ suite("Extension Activation", () => {
         assert.ok(commands.includes("luma.showOutputChannel"));
         assert.ok(commands.includes("luma.runFile"));
         assert.ok(commands.includes("luma.runTests"));
-        // luma.showReferences is registered by the LSP client's
-        // ExecuteCommandFeature when the server starts, so it is not
-        // available in tests without a running language server.
+        // The extension registers luma.showReferences itself (not the LSP
+        // client), so it exists even without a running language server.
+        assert.ok(commands.includes("luma.showReferences"));
         assert.ok(commands.includes("luma.updateServer"));
     });
 

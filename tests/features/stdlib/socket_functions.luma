@@ -3,53 +3,64 @@
 #
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
+#
+# Every listener binds port 0 so the kernel assigns a free ephemeral port; no
+# test uses a fixed port that could collide with a suite running in parallel.
+# Sockets are closed before the assertions run, so a failing assertion never
+# leaks a handle into later tests.
 # ═══════════════════════════════════════════════════════════
+
+# ─── Loopback helpers ───
+
+function socket listen_on_loopback() {
+    return Result.unwrap(Socket.listen("127.0.0.1", 0))
+}
+
+function integer bound_port(socket bound_socket) {
+    return Result.unwrap(Socket.local_address_parts(bound_socket)).port
+}
+
+# A loopback port with nothing listening on it: bind an ephemeral port, record
+# it, and release it again.
+function integer unused_loopback_port() {
+    socket listener = listen_on_loopback()
+    integer port = bound_port(listener)
+
+    Socket.close(listener)
+
+    return port
+}
+
+function void close_all(array<socket> sockets) {
+    for open_socket in sockets {
+        Socket.close(open_socket)
+    }
+}
+
+# ─── Lifecycle ───
 
 @test
 function void test_udp_create_and_close() {
-    result<socket> socket_result = Socket.udp_create()
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    boolean was_connected = Socket.is_connected(udp_socket)
 
-    match socket_result {
-        success(socket_handle) {
-            assert(Socket.is_connected(socket_handle), "UDP socket should be valid")
+    Socket.close(udp_socket)
 
-            Socket.close(socket_handle)
-
-            assert(!Socket.is_connected(socket_handle), "closed socket should not be connected")
-        }
-        failure(error_message) {
-            assert(false, "failed to create UDP socket: ${error_message}")
-        }
-    }
+    assert(was_connected, "UDP socket should be valid")
+    assert(!Socket.is_connected(udp_socket), "closed socket should not be connected")
 }
 
 @test
 function void test_tcp_listen_and_close() {
-    result<socket> socket_result = Socket.listen("127.0.0.1", 0)
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+    boolean was_connected = Socket.is_connected(server)
+    result<string> address = Socket.local_address(server)
 
-    match socket_result {
-        success(socket_handle) {
-            assert(Socket.is_connected(socket_handle), "server socket should be valid")
+    Socket.close(server)
 
-            result<string> address_result = Socket.local_address(socket_handle)
-
-            match address_result {
-                success(address_string) {
-                    assert(String.length(address_string) > 0, "local address should not be empty")
-                }
-                failure(error_message) {
-                    assert(false, "failed to get local address: ${error_message}")
-                }
-            }
-
-            Socket.close(socket_handle)
-
-            assert(!Socket.is_connected(socket_handle), "closed socket should not be connected")
-        }
-        failure(error_message) {
-            assert(false, "failed to listen: ${error_message}")
-        }
-    }
+    assert(was_connected, "server socket should be valid")
+    assert(String.length(Result.unwrap(address)) > 0, "local address should not be empty")
+    assert(!Socket.is_connected(server), "closed socket should not be connected")
 }
 
 @test
@@ -70,119 +81,88 @@ function void test_connect_invalid_port() {
 
 @test
 function void test_socket_set_timeout() {
-    result<socket> socket_result = Socket.udp_create()
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<boolean> timeout_result = Socket.set_timeout(udp_socket, 1000)
 
-    match socket_result {
-        success(socket_handle) {
-            result<boolean> timeout_result = Socket.set_timeout(socket_handle, 1000)
+    Socket.close(udp_socket)
 
-            match timeout_result {
-                success(is_success) {
-                    assert(is_success, "set_timeout should succeed")
-                }
-                failure(error_message) {
-                    assert(false, "failed to set timeout: ${error_message}")
-                }
-            }
-
-            Socket.close(socket_handle)
-        }
-        failure(error_message) {
-            assert(false, "failed to create UDP socket: ${error_message}")
-        }
-    }
+    assert(timeout_result == success(true), "set_timeout should succeed")
 }
 
 @test
 function void test_socket_type_of() {
-    result<socket> socket_result = Socket.udp_create()
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    string type_name = type_of(udp_socket)
 
-    match socket_result {
-        success(socket_handle) {
-            assert(type_of(socket_handle) == "socket", "type_of socket should be 'socket'")
+    Socket.close(udp_socket)
 
-            Socket.close(socket_handle)
-        }
-        failure(error_message) {
-            assert(false, "failed to create UDP socket: ${error_message}")
-        }
-    }
+    assert(type_name == "socket", "type_of socket should be 'socket'")
+}
+
+@test
+function void test_udp_bind() {
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<boolean> bind_result = Socket.udp_bind(udp_socket, "127.0.0.1", 0)
+
+    Socket.close(udp_socket)
+
+    assert(bind_result == success(true), "bind should succeed")
 }
 
 # ─── UDP send / receive ───
 
 @test
 function void test_udp_send_and_receive() {
-    # Create and bind two UDP sockets, send a message between them.
+    # Bind two UDP sockets on ephemeral loopback ports and send a datagram
+    # from one to the other.
     socket sender = Result.unwrap(Socket.udp_create())
-    result<boolean> _sb = Socket.udp_bind(sender, "127.0.0.1", 0)
-
     socket receiver = Result.unwrap(Socket.udp_create())
-    result<boolean> _rb = Socket.udp_bind(receiver, "127.0.0.1", 0)
+    result<boolean> sender_bound = Socket.udp_bind(sender, "127.0.0.1", 0)
+    result<boolean> receiver_bound = Socket.udp_bind(receiver, "127.0.0.1", 0)
+    Socket.Address receiver_address = Result.unwrap(Socket.local_address_parts(receiver))
 
-    # Get the receiver's bound address to extract port.
-    string receiver_addr = Result.unwrap(Socket.local_address(receiver))
+    # Short timeout so a lost datagram fails the test instead of hanging it.
+    result<boolean> timeout_result = Socket.set_timeout(receiver, 2000)
 
-    # Parse host:port from local_address.
-    array<string> parts = String.split(receiver_addr, ":")
-    string host = parts[0]
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+    result<integer> send_result =
+        Socket.udp_send(sender, "hello", receiver_address.host, receiver_address.port)
+    result<string> received = Socket.receive(receiver, 1024)
 
-    # Short timeout to avoid hanging.
-    result<boolean> _t = Socket.set_timeout(receiver, 2000)
+    close_all([sender, receiver])
 
-    # Send a message.
-    result<integer> send_result = Socket.udp_send(sender, "hello", host, port)
-
-    assert(Result.is_success(send_result), "udp_send should succeed")
-
-    Socket.close(sender)
-    Socket.close(receiver)
+    assert(sender_bound == success(true))
+    assert(receiver_bound == success(true))
+    assert(timeout_result == success(true))
+    assert(send_result == success(5), "udp_send should report all five bytes sent")
+    assert(received == success("hello"), "the receiver should get the datagram")
 }
 
-# ─── Negative tests ───
+# ─── Negative tests — closed sockets and refused connections ───
 
 @test
 function void test_socket_send_on_closed() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
 
-    Socket.close(s)
+    Socket.close(udp_socket)
 
-    result<integer> r = Socket.udp_send(s, "data", "127.0.0.1", 9999)
+    # The send fails on the closed handle before any datagram leaves the host.
+    result<integer> send_result = Socket.udp_send(udp_socket, "data", "127.0.0.1", 9999)
 
-    assert(Result.is_failure(r), "send on closed socket should fail")
+    assert(Result.is_failure(send_result), "send on closed socket should fail")
 }
 
 @test
 function void test_socket_connect_refused() {
     # Connecting to a port with no listener should fail.
-    result<socket> r = Socket.connect("127.0.0.1", 1)
+    result<socket> connection_result = Socket.connect("127.0.0.1", unused_loopback_port())
 
-    assert(Result.is_failure(r), "connection to refused port should fail")
-}
-
-@test
-function void test_udp_bind() {
-    result<socket> socket_result = Socket.udp_create()
-
-    match socket_result {
+    match connection_result {
         success(socket_handle) {
-            result<boolean> bind_result = Socket.udp_bind(socket_handle, "127.0.0.1", 0)
-
-            match bind_result {
-                success(is_success) {
-                    assert(is_success, "bind should succeed")
-                }
-                failure(error_message) {
-                    assert(false, "failed to bind: ${error_message}")
-                }
-            }
-
             Socket.close(socket_handle)
+
+            assert(false, "connection to an unbound port should fail")
         }
-        failure(error_message) {
-            assert(false, "failed to create UDP socket: ${error_message}")
-        }
+        failure(_message) {}
     }
 }
 
@@ -193,189 +173,181 @@ function void test_tcp_send_and_receive() {
     # Bind a server, self-connect, accept the queued peer, and exchange a
     # message. Reliable on loopback: connect() completes the handshake in-kernel
     # and queues the connection, so accept() returns it without a second thread.
-    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
-
-    string server_addr = Result.unwrap(Socket.local_address(server))
-    array<string> parts = String.split(server_addr, ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-
-    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket server = listen_on_loopback()
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", bound_port(server)))
     socket connection = Result.unwrap(Socket.accept(server))
-
-    result<boolean> _t = Socket.set_timeout(connection, 2000)
+    result<boolean> _timeout_set = Socket.set_timeout(connection, 2000)
 
     result<integer> send_result = Socket.send(client, "hello")
-    assert(Result.is_success(send_result), "send should succeed")
+    result<string> received = Socket.receive(connection, 1024)
 
-    string received = Result.unwrap(Socket.receive(connection, 1024))
-    assert(received == "hello", "received data should match the sent data")
+    close_all([client, connection, server])
 
-    Socket.close(client)
-    Socket.close(connection)
-    Socket.close(server)
+    assert(send_result == success(5), "send should report all five bytes sent")
+    assert(received == success("hello"), "received data should match the sent data")
 }
 
 @test
 function void test_tcp_remote_address_matches_server() {
     # After a loopback handshake, the client's remote address must equal the
     # server's local (listening) address.
-    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
-
-    string server_addr = Result.unwrap(Socket.local_address(server))
-    array<string> parts = String.split(server_addr, ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-
-    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket server = listen_on_loopback()
+    string server_address = Result.unwrap(Socket.local_address(server))
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", bound_port(server)))
     socket connection = Result.unwrap(Socket.accept(server))
 
-    string client_remote = Result.unwrap(Socket.remote_address(client))
-    assert(client_remote == server_addr,
-        "client's remote address should equal the server's listening address")
+    result<string> client_remote = Socket.remote_address(client)
 
-    Socket.close(client)
-    Socket.close(connection)
-    Socket.close(server)
+    close_all([client, connection, server])
+
+    assert(
+        client_remote == success(server_address),
+        "client's remote address should equal the server's listening address"
+    )
 }
 
 @test
 function void test_local_address_has_loopback_host() {
     # listen("127.0.0.1", 0) binds to the loopback host on a kernel-assigned
     # ephemeral port; the reported address must reflect both.
-    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
-
+    socket server = listen_on_loopback()
     string address = Result.unwrap(Socket.local_address(server))
-    assert(String.starts_with(address, "127.0.0.1:"),
-        "local address should be on the loopback host")
-    assert(address != "127.0.0.1:0", "listen on port 0 should assign a real port")
 
     Socket.close(server)
+
+    assert(String.starts_with(address, "127.0.0.1:"), "local address should be on loopback")
+    assert(address != "127.0.0.1:0", "listen on port 0 should assign a real port")
 }
 
 @test
 function void test_local_address_parts_fields() {
     # local_address_parts returns a structured Socket.Address record instead of a
     # "host:port" string, so host and port are read directly (no manual split).
-    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
-
-    Socket.Address addr = Result.unwrap(Socket.local_address_parts(server))
-    assert(addr.host == "127.0.0.1", "address host should be the loopback host")
-    assert(addr.port > 0, "listen on port 0 should assign a real, non-zero port")
+    socket server = listen_on_loopback()
+    Socket.Address address = Result.unwrap(Socket.local_address_parts(server))
 
     Socket.close(server)
+
+    assert(address.host == "127.0.0.1", "address host should be the loopback host")
+    assert(address.port > 0, "listen on port 0 should assign a real, non-zero port")
 }
 
 @test
 function void test_remote_address_parts_on_unconnected() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<Socket.Address> remote = Socket.remote_address_parts(udp_socket)
 
-    result<Socket.Address> r = Socket.remote_address_parts(s)
-    assert(Result.is_failure(r), "remote_address_parts on an unconnected socket should fail")
+    Socket.close(udp_socket)
 
-    Socket.close(s)
+    assert(Result.is_failure(remote), "remote_address_parts on an unconnected socket should fail")
 }
 
-# ─── Additional negative tests ───
+# ─── Negative tests — invalid arguments and unconnected sockets ───
 
 @test
 function void test_receive_rejects_non_positive_max_bytes() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<string> received = Socket.receive(udp_socket, 0)
 
-    result<string> r = Socket.receive(s, 0)
-    assert(Result.is_failure(r), "receive with non-positive max_bytes should fail")
+    Socket.close(udp_socket)
 
-    Socket.close(s)
+    assert(Result.is_failure(received), "receive with non-positive max_bytes should fail")
 }
 
 @test
 function void test_set_timeout_on_closed() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
 
-    Socket.close(s)
+    Socket.close(udp_socket)
 
-    result<boolean> r = Socket.set_timeout(s, 1000)
-    assert(Result.is_failure(r), "set_timeout on a closed socket should fail")
+    result<boolean> timeout_result = Socket.set_timeout(udp_socket, 1000)
+
+    assert(Result.is_failure(timeout_result), "set_timeout on a closed socket should fail")
 }
 
 @test
 function void test_accept_on_non_server() {
     # A UDP socket is valid but not a listening server socket.
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<socket> accepted = Socket.accept(udp_socket)
 
-    result<socket> r = Socket.accept(s)
-    assert(Result.is_failure(r), "accept on a non-server socket should fail")
+    Socket.close(udp_socket)
 
-    Socket.close(s)
+    assert(Result.is_failure(accepted), "accept on a non-server socket should fail")
 }
 
 @test
 function void test_listen_invalid_port() {
-    result<socket> r = Socket.listen("127.0.0.1", 99999)
-    assert(Result.is_failure(r), "listen on an out-of-range port should fail")
+    result<socket> listen_result = Socket.listen("127.0.0.1", 99999)
+
+    assert(Result.is_failure(listen_result), "listen on an out-of-range port should fail")
 }
 
 @test
 function void test_udp_send_invalid_port() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<integer> send_result = Socket.udp_send(udp_socket, "data", "127.0.0.1", 99999)
 
-    result<integer> r = Socket.udp_send(s, "data", "127.0.0.1", 99999)
-    assert(Result.is_failure(r), "udp_send to an out-of-range port should fail")
+    Socket.close(udp_socket)
 
-    Socket.close(s)
+    assert(Result.is_failure(send_result), "udp_send to an out-of-range port should fail")
 }
 
 @test
 function void test_remote_address_on_unconnected() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<string> remote = Socket.remote_address(udp_socket)
 
-    result<string> r = Socket.remote_address(s)
-    assert(Result.is_failure(r), "remote_address on an unconnected socket should fail")
+    Socket.close(udp_socket)
 
-    Socket.close(s)
+    assert(Result.is_failure(remote), "remote_address on an unconnected socket should fail")
 }
 
 @test
 function void test_connect_reports_host_resolution_failure() {
     # A hostname longer than the DNS limit (253 bytes, RFC 1035) fails
     # resolution deterministically with no network access, so this test is
-    # hermetic. The failure must carry the shared "failed to resolve host"
-    # wording produced by the single resolve_host_failure helper.
+    # hermetic.
     string long_host = Result.unwrap(String.repeat("a", 300))
+    result<socket> connection_result = Socket.connect(long_host, 80)
 
-    result<socket> r = Socket.connect(long_host, 80)
-
-    match r {
+    match connection_result {
         success(socket_handle) {
             Socket.close(socket_handle)
+
             assert(false, "an over-long host must not resolve")
         }
         failure(error_message) {
-            assert(String.contains(error_message, "failed to resolve host"),
-                "connect failure should report host resolution: ${error_message}")
+            assert(
+                String.contains(error_message, "failed to resolve host"),
+                "connect failure should report host resolution: ${error_message}"
+            )
         }
     }
 }
 
+# ─── IP address parsing ───
+
 @test
 function void test_socket_parse_ip() {
-    Socket.IpAddress ip = Result.unwrap(Socket.parse_ip("192.168.0.1"))
+    Socket.IpAddress ipv4 = Result.unwrap(Socket.parse_ip("192.168.0.1"))
 
-    string label = match ip {
-        case Socket.IpAddress.Version4(addr) { addr }
-        case Socket.IpAddress.Version6(_addr) { "v6" }
+    string ipv4_text = match ipv4 {
+        case Socket.IpAddress.Version4(address) { address }
+        case Socket.IpAddress.Version6(_address) { "v6" }
     }
 
-    assert(label == "192.168.0.1", "classified as V4 with the address text")
-    assert(Socket.ip_to_string(ip) == "192.168.0.1", "renders back to text")
+    assert(ipv4_text == "192.168.0.1", "classified as V4 with the address text")
+    assert(Socket.ip_to_string(ipv4) == "192.168.0.1", "renders back to text")
 
-    Socket.IpAddress ip6 = Result.unwrap(Socket.parse_ip("2001:DB8::1"))
+    Socket.IpAddress ipv6 = Result.unwrap(Socket.parse_ip("2001:DB8::1"))
 
-    string label6 = match ip6 {
-        case Socket.IpAddress.Version4(_addr) { "v4" }
-        case Socket.IpAddress.Version6(addr) { addr }
+    string ipv6_text = match ipv6 {
+        case Socket.IpAddress.Version4(_address) { "v4" }
+        case Socket.IpAddress.Version6(address) { address }
     }
 
-    assert(label6 == "2001:db8::1", "classified as V6, lowercased")
-
+    assert(ipv6_text == "2001:db8::1", "classified as V6, lowercased")
     assert(Result.is_failure(Socket.parse_ip("999.0.0.1")), "invalid IPv4 fails")
     assert(Result.is_failure(Socket.parse_ip("not an ip")), "garbage fails")
 }
@@ -386,137 +358,121 @@ function void test_socket_parse_ip() {
 function void test_tcp_send_all_and_receive_all() {
     # send_all writes the whole payload; after the client closes, receive_all on
     # the peer drains the entire stream until the orderly shutdown.
-    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
-
-    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-
-    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket server = listen_on_loopback()
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", bound_port(server)))
     socket connection = Result.unwrap(Socket.accept(server))
-
-    result<boolean> _t = Socket.set_timeout(connection, 2000)
+    result<boolean> _timeout_set = Socket.set_timeout(connection, 2000)
 
     result<boolean> send_result = Socket.send_all(client, "hello world")
-    assert(Result.is_success(send_result), "send_all should succeed")
+
     Socket.close(client)
 
-    string received = Result.unwrap(Socket.receive_all(connection))
-    assert(received == "hello world", "receive_all should drain the whole stream")
+    result<string> received = Socket.receive_all(connection)
 
-    Socket.close(connection)
-    Socket.close(server)
+    close_all([connection, server])
+
+    assert(send_result == success(true), "send_all should succeed")
+    assert(received == success("hello world"), "receive_all should drain the whole stream")
 }
 
 @test
 function void test_tcp_receive_line() {
     # receive_line returns bytes up to and including the first newline.
-    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
-
-    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-
-    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket server = listen_on_loopback()
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", bound_port(server)))
     socket connection = Result.unwrap(Socket.accept(server))
+    result<boolean> _timeout_set = Socket.set_timeout(connection, 2000)
 
-    result<boolean> _t = Socket.set_timeout(connection, 2000)
+    result<integer> send_result = Socket.send(client, "first\nsecond\n")
+    result<string> line = Socket.receive_line(connection)
 
-    result<integer> _s = Socket.send(client, "first\nsecond\n")
+    close_all([client, connection, server])
 
-    string line = Result.unwrap(Socket.receive_line(connection))
-    assert(line == "first\n", "receive_line should stop at the first newline")
-
-    Socket.close(client)
-    Socket.close(connection)
-    Socket.close(server)
+    assert(Result.is_success(send_result), "send should succeed")
+    assert(line == success("first\n"), "receive_line should stop at the first newline")
 }
 
 @test
 function void test_tcp_send_bytes_and_receive_bytes() {
     # send_bytes writes raw bytes; receive_bytes reads them back as integers.
-    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
-
-    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-
-    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket server = listen_on_loopback()
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", bound_port(server)))
     socket connection = Result.unwrap(Socket.accept(server))
+    result<boolean> _timeout_set = Socket.set_timeout(connection, 2000)
 
-    result<boolean> _t = Socket.set_timeout(connection, 2000)
+    result<integer> send_result = Socket.send_bytes(client, [10, 20, 30])
+    result<array<integer>> received = Socket.receive_bytes(connection, 1024)
 
-    array<integer> payload = [10, 20, 30]
-    result<integer> send_result = Socket.send_bytes(client, payload)
-    assert(Result.is_success(send_result), "send_bytes should succeed")
+    close_all([client, connection, server])
 
-    array<integer> got = Result.unwrap(Socket.receive_bytes(connection, 1024))
-    assert(Array.length(got) == 3, "receive_bytes should return all three bytes")
-    assert(got[0] == 10, "first byte should match")
-    assert(got[1] == 20, "second byte should match")
-    assert(got[2] == 30, "third byte should match")
-
-    Socket.close(client)
-    Socket.close(connection)
-    Socket.close(server)
+    assert(send_result == success(3), "send_bytes should report all three bytes sent")
+    assert(received == success([10, 20, 30]), "receive_bytes should return the same bytes")
 }
 
 @test
 function void test_send_bytes_rejects_out_of_range() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<integer> send_result = Socket.send_bytes(udp_socket, [1, 2, 999])
 
-    array<integer> payload = [1, 2, 999]
-    result<integer> r = Socket.send_bytes(s, payload)
-    assert(Result.is_failure(r), "a byte outside 0-255 should fail")
+    Socket.close(udp_socket)
 
-    Socket.close(s)
+    assert(Result.is_failure(send_result), "a byte outside 0-255 should fail")
 }
 
 @test
 function void test_receive_bytes_rejects_non_positive_max() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<array<integer>> received = Socket.receive_bytes(udp_socket, 0)
 
-    result<array<integer>> r = Socket.receive_bytes(s, 0)
-    assert(Result.is_failure(r), "receive_bytes with non-positive max should fail")
+    Socket.close(udp_socket)
 
-    Socket.close(s)
+    assert(Result.is_failure(received), "receive_bytes with non-positive max should fail")
 }
 
 @test
 function void test_send_all_on_closed() {
-    socket s = Result.unwrap(Socket.udp_create())
-    Socket.close(s)
+    socket udp_socket = Result.unwrap(Socket.udp_create())
 
-    result<boolean> r = Socket.send_all(s, "data")
-    assert(Result.is_failure(r), "send_all on a closed socket should fail")
+    Socket.close(udp_socket)
+
+    result<boolean> send_result = Socket.send_all(udp_socket, "data")
+
+    assert(Result.is_failure(send_result), "send_all on a closed socket should fail")
 }
 
 @test
 function void test_connect_timeout_success() {
     # connect_timeout completes a loopback handshake within the deadline.
-    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+    socket server = listen_on_loopback()
+    result<socket> connection_result = Socket.connect_timeout("127.0.0.1", bound_port(server), 2000)
+    boolean is_connected = match connection_result {
+        success(client) {
+            Socket.close(client)
+            true
+        }
+        failure(_message) { false }
+    }
 
-    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-
-    result<socket> r = Socket.connect_timeout("127.0.0.1", port, 2000)
-    assert(Result.is_success(r), "connect_timeout to a live listener should succeed")
-
-    socket client = Result.unwrap(r)
-    Socket.close(client)
     Socket.close(server)
+
+    assert(is_connected, "connect_timeout to a live listener should succeed")
 }
 
 @test
 function void test_connect_timeout_invalid_port() {
-    result<socket> r = Socket.connect_timeout("127.0.0.1", 99999, 1000)
-    assert(Result.is_failure(r), "connect_timeout on an out-of-range port should fail")
+    result<socket> connection_result = Socket.connect_timeout("127.0.0.1", 99999, 1000)
+
+    assert(
+        Result.is_failure(connection_result),
+        "connect_timeout on an out-of-range port should fail"
+    )
 }
 
-# ═══════════════════════════════════════════════════════════
-# Socket.Error (opt-in typed transport errors via *_typed)
-# ═══════════════════════════════════════════════════════════
+# ─── Socket.Error (opt-in typed transport errors via *_typed) ───
 
 # Exhaustive match over every Socket.Error variant. Beyond labelling a category,
-# this doubles as a check that Socket.Error is fully registered, exhaustively
-# matchable, and usable as a parameter type annotation.
+# this doubles as a compile-time check that Socket.Error is fully registered,
+# exhaustively matchable, and usable as a parameter type annotation.
 function string socket_error_label(Socket.Error e) {
     return match e {
         case Socket.Error.ConnectionRefused { "connection_refused" }
@@ -529,130 +485,176 @@ function string socket_error_label(Socket.Error e) {
     }
 }
 
-# Classify a connect_typed result into a label.
-function string connect_typed_label(result<socket, Socket.Error> r) {
-    return match r {
-        success(_conn) { "unexpected_success" }
-        failure(e)     { socket_error_label(e) }
+# Classify a connect_typed result into a label, closing an unexpected socket.
+function string connect_typed_label(result<socket, Socket.Error> connection_result) {
+    return match connection_result {
+        success(connection) {
+            Socket.close(connection)
+            "unexpected_success"
+        }
+        failure(e) { socket_error_label(e) }
     }
 }
 
 # Classify a send_typed result into a label.
-function string send_typed_label(result<integer, Socket.Error> r) {
-    return match r {
-        success(_n) { "unexpected_success" }
-        failure(e)  { socket_error_label(e) }
+function string send_typed_label(result<integer, Socket.Error> send_result) {
+    return match send_result {
+        success(_count) { "unexpected_success" }
+        failure(e)      { socket_error_label(e) }
     }
 }
 
 # Classify a receive_typed result into a label.
-function string receive_typed_label(result<string, Socket.Error> r) {
-    return match r {
-        success(_s) { "unexpected_success" }
-        failure(e)  { socket_error_label(e) }
+function string receive_typed_label(result<string, Socket.Error> receive_result) {
+    return match receive_result {
+        success(_data) { "unexpected_success" }
+        failure(e)     { socket_error_label(e) }
     }
 }
 
 @test
 function void test_socket_send_typed_on_closed_is_not_connected() {
-    socket s = Result.unwrap(Socket.udp_create())
-    Socket.close(s)
+    socket udp_socket = Result.unwrap(Socket.udp_create())
 
-    result<integer, Socket.Error> r = Socket.send_typed(s, "data")
+    Socket.close(udp_socket)
 
-    assert(Result.is_failure(r), "sending on a closed socket fails")
-    assert(send_typed_label(r) == "not_connected", "a closed socket classifies as NotConnected")
+    result<integer, Socket.Error> send_result = Socket.send_typed(udp_socket, "data")
+
+    assert(Result.is_failure(send_result), "sending on a closed socket fails")
+    assert(
+        send_typed_label(send_result) == "not_connected",
+        "a closed socket classifies as NotConnected"
+    )
 }
 
 @test
 function void test_socket_receive_typed_on_closed_is_not_connected() {
-    socket s = Result.unwrap(Socket.udp_create())
-    Socket.close(s)
+    socket udp_socket = Result.unwrap(Socket.udp_create())
 
-    result<string, Socket.Error> r = Socket.receive_typed(s, 1024)
+    Socket.close(udp_socket)
 
-    assert(Result.is_failure(r), "receiving on a closed socket fails")
-    assert(receive_typed_label(r) == "not_connected", "a closed socket classifies as NotConnected")
+    result<string, Socket.Error> receive_result = Socket.receive_typed(udp_socket, 1024)
+
+    assert(Result.is_failure(receive_result), "receiving on a closed socket fails")
+    assert(
+        receive_typed_label(receive_result) == "not_connected",
+        "a closed socket classifies as NotConnected"
+    )
 }
 
 @test
 function void test_socket_receive_typed_non_positive_max_bytes_is_other() {
-    socket s = Result.unwrap(Socket.udp_create())
+    socket udp_socket = Result.unwrap(Socket.udp_create())
+    result<string, Socket.Error> receive_result = Socket.receive_typed(udp_socket, 0)
 
-    result<string, Socket.Error> r = Socket.receive_typed(s, 0)
+    Socket.close(udp_socket)
 
-    assert(Result.is_failure(r), "a non-positive max_bytes fails")
-    assert(receive_typed_label(r) == "other", "an invalid max_bytes classifies as Other")
-
-    Socket.close(s)
+    assert(Result.is_failure(receive_result), "a non-positive max_bytes fails")
+    assert(
+        receive_typed_label(receive_result) == "other",
+        "an invalid max_bytes classifies as Other"
+    )
 }
 
 @test
 function void test_socket_connect_typed_refused_is_connection_refused() {
-    # Listen on an ephemeral loopback port, capture it, then close the listener so
-    # nothing is accepting; connecting to that port must be refused.
-    socket srv = Result.unwrap(Socket.listen("127.0.0.1", 0))
-    array<string> parts = String.split(Result.unwrap(Socket.local_address(srv)), ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-    Socket.close(srv)
+    # Nothing is accepting on the released port, so the connect is refused.
+    result<socket, Socket.Error> connection_result =
+        Socket.connect_typed("127.0.0.1", unused_loopback_port())
 
-    result<socket, Socket.Error> r = Socket.connect_typed("127.0.0.1", port)
-
-    assert(Result.is_failure(r), "connecting to an unbound loopback port fails")
-    assert(connect_typed_label(r) == "connection_refused",
-           "an unbound port classifies as ConnectionRefused")
+    assert(Result.is_failure(connection_result), "connecting to an unbound loopback port fails")
+    assert(
+        connect_typed_label(connection_result) == "connection_refused",
+        "an unbound port classifies as ConnectionRefused"
+    )
 }
 
 @test
-function void test_socket_connect_typed_invalid_host_is_host_unreachable() {
-    result<socket, Socket.Error> r =
-        Socket.connect_typed("invalid.host.that.does.not.exist.example", 80)
+function void test_socket_connect_typed_unresolvable_host_is_host_unreachable() {
+    # An over-long hostname (> 253 bytes) cannot resolve, so this needs no DNS
+    # server and cannot be defeated by a resolver that answers every query.
+    string long_host = Result.unwrap(String.repeat("a", 300))
+    result<socket, Socket.Error> connection_result = Socket.connect_typed(long_host, 80)
 
-    assert(Result.is_failure(r), "an unresolvable host fails")
-    assert(connect_typed_label(r) == "host_unreachable",
-           "an unresolvable host classifies as HostUnreachable")
+    assert(Result.is_failure(connection_result), "an unresolvable host fails")
+    assert(
+        connect_typed_label(connection_result) == "host_unreachable",
+        "an unresolvable host classifies as HostUnreachable"
+    )
 }
 
 @test
-function void test_socket_error_is_exhaustively_matchable() {
-    # Drive the label function with a concrete failure so the exhaustive match
-    # over all seven variants is exercised at runtime.
-    result<socket, Socket.Error> r = Socket.connect_typed("127.0.0.1", 99999)
-    assert(connect_typed_label(r) == "other", "an out-of-range port classifies as Other")
+function void test_socket_connect_typed_invalid_port_is_other() {
+    result<socket, Socket.Error> connection_result = Socket.connect_typed("127.0.0.1", 99999)
+
+    assert(
+        connect_typed_label(connection_result) == "other",
+        "an out-of-range port classifies as Other"
+    )
 }
 
 @test
 function void test_socket_send_all_typed_on_closed_is_not_connected() {
-    socket s = Result.unwrap(Socket.udp_create())
-    Socket.close(s)
+    socket udp_socket = Result.unwrap(Socket.udp_create())
 
-    result<boolean, Socket.Error> r = Socket.send_all_typed(s, "data")
+    Socket.close(udp_socket)
 
-    assert(Result.is_failure(r), "send_all_typed on a closed socket fails")
+    result<boolean, Socket.Error> send_result = Socket.send_all_typed(udp_socket, "data")
 
-    string label = match r {
-        success(_ok) { "unexpected_success" }
-        failure(e)   { socket_error_label(e) }
+    assert(Result.is_failure(send_result), "send_all_typed on a closed socket fails")
+
+    string label = match send_result {
+        success(_is_sent) { "unexpected_success" }
+        failure(e)        { socket_error_label(e) }
     }
 
     assert(label == "not_connected", "a closed socket classifies as NotConnected")
 }
 
 @test
-function void test_socket_connect_timeout_typed_refused_is_connection_refused() {
-    # Close the listener so nothing accepts; a timed connect must be refused
-    # (not merely time out) on loopback.
-    socket srv = Result.unwrap(Socket.listen("127.0.0.1", 0))
-    array<string> parts = String.split(Result.unwrap(Socket.local_address(srv)), ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-    Socket.close(srv)
-
-    result<socket, Socket.Error> r = Socket.connect_timeout_typed("127.0.0.1", port, 2000)
-
-    assert(Result.is_failure(r), "connecting to an unbound loopback port fails")
+function void test_socket_connect_timeout_typed_unbound_port_fails() {
     # The exact classification of an unbound loopback port is platform-timing
     # dependent: most systems refuse the connection immediately, but some report
-    # the elapsed deadline as a timeout instead.  Accept either failure.
-    assert(connect_typed_label(r) == "connection_refused" || connect_typed_label(r) == "timeout",
-           "an unbound port fails as ConnectionRefused or Timeout")
+    # the elapsed deadline as a timeout instead. Accept either failure.
+    result<socket, Socket.Error> connection_result =
+        Socket.connect_timeout_typed("127.0.0.1", unused_loopback_port(), 2000)
+
+    string label = connect_typed_label(connection_result)
+
+    assert(Result.is_failure(connection_result), "connecting to an unbound loopback port fails")
+    assert(
+        label == "connection_refused" || label == "timeout",
+        "an unbound port fails as ConnectionRefused or Timeout"
+    )
+}
+
+@test
+function void test_socket_listen_typed_success() {
+    socket server = Result.unwrap(Socket.listen_typed("127.0.0.1", 0))
+    integer port = bound_port(server)
+
+    Socket.close(server)
+
+    assert(port > 0, "listen_typed on port 0 should assign a real port")
+}
+
+@test
+function void test_socket_listen_typed_on_used_port_is_address_in_use() {
+    # A port another socket is listening on must not be taken over (on Windows
+    # SO_REUSEADDR would allow exactly that), so the clash is reported.
+    socket server = listen_on_loopback()
+    integer port = bound_port(server)
+
+    result<socket, Socket.Error> clash = Socket.listen_typed("127.0.0.1", port)
+    string label = match clash {
+        success(second) {
+            Socket.close(second)
+            "unexpected_success"
+        }
+        failure(error) { socket_error_label(error) }
+    }
+
+    Socket.close(server)
+
+    assert(label == "address_in_use", "got ${label}")
 }

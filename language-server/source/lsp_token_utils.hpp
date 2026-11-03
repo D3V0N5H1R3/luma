@@ -153,7 +153,7 @@ struct TokenExtents {
 [[nodiscard]] inline Range find_declaration_name_range(const std::vector<Token>& tokens,
                                                        const SourceLocation& decl_loc,
                                                        std::string_view name) {
-    return find_identifier_range(tokens, decl_loc, luma::qualified_member(name));
+    return find_identifier_range(tokens, decl_loc, luma::symbols::qualified_member(name));
 }
 
 // Find the first Identifier token matching 'name' within a bounding range
@@ -184,7 +184,7 @@ struct TokenExtents {
 [[nodiscard]] inline Range find_declaration_name_range(const TokenIndex& line_index,
                                                        const SourceLocation& decl_loc,
                                                        std::string_view name) {
-    const std::string_view member = luma::qualified_member(name);
+    const std::string_view member = luma::symbols::qualified_member(name);
     const int line0 = decl_loc.line - 1;
     const int col0 = std::max(0, decl_loc.column - 1);
     const Range fallback{Position{line0, col0},
@@ -225,6 +225,17 @@ extract_namespace_prefix(const std::vector<Token>& tokens, std::size_t identifie
     return tokens[token_index - 1].type == TokenType::Dot &&
            is_identifier(tokens[token_index - 2]) && tokens[token_index - 2].lexeme == expected_ns;
 }
+
+// Whether the Identifier at `token_index` introduces a name rather than uses
+// one. Recognised binding forms (all type-first, as Luma writes them):
+//   [mutable] <type> name = …        variable declaration
+//   (<type> name, <type> other)      function / lambda parameter, tuple binding
+//   for name in …, for i, name in …, for (a, b) in …
+//   catch (name)
+//   case Variant(name) / case success(name) / case some(name)  match patterns
+// Record-pattern bindings (`case Shape { width }`, `Point { x } = p`) are not
+// recognised.
+[[nodiscard]] bool is_binding_occurrence(const std::vector<Token>& tokens, std::size_t token_index);
 
 } // namespace luma::lsp
 

@@ -1,9 +1,12 @@
 // Standard library tests: Resource and core builtins (print, assert, type_of, success, failure).
 
 #include <iostream>
-#include <sstream>
+#include <string>
 
 #include "stdlib_test_helpers.hpp"
+
+using luma::test::CapturedStream;
+using luma::test::eval;
 
 static void test_print_single_value_adds_newline() {
     const CapturedStream captured{std::cout};
@@ -15,7 +18,9 @@ static void test_print_single_value_adds_newline() {
 
 static void test_print_multiple_values_space_separated() {
     const CapturedStream captured{std::cout};
-    eval("print(1, \"a\", true)");
+    const auto v = eval("print(1, \"a\", true)");
+
+    ASSERT_TRUE(v.is_null());
 
     // Values are joined by single spaces, then a trailing newline. Strings
     // print unquoted (to_string), booleans as true/false.
@@ -24,7 +29,9 @@ static void test_print_multiple_values_space_separated() {
 
 static void test_print_no_args_prints_only_newline() {
     const CapturedStream captured{std::cout};
-    eval("print()");
+    const auto v = eval("print()");
+
+    ASSERT_TRUE(v.is_null());
 
     ASSERT_EQ(captured.str(), std::string("\n"));
 }
@@ -50,17 +57,17 @@ static void test_assert_false_throws_custom_message() {
 
 static void test_assert_falsy_values_throw() {
     // Falsy non-boolean values (zero, empty string, none) also fail.
-    ASSERT_THROWS(eval("assert(0)"));
-    ASSERT_THROWS(eval("assert(\"\")"));
-    ASSERT_THROWS(eval("assert(none)"));
+    ASSERT_EVAL_THROWS("assert(0)", "assertion failed");
+    ASSERT_EVAL_THROWS("assert(\"\")", "assertion failed");
+    ASSERT_EVAL_THROWS("assert(none)", "assertion failed");
 }
 
 static void test_assert_no_args_throws() {
-    ASSERT_THROWS(eval("assert()"));
+    ASSERT_EVAL_THROWS("assert()", "assert: expected at least 1 argument(s), got 0");
 }
 
 static void test_assert_non_string_message_throws() {
-    ASSERT_THROWS(eval("assert(true, 42)"));
+    ASSERT_EVAL_THROWS("assert(true, 42)", "assert: expected string, got 'integer'");
 }
 
 // ─── type_of ───
@@ -81,11 +88,11 @@ static void test_type_of_some_reports_inner_type() {
 }
 
 static void test_type_of_no_args_throws() {
-    ASSERT_THROWS(eval("type_of()"));
+    ASSERT_EVAL_THROWS("type_of()", "type_of: expected exactly 1 argument(s), got 0");
 }
 
 static void test_type_of_too_many_args_throws() {
-    ASSERT_THROWS(eval("type_of(1, 2)"));
+    ASSERT_EVAL_THROWS("type_of(1, 2)", "type_of: expected exactly 1 argument(s), got 2");
 }
 
 // ─── success / failure ───
@@ -105,23 +112,40 @@ static void test_fail_has_location() {
     ASSERT_RESULT_FAILURE(v);
     ASSERT_TRUE(v.as_result()->has_failure_location);
     ASSERT_EQ(v.as_result()->failure_location.line, 1);
+    // The location is unwrap-error context only; printing shows the bare value.
+    ASSERT_EQ(v.to_string(), std::string("failure(oops)"));
+}
+
+static void test_retry_failure_prints_without_location() {
+    const auto v = eval("Task.retry(2, () -> failure(\"boom\"))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(v.to_string(), std::string("failure(boom)"));
 }
 
 static void test_read_file_limited() {
-    // Non-existent file returns fail.
-    ASSERT_EVAL_FAILURE("FileSystem.read_file_limited(\"_no_such_file_xyz.txt\", 1024)");
+    // A missing file yields a failure result.
+    const auto missing = eval("FileSystem.read_file_limited(\"_no_such_file_xyz.txt\", 1024)");
 
-    // Negative max_bytes returns fail.
-    ASSERT_EVAL_FAILURE("FileSystem.read_file_limited(\"_no_such_file_xyz.txt\", -1)");
+    ASSERT_RESULT_FAILURE(missing);
+    ASSERT_EQ(missing.as_result()->owned_inner->as_string().find("max_bytes"), std::string::npos);
+
+    // A negative max_bytes is rejected before the path is even looked at.
+    const auto negative = eval("FileSystem.read_file_limited(\"_no_such_file_xyz.txt\", -1)");
+
+    ASSERT_RESULT_FAILURE(negative);
+    ASSERT_NE(negative.as_result()->owned_inner->as_string().find("max_bytes must be non-negative"),
+              std::string::npos);
 }
 
 static void test_resource_with() {
-    // Cleanup is called after body; body return value is returned.
+    // The body's return value is returned (cleanup side effects are covered by
+    // test_resource_with_cleanup_runs_on_success).
     const auto result = eval("Resource.with(42, (integer v) -> v, (integer v) -> none)");
 
-    ASSERT_TRUE(result.as_integer() == 42);
+    ASSERT_EQ(result.as_integer(), 42);
 
-    // Cleanup is called even when it modifies nothing (smoke test).
+    // A body that transforms the resource returns the transformed value.
     const auto r2 =
         eval("Resource.with(\"hello\", (string v) -> String.uppercase(v), (string v) -> none)");
 
@@ -341,8 +365,8 @@ static void test_resource_with_body_error_suppresses_cleanup_error() {
                         "Reference.get(caught)\n");
 
     const auto msg = v.as_string();
-    ASSERT_TRUE(msg.find("BODY_FAILURE") != std::string::npos);
-    ASSERT_TRUE(msg.find("CLEANUP_FAILURE") == std::string::npos);
+    ASSERT_NE(msg.find("BODY_FAILURE"), std::string::npos);
+    ASSERT_EQ(msg.find("CLEANUP_FAILURE"), std::string::npos);
 }
 
 static void test_resource_using_release_error_on_success_propagates() {
@@ -380,8 +404,8 @@ static void test_resource_using_body_error_suppresses_release_error() {
                         "Reference.get(caught)\n");
 
     const auto msg = v.as_string();
-    ASSERT_TRUE(msg.find("BODY_FAILURE") != std::string::npos);
-    ASSERT_TRUE(msg.find("RELEASE_FAILURE") == std::string::npos);
+    ASSERT_NE(msg.find("BODY_FAILURE"), std::string::npos);
+    ASSERT_EQ(msg.find("RELEASE_FAILURE"), std::string::npos);
 }
 
 static void test_resource_with_all_basic() {
@@ -478,6 +502,7 @@ int main() {
     RUN(test_type_of_too_many_args_throws);
     RUN(test_success_construction);
     RUN(test_fail_has_location);
+    RUN(test_retry_failure_prints_without_location);
     RUN(test_read_file_limited);
     RUN(test_resource_with);
     RUN(test_resource_with_cleanup_on_error);

@@ -1,11 +1,14 @@
 #ifndef LUMA_DAP_HELPERS_HPP
 #define LUMA_DAP_HELPERS_HPP
 
+#include <charconv>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "common/narrow_int.hpp"
@@ -116,14 +119,25 @@ parse_breakpoint_requests(const JsonValue& args, const std::string& array_key = 
     return requests;
 }
 
-// Format an integer value string as hexadecimal. Returns the original string on failure.
+// Format an integer value string as hexadecimal (`-0x2a` for negatives).
+// Returns the original string unchanged when it is not an integer.
 [[nodiscard]] inline std::string format_value_hex(const std::string& value) {
-    try {
-        const auto int_val = std::stoll(value);
-        return std::format("0x{:x}", int_val);
-    } catch (...) {
-        return "<formatting error>";
+    std::int64_t int_val{0};
+    const auto* const first = value.data();
+    const auto* const last = value.data() + value.size();
+    const auto [ptr, ec] = std::from_chars(first, last, int_val);
+
+    if (ec != std::errc{} || ptr != last) {
+        return value;
     }
+
+    if (int_val < 0) {
+        // Negate in unsigned arithmetic so INT64_MIN does not overflow.
+        const auto magnitude = std::uint64_t{0} - static_cast<std::uint64_t>(int_val);
+        return std::format("-0x{:x}", magnitude);
+    }
+
+    return std::format("0x{:x}", int_val);
 }
 
 // ─── Session collection responses ───

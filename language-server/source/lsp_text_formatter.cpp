@@ -139,7 +139,8 @@ constexpr std::array<std::pair<char, char>, 11> two_char_operators{{
     for (std::size_t i = 0; i < line.size(); ++i) {
         const char c = line[i];
 
-        // Let the context tracker handle strings, comments, interpolation.
+        // Let the context tracker consume strings, interpolations, and
+        // comments verbatim; only plain code characters reach the rules below.
         bool append_rest = false;
 
         if (ctx.update(line, i, out, append_rest)) {
@@ -157,14 +158,14 @@ constexpr std::array<std::pair<char, char>, 11> two_char_operators{{
         // Single-character binary operators: = + * /
         // Don't touch '<' and '>' — can't distinguish generics from comparisons
         // without semantic analysis, so leave them as-is.
-        if ((c == '=' || c == '+' || c == '*' || c == '/') && !ctx.in_string) {
+        if (c == '=' || c == '+' || c == '*' || c == '/') {
             if (try_normalize_single_char_operator(line, i, out)) {
                 continue;
             }
         }
 
         // '-' — distinguish binary minus from unary minus.
-        if (c == '-' && !ctx.in_string) {
+        if (c == '-') {
             const bool is_binary = !out.empty() && (is_ident_char(out.back()) ||
                                                     out.back() == ')' || out.back() == ']');
             if (is_binary) {
@@ -223,13 +224,13 @@ constexpr std::array<std::pair<char, char>, 11> two_char_operators{{
 
 // Determine whether `trimmed` starts with a continuation keyword that
 // causes the indent level to decrease before writing the line and
-// increase again afterwards (e.g. else, catch, finally, case).
+// increase again afterwards (e.g. else, catch, finally).  `case` is not one:
+// a match arm sits inside the match's braces and carries its own braces.
 [[nodiscard]] bool is_continuation_keyword(const std::string& trimmed) {
     return trimmed.starts_with("else ") || trimmed == "else" || trimmed.starts_with("else{") ||
            trimmed.starts_with("catch ") || trimmed == "catch" || trimmed.starts_with("catch(") ||
            trimmed.starts_with("catch{") || trimmed.starts_with("finally ") ||
-           trimmed == "finally" || trimmed.starts_with("finally{") ||
-           trimmed.starts_with("case ") || trimmed == "case";
+           trimmed == "finally" || trimmed.starts_with("finally{");
 }
 
 // Compute the indent adjustment to apply before writing a line.

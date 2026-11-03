@@ -11,7 +11,9 @@
 #include "symbols/symbol_kind.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::symbols::symbol_kind_name;
+using luma::symbols::SymbolKind;
+using luma::symbols::to_lsp_symbol_kind;
 
 // ═══════════════════════════════════════════════════════════
 // to_lsp_symbol_kind — integer values match the LSP spec
@@ -72,8 +74,7 @@ static void test_operator_stream_struct() {
 }
 
 int main() {
-    using namespace luma::test;
-    print_suite_header("symbol_kind");
+    luma::test::print_suite_header("symbol_kind");
 
     RUN(test_to_lsp_symbol_kind_values);
     RUN(test_to_lsp_symbol_kind_is_constexpr);

@@ -187,7 +187,7 @@ The bullets below are a quick reference for the reviewer. The authoritative rule
 - Logical grouping through blank lines — separate distinct steps, sections, or concerns within a function.
 - Consistent spacing around operators, after commas, and inside control structures.
 - Avoid deep nesting; prefer early returns, guard clauses, pipes, or helper functions to flatten logic.
-- Comments explain _why_, not _what_ — delete redundant or stale comments.
+- Comments explain *why*, not *what* — delete redundant or stale comments.
 
 ### Simplicity and Responsibility
 

@@ -1,6 +1,13 @@
 // Standard library tests: Set.
 
+#include <array>
+#include <string>
+#include <string_view>
+#include <utility>
+
 #include "stdlib_test_helpers.hpp"
+
+using luma::test::eval;
 
 static void test_set_any_all_count_find() {
     ASSERT_EQ(eval("Set.from_array([1,2,3,4]) |> Set.any((integer x) -> x > 3) |> Result.unwrap()")
@@ -108,16 +115,16 @@ static void test_set_intersection() {
 
 static void test_set_is_disjoint() {
     ASSERT_TRUE(eval("Set.is_disjoint(Set.from_array([1, 2]), Set.from_array([3, 4]))").as_bool());
-    ASSERT_TRUE(
-        !eval("Set.is_disjoint(Set.from_array([1, 2, 3]), Set.from_array([3, 4, 5]))").as_bool());
+    ASSERT_FALSE(
+        eval("Set.is_disjoint(Set.from_array([1, 2, 3]), Set.from_array([3, 4, 5]))").as_bool());
     ASSERT_TRUE(eval("Set.is_disjoint(Set.new(), Set.from_array([1, 2]))").as_bool());
 }
 
 static void test_set_is_superset() {
     ASSERT_TRUE(
         eval("Set.is_superset(Set.from_array([1, 2, 3, 4]), Set.from_array([1, 2]))").as_bool());
-    ASSERT_TRUE(
-        !eval("Set.is_superset(Set.from_array([1, 2]), Set.from_array([1, 2, 3]))").as_bool());
+    ASSERT_FALSE(
+        eval("Set.is_superset(Set.from_array([1, 2]), Set.from_array([1, 2, 3]))").as_bool());
     ASSERT_TRUE(eval("Set.is_superset(Set.from_array([1, 2, 3]), Set.new())").as_bool());
 }
 
@@ -324,60 +331,28 @@ static void test_set_map_to_composite_succeeds() {
 // a thrown error. Higher-order operations wrap callback errors into a failure
 // result rather than throwing.
 
-static void test_set_length_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Set.length(42)"), "expected set");
-}
+// (source, expected error message) for each operation given a non-set receiver
+// or argument.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 14> wrong_type_cases{{
+    {"Set.length(42)", "Set.length: expected set, got 'integer'"},
+    {"Set.contains(42, 1)", "Set.contains: expected set, got 'integer'"},
+    {"Set.add(42, 1)", "Set.add: expected set, got 'integer'"},
+    {"Set.remove(42, 1)", "Set.remove: expected set, got 'integer'"},
+    {"Set.union(Set.new(), 42)", "Set.union: expected set, got 'integer'"},
+    {"Set.intersection(42, Set.new())", "Set.intersection: expected set, got 'integer'"},
+    {"Set.difference(Set.new(), 42)", "Set.difference: expected set, got 'integer'"},
+    {"Set.is_subset(Set.new(), 42)", "Set.is_subset: expected set, got 'integer'"},
+    {"Set.is_superset(42, Set.new())", "Set.is_superset: expected set, got 'integer'"},
+    {"Set.is_disjoint(Set.new(), 42)", "Set.is_disjoint: expected set, got 'integer'"},
+    {"Set.equals(Set.new(), 42)", "Set.equals: expected set, got 'integer'"},
+    {"Set.symmetric_difference(42, Set.new())",
+     "Set.symmetric_difference: expected set, got 'integer'"},
+    {"Set.from_array(42)", "Set.from_array: expected array, got 'integer'"},
+    {"Set.to_array(42)", "Set.to_array: expected set, got 'integer'"},
+}};
 
-static void test_set_contains_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.contains(42, 1)"));
-}
-
-static void test_set_add_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.add(42, 1)"));
-}
-
-static void test_set_remove_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.remove(42, 1)"));
-}
-
-static void test_set_union_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.union(Set.new(), 42)"));
-}
-
-static void test_set_intersection_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.intersection(42, Set.new())"));
-}
-
-static void test_set_difference_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.difference(Set.new(), 42)"));
-}
-
-static void test_set_is_subset_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.is_subset(Set.new(), 42)"));
-}
-
-static void test_set_is_superset_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.is_superset(42, Set.new())"));
-}
-
-static void test_set_is_disjoint_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.is_disjoint(Set.new(), 42)"));
-}
-
-static void test_set_equals_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.equals(Set.new(), 42)"));
-}
-
-static void test_set_symmetric_difference_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.symmetric_difference(42, Set.new())"));
-}
-
-static void test_set_from_array_non_array_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Set.from_array(42)"), "expected array");
-}
-
-static void test_set_to_array_wrong_type_throws() {
-    ASSERT_THROWS(eval("Set.to_array(42)"));
+static void test_set_wrong_type_throws(std::string_view source, std::string_view message) {
+    ASSERT_EVAL_THROWS(std::string{source}, message);
 }
 
 static void test_set_map_callback_error() {
@@ -405,34 +380,24 @@ static void test_set_each_callback_error() {
 int main() {
     RUN(test_set_add);
     RUN(test_set_add_immutability);
-    RUN(test_set_add_wrong_type_throws);
     RUN(test_set_composite_elements);
     RUN(test_set_composite_union);
     RUN(test_set_concat);
     RUN(test_set_contains);
-    RUN(test_set_contains_wrong_type_throws);
     RUN(test_set_difference);
-    RUN(test_set_difference_wrong_type_throws);
     RUN(test_set_each);
     RUN(test_set_each_callback_error);
     RUN(test_set_equals);
-    RUN(test_set_equals_wrong_type_throws);
     RUN(test_set_filter);
     RUN(test_set_filter_callback_error);
     RUN(test_set_filter_empty);
     RUN(test_set_from_array);
-    RUN(test_set_from_array_non_array_throws);
     RUN(test_set_intersection);
-    RUN(test_set_intersection_wrong_type_throws);
     RUN(test_set_is_disjoint);
-    RUN(test_set_is_disjoint_wrong_type_throws);
     RUN(test_set_is_empty);
     RUN(test_set_is_subset);
-    RUN(test_set_is_subset_wrong_type_throws);
     RUN(test_set_is_superset);
-    RUN(test_set_is_superset_wrong_type_throws);
     RUN(test_set_length);
-    RUN(test_set_length_wrong_type_throws);
     RUN(test_set_map);
     RUN(test_set_map_callback_error);
     RUN(test_set_map_deduplicates);
@@ -445,16 +410,13 @@ int main() {
     RUN(test_set_reduce_callback_error);
     RUN(test_set_reduce_empty);
     RUN(test_set_remove);
-    RUN(test_set_remove_wrong_type_throws);
     RUN(test_set_string_elements);
     RUN(test_set_symmetric_difference);
-    RUN(test_set_symmetric_difference_wrong_type_throws);
     RUN(test_set_to_array);
-    RUN(test_set_to_array_wrong_type_throws);
     RUN(test_set_union);
     RUN(test_set_union_contains);
-    RUN(test_set_union_wrong_type_throws);
     RUN(test_set_bulk_ops_preserve_unique_results);
     RUN(test_set_any_all_count_find);
+    RUN_PARAMETERIZED(test_set_wrong_type_throws, wrong_type_cases);
     return SUMMARY();
 }

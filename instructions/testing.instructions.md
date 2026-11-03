@@ -53,50 +53,61 @@ int main() {
 }
 ```
 
-Available assertion macros:
+Available assertion macros (each argument is evaluated exactly once; integer pairs compare by mathematical value via `std::cmp_*`, so `-1` never equals `SIZE_MAX`):
 
 - `ASSERT_EQ(a, b)` — fails if `a != b`.
 - `ASSERT_NE(a, b)` — fails if `a == b`.
 - `ASSERT_TRUE(cond)` — fails if `cond` is false.
 - `ASSERT_FALSE(cond)` — fails if `cond` is true.
-- `ASSERT_THROWS(expr)` — fails if `expr` does not throw.
+- `ASSERT_THROWS_WITH_MESSAGE(expr, expected_substr)` — fails unless `expr` throws a `std::exception` whose message contains the (non-empty) `expected_substr`.
+- `ASSERT_THROWS_AS(expr, ExceptionType)` — fails unless `expr` throws `ExceptionType` (or a type derived from it).
 - `ASSERT_LT(a, b)` — fails if `a >= b`.
 - `ASSERT_LE(a, b)` — fails if `a > b`.
 - `ASSERT_GT(a, b)` — fails if `a <= b`.
 - `ASSERT_GE(a, b)` — fails if `a < b`.
-- `ASSERT_NEAR(a, b, epsilon)` — fails if `|a - b| > epsilon`.
+- `ASSERT_NEAR(a, b, epsilon)` — fails if `|a - b| > epsilon` or either side is NaN.
 - `ASSERT_SNAPSHOT(name, actual, __FILE__)` — compares against `.expected` file in `snapshots/` directory.
+- `REQUIRE_VALUE(optional)` — returns the contained value, failing the test when the optional is empty.
+
+There is deliberately no "throws anything" assertion: every error-path test pins the exception's message or type, so it cannot pass because of an unrelated failure.
 
 Stdlib test convenience macros (from `shared_eval.hpp`):
 
 - `ASSERT_EVAL_INT(code, expected)` — evaluates Luma expression `code` and asserts the result is integer `expected`.
 - `ASSERT_EVAL_STR(code, expected)` — evaluates and asserts the result is string `expected`.
 - `ASSERT_EVAL_BOOL(code, expected)` — evaluates and asserts the result is boolean `expected`.
-- `ASSERT_EVAL_NUM(code, expected)` — evaluates and asserts the result is number (double) near `expected`.
+- `ASSERT_EVAL_NUM(code, expected)` — evaluates and asserts the result is number (double) exactly equal to `expected`; use `ASSERT_NEAR` on the value for inexact results.
 - `ASSERT_EVAL_FAILURE(code)` — evaluates and asserts the result is an error.
+- `ASSERT_EVAL_THROWS(code, expected_substr)` — evaluates and asserts that a runtime error whose message contains `expected_substr` is raised.
 - `ASSERT_RESULT_SUCCESS(value)` — asserts `value` is a `result` in the success state (checks `is_result()` first).
 - `ASSERT_RESULT_FAILURE(value)` — asserts `value` is a `result` in the failure state (checks `is_result()` first).
 
-Prefer `ASSERT_EVAL_*` for the common single-scalar shape (evaluate → assert success → compare one value) and `ASSERT_RESULT_SUCCESS`/`ASSERT_RESULT_FAILURE` over hand-written `ASSERT_TRUE(v.as_result()->is_success)`, which skips the `is_result()` guard.
+Prefer `ASSERT_EVAL_*` for the common single-scalar shape (evaluate → assert success → compare one value) and `ASSERT_RESULT_SUCCESS`/`ASSERT_RESULT_FAILURE` over hand-written `ASSERT_TRUE(v.as_result()->is_success)`, which skips the `is_result()` guard. Prefer `ASSERT_EQ(a, b)` over `ASSERT_TRUE(a == b)`: it prints both values on failure.
 
 All throw `std::runtime_error` on failure, which `run_test` catches and reports. Enum values are auto-formatted to their underlying integer type for assertion messages.
 
-### Temporary Files and Directories
+### RAII Helpers
 
-For tests that touch the real filesystem, `test_framework.hpp` provides RAII helpers that clean up on destruction — even if an assertion throws — and use unique names so parallel `ctest -j` runs never collide:
+`test_framework.hpp` provides RAII helpers (all in `luma::test`) that restore state on destruction — even if an assertion throws — so a failing test never leaks into the next one:
 
 - `TempFile{content}` — writes a uniquely named `.luma` file in the system temp directory.
-- `TempFile{path, content}` — writes `content` to the given path, creating parent directories as needed.
+- `TempFile{path, content}` — writes `content` to the given path, creating parent directories as needed; throws if the write fails.
 - `TempDir{}` — creates a fresh, unique temporary directory and removes it recursively.
+- `ScopedPathCleanup{path}` — for a file or directory a test creates under a fixed name (e.g. from a Luma program): removes stale leftovers on construction and the path recursively on destruction.
+- `LimitGuard{ResourceLimits::field, value}` — temporarily overrides a resource limit (or any assignable value).
+- `ScopedEnv{name, value}` — temporarily sets an environment variable.
+- `CapturedStream{std::cout}` / `CapturedStreams{std::cout, std::cerr}` — capture output for assertions; `StdinRedirect{buffer}` feeds `std::cin`.
 
-Both expose `.path()` (a `std::filesystem::path`) and `.path_string()`. Never hand-roll a fixed-name temporary file or directory: reusing a shared name races under parallel test execution and can leak artifacts into the working tree.
+`stdlib_test_helpers.hpp` adds `LumaTempFile{name, contents}` for files written through the Luma `FileSystem` module.
+
+`TempFile` and `TempDir` expose `.path()` (a `std::filesystem::path`) and `.path_string()`. Never hand-roll a fixed-name temporary file or directory: reusing a shared name races under parallel test execution and can leak artifacts into the working tree. Never save and restore state by hand — a throwing assertion skips the restore.
 
 ### Test Fixtures
 
-Derive from `TestFixture` and override `set_up()` / `tear_down()`:
+Derive from `luma::test::TestFixture` and override `set_up()` / `tear_down()`. `tear_down()` runs exactly once after the body, whether or not the body failed:
 
 ```cpp
-class MyFixture : public TestFixture {
+class MyFixture : public luma::test::TestFixture {
 public:
     int value{};
     void set_up() override { value = 42; }
@@ -107,27 +118,16 @@ TEST_F(MyFixture, test_uses_value) { ASSERT_EQ(fixture.value, 42); }
 int main() { RUN(test_uses_value); return SUMMARY(); }
 ```
 
-### Benchmarks
-
-Use the `BENCHMARK` macro for simple micro-benchmarks:
-
-```cpp
-BENCHMARK(my_benchmark, 10000) {
-    // code to benchmark
-}
-RUN(my_benchmark); // in main — prints ns/iter after warmup
-```
-
 ### Test File Structure
 
 Follow this layout for every C++ test file:
 
 1. **File comment** — single line describing the scope (e.g., `// Lexer unit tests.`).
-2. **Includes** — standard library first, then project headers, then `test_framework.hpp`.
-3. **`using namespace luma;`** — permitted in test files only.
-4. **Helper functions** — pipeline shortcuts like `lex()`, `parse()`, `eval()`, `run()`.
+2. **Includes** — standard library first, then project headers, each group sorted.
+3. **Using-declarations** — name what the file uses (`using luma::Value;`, `using luma::test::eval;`). Never use `using namespace` (cpp.instructions.md §22).
+4. **Helper functions** — file-specific pipeline shortcuts; reuse the shared helpers instead of re-implementing them.
 5. **Test functions** — one `static void` function per test, named `test_<feature>`.
-6. **`main()`** — registers tests with `RUN(test_name)`, returns `SUMMARY()`. Alternatively, use `LUMA_TEST(name)` for auto-registration and `LUMA_RUN_ALL()` in `main()`.
+6. `main()` — registers tests with `RUN(test_name)`, returns `SUMMARY()`. Alternatively, use `LUMA_TEST(name)` for auto-registration and `LUMA_RUN_ALL()` in `main()`.
 
 ### Auto-Registration (Alternative)
 
@@ -149,28 +149,27 @@ Both approaches (`RUN`/`SUMMARY` and `LUMA_TEST`/`LUMA_RUN_ALL`) are supported. 
 
 ### Helper Functions
 
-Each test file defines helpers that set up the interpreter pipeline for the layer under test:
+The shared helper headers (all in namespace `luma::test`) set up the interpreter pipeline for each layer; a file adds its own helpers only for what they do not cover:
 
-| Test file                                 | Helper                        | Purpose                                                                                        |
-| ----------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------- |
-| `cli_test.cpp`                            | _(direct)_                    | Tests exit codes, `levenshtein()`, and `suggest_flag()` directly.                              |
-| `concurrency_test.cpp`                    | _(direct)_                    | Tests Channel, Task, TaskScope, CancellationToken, and ThreadPool APIs directly (no pipeline). |
-| `include_resolver_test.cpp`               | `count_declarations(prog, k)` | Counts declarations of a specific kind in a `Program`.                                         |
-| `include_resolver_test.cpp`               | `load_and_resolve(path, sm)`  | Lexes, parses, and resolves includes from a file, returns `Program`.                           |
-| `lexer_test.cpp`                          | `lex(src)`                    | Tokenises `src`, returns `std::vector<Token>`.                                                 |
-| `parser_test.cpp`                         | `parse(src)`                  | Lexes and parses `src`, returns `Program`.                                                     |
-| `repl_test.cpp`                           | _(direct)_                    | Tests `compute_brace_depth_delta` directly (no pipeline).                                      |
-| `stdlib_test_helpers.hpp` consumers       | `eval(src)`                   | Evaluates expressions that call stdlib functions, returns `Value`.                             |
-| `vm_test.cpp`                             | `eval(src)`                   | Runs the full pipeline for expression-level code via the VM, returns `Value`.                  |
-| `type_checker_test_helpers.hpp` consumers | `check_warnings(src)`         | Lexes, parses, and type-checks `src`, returns `std::vector<Diagnostic>`.                       |
-| `type_checker_test_helpers.hpp` consumers | `check(src)`                  | Lexes, parses, and type-checks `src`, returns `std::vector<Diagnostic>`.                       |
-| `type_checker_test_helpers.hpp` consumers | `fails(src)`                  | Returns `true` if `src` produces type errors.                                                  |
-| `type_checker_test_helpers.hpp` consumers | `has_warnings(src)`           | Returns `true` if `src` produces warnings.                                                     |
-| `type_checker_test_helpers.hpp` consumers | `passes(src)`                 | Returns `true` if `src` produces no type errors.                                               |
+| Header / test file                | Helper                                                       | Purpose                                                                                       |
+| --------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `shared_eval.hpp`                 | `eval(src)`, `eval_checked(src)`                             | Run the full pipeline (unchecked / with type checking and linting), return the `Value`.       |
+| `shared_eval.hpp`                 | `make_std_env()`, `make_sandboxed_std_env()`                 | An environment with the standard library registered (normal / sandbox mode).                  |
+| `lex_parse_util.hpp`              | `lex_and_parse(src)`, `parse_errors(src)`                    | Front-end only: the parsed `Program`, or the parser's syntax errors.                          |
+| `analysis/test_parse_helper.hpp`  | `parse(src)`                                                 | Lexes and parses `src`, returns `Program`.                                                    |
+| `analysis/type_checker_test_helpers.hpp` | `check(src)`, `check_warnings(src)`                   | Lexes, parses, and type-checks `src`, returns `std::vector<Diagnostic>`.                      |
+| `analysis/type_checker_test_helpers.hpp` | `passes(src)`, `fails(src)`, `fails_with(src, code)`  | Whether `src` type-checks, fails, or fails with a specific diagnostic code.                   |
+| `runtime/compiler_test_helpers.hpp` | `compile(src)`, `compile_script(src)`                      | Compile in REPL mode / as a script, returns `CompileResult`.                                  |
+| `runtime/compiler_test_helpers.hpp` | `has_opcode`, `count_opcode`, `opcode_offsets`             | Inspect a chunk instruction by instruction (operand bytes are never mistaken for opcodes).    |
+| `runtime/stdlib_test_helpers.hpp` | `LumaTempFile`, `luma_string_literal`                        | Temporary files written through the Luma `FileSystem` module.                                 |
+| `include_resolver_test.cpp`       | `load_and_resolve(path, sm)`                                 | Lexes, parses, and resolves includes from a file, returns `Program`.                          |
+| `lexer_test.cpp`                  | `lex(src)`                                                   | Tokenises `src`, returns `std::vector<Token>`.                                                |
+| `cli_test.cpp`, `concurrency_test.cpp`, `repl_test.cpp` | _(direct)_                             | Call the component APIs directly (no pipeline).                                               |
 
 **When to use which:**
 
-- `eval()` — for testing expressions or statements that produce a value (arithmetic, string ops, variable declarations). The result is the value of the last statement. Available in the `tests/runtime/stdlib_test_*.cpp` files via `stdlib_test_helpers.hpp`, and in `vm_test.cpp`.
+- `eval()` — for testing expressions or statements that produce a value (arithmetic, string ops, variable declarations). The result is the value of the last statement. It skips the type checker, so error-path tests must pin the message (`ASSERT_EVAL_THROWS`): a typo in the source surfaces as an "undefined variable" runtime error.
+- `eval_checked()` — when the type checker must accept the program too.
 - Direct API calls — for testing internal state (e.g., verifying that specific functions are registered in the environment).
 
 ### Adding a New C++ Test
@@ -187,27 +186,13 @@ Each test file defines helpers that set up the interpreter pipeline for the laye
 
 ### Testing Error Conditions
 
-Use `ASSERT_THROWS` for verifying that code throws:
+Pin every expected error by its message (or its exception type when the class is the point) — never accept "any exception", because an unrelated failure such as a typo would pass the test:
 
 ```cpp
 static void test_division_by_zero() {
-    ASSERT_THROWS(eval("1 / 0"));
-}
-```
-
-For more specific exception type checking:
-
-```cpp
-static void test_division_by_zero() {
-    bool threw = false;
-
-    try {
-        eval("1 / 0");
-    } catch (const RuntimeError&) {
-        threw = true;
-    }
-
-    ASSERT_TRUE(threw);
+    ASSERT_EVAL_THROWS("integer x = 1\ninteger y = 0\nx / y", "division by zero");
+    ASSERT_THROWS_AS(luma::test::eval("1 / 0"), luma::RuntimeError);
+    ASSERT_THROWS_WITH_MESSAGE(parse_config(text), "missing key");
 }
 ```
 
@@ -260,14 +245,14 @@ function void test_<feature_b>() {
 
 ```bash
 # Run a single test suite
-build/Release/luma --test tests/features/language/arrays.luma
+build/luma --test tests/features/language/arrays.luma
 ```
 
 ```powershell
 # Run all test suites (PowerShell)
 foreach ($f in Get-ChildItem tests\features\*\*.luma) {
     Write-Host "── $($f.Name) ──"
-    & build/Release/luma.exe --test $f.FullName
+    & build/luma.exe --test $f.FullName
 }
 ```
 
@@ -302,7 +287,7 @@ test1
 
 | Command                                                         | What it runs                      |
 | --------------------------------------------------------------- | --------------------------------- |
-| `build/Release/luma --test tests/features/language/<file>.luma` | A single Luma feature test suite. |
+| `build/luma --test tests/features/language/<file>.luma` | A single Luma feature test suite. |
 | `ctest --preset default`                                        | All C++ unit tests via CTest.     |
 
 Always run both C++ and Luma tests before submitting changes. CTest must report zero failures, and all Luma test suites must pass.
@@ -346,20 +331,20 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 | ---------------------------- | -------------------------------------------- |
 | `fuzz_lexer`                 | Tokenisation of arbitrary input              |
 | `fuzz_parser`                | AST construction from token stream           |
-| `fuzz_resolver`              | Name resolution and slot assignment          |
 | `fuzz_type_checker`          | Static type checking                         |
-| `fuzz_linter`                | Post-type-check lint pass                    |
-| `fuzz_compiler`              | Bytecode compilation from valid ASTs         |
-| `fuzz_optimizer`             | Bytecode optimisation pass                   |
+| `fuzz_linter`                | Type check then lint, as in production       |
+| `fuzz_compiler`              | Production passes; output-verifies oracle    |
+| `fuzz_optimizer`             | Every level and chunk; still-verifies oracle |
 | `fuzz_include_resolver`      | Include path resolution                      |
-| `fuzz_vm`                    | VM execution of compiled bytecode            |
-| `fuzz_structured`            | Records, choices, and pattern matching       |
-| `fuzz_bytecode_deserializer` | Bytecode decode with round-trip oracle       |
+| `fuzz_vm`                    | VM execution, optimised/verified per input   |
+| `fuzz_structured`            | Generated well-typed and chaos programs      |
+| `fuzz_bytecode_deserializer` | Bytecode decode, round-trip, then execute    |
 | `fuzz_json`                  | JSON-RPC body parse with re-serialise oracle |
 | `fuzz_json_stdlib`           | `Json.deserialize` with re-serialise oracle  |
 | `fuzz_csv`                   | RFC 4180 CSV parse with round-trip oracle    |
 | `fuzz_xml`                   | `Xml.deserialize` with round-trip oracle     |
 | `fuzz_datetime`              | ISO-8601 parse with round-trip oracle        |
+| `fuzz_decimal`               | `Decimal` parse with canonical-text oracle   |
 | `fuzz_protocol`              | Content-Length message framing               |
 | `fuzz_compression`           | deflate/gzip/RLE decode round-trip oracle    |
 | `fuzz_encoder`               | Base64/URL decode round-trip oracle          |
@@ -375,20 +360,21 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 
 ### Building
 
-Fuzz targets require Clang with AddressSanitizer and libFuzzer:
+Fuzz targets require Clang with libFuzzer; AddressSanitizer and UndefinedBehaviorSanitizer are enabled through the global flags and mirrored onto every target:
 
 ```bash
 cmake -B build-fuzz -DLUMA_BUILD_FUZZ=ON \
-    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined"
 cmake --build build-fuzz
 ```
 
 ### Running
 
-Run a target with the shared corpus and dictionary:
+Run a target with its own seed corpus and the shared dictionary:
 
 ```bash
-./build-fuzz/fuzz_parser fuzz/corpus/ -dict=fuzz/dictionary.txt -max_total_time=300
+./build-fuzz/fuzz_parser fuzz/corpus/parser/ -dict=fuzz/dictionary.txt -timeout=25 -max_total_time=300
 ```
 
 Key libFuzzer flags:
@@ -396,7 +382,11 @@ Key libFuzzer flags:
 - `-max_total_time=N` — stop after N seconds
 - `-max_len=4096` — cap input size (default for this project)
 - `-dict=fuzz/dictionary.txt` — use project dictionary for token-aware mutations
+- `-timeout=N` — report an input running longer than N seconds as a hang
+- `-close_fd_mask=1` — close the target's stdout (executed programs print)
 - `-jobs=N` — run N parallel fuzzing jobs
+
+The harness (`fuzz/fuzz_harness.hpp`) tolerates only `std::runtime_error` and `std::bad_alloc`; any other exception — and a `luma::InternalError`, which the VM raises when a built-in fails with an interpreter fault — traps as a finding. Seeds for the compiling and executing targets (`corpus/compiler/`, `corpus/optimizer/`, `corpus/vm/`) must type-check and run under `luma --box`, or they never reach the stages they seed. The structured generator is pinned by `tests/integration/fuzz_generator_test.cpp`.
 
 ### Corpus
 
@@ -429,7 +419,7 @@ Before submitting any change that touches the interpreter, standard library, or 
 - [ ] Interpreter or stdlib behaviour changes are covered by **both** a C++ unit test and a Luma `@test` feature test where applicable.
 - [ ] Test and `@test` function names follow the conventions in §4 (descriptive `test_*` names, no `test1`).
 - [ ] `ctest --preset default` reports zero failures.
-- [ ] All affected Luma feature suites pass via `build/Release/luma --test <file>.luma`.
+- [ ] All affected Luma feature suites pass via `build/luma --test <file>.luma`.
 - [ ] New or modified stdlib modules update the sandbox tests (§6) at both the C++ and Luma layers.
 - [ ] New resource limits add a C++ test that triggers the limit and verifies the error (§6).
 - [ ] New language features add a minimal seed file to the appropriate `fuzz/corpus/` subdirectory (§7).

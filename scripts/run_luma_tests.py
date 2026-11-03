@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Run Luma feature tests.
 
-Cross-platform replacement for run_luma_tests.sh / run_luma_tests.ps1.
 Discovers all .luma files under a test directory, executes each with the
 luma interpreter in --test mode, and reports a summary.
 

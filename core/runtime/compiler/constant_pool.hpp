@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -33,8 +34,21 @@ public:
     static constexpr std::size_t max_size{CompilerLimits::k_max_constants};
 
     // Add a constant, deduplicating integers, strings, and doubles.
-    // Returns the u16 pool index.
+    // Returns the u16 pool index.  Throws std::overflow_error when a new entry
+    // is needed but the pool is full.
     [[nodiscard]] std::uint16_t add(Value value) {
+        if (auto index = try_add(std::move(value))) {
+            return *index;
+        }
+
+        throw std::overflow_error{
+            std::format("Constant pool overflow (more than {} constants)", max_size)};
+    }
+
+    // Like add(), but returns std::nullopt instead of throwing when a new entry
+    // is needed and the pool is full.  An already-present constant is still
+    // found.  The compiler uses this to report a located diagnostic.
+    [[nodiscard]] std::optional<std::uint16_t> try_add(Value value) {
         if (value.is_integer()) {
             return add_dedup(value, value.as_integer(), int_indices_);
         }
@@ -50,7 +64,9 @@ public:
             return add_dedup(value, bits, double_indices_);
         }
 
-        ensure_space();
+        if (is_full()) {
+            return std::nullopt;
+        }
 
         values_.push_back(std::move(value));
 
@@ -109,22 +125,30 @@ public:
     }
 
 private:
+    [[nodiscard]] bool is_full() const noexcept {
+        return values_.size() >= max_size;
+    }
+
     void ensure_space() {
-        if (values_.size() >= max_size) {
+        if (is_full()) {
             throw std::overflow_error{
                 std::format("Constant pool overflow (more than {} constants)", max_size)};
         }
     }
 
     // Deduplication helper: look up a key in the given map, returning the
-    // existing index if found, otherwise appending the value to the pool.
+    // existing index if found, otherwise appending the value to the pool
+    // (std::nullopt when the pool is full).
     template <typename Key, typename Map>
-    [[nodiscard]] std::uint16_t add_dedup(Value& value, const Key& key, Map& dedup_map) {
+    [[nodiscard]] std::optional<std::uint16_t> add_dedup(Value& value, const Key& key,
+                                                         Map& dedup_map) {
         if (auto it = dedup_map.find(key); it != dedup_map.end()) {
             return it->second;
         }
 
-        ensure_space();
+        if (is_full()) {
+            return std::nullopt;
+        }
 
         auto idx = static_cast<std::uint16_t>(values_.size());
 

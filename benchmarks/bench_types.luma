@@ -34,17 +34,17 @@ choice BenchDirection { North  South  East  West }
 
 function integer bench_list_length(BenchList list) {
     return match list {
-    case BenchList.Nil { 0 }
-    case BenchList.Cons(_, t) { 1 + bench_list_length(t) }
+        case BenchList.Nil        { 0 }
+        case BenchList.Cons(_, t) { 1 + bench_list_length(t) }
     }
 }
 
 function string bench_direction_label(BenchDirection d) {
     return match d {
-    case BenchDirection.North { "N" }
-    case BenchDirection.South { "S" }
-    case BenchDirection.East  { "E" }
-    case BenchDirection.West  { "W" }
+        case BenchDirection.North { "N" }
+        case BenchDirection.South { "S" }
+        case BenchDirection.East  { "E" }
+        case BenchDirection.West  { "W" }
     }
 }
 
@@ -82,8 +82,8 @@ function BenchResult run_type_benchmarks(BenchResult state) {
 
     st = time_it(st, "nested record construction + access", 10000, () -> {
         BenchLine line = BenchLine {
-        start = BenchPoint { x = 0.0, y = 0.0 },
-        finish = BenchPoint { x = 3.0, y = 4.0 }
+            start = BenchPoint { x = 0.0, y = 0.0 },
+            finish = BenchPoint { x = 3.0, y = 4.0 }
         }
         number _reach = line.start.x + line.finish.y
     })
@@ -101,10 +101,10 @@ function BenchResult run_type_benchmarks(BenchResult state) {
     st = time_it(st, "choice type match (4 arms)", 10000, () -> {
         BenchShape s = BenchShape.Rectangle(10.0, 20.0)
         number _area = match s {
-        case BenchShape.Circle(r) { 3.14159 * r * r }
-        case BenchShape.Rectangle(w, h) { w * h }
-        case BenchShape.Triangle(b, h) { 0.5 * b * h }
-        case BenchShape.Point { 0.0 }
+            case BenchShape.Circle(r)       { 3.14159 * r * r }
+            case BenchShape.Rectangle(w, h) { w * h }
+            case BenchShape.Triangle(b, h)  { 0.5 * b * h }
+            case BenchShape.Point           { 0.0 }
         }
     })
 
@@ -129,7 +129,7 @@ function BenchResult run_type_benchmarks(BenchResult state) {
 
     st = time_it(st, "ADT recursive traversal", 5000, () -> {
         BenchList list = BenchList.Cons(1, BenchList.Cons(2, BenchList.Cons(3,
-        BenchList.Cons(4, BenchList.Cons(5, BenchList.Nil)))))
+            BenchList.Cons(4, BenchList.Cons(5, BenchList.Nil)))))
         integer _len = bench_list_length(list)
     })
 

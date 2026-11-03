@@ -64,13 +64,35 @@ struct ScopedOccurrenceFilter {
 //   1. Local-variable scope: if filter.is_local && filter.enclosing_function is
 //      set, only tokens inside the enclosing function body range in the origin
 //      document are kept.
-//   2. Namespace prefix: if non-empty, only tokens preceded by the expected
-//      "Namespace." pattern are kept.
+//   2. Namespace: with a non-empty prefix, a token is kept when it is
+//      qualified as "Namespace.name", is the member's own declaration name, or
+//      is a bare name imported from that namespace with `use`. With an empty
+//      prefix, qualified tokens and unqualified tokens bound to a namespace
+//      member are rejected. (A bare use inside the namespace block is not a
+//      member reference: Luma requires the qualified form or `use` there too.)
 //   3. Declaration skip: if filter.include_declaration is false and we are in
 //      the origin document, the definition-site token is excluded.
 [[nodiscard]] std::vector<std::size_t>
 collect_scoped_occurrences(const AnalysisResult& result, const std::string& name,
                            std::string_view doc_uri, const ScopedOccurrenceFilter& filter);
+
+// The qualified name ("Geo.area") of the namespace member whose declaration
+// name is the token at `token_index`, or nullptr.
+[[nodiscard]] const std::string* namespace_member_declared_at(const AnalysisResult& result,
+                                                              std::size_t token_index);
+
+// The namespace (its last segment, as written before a dot) that the
+// unqualified identifier at `token_index` binds to: the namespace of a member
+// whose declaration name it is, or of a member imported with `use`. Empty when
+// it refers to a top-level (or local) symbol.
+[[nodiscard]] std::string unqualified_binding_namespace(const AnalysisResult& result,
+                                                        std::size_t token_index);
+
+// The namespace that qualifies the identifier at `token_index` for rename and
+// references: the explicit "X." receiver when present, otherwise
+// unqualified_binding_namespace().
+[[nodiscard]] std::string target_namespace_prefix(const AnalysisResult& result,
+                                                  std::size_t token_index);
 
 } // namespace luma::lsp
 

@@ -16,22 +16,23 @@ function result<integer> bench_fallible_divide(integer a, integer b) {
     if b == 0 {
         return failure("division by zero")
     }
+
     return success(a // b)
 }
 
 function result<integer> bench_chain_three() {
     return bench_fallible_divide(100, 5)
-    |> Result.map((integer x) -> x + 10)
-    |> Result.map((integer x) -> x * 2)
+        |> Result.map((integer x) -> x + 10)
+        |> Result.map((integer x) -> x * 2)
 }
 
 function result<integer> bench_deep_chain() {
     return success(1)
-    |> Result.map((integer x) -> x + 1)
-    |> Result.map((integer x) -> x + 1)
-    |> Result.map((integer x) -> x + 1)
-    |> Result.map((integer x) -> x + 1)
-    |> Result.map((integer x) -> x + 1)
+        |> Result.map((integer x) -> x + 1)
+        |> Result.map((integer x) -> x + 1)
+        |> Result.map((integer x) -> x + 1)
+        |> Result.map((integer x) -> x + 1)
+        |> Result.map((integer x) -> x + 1)
 }
 
 function integer bench_increment(integer n) {
@@ -172,7 +173,7 @@ function BenchResult run_error_handling_benchmarks(BenchResult state) {
     })
 
     st = time_it(st, "Result.map_failure (failure)", 10000, () -> {
-        result<integer> _r = Result.map_failure(failure("oops"), (string e) -> "wrapped: " + e)
+        result<integer> _r = Result.map_failure(failure("oops"), (string e) -> "wrapped: ${e}")
     })
 
     st = time_it(st, "Result.to_optional (success)", 10000, () -> {
@@ -208,7 +209,7 @@ function BenchResult run_error_handling_benchmarks(BenchResult state) {
     })
 
     st = time_it(st, "Optional.zip (both some)", 10000, () -> {
-        (integer _a, integer _b) = Optional.zip(some(1), some(2))
+        (integer _a, integer _b) = Optional.unwrap(Optional.zip(some(1), some(2)))
     })
 
     st = time_it(st, "Optional.contains (some)", 10000, () -> {

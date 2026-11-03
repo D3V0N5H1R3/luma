@@ -24,17 +24,25 @@ struct Token {
     std::string lexeme;
     std::optional<TokenLiteral> literal;
     // Location of the position ONE PAST the token's last character (1-based).
+    // AST nodes and the language server are built on this end-position
+    // convention, so it stays the token's `location`.  The lexer also stamps
+    // the token's start into `location.start_line`/`start_column`, so every
+    // copy of this location (AST nodes, source maps) can still find the start
+    // and diagnostics put the caret on the token itself.
     SourceLocation location;
     // Location of the token's FIRST character (1-based), i.e. the true start of
-    // its source span.  For most tokens the lexeme equals the raw source text,
-    // so the start can be reconstructed as `location - lexeme_width`; string
-    // literals are the exception — their lexeme is PROCESSED (quotes stripped,
-    // escape sequences resolved, triple-quoted bodies dedented), so that
-    // reconstruction is wrong and, for multi-line strings, produces negative or
-    // oversized coordinates.  The lexer records the real start for string tokens
-    // here.  A sentinel line of 0 means "unset"; consumers then fall back to the
-    // lexeme-width reconstruction, which is correct for non-string tokens.
+    // its source span.  The lexer records it for every token it emits.  It is
+    // essential for string literals, whose lexeme is PROCESSED (quotes stripped,
+    // escape sequences resolved, triple-quoted bodies dedented), so their start
+    // cannot be reconstructed as `location - lexeme_width`.  A sentinel line of
+    // 0 means "unset" (only for tokens synthesised outside the lexer); consumers
+    // then fall back to the lexeme-width reconstruction.
     SourceLocation start_location{0, 0, 0};
+    // True when at least one newline separates this token from the previous
+    // one.  Luma has no statement terminator, so the parser uses this to stop a
+    // `(` or `[` at the start of a line from continuing the previous expression
+    // as a call or index.
+    bool preceded_by_newline{false};
 };
 
 } // namespace luma

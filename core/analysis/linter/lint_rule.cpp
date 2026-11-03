@@ -78,6 +78,10 @@ static constexpr std::array builtin_rules = std::to_array<LintRuleInfo>({
     {.id="W0016", .name="unused-include",
      .description="Included file appears unused — remove if not needed",
      .severity=Severity::Warning, .code=DiagnosticCode::UnusedInclude},
+
+    {.id="W0017", .name="boolean-literal-comparison",
+     .description="Boolean value compared with == or != against 'true'/'false' — use it directly",
+     .severity=Severity::Warning, .code=DiagnosticCode::BooleanLiteralComparison},
 });
 // clang-format on
 
