@@ -11,7 +11,9 @@
 #include "json/json.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::dap;
+using luma::dap::BreakpointRequest;
+using luma::dap::evaluate_hit_condition;
+using luma::dap::validate_hit_condition;
 using luma::json::JsonValue;
 
 namespace {

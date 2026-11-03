@@ -37,16 +37,16 @@ record Client {
 
 function string format_message(Message msg) {
     return match msg {
-    case Message.Join(user)       { "*** ${user} joined the chat ***" }
-    case Message.Leave(user)      { "*** ${user} left the chat ***" }
-    case Message.Chat(user, text) { "[${user}] ${text}" }
-    case Message.ServerNotice(t)  { ">> ${t}" }
-    case Message.Shutdown         { ">> Server shutting down..." }
+    case Message.Join(user)         { "*** ${user} joined the chat ***" }
+    case Message.Leave(user)        { "*** ${user} left the chat ***" }
+    case Message.Chat(user, text)   { "[${user}] ${text}" }
+    case Message.ServerNotice(text) { ">> ${text}" }
+    case Message.Shutdown           { ">> Server shutting down..." }
     }
 }
 
 function string timestamp() {
-    return Result.unwrap_or(DateTime.now_iso_string(), "??:??:??")
+    return Result.unwrap_or(DateTime.now_iso_string(), "unknown time")
 }
 
 function string format_with_time(Message msg) {
@@ -61,38 +61,34 @@ function array<Client> add_client(array<Client> clients, Client client) {
 
 function array<Client> remove_client(array<Client> clients, string username) {
     return clients
-    |> Array.filter((Client c) -> c.username != username)
-    |> Result.unwrap_or([])
+        |> Array.filter((Client c) -> c.username != username)
+        |> Result.unwrap_or([])
 }
 
 function optional<Client> find_client(array<Client> clients, string username) {
-    for client in clients {
-        if client.username == username {
-            return some(client)
-        }
-    }
+    result<Client> found = clients |> Array.find((Client c) -> c.username == username)
 
-    return none
+    return Result.to_optional(found)
 }
 
 function array<string> list_usernames(array<Client> clients) {
     return clients
-    |> Array.map((Client c) -> c.username)
-    |> Result.unwrap_or([])
+        |> Array.map((Client c) -> c.username)
+        |> Result.unwrap_or([])
 }
 
 # ─── Broadcast ───────────────────────────────────────────
 
 function void broadcast(array<Client> clients, string text) {
     for client in clients {
-        boolean _ = Channel.send(client.outbox, text)
+        _ = Channel.send(client.outbox, text)
     }
 }
 
 function void broadcast_except(array<Client> clients, string exclude, string text) {
     for client in clients {
         if client.username != exclude {
-            boolean _ = Channel.send(client.outbox, text)
+            _ = Channel.send(client.outbox, text)
         }
     }
 }
@@ -127,12 +123,12 @@ function void run_dispatcher(
                 string announcement = format_with_time(msg)
 
                 broadcast(clients, announcement)
-                boolean _ = Channel.send(log_channel, announcement)
+                _ = Channel.send(log_channel, announcement)
 
                 # Send welcome message to the joining client
                 array<string> names = list_usernames(clients)
                 string who = Array.join(names, ", ")
-                boolean _welcome = Channel.send(outbox,
+                _ = Channel.send(outbox,
                     format_with_time(Message.ServerNotice("Welcome! Online: ${who}"))
                 )
             }
@@ -142,32 +138,30 @@ function void run_dispatcher(
                 clients = remove_client(clients, username)
 
                 broadcast(clients, announcement)
-                boolean _ = Channel.send(log_channel, announcement)
+                _ = Channel.send(log_channel, announcement)
             }
             case Message.Chat(username, _) {
                 string formatted = format_with_time(msg)
 
                 broadcast_except(clients, username, formatted)
-                boolean _logged = Channel.send(log_channel, formatted)
+                _ = Channel.send(log_channel, formatted)
             }
             case Message.ServerNotice(_) {
                 string formatted = format_with_time(msg)
 
                 broadcast(clients, formatted)
-                boolean _logged = Channel.send(log_channel, formatted)
+                _ = Channel.send(log_channel, formatted)
             }
             case Message.Shutdown {
                 string notice = format_with_time(msg)
 
                 broadcast(clients, notice)
-                boolean _ = Channel.send(log_channel, notice)
+                _ = Channel.send(log_channel, notice)
 
-                # Close all client outboxes
                 for client in clients {
                     Channel.close(client.outbox)
                 }
 
-                clients = []
                 is_running = false
             }
             }
@@ -183,23 +177,18 @@ function void run_dispatcher(
 
 # ─── Simulated Client ───────────────────────────────────
 
-function array<string> simulate_client(
+function void simulate_client(
     channel<Message> server_inbox,
     string username,
     array<string> script
 ) {
-    # Join
-    boolean _ = Channel.send(server_inbox, Message.Join(username))
+    _ = Channel.send(server_inbox, Message.Join(username))
 
-    # Send scripted messages with small pauses between
     for line in script {
-        boolean _ = Channel.send(server_inbox, Message.Chat(username, line))
+        _ = Channel.send(server_inbox, Message.Chat(username, line))
     }
 
-    # Leave
-    boolean _leave = Channel.send(server_inbox, Message.Leave(username))
-
-    return ["${username}: done"]
+    _ = Channel.send(server_inbox, Message.Leave(username))
 }
 
 # ─── Tests ───────────────────────────────────────────────
@@ -280,8 +269,7 @@ function void test_list_usernames() {
 }
 
 @test
-function void test_message_round_trip() {
-    # Verify all message variants format without error
+function void test_every_message_variant_formats_to_text() {
     array<Message> messages = [
         Message.Join("user1"),
         Message.Leave("user2"),
@@ -309,12 +297,11 @@ function void main() {
     channel<Message> server_inbox = Channel.new_buffered(200)
     channel<string> log_channel = Channel.new_buffered(200)
 
-    # Start the dispatcher in a task scope
     task_scope {
-        # Start dispatcher
         spawn run_dispatcher(server_inbox, log_channel)
 
-        # Simulate three clients chatting concurrently
+        # The inner scope waits for every client, so Shutdown is only sent
+        # once all their messages are already queued in the inbox.
         task_scope {
             spawn simulate_client(server_inbox, "Alice", [
                 "Hey everyone!",
@@ -336,10 +323,10 @@ function void main() {
         }
 
         # All clients finished — tell the dispatcher to shut down
-        boolean _ = Channel.send(server_inbox, Message.Shutdown)
+        _ = Channel.send(server_inbox, Message.Shutdown)
     }
 
-    # Collect log
+    # The dispatcher closes the log channel on shutdown, which ends this loop.
     print("─── Chat Log ───")
 
     mutable boolean is_collecting = true

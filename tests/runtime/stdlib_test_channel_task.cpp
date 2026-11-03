@@ -1,9 +1,18 @@
 // Standard library tests: Channel, Task.
 
+#include <cstddef>
 #include <mutex>
+#include <string>
 
+#include "analysis/errors/error.hpp"
+#include "common/resource_limits.hpp"
 #include "runtime/concurrency/thread_pool.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ResourceLimits;
+using luma::RuntimeError;
+using luma::ThreadPool;
+using luma::test::eval;
 
 static void test_channel_close() {
     const auto v = eval("channel<integer> ch = Channel.new()\n"
@@ -15,7 +24,7 @@ static void test_channel_close() {
 }
 
 static void test_channel_is_closed_non_channel_throws() {
-    ASSERT_THROWS(eval("Channel.is_closed(42)"));
+    ASSERT_EVAL_THROWS("Channel.is_closed(42)", "Channel.is_closed: expected channel");
 }
 
 static void test_channel_is_empty() {
@@ -39,7 +48,7 @@ static void test_channel_length() {
 }
 
 static void test_channel_length_non_channel_throws() {
-    ASSERT_THROWS(eval("Channel.length(42)"));
+    ASSERT_EVAL_THROWS("Channel.length(42)", "Channel.length: expected channel");
 }
 
 static void test_channel_make() {
@@ -59,25 +68,11 @@ static void test_channel_make_buffered() {
 }
 
 static void test_channel_make_buffered_invalid() {
-    bool threw_zero{false};
-
-    try {
-        eval("Channel.new_buffered(0)");
-    } catch (const RuntimeError&) {
-        threw_zero = true;
-    }
-
-    ASSERT_TRUE(threw_zero);
-
-    bool threw_neg{false};
-
-    try {
-        eval("Channel.new_buffered(-5)");
-    } catch (const RuntimeError&) {
-        threw_neg = true;
-    }
-
-    ASSERT_TRUE(threw_neg);
+    ASSERT_THROWS_AS(eval("Channel.new_buffered(0)"), RuntimeError);
+    ASSERT_EVAL_THROWS("Channel.new_buffered(0)",
+                       "Channel.new_buffered: capacity must be positive, got 0");
+    ASSERT_EVAL_THROWS("Channel.new_buffered(-5)",
+                       "Channel.new_buffered: capacity must be positive, got -5");
 }
 
 static void test_channel_receive_all() {
@@ -106,7 +101,7 @@ static void test_channel_receive_timeout_times_out() {
 
     const std::string msg = v.as_result()->owned_inner->as_string();
 
-    ASSERT_TRUE(msg.find("timeout") != std::string::npos);
+    ASSERT_NE(msg.find("timeout"), std::string::npos);
 }
 
 static void test_channel_receive_timeout_with_value() {
@@ -118,7 +113,7 @@ static void test_channel_receive_timeout_with_value() {
 }
 
 static void test_channel_send_non_channel_throws() {
-    ASSERT_THROWS(eval("Channel.send(42, 1)"));
+    ASSERT_EVAL_THROWS("Channel.send(42, 1)", "Channel.send: expected channel");
 }
 
 static void test_channel_send_receive() {
@@ -138,7 +133,7 @@ static void test_channel_send_timeout_on_closed() {
 
     const std::string msg = v.as_result()->owned_inner->as_string();
 
-    ASSERT_TRUE(msg.find("closed") != std::string::npos);
+    ASSERT_NE(msg.find("closed"), std::string::npos);
 }
 
 static void test_channel_send_timeout_succeeds() {
@@ -158,7 +153,7 @@ static void test_channel_send_timeout_times_out() {
 
     const std::string msg = v.as_result()->owned_inner->as_string();
 
-    ASSERT_TRUE(msg.find("timeout") != std::string::npos);
+    ASSERT_NE(msg.find("timeout"), std::string::npos);
 }
 
 static void test_channel_try_receive_empty() {
@@ -178,12 +173,14 @@ static void test_task_cancel() {
                         "integer _r = await t\n"
                         "Task.cancel(t)\n");
 
+    // Every spawned task owns a cancellation token, so cancel reports true
+    // even for an unscoped task that has already completed.
     ASSERT_TRUE(v.is_bool());
-    // Unscoped tasks may not have a cancellation token, so cancel may return false.
+    ASSERT_TRUE(v.as_bool());
 }
 
 static void test_task_cancel_non_task_throws() {
-    ASSERT_THROWS(eval("Task.cancel(42)"));
+    ASSERT_EVAL_THROWS("Task.cancel(42)", "Task.cancel: expected a task");
 }
 
 static void test_task_is_cancelled() {
@@ -201,12 +198,14 @@ static void test_task_is_cancelled_after_cancel() {
                         "boolean _c = Task.cancel(t)\n"
                         "Task.is_cancelled(t)\n");
 
+    // Every spawned task owns a cancellation token, so cancelling an unscoped
+    // task marks it as cancelled.
     ASSERT_TRUE(v.is_bool());
-    // For unscoped tasks, cancel may not set a token, so is_cancelled may be false.
+    ASSERT_TRUE(v.as_bool());
 }
 
 static void test_task_is_cancelled_non_task_throws() {
-    ASSERT_THROWS(eval("Task.is_cancelled(42)"));
+    ASSERT_EVAL_THROWS("Task.is_cancelled(42)", "Task.is_cancelled: expected a task");
 }
 
 static void test_task_is_done() {
@@ -218,7 +217,7 @@ static void test_task_is_done() {
 }
 
 static void test_task_is_done_non_task_throws() {
-    ASSERT_THROWS(eval("Task.is_done(42)"));
+    ASSERT_EVAL_THROWS("Task.is_done(42)", "Task.is_done: expected a task");
 }
 
 static void test_task_map_n_returns_result() {
@@ -236,11 +235,12 @@ static void test_task_retry_all_fail() {
 }
 
 static void test_task_retry_invalid_attempts() {
-    ASSERT_THROWS(eval("Task.retry(0, (integer n) -> success(n))"));
+    ASSERT_EVAL_THROWS("Task.retry(0, (integer n) -> success(n))",
+                       "Task.retry: max_attempts must be > 0");
 }
 
 static void test_task_retry_negative_attempts_throws() {
-    ASSERT_THROWS(eval("Task.retry(-1, () -> success(1))"));
+    ASSERT_EVAL_THROWS("Task.retry(-1, () -> success(1))", "Task.retry: max_attempts must be > 0");
 }
 
 static void test_task_retry_success() {
@@ -270,7 +270,7 @@ static void test_task_all_empty_returns_empty_array() {
 }
 
 static void test_task_all_non_task_throws() {
-    ASSERT_THROWS(eval("Task.all([42])"));
+    ASSERT_EVAL_THROWS("Task.all([42])", "Task.all: array element is not a task");
 }
 
 static void test_task_race_returns_result() {
@@ -301,7 +301,7 @@ static void test_task_timeout_success() {
 }
 
 static void test_task_timeout_non_task_throws() {
-    ASSERT_THROWS(eval("Task.timeout(42, 100)"));
+    ASSERT_EVAL_THROWS("Task.timeout(42, 100)", "Task.timeout: expected a task");
 }
 
 static void test_task_map_transforms_result() {
@@ -311,7 +311,7 @@ static void test_task_map_transforms_result() {
 }
 
 static void test_task_map_non_task_throws() {
-    ASSERT_THROWS(eval("Task.map(42, (integer x) -> x)"));
+    ASSERT_EVAL_THROWS("Task.map(42, (integer x) -> x)", "Task.map: expected a task");
 }
 
 static void test_task_flat_map_chains_tasks() {
@@ -322,7 +322,8 @@ static void test_task_flat_map_chains_tasks() {
 }
 
 static void test_task_flat_map_non_task_throws() {
-    ASSERT_THROWS(eval("Task.flat_map(42, (integer x) -> spawn String.length(\"a\"))"));
+    ASSERT_EVAL_THROWS("Task.flat_map(42, (integer x) -> spawn String.length(\"a\"))",
+                       "Task.flat_map: expected a task");
 }
 
 static void test_task_flat_map_requires_task_return() {
@@ -358,38 +359,32 @@ static void test_task_delay_returns_null() {
 }
 
 static void test_task_delay_negative_throws() {
-    ASSERT_THROWS(eval("Task.delay(-1)"));
+    ASSERT_EVAL_THROWS("Task.delay(-1)", "Task.delay: milliseconds must be non-negative");
 }
 
 static void test_thread_pool_queue_limit() {
+    // Declaration order matters: `hold` is destroyed first (releasing the
+    // worker even when an assertion throws), then `pool` joins its worker, and
+    // only then is `block` destroyed.
+    std::mutex block;
+
     // Create a pool with 1 worker thread and block it so tasks queue up.
     ThreadPool pool{1};
 
-    std::mutex block;
-    block.lock(); // hold the mutex so the first task blocks
+    const std::lock_guard<std::mutex> hold{block}; // the first task blocks on this
 
     // Enqueue a blocking task that holds the worker.
-    pool.enqueue([&block] { std::lock_guard<std::mutex> guard{block}; });
+    pool.enqueue([&block] { const std::lock_guard<std::mutex> guard{block}; });
 
-    // Fill the queue up to the limit.  The worker is blocked, so all
-    // tasks accumulate in the queue.
-    bool threw{false};
-
-    try {
+    // Fill the queue past the limit.  The worker is blocked, so all tasks
+    // accumulate in the queue and the last enqueue must be rejected.
+    const auto overfill_queue = [&pool] {
         for (std::size_t i{0}; i < ResourceLimits::max_task_queue_size + 1; ++i) {
             pool.enqueue([] {});
         }
-    } catch (const std::runtime_error& e) {
-        threw = true;
+    };
 
-        const std::string msg = e.what();
-
-        ASSERT_TRUE(msg.find("task queue is full") != std::string::npos);
-    }
-
-    block.unlock(); // unblock worker so pool can shut down
-
-    ASSERT_TRUE(threw);
+    ASSERT_THROWS_WITH_MESSAGE(overfill_queue(), "task queue is full");
 }
 
 static void test_task_any_first_success() {
@@ -437,7 +432,7 @@ static void test_task_all_settled_mixed() {
     ASSERT_EQ(v.as_array()->elements->size(), 2U);
     ASSERT_TRUE((*v.as_array()->elements)[0].as_result()->is_success);
     ASSERT_EQ((*v.as_array()->elements)[0].as_result()->owned_inner->as_integer(), 1);
-    ASSERT_TRUE(!(*v.as_array()->elements)[1].as_result()->is_success);
+    ASSERT_FALSE((*v.as_array()->elements)[1].as_result()->is_success);
 }
 
 static void test_task_all_settled_empty() {
@@ -448,7 +443,7 @@ static void test_task_all_settled_empty() {
 }
 
 static void test_task_all_settled_non_task_throws() {
-    ASSERT_THROWS(eval("Task.all_settled([42])"));
+    ASSERT_EVAL_THROWS("Task.all_settled([42])", "Task.all_settled: array element is not a task");
 }
 
 static void test_task_retry_with_backoff_success() {
@@ -474,7 +469,8 @@ static void test_task_retry_with_backoff_eventual_success() {
 }
 
 static void test_task_retry_with_backoff_invalid_n_throws() {
-    ASSERT_THROWS(eval("Task.retry_with_backoff(0, 1, () -> success(1))"));
+    ASSERT_EVAL_THROWS("Task.retry_with_backoff(0, 1, () -> success(1))",
+                       "Task.retry_with_backoff: n must be > 0");
 }
 
 static void test_task_completed_awaitable() {

@@ -7,7 +7,7 @@
 #include "common/format_number.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::format_number;
 
 // ═══════════════════════════════════════════════════════════
 // Whole numbers — must retain ".0" suffix

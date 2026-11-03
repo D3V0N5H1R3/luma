@@ -192,6 +192,36 @@ class SafeExtractTar(unittest.TestCase):
                 download._safe_extract_tar(archive, dest)
             self.assertFalse((tmp_path / "evil.txt").exists())
 
+    def test_interpreter_without_data_filter_extracts_by_hand(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            archive = tmp_path / "ok.tar.gz"
+            self._write_tar(archive, "sub/ok.txt", b"payload")
+
+            dest = tmp_path / "out"
+            dest.mkdir()
+            # A stand-in tarfile module lacking data_filter, as on older Pythons.
+            old_tarfile = SimpleNamespace(open=tarfile.open)
+            with mock.patch.object(download, "tarfile", old_tarfile):
+                download._safe_extract_tar(archive, dest)
+            self.assertEqual((dest / "sub" / "ok.txt").read_bytes(), b"payload")
+
+    def test_symlink_member_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            archive = tmp_path / "link.tar.gz"
+            with tarfile.open(archive, "w:gz") as tf:
+                info = tarfile.TarInfo(name="link")
+                info.type = tarfile.SYMTYPE
+                info.linkname = "/etc/passwd"
+                tf.addfile(info)
+
+            dest = tmp_path / "out"
+            dest.mkdir()
+            with self.assertRaises(ValueError):
+                download._safe_extract_tar(archive, dest)
+            self.assertFalse((dest / "link").exists())
+
 
 class RejectUnsafeMember(unittest.TestCase):
     """Direct coverage for the shared path-traversal guard both extractors use."""
@@ -372,6 +402,22 @@ class DownloadFile(unittest.TestCase):
                 download.download_file("https://example/luma", dest)
             self.assertEqual(dest.read_bytes(), body)
 
+    def test_network_failure_emits_error_and_exits_1(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "luma.tar.gz"
+            dest.write_bytes(b"partial")
+            stdout = io.StringIO()
+            with (
+                mock.patch("urllib.request.urlopen", side_effect=OSError("network down")),
+                contextlib.redirect_stdout(stdout),
+                self.assertRaises(SystemExit) as ctx,
+            ):
+                download.download_file("https://example/luma.tar.gz", dest)
+            self.assertEqual(ctx.exception.code, 1)
+            self.assertFalse(dest.exists(), "a partial download must be removed")
+        events = [json.loads(line) for line in stdout.getvalue().splitlines()]
+        self.assertEqual(events[-1]["event"], "error")
+
 
 class FetchExpectedChecksum(unittest.TestCase):
     _MANIFEST = f"{'1' * 64}  luma-linux-x86_64.tar.gz\n{'2' * 64} *luma-macos-aarch64.tar.gz\n"
@@ -409,6 +455,18 @@ class FetchExpectedChecksum(unittest.TestCase):
                 release, "luma-linux-x86_64.tar.gz", "SHA256SUMS"
             )
         self.assertIsNone(digest)
+
+    def test_unreachable_manifest_emits_error_and_returns_none(self) -> None:
+        stdout = io.StringIO()
+        with (
+            mock.patch("urllib.request.urlopen", side_effect=OSError("network down")),
+            contextlib.redirect_stdout(stdout),
+        ):
+            digest = download.fetch_expected_checksum(
+                self._release(), "luma-macos-aarch64.tar.gz", "SHA256SUMS"
+            )
+        self.assertIsNone(digest)
+        self.assertEqual(json.loads(stdout.getvalue().splitlines()[-1])["event"], "error")
 
 
 class MakeExecutable(unittest.TestCase):

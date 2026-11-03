@@ -195,7 +195,12 @@ void register_array_transform_query(const EnvPtr& env) {
 
                 const auto window_count = elems.size() - static_cast<std::size_t>(size) + 1;
 
-                if (window_count > ResourceLimits::max_array_size) {
+                // The output holds window_count × size elements in total (up to
+                // ~L²/4 for size ≈ L/2), not just window_count — which can never
+                // exceed the input length.  Divide rather than multiply so the
+                // check cannot overflow.
+                if (window_count >
+                    ResourceLimits::max_array_size / static_cast<std::size_t>(size)) {
                     return make_failure_value(
                         error_msg("Array", "windows", "result exceeds maximum array size"));
                 }

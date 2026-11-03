@@ -70,9 +70,7 @@ function void main() {
     number mode = Statistics.mode(data) |> Result.unwrap_or(0.0)
     number vr = Statistics.variance(data) |> Result.unwrap_or(0.0)
     number sd = Statistics.standard_deviation(data) |> Result.unwrap_or(0.0)
-    number pct = Statistics.percentile(data, 50.0) |> Result.unwrap_or(0.0)
     number sm = Math.sum(data) |> Result.unwrap_or(0.0)
-    number corr = Statistics.correlation([1.0, 2.0, 3.0], [2.0, 4.0, 6.0]) |> Result.unwrap_or(0.0)
 
     # Classification helpers.
     boolean isinf = Math.is_infinite(inf)
@@ -101,6 +99,6 @@ function void main() {
     print("trig: ${si} ${co} ${ta} ${asn} ${acs} ${atn} ${a2} ${deg} ${rad}")
     print("transc: ${ex} ${hy} ${cr} ${hs} ${hc} ${ht}")
     print("interp: ${cl} ${lp} ${rm} ${ssp} ${rem}")
-    print("stats: ${mean} ${med} ${mode} ${vr} ${sd} ${pct} ${sm} ${corr}")
+    print("stats: ${mean} ${med} ${mode} ${vr} ${sd} ${sm}")
     print("classify: ${isinf} ${isnan} ${approx} ${neg_root} ${fac_overflow} ${caught}")
 }

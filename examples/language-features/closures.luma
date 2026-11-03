@@ -40,11 +40,11 @@ function void main() {
 
     integer threshold = 60
     array<integer> scores = [55, 70, 45, 80, 90]
-    array<integer> passing = Result.unwrap(Array.filter(scores, (integer s) -> s >= threshold))
+    array<integer> passing = Array.filter(scores, (integer score) -> score >= threshold) ?? []
     print("passing (>= ${threshold}): ${passing}")
 
     integer factor = 3
-    array<integer> tripled = Result.unwrap(Array.map([1, 2, 3], (integer x) -> x * factor))
+    array<integer> tripled = Array.map([1, 2, 3], (integer x) -> x * factor) ?? []
     print("tripled by ${factor}: ${tripled}")
 
     # ── Returning a closure (factory) ──

@@ -55,6 +55,17 @@ using luma::json::JsonValue;
     return JsonBuilder().set("reason", std::string(reason)).set("threadId", thread_id).build();
 }
 
+// Build the body for a "breakpoint" event (e.g. a pending breakpoint that
+// became verified once the program was compiled).  `breakpoint` is an
+// already-serialised DAP Breakpoint object.
+[[nodiscard]] inline JsonValue make_breakpoint_event_body(std::string_view reason,
+                                                          JsonValue breakpoint) {
+    return JsonBuilder()
+        .set("reason", std::string(reason))
+        .set("breakpoint", std::move(breakpoint))
+        .build();
+}
+
 // ─── Object builders ───
 
 // Build a DAP Thread object.

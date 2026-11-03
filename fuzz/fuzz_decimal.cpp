@@ -1,6 +1,5 @@
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <optional>
 #include <string>
 
@@ -43,29 +42,26 @@ void check_roundtrip(const luma::Decimal& value) {
 } // namespace
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    return luma::fuzz::run_text(data, size, luma::fuzz::max_input_size,
-                                [&](const std::string& input) {
-                                    // ── Never-crash: arbitrary bytes are parsed or rejected, never crash.
-                                    const auto parsed = luma::Decimal::parse(input);
-                                    luma::fuzz::do_not_optimize(parsed.has_value());
+    return luma::fuzz::run_text(
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
+            // ── Never-crash: arbitrary bytes are parsed or rejected.
+            const auto parsed = luma::Decimal::parse(input);
+            luma::fuzz::do_not_optimize(parsed.has_value());
 
-                                    // ── Oracle: an accepted value's canonical text must round-trip.
-                                    if (parsed) {
-                                        check_roundtrip(*parsed);
-                                    }
+            // ── Oracle: an accepted value's canonical text must round-trip.
+            if (parsed) {
+                check_roundtrip(*parsed);
+            }
 
-                                    // ── Never-crash: build a decimal from a hostile double bit pattern
-                                    // so the NaN / infinity guards are driven directly.
-                                    double raw = 0.0;
-                                    if (size >= sizeof(raw)) {
-                                        std::memcpy(&raw, data, sizeof(raw));
-                                    }
-                                    const auto from_double = luma::Decimal::from_double(raw);
-                                    luma::fuzz::do_not_optimize(from_double.has_value());
+            // ── Never-crash: build a decimal from a hostile double bit pattern
+            // so the NaN / infinity guards are driven directly.
+            const auto from_double =
+                luma::Decimal::from_double(luma::fuzz::leading_double(data, size));
+            luma::fuzz::do_not_optimize(from_double.has_value());
 
-                                    // ── Oracle: a value from a finite double must also round-trip.
-                                    if (from_double) {
-                                        check_roundtrip(*from_double);
-                                    }
-                                });
+            // ── Oracle: a value from a finite double must also round-trip.
+            if (from_double) {
+                check_roundtrip(*from_double);
+            }
+        });
 }

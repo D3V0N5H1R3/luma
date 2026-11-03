@@ -6,18 +6,28 @@
 // which declarations reach the table, how they are keyed, and which fields are
 // resolved versus intentionally left Unknown.
 
+#include <string>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::SymbolTable;
+using luma::TypeChecker;
+using luma::TypeInfo;
+using luma::test::parse;
 
 // ─── Harness ───
 // The shared check() helper owns its TypeChecker internally, so it cannot be
 // reused here: export_symbols() must be called on the *same* checker instance
 // that ran check().  This local harness keeps the checker alive across both.
+// Every source is a valid snippet, so the check must report no errors.
 
-static SymbolTable exported(const std::string& source) {
+[[nodiscard]] static SymbolTable exported(const std::string& source) {
     const auto program = parse(source);
 
     TypeChecker checker;
-    (void)checker.check(program, /*require_main=*/false);
+    const auto errors = checker.check(program, /*require_main=*/false);
+
+    ASSERT_TRUE(errors.empty());
 
     return checker.export_symbols();
 }

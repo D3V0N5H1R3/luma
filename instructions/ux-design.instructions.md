@@ -83,18 +83,18 @@ Recognising something is far easier than recalling it from memory.
 
 ### Useful UX Laws
 
-| Law                          | What It Says                                                                 | Design Implication                                              |
-| ---------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| **Jakob's Law**              | Users spend most of their time on _other_ products.                         | Follow established conventions; do not reinvent the familiar.   |
-| **Hick's Law**               | Decision time grows with the number and complexity of choices.              | Reduce and group options; reveal advanced choices on demand.    |
-| **Fitts's Law**              | Time to hit a target depends on its size and distance.                      | Make important targets big and place them close to the action.  |
-| **Miller's Law**             | People hold roughly 7 (±2) items in working memory.                         | Chunk content; do not rely on users remembering long lists.     |
-| **Tesler's Law**             | Every process has irreducible complexity that lives somewhere.              | Absorb complexity into the system, not onto the user.           |
-| **Postel's Law**             | Be liberal in what you accept, conservative in what you produce.            | Accept forgiving input; emit clear, predictable output.         |
-| **Doherty Threshold**        | Productivity soars when system response is under ~400 ms.                    | Keep interactions fast; show progress when they cannot be.      |
-| **Aesthetic-Usability**      | People perceive attractive designs as easier to use.                        | Visual polish builds trust and forgiveness — but never fakes function. |
-| **Von Restorff Effect**      | The item that differs most is the one remembered.                           | Make the single most important element stand out — only one.    |
-| **Serial Position Effect**   | People best remember the first and last items in a series.                  | Place key actions at the start or end of lists and menus.       |
+| Law                        | What It Says                                                     | Design Implication                                                     |
+| -------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Jakob's Law**            | Users spend most of their time on _other_ products.              | Follow established conventions; do not reinvent the familiar.          |
+| **Hick's Law**             | Decision time grows with the number and complexity of choices.   | Reduce and group options; reveal advanced choices on demand.           |
+| **Fitts's Law**            | Time to hit a target depends on its size and distance.           | Make important targets big and place them close to the action.         |
+| **Miller's Law**           | People hold roughly 7 (±2) items in working memory.              | Chunk content; do not rely on users remembering long lists.            |
+| **Tesler's Law**           | Every process has irreducible complexity that lives somewhere.   | Absorb complexity into the system, not onto the user.                  |
+| **Postel's Law**           | Be liberal in what you accept, conservative in what you produce. | Accept forgiving input; emit clear, predictable output.                |
+| **Doherty Threshold**      | Productivity soars when system response is under ~400 ms.        | Keep interactions fast; show progress when they cannot be.             |
+| **Aesthetic-Usability**    | People perceive attractive designs as easier to use.             | Visual polish builds trust and forgiveness — but never fakes function. |
+| **Von Restorff Effect**    | The item that differs most is the one remembered.                | Make the single most important element stand out — only one.           |
+| **Serial Position Effect** | People best remember the first and last items in a series.       | Place key actions at the start or end of lists and menus.              |
 
 ---
 
@@ -102,18 +102,18 @@ Recognising something is far easier than recalling it from memory.
 
 The ten heuristics are the canonical checklist for usability. Evaluate every interface against them.
 
-| #   | Heuristic                              | In Practice                                                                                  |
-| --- | -------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 1   | **Visibility of system status**        | Always keep users informed through timely feedback — loading, progress, saved, selected.     |
-| 2   | **Match between system and real world**| Speak the user's language. Use familiar words, concepts, and ordering, not internal jargon.  |
-| 3   | **User control and freedom**           | Provide clearly marked exits — undo, redo, cancel, back. Never trap the user.                 |
-| 4   | **Consistency and standards**          | Follow platform and product conventions. The same word or control means the same thing.      |
-| 5   | **Error prevention**                   | Design so mistakes cannot happen: constraints, confirmations, good defaults, forgiving input. |
-| 6   | **Recognition rather than recall**     | Make objects, actions, and options visible. Do not force users to remember information.       |
-| 7   | **Flexibility and efficiency of use**  | Offer accelerators (shortcuts, defaults) for experts without blocking novices.               |
-| 8   | **Aesthetic and minimalist design**    | Show only what is relevant. Every extra element competes with the essential ones.            |
-| 9   | **Help users with errors**             | State problems in plain language, diagnose the cause, and suggest a concrete recovery.       |
-| 10  | **Help and documentation**             | Prefer interfaces that need no help; when help is needed, make it searchable and task-focused.|
+| #   | Heuristic                               | In Practice                                                                                    |
+| --- | --------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 1   | **Visibility of system status**         | Always keep users informed through timely feedback — loading, progress, saved, selected.       |
+| 2   | **Match between system and real world** | Speak the user's language. Use familiar words, concepts, and ordering, not internal jargon.    |
+| 3   | **User control and freedom**            | Provide clearly marked exits — undo, redo, cancel, back. Never trap the user.                  |
+| 4   | **Consistency and standards**           | Follow platform and product conventions. The same word or control means the same thing.        |
+| 5   | **Error prevention**                    | Design so mistakes cannot happen: constraints, confirmations, good defaults, forgiving input.  |
+| 6   | **Recognition rather than recall**      | Make objects, actions, and options visible. Do not force users to remember information.        |
+| 7   | **Flexibility and efficiency of use**   | Offer accelerators (shortcuts, defaults) for experts without blocking novices.                 |
+| 8   | **Aesthetic and minimalist design**     | Show only what is relevant. Every extra element competes with the essential ones.              |
+| 9   | **Help users with errors**              | State problems in plain language, diagnose the cause, and suggest a concrete recovery.         |
+| 10  | **Help and documentation**              | Prefer interfaces that need no help; when help is needed, make it searchable and task-focused. |
 
 > **Plain language matters most.** Across heuristics 2, 5, and 9, the single highest-leverage habit is to **use simple language** — short, concrete words a first-time user understands, never error codes or implementation terms.
 
@@ -123,18 +123,18 @@ The ten heuristics are the canonical checklist for usability. Evaluate every int
 
 Gestalt psychology describes how people group separate elements into a coherent whole. Use these principles deliberately to imply structure _without_ adding lines, boxes, or labels.
 
-| Principle                     | What the Eye Does                                                        | Use It To                                                       |
-| ----------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------- |
-| **Proximity**                 | Groups elements that are close together.                                | Group related items by spacing alone; separate unrelated ones. |
-| **Similarity**                | Groups elements that look alike (colour, shape, size).                  | Signal that items share a role or category.                    |
-| **Closure**                   | Completes incomplete shapes into recognisable forms.                    | Simplify icons and logos; the mind fills the gaps.             |
-| **Continuity**                | Follows lines and curves, preferring smooth paths.                      | Align elements along a path to lead the eye through content.   |
-| **Symmetry**                  | Perceives symmetrical elements as a unified, ordered group.             | Create balance and a sense of stability and quality.           |
-| **Common Fate**               | Groups elements that move in the same direction.                        | Animate related items together so they read as one unit.       |
-| **Common Region**             | Groups elements inside a shared boundary or background.                 | Use a card or panel to bind related controls together.         |
-| **Connection (Connectedness)**| Groups elements joined by a line or connector most strongly of all.     | Link steps, nodes, or related fields with explicit connectors. |
-| **Figure and Ground**         | Separates a focal object (figure) from its background (ground).         | Ensure the foreground is unambiguous; avoid ambiguous overlap. |
-| **Good Figure (Prägnanz)**    | Interprets ambiguous images in the simplest, most stable way possible.  | Favour simple, regular forms — they are perceived and recalled fastest. |
+| Principle                      | What the Eye Does                                                      | Use It To                                                               |
+| ------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Proximity**                  | Groups elements that are close together.                               | Group related items by spacing alone; separate unrelated ones.          |
+| **Similarity**                 | Groups elements that look alike (colour, shape, size).                 | Signal that items share a role or category.                             |
+| **Closure**                    | Completes incomplete shapes into recognisable forms.                   | Simplify icons and logos; the mind fills the gaps.                      |
+| **Continuity**                 | Follows lines and curves, preferring smooth paths.                     | Align elements along a path to lead the eye through content.            |
+| **Symmetry**                   | Perceives symmetrical elements as a unified, ordered group.            | Create balance and a sense of stability and quality.                    |
+| **Common Fate**                | Groups elements that move in the same direction.                       | Animate related items together so they read as one unit.                |
+| **Common Region**              | Groups elements inside a shared boundary or background.                | Use a card or panel to bind related controls together.                  |
+| **Connection (Connectedness)** | Groups elements joined by a line or connector most strongly of all.    | Link steps, nodes, or related fields with explicit connectors.          |
+| **Figure and Ground**          | Separates a focal object (figure) from its background (ground).        | Ensure the foreground is unambiguous; avoid ambiguous overlap.          |
+| **Good Figure (Prägnanz)**     | Interprets ambiguous images in the simplest, most stable way possible. | Favour simple, regular forms — they are perceived and recalled fastest. |
 
 The practical takeaway: **spacing and arrangement carry meaning**. Reach for proximity and common region before you reach for borders and dividers.
 
@@ -187,13 +187,13 @@ Whitespace (negative space) is not empty — it is an active design tool that cr
 - **Give content room to breathe.** Adequate padding inside containers and around text improves comprehension and perceived quality.
 - **Do not fear empty space.** Cramming more in rarely helps; it raises cognitive load and weakens hierarchy.
 
-| Token  | Example Step | Typical Use                                |
-| ------ | ------------ | ------------------------------------------ |
-| `xs`   | 4 px         | Icon-to-label gaps, tight inline spacing   |
-| `sm`   | 8 px         | Related controls, list-item padding        |
-| `md`   | 16 px        | Default gap between elements               |
-| `lg`   | 24 px        | Separation between groups                   |
-| `xl`   | 32–48 px     | Section breaks, page margins                |
+| Token | Example Step | Typical Use                              |
+| ----- | ------------ | ---------------------------------------- |
+| `xs`  | 4 px         | Icon-to-label gaps, tight inline spacing |
+| `sm`  | 8 px         | Related controls, list-item padding      |
+| `md`  | 16 px        | Default gap between elements             |
+| `lg`  | 24 px        | Separation between groups                |
+| `xl`  | 32–48 px     | Section breaks, page margins             |
 
 ---
 
@@ -257,12 +257,12 @@ Every action deserves a reaction. Feedback closes the loop between intent and re
 - **Show system status.** Communicate loading, progress, success, and error states clearly. Users left guessing assume the system is broken.
 - **Do not make users wait silently.** Response-time perception follows well-known thresholds:
 
-| Delay        | User Perception                       | What To Do                                                      |
-| ------------ | ------------------------------------- | -------------------------------------------------------------- |
-| **≤ 0.1 s**  | Feels instantaneous                   | No indicator needed.                                            |
-| **≤ 1 s**    | Noticeable, but flow is unbroken      | No spinner; keep the result snappy.                            |
-| **1–10 s**   | Attention starts to wander            | Show a spinner or progress indicator; keep the user informed.  |
-| **> 10 s**   | User likely switches tasks            | Show a progress bar with an estimate; allow cancel; signal completion. |
+| Delay       | User Perception                  | What To Do                                                             |
+| ----------- | -------------------------------- | ---------------------------------------------------------------------- |
+| **≤ 0.1 s** | Feels instantaneous              | No indicator needed.                                                   |
+| **≤ 1 s**   | Noticeable, but flow is unbroken | No spinner; keep the result snappy.                                    |
+| **1–10 s**  | Attention starts to wander       | Show a spinner or progress indicator; keep the user informed.          |
+| **> 10 s**  | User likely switches tasks       | Show a progress bar with an estimate; allow cancel; signal completion. |
 
 - **Prefer determinate progress.** A progress bar that shows how much is left beats an endless spinner.
 - **Consider optimistic UI.** For high-confidence actions, reflect the result immediately and reconcile in the background — but always handle and surface failure.
@@ -378,35 +378,35 @@ Simplicity is the discipline of showing only what is needed, when it is needed.
 
 Luma's primary surfaces are text interfaces: the interpreter's `Console` output, interactive `Terminal` (TUI) applications, and the REPL. Every principle above still applies, but its _expression_ changes when the canvas is a grid of characters rather than pixels. This section translates those principles and adds the conventions unique to command-line work. Treat it as the terminal-specific companion to §§5–19, and the authoritative rubric the `ux-audit`/`ux-improve` prompts map their "Terminal/Console Lens" onto.
 
-### How the graphical principles translate
+### How the Graphical Principles Translate
 
 - **Hierarchy (§5) without size or weight.** A terminal has no font sizes. Establish hierarchy with spacing, indentation, casing, ordering, separators, and — sparingly — colour and bold. Put the most important line first or set it off with a blank line.
 - **Effort and choice (Fitts's / Hick's Law, §11).** There are no pixels to click; the "target" is a keystroke or a menu choice. Keep key actions to single, memorable keys; number or letter menu items; make the most common choice the default.
 - **Motion (§13) becomes redraw discipline.** "Animation" in a terminal is screen redraw. Favour stable, minimal repaints over frequent full-screen clears; never rely on rapid redraw for meaning; keep persistent regions (status, help, errors) in fixed, predictable positions.
 - **Responsive design (§17) becomes width- and stream-awareness.** Adapt to terminal width, degrade gracefully on narrow terminals, and stay usable when input or output is redirected (non-interactive or piped).
 
-### Prompts and affordances
+### Prompts and Affordances
 
 - **State what you expect.** A prompt should show the expected input, the available choices, the default (in brackets), and how to cancel or get help — for example `Continue? [Y/n]` or `Choose 1–3 (q to quit):`.
 - **Echo and confirm.** Reflect what the user entered where it aids understanding, and confirm the interpretation of ambiguous input before acting on it.
 
-### Discoverability and navigation
+### Discoverability and Navigation
 
 - **Show the way in.** Surface available commands, keys, and shortcuts where they are needed — a persistent hint line, a `help`/`?` command, or a startup banner — rather than assuming the user recalls them.
 - **Name consistently (§16).** The same key, command, and label mean the same thing throughout, and common CLI/TUI conventions are honoured (`q` to quit, `Ctrl+C` to cancel, `--help`, `-` for stdin).
 
-### Colour and non-colour cues
+### Colour and Non-Colour Cues
 
 - **Readable on light and dark.** Do not assume a background colour; choose colours that read on both, and keep meaning legible in monochrome.
 - **Never colour alone (§8, §18).** Pair every colour-coded status with text, a symbol, or position, and degrade to plain text for non-TTY output or when `NO_COLOR` is set.
 
-### Feedback, input tolerance, and recovery
+### Feedback, Input Tolerance, and Recovery
 
 - **Never block silently (§12).** Long or asynchronous work (HTTP, timers, file I/O) surfaces loading, progress, success, empty, and error states; a slow action visibly shows that it is working.
 - **Tolerate bad input (§14).** Handle invalid input without losing the user's work, and reply with actionable recovery text — what was wrong and what to try — never a raw code or stack trace.
 - **Always offer an exit (§3).** Every prompt and mode states how to cancel, go back, or quit, so the user is never trapped.
 
-### Progressive disclosure and testability
+### Progressive Disclosure and Testability
 
 - **Show little, reveal on demand (§19).** Default to the essentials; keep advanced options and long help behind an explicit `help`, `?`, or `--verbose` so beginners are not overwhelmed.
 - **Make the experience testable.** Interactive behaviour should be drivable headlessly — scripted stdin for `Console` apps, the `Terminal.test_*` APIs for TUIs — so UX qualities such as feedback, focus, and recovery can be verified and kept from regressing.

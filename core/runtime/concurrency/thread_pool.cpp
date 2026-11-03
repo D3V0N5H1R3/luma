@@ -1,20 +1,38 @@
 #include "runtime/concurrency/thread_pool.hpp"
 
 #include <cassert>
+#include <format>
 #include <future>
 #include <iostream>
 #include <stdexcept>
+#include <system_error>
 
+#include "analysis/errors/error.hpp"
 #include "common/resource_limits.hpp"
 
 namespace luma {
+
+namespace {
+
+// The pool whose worker_loop() is running on this thread, or nullptr on a
+// thread that is not a pool worker.  Lets BlockingRegion find its pool.
+thread_local ThreadPool* tls_worker_pool = nullptr;
+
+// BlockingRegion nesting on this thread: all regions, and Wait::OnPoolTasks
+// regions.  Only the outermost region of each kind updates the pool counters.
+thread_local std::size_t tls_region_depth = 0;
+thread_local std::size_t tls_on_tasks_depth = 0;
+
+} // namespace
 
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4324) // structure was padded due to alignment specifier
 #endif
 
-ThreadPool::ThreadPool(std::size_t thread_count) {
+ThreadPool::ThreadPool(std::size_t thread_count, std::size_t max_compensating_workers,
+                       std::chrono::milliseconds deadlock_grace)
+    : max_compensating_workers_{max_compensating_workers}, deadlock_grace_{deadlock_grace} {
     // hardware_concurrency() may return 0 on some platforms.
     if (thread_count == 0) {
         thread_count = 1;
@@ -35,6 +53,7 @@ ThreadPool::ThreadPool(std::size_t thread_count) {
     try {
         for (std::size_t i{0}; i < thread_count; ++i) {
             workers_.emplace_back([this, i] { worker_loop(i); });
+            live_workers_.fetch_add(1, std::memory_order_relaxed);
         }
     } catch (...) {
         // Tear the partially-built pool down cleanly, then rethrow so the
@@ -168,6 +187,153 @@ void ThreadPool::enqueue(std::function<void()>&& task) {
     { const std::scoped_lock lock{mutex_}; }
 
     task_available_cv_.notify_one();
+
+    // If every worker is blocked waiting on other pool work, nobody would pick
+    // this task up — start a compensating worker for it.
+    (void)maybe_add_compensating_worker();
+}
+
+std::size_t ThreadPool::worker_count() const noexcept {
+    return live_workers_.load(std::memory_order_acquire);
+}
+
+bool ThreadPool::maybe_add_compensating_worker() {
+    // Lock-free fast path: the common case has at least one runnable worker.
+    if (blocked_workers_.load(std::memory_order_acquire) <
+        live_workers_.load(std::memory_order_acquire)) {
+        return true;
+    }
+
+    if (!has_any_work()) {
+        return true;
+    }
+
+    const std::scoped_lock lock{mutex_};
+
+    // Re-check under the lock so concurrent callers start one worker, not one
+    // each, and never after shutdown has begun (the destructor joins workers_
+    // after setting should_stop_ under this same mutex, so no thread is added
+    // once it starts joining).  Compensating workers never exit before
+    // shutdown — once their blocking wait ends they keep serving the queue —
+    // so workers_.size() is the live worker count and the cap bounds the
+    // number of simultaneously blocked workers.
+    if (should_stop_.load(std::memory_order_acquire) ||
+        blocked_workers_.load(std::memory_order_acquire) <
+            live_workers_.load(std::memory_order_acquire)) {
+        return true;
+    }
+
+    if (workers_.size() >= worker_states_.size() + max_compensating_workers_) {
+        return false;
+    }
+
+    const auto worker_id = workers_.size();
+
+    try {
+        workers_.emplace_back([this, worker_id] { worker_loop(worker_id); });
+        live_workers_.fetch_add(1, std::memory_order_release);
+    } catch (const std::system_error& error) {
+        // Out of OS threads: keep running with the workers we have.
+        std::cerr << "ThreadPool: could not start a compensating worker: " << error.what() << '\n';
+        return false;
+    }
+
+    return true;
+}
+
+ThreadPool::BlockingRegion::BlockingRegion(Wait wait)
+    : pool_{tls_worker_pool}, on_pool_tasks_{wait == Wait::OnPoolTasks} {
+    if (pool_ == nullptr) {
+        return;
+    }
+
+    // Regions nest on one thread (Task.map holds one while its callback may
+    // `await`); the worker is still a single blocked worker, so only the
+    // outermost region of each kind changes the pool's counters.
+    counts_blocked_ = tls_region_depth++ == 0;
+    counts_on_tasks_ = on_pool_tasks_ && tls_on_tasks_depth++ == 0;
+
+    if (counts_blocked_) {
+        pool_->blocked_workers_.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    if (counts_on_tasks_) {
+        pool_->blocked_on_tasks_.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    if (!counts_blocked_ && !counts_on_tasks_) {
+        return; // Already accounted for by an enclosing region.
+    }
+
+    // Start a compensating worker if this wait leaves every worker blocked
+    // with work queued.  At the cap this cannot help; the waiter then reports
+    // a persistent stall from verify_not_deadlocked() while it polls.
+    (void)pool_->maybe_add_compensating_worker();
+}
+
+void ThreadPool::BlockingRegion::verify_not_deadlocked() {
+    if (pool_ == nullptr || !on_pool_tasks_) {
+        return;
+    }
+
+    if (!pool_->stalled_on_pool_tasks()) {
+        stalled_since_.reset();
+        return;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+
+    if (!stalled_since_) {
+        stalled_since_ = now;
+        return;
+    }
+
+    // The counts can lag: a worker whose awaited task has just finished stays
+    // counted as blocked until it is scheduled and leaves its region, and it
+    // would then run the queued work.  Only a stall that persists across the
+    // whole grace period (sampled on every poll) is a real one.
+    if (now - *stalled_since_ < pool_->deadlock_grace_) {
+        return;
+    }
+
+    throw RuntimeError{std::format("too many nested blocking tasks (limit {}): every task worker "
+                                   "is waiting on another task and none is free to run it",
+                                   pool_->max_compensating_workers_),
+                       {},
+                       "avoid nesting task_scope/await this deeply inside spawned tasks"};
+}
+
+bool ThreadPool::stalled_on_pool_tasks() {
+    return !maybe_add_compensating_worker() &&
+           blocked_on_tasks_.load(std::memory_order_acquire) >=
+               live_workers_.load(std::memory_order_acquire) &&
+           has_any_work();
+}
+
+ThreadPool::BlockingRegion::~BlockingRegion() {
+    release();
+}
+
+void ThreadPool::BlockingRegion::release() noexcept {
+    if (pool_ == nullptr) {
+        return;
+    }
+
+    if (on_pool_tasks_) {
+        --tls_on_tasks_depth;
+    }
+
+    --tls_region_depth;
+
+    if (counts_on_tasks_) {
+        pool_->blocked_on_tasks_.fetch_sub(1, std::memory_order_acq_rel);
+    }
+
+    if (counts_blocked_) {
+        pool_->blocked_workers_.fetch_sub(1, std::memory_order_acq_rel);
+    }
+
+    pool_ = nullptr;
 }
 
 bool ThreadPool::try_dequeue_local(std::size_t worker_id, std::function<void()>& task) {
@@ -233,7 +399,13 @@ bool ThreadPool::has_any_work() const {
 }
 
 bool ThreadPool::fetch_next_task(std::size_t worker_id, std::function<void()>& task) {
-    return try_dequeue_local(worker_id, task) || try_steal_from_others(worker_id, task);
+    // Compensating workers (id beyond the base pool) own no local queue; they
+    // only steal from the base workers' queues.
+    if (worker_id < worker_states_.size() && try_dequeue_local(worker_id, task)) {
+        return true;
+    }
+
+    return try_steal_from_others(worker_id, task);
 }
 
 void ThreadPool::execute_task(std::function<void()>& task) {
@@ -256,6 +428,8 @@ void ThreadPool::execute_task(std::function<void()>& task) {
 }
 
 void ThreadPool::worker_loop(std::size_t worker_id) {
+    tls_worker_pool = this;
+
     while (true) {
         std::function<void()> task;
 

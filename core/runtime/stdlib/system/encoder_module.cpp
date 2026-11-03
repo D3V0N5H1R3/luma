@@ -279,7 +279,12 @@ void register_encoder_ns(const EnvPtr& env) {
             std::size_t pos = 0;
 
             while (pos < text.size()) {
-                const std::uint32_t cp = utf8_decode_at(text, pos);
+                // utf8_decode reports the bytes actually consumed, so an
+                // ill-formed or truncated sequence advances by exactly the
+                // bytes it covered (the lead byte's nominal length could skip
+                // past — or, for a stray continuation byte, fail to advance).
+                const auto decoded = utf8_decode(text, pos);
+                const std::uint32_t cp = decoded.codepoint;
 
                 if (cp > max_cp) {
                     return make_failure_value(std::format(
@@ -288,8 +293,7 @@ void register_encoder_ns(const EnvPtr& env) {
                 }
 
                 bytes += static_cast<char>(static_cast<std::uint8_t>(cp));
-                pos += static_cast<std::size_t>(
-                    utf8_codepoint_len(static_cast<std::uint8_t>(text[pos])));
+                pos += decoded.length;
             }
 
             return make_success_value(bytes_to_array(bytes));

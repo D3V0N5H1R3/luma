@@ -46,7 +46,9 @@ std::optional<Variable> ExpressionEvaluator::make_variable_from_value(const std:
     Variable result = make_base_variable(name, value);
 
     if (is_structured(value)) {
-        result.variables_reference = alloc_ref_(std::make_shared<Value>(value));
+        // `name` is the identifier that was looked up, so it is itself a valid
+        // expression for the value.
+        result.variables_reference = alloc_ref_(std::make_shared<Value>(value), name);
     }
 
     return result;
@@ -199,17 +201,32 @@ std::shared_ptr<Environment> ExpressionEvaluator::build_scratch_environment(VM* 
     // look-ups report "not available in sandbox mode" instead of executing.
     register_all(scratch_env, /*sandbox=*/true);
 
-    // Copy current locals into the scratch environment as globals.  Locals are
-    // defined first so they shadow any program global of the same name in the
-    // global-copy step below.
+    // Copy current locals, then the frame's captured upvalues, into the scratch
+    // environment as globals, so compound expressions (`x + 1`, conditions such
+    // as `count > limit` inside a lambda) see the same names the single-name
+    // lookups do.  Each name is defined once — the first binding wins, which
+    // matches VMIntrospector::find_local — because Environment::define throws on
+    // a duplicate, and a function with two sibling blocks declaring `i` has two
+    // slots of that name.  Locals shadow upvalues, and both shadow program
+    // globals of the same name in the global-copy step below.
+    const auto define_if_absent = [&scratch_env](const std::string& name, const Value& value) {
+        if (!name.empty() && name != "_" && !scratch_env->has_local(name)) {
+            scratch_env->define(name, value, false);
+        }
+    };
+
     const VMIntrospector intro(*target_vm);
 
-    if (static_cast<std::size_t>(frame_index) < intro.frame_count()) {
-        auto locals = intro.locals(static_cast<std::size_t>(frame_index));
+    if (frame_index >= 0 && static_cast<std::size_t>(frame_index) < intro.frame_count()) {
+        const auto frame = static_cast<std::size_t>(frame_index);
 
-        for (const auto& local : locals) {
-            if (!local.name.empty() && local.name != "_") {
-                scratch_env->define(local.name, local.value, false);
+        for (const auto& local : intro.locals(frame)) {
+            define_if_absent(local.name, local.value);
+        }
+
+        if (intro.has_upvalues(frame)) {
+            for (const auto& upvalue : intro.upvalues(frame)) {
+                define_if_absent(upvalue.name, upvalue.value);
             }
         }
     }
@@ -220,11 +237,8 @@ std::shared_ptr<Environment> ExpressionEvaluator::build_scratch_environment(VM* 
     // name already present — this preserves the stdlib registration above and
     // lets the copied locals shadow globals of the same name.
     if (auto program_globals = target_vm->global_env()) {
-        program_globals->for_each_binding([&](const std::string& name, const Value& value) {
-            if (!scratch_env->has_local(name)) {
-                scratch_env->define(name, value, false);
-            }
-        });
+        program_globals->for_each_binding(
+            [&](const std::string& name, const Value& value) { define_if_absent(name, value); });
     }
 
     return scratch_env;
@@ -293,16 +307,20 @@ Variable ExpressionEvaluator::evaluate_on_scratch_vm(VM* target_vm, int frame_in
         evaluated = scratch_vm.execute_function(*eval_function);
     } catch (const std::exception& ex) {
         threw = true;
-        // A non-terminating expression can also trip the VM's global
-        // runaway-loop guard before the cooperative time deadline fires: on a
-        // fast host the max-iteration cap is reached first and surfaces as a
+        // A non-terminating expression can also trip one of the VM's
+        // runaway-loop guards before the cooperative time deadline fires: on a
+        // fast host an iteration cap is reached first and surfaces as a
         // RuntimeError, whereas on a slow host the deadline wins.  Both mean the
-        // expression does not terminate, so treat the guard the same as a
+        // expression does not terminate, so treat the guards the same as a
         // deadline abort rather than reporting a generic evaluation error — the
-        // shared message generator keeps this in step with the VM.
-        const std::string runaway_message =
+        // shared message generators keep this in step with the VM.
+        const std::string_view message{ex.what()};
+        const std::string while_budget_message =
             vm_errors::loop_exceeded_max_iterations(ResourceLimits::max_while_iterations);
-        if (std::string_view{ex.what()}.find(runaway_message) != std::string_view::npos) {
+        const std::string total_budget_message =
+            vm_errors::loop_exceeded_total_iterations(ResourceLimits::max_total_loop_iterations);
+        if (message.find(while_budget_message) != std::string_view::npos ||
+            message.find(total_budget_message) != std::string_view::npos) {
             runaway = true;
         }
     } catch (...) {
@@ -331,7 +349,10 @@ Variable ExpressionEvaluator::evaluate_on_scratch_vm(VM* target_vm, int frame_in
     result.type = evaluated.display_type_name();
 
     if (is_structured(evaluated)) {
-        result.variables_reference = alloc_ref_(std::make_shared<Value>(std::move(evaluated)));
+        // Parenthesised so child accessors (`(a + b)[0]`) bind to the whole
+        // expression.
+        result.variables_reference =
+            alloc_ref_(std::make_shared<Value>(std::move(evaluated)), "(" + expression + ")");
     }
 
     return result;

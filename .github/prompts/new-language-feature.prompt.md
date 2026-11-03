@@ -26,7 +26,7 @@ Implement a new language feature in Luma. Follow the interpreter pipeline and mo
     3. **Parser** (`core/analysis/parser/`): Parse the new syntax into the AST node(s). Add a recursion guard to every new branch that recurses.
     4. **Type Checker** (`core/analysis/types/`): Add type checking rules for the new construct.
     5. **Linter** (`core/analysis/linter/`): Add code-quality warnings for the new construct where applicable (e.g. unused binding, dead code).
-    6. **Compiler** (`core/runtime/compiler/`): Emit bytecode for the new AST node(s). Scope and variable→slot resolution happens here via `VariableResolver` (the standalone `core/analysis/resolver/` `NameResolver` is not wired into the run path). Reserve scratch slots around any value-producing block that leaves temporaries on the stack.
+    6. **Compiler** (`core/runtime/compiler/`): Emit bytecode for the new AST node(s). Scope and variable→slot resolution happens here via `VariableResolver`. Reserve scratch slots around any value-producing block that leaves temporaries on the stack, and around any exit (`return`, `?`, `break`/`continue`) that compiles pending `finally` bodies while a value is on the stack.
     7. **VM** (`core/runtime/vm/`): Implement any new opcodes and wire them into the dispatch table (`vm_dispatch_table.cpp`).
     8. **Optimizer & Verifier** (`core/runtime/compiler/`): Teach the optimizer about any new foldable operators, and register every new opcode with the bytecode verifier so valid programs are not rejected.
 
@@ -34,12 +34,12 @@ Implement a new language feature in Luma. Follow the interpreter pipeline and mo
 7. **Review the implementation and refine it.** Check the code against the confirmed design, the documented project pitfalls in [learnings.instructions.md](../../instructions/learnings.instructions.md) (e.g. scratch-slot reservation, parser recursion guards, MSVC-vs-clang portability), security (OWASP), performance, and the C++ style guide. Address any findings before writing tests.
 8. Add tests at each level:
     - `tests/analysis/lexer_test.cpp` for new tokens.
-    - `tests/analysis/parser_test.cpp` for AST construction.
+    - The matching `tests/analysis/parser_test_*.cpp` file (declarations, statements, expressions, or errors) for AST construction.
     - The appropriate `tests/analysis/type_checker_test_*.cpp` file for type rules, using `type_checker_test_helpers.hpp`.
     - `tests/analysis/linter_test.cpp` for any new lint warnings.
     - `tests/runtime/compiler_test.cpp` for bytecode compilation.
-    - `tests/runtime/optimizer_test.cpp` and `tests/runtime/verifier_test.cpp` for new opcodes (optimisation and bytecode validation).
-    - `tests/runtime/vm_test.cpp` for runtime behaviour.
+    - The matching `tests/runtime/optimizer_test_*.cpp` file (peephole, constant fold, or control flow) and `tests/runtime/verifier_test.cpp` for new opcodes (optimisation and bytecode validation).
+    - The matching `tests/runtime/vm_test_*.cpp` file for runtime behaviour.
     - `tests/integration/integration_test.cpp` for full-pipeline (Lexer → VM) coverage.
     - `tests/features/language/` for a Luma-level test file.
     - `fuzz/corpus/{lexer,parser,type_checker}/` seed inputs and `fuzz/dictionary.txt` entries for the new syntax, so the fuzzers exercise the new parser/type-checker branches (recursion guards in particular).
@@ -61,13 +61,13 @@ Implement a new language feature in Luma. Follow the interpreter pipeline and mo
 
 A language feature touches every pipeline phase. Verify incrementally rather than waiting until the end.
 
-| After… | Run | Why |
-|---------|-----|-----|
-| Each pipeline phase (step 6) | `cmake --build --preset default` (compile only) | Catches signature errors before the next phase builds on them |
-| Lexer + Parser + Type Checker done | `ctest -R "lexer_test\|parser_test\|type_checker_test"` | Confirms front-end accepts/rejects correctly before wiring bytecode |
-| Compiler + VM done | `ctest -R "compiler_test\|vm_test\|integration_test"` | Confirms end-to-end runtime behaviour |
-| All C++ tests pass | `build/Release/luma --strict --test tests/features/language/<feature>.luma` | Validates the user-facing semantics and catches lint warnings |
-| Feature tests pass | [full-test-sweep.prompt.md](full-test-sweep.prompt.md) | Exercises fuzz seeds, benchmarks, and examples |
+| After…                             | Run                                                                         | Why                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Each pipeline phase (step 6)       | `cmake --build --preset default` (compile only)                             | Catches signature errors before the next phase builds on them       |
+| Lexer + Parser + Type Checker done | `ctest -R "lexer_test\|parser_test\|type_checker_test"`                     | Confirms front-end accepts/rejects correctly before wiring bytecode |
+| Compiler + VM done                 | `ctest -R "compiler_test\|vm_test\|integration_test"`                       | Confirms end-to-end runtime behaviour                               |
+| All C++ tests pass                 | `build/luma --strict --test tests/features/language/<feature>.luma` | Validates the user-facing semantics and catches lint warnings       |
+| Feature tests pass                 | [full-test-sweep.prompt.md](full-test-sweep.prompt.md)                      | Exercises fuzz seeds, benchmarks, and examples                      |
 
 If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
 

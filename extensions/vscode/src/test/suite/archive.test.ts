@@ -1,6 +1,26 @@
 import * as assert from "node:assert";
 
-import { escapePowerShellLiteral } from "../../utils/binary/archive";
+import { buildExpandArchiveCommand, escapePowerShellLiteral } from "../../utils/binary/archive";
+
+suite("buildExpandArchiveCommand", () => {
+    test("passes the archive with -LiteralPath so brackets are not wildcards", () => {
+        const command = buildExpandArchiveCommand(
+            "C:\\Users\\dev[1]\\bin\\luma_lsp-windows-x86_64.zip",
+            "C:\\Users\\dev[1]\\bin",
+        );
+        assert.strictEqual(
+            command,
+            "Expand-Archive -LiteralPath 'C:\\Users\\dev[1]\\bin\\luma_lsp-windows-x86_64.zip' " +
+                "-DestinationPath 'C:\\Users\\dev[1]\\bin' -Force",
+        );
+    });
+
+    test("escapes quotes in both paths", () => {
+        const command = buildExpandArchiveCommand("C:\\O'Brien\\a.zip", "C:\\O'Brien");
+        assert.ok(command.includes("'C:\\O''Brien\\a.zip'"));
+        assert.ok(command.includes("'C:\\O''Brien'"));
+    });
+});
 
 suite("escapePowerShellLiteral", () => {
     test("leaves an ordinary path unchanged", () => {

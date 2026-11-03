@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_TYPES_MATCH_ARM_BINDING_HPP
+#define LUMA_TYPES_MATCH_ARM_BINDING_HPP
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Match-arm binding helpers — shared by the expression and statement checkers.
@@ -37,13 +38,10 @@ void bind_arm_names(TypeCheckingServices& tc, const MatchArm& arm, const TypeInf
 // (e.g. `case Cons(head, tail)`) into the current scope.  For generic choices,
 // temporarily binds the choice's type parameters — to the subject's concrete
 // type arguments when present, otherwise as unknown placeholders — so recursive
-// field types resolve, restoring prior bindings on return.
-//
-// When `report_unknown_variant` is true, emits a diagnostic if the arm names a
-// variant the choice does not declare (the match-statement behaviour); the
-// match-expression path passes false and stays silent.
+// field types resolve, restoring prior bindings on return.  An unknown variant
+// binds nothing: check_arm_patterns() reports it.
 void bind_choice_fields(TypeCheckingServices& tc, const MatchArm& arm, const TypeInfo& subject_type,
-                        const SourceLocation& location, bool report_unknown_variant);
+                        const SourceLocation& location);
 
 // Bind the fields of a record destructuring — shared by record-destructuring
 // bindings (`Point { x, y } = p`) and record match patterns
@@ -57,10 +55,31 @@ void bind_record_fields(TypeCheckingServices& tc, std::string_view record_type,
                         const std::vector<std::string>& fields, const TypeInfo& subject_type,
                         const SourceLocation& location, bool is_mutable);
 
-// Merge per-arm ownership snapshots back into the current scope: if any arm
-// consumed a previously-unconsumed unique variable, mark it consumed
-// (conservative — prevents use-after-move across arms).
-void merge_arm_ownership(TypeCheckingServices& tc, const TypeScope::OwnershipSnapshot& before,
-                         const std::vector<TypeScope::OwnershipSnapshot>& arm_snapshots);
+// Merge per-branch ownership snapshots back into the current scope — shared by
+// if statements, if expressions, match statements, and match expressions.  A
+// unique variable consumed on any branch is consumed afterwards (conservative —
+// prevents use-after-move on the path that consumed it).  An `if` without an
+// `else` passes `before` itself as the snapshot of its implicit empty branch.
+// Callers pass only the branches that fall through: one that ends in return,
+// break, or continue never reaches the code after the if/match.  With no
+// snapshots at all (no branch falls through), the pre-branch state is kept.
+void merge_branch_ownership(TypeCheckingServices& tc, const TypeScope::OwnershipSnapshot& before,
+                            const std::vector<TypeScope::OwnershipSnapshot>& branch_snapshots);
+
+// Validate every pattern of a match arm, including `case A | B` alternatives,
+// against the subject type — shared by match statements and match
+// expressions.  Each pattern must fit the subject's kind: integer, string and
+// range cases need an integer/string subject, `true`/`false` a boolean,
+// `some`/`none` an optional, `success`/`failure` a result, and a choice
+// pattern must name a variant of the subject's own choice type.  Comparison
+// values must be compatible with the subject.  A permissive subject (unknown
+// or StdlibAny) is not checked, except that a choice pattern naming a variant
+// its choice does not declare is always reported.  Diagnostics without a more
+// precise position are reported at the arm, or at `match_location` when the
+// arm has no location.
+void check_arm_patterns(TypeCheckingServices& tc, const MatchArm& arm, const TypeInfo& subject_type,
+                        const SourceLocation& match_location);
 
 } // namespace luma::match_arm_binding
+
+#endif // LUMA_TYPES_MATCH_ARM_BINDING_HPP

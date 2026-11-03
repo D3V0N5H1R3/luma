@@ -5,13 +5,44 @@
 # Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
+choice DowncastColor { Red Green Blue }
+
+record DowncastPoint { integer x, integer y }
+
+interface HasId { integer id }
+
+record User { integer id, string name }
+
+record Admin { integer id, boolean is_elevated }
+
+# A generic parameter hides the static type, so these helpers exercise the
+# runtime check rather than a downcast the type checker can already decide.
+
+function<T> result<User> try_downcast_user(T value) {
+    return downcast<User>(value)
+}
+
+function<T> boolean is_user(T value) {
+    return is<User>(value)
+}
+
+function<T> result<DowncastColor> try_downcast_color(T value) {
+    return downcast<DowncastColor>(value)
+}
+
+function<T> result<optional<integer>> try_downcast_optional_integer(T value) {
+    return downcast<optional<integer>>(value)
+}
+
+# ─── Basic downcast ───
+
 @test
-function void test_downcast_failure() {
+function void test_downcast_failure_message() {
     integer input = 42
 
     result<DowncastColor> cast_result = downcast<DowncastColor>(input)
 
-    assert(!Result.is_success(cast_result))
+    assert(cast_result == failure("cannot downcast 'integer' to 'DowncastColor'"))
 }
 
 @test
@@ -20,10 +51,10 @@ function void test_downcast_boolean_fails_for_choice() {
 
     result<boolean> cast_result = downcast<boolean>(input)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
-# ─── Typed array downcast (element type verification) ─────
+# ─── Typed array downcast (element type verification) ───
 
 @test
 function void test_downcast_array_untyped_accepts_integer_array() {
@@ -31,7 +62,7 @@ function void test_downcast_array_untyped_accepts_integer_array() {
 
     result<array> cast_result = downcast<array>(input)
 
-    assert(Result.is_success(cast_result))
+    assert(Array.length(Result.unwrap(cast_result)) == 3)
 }
 
 @test
@@ -40,7 +71,7 @@ function void test_downcast_array_wrong_element_type() {
 
     result<array<integer>> cast_result = downcast<array<integer>>(input)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
@@ -49,7 +80,7 @@ function void test_downcast_array_untyped_accepts_string_array() {
 
     result<array> cast_result = downcast<array>(input)
 
-    assert(Result.is_success(cast_result))
+    assert(Array.length(Result.unwrap(cast_result)) == 3)
 }
 
 @test
@@ -59,7 +90,7 @@ function void test_downcast_array_number_accepts_integer_elements() {
     result<array<number>> cast_result = downcast<array<number>>(input)
 
     # integer elements satisfy number target (widening allowed)
-    assert(Result.is_success(cast_result))
+    assert(cast_result == success([1.0, 2.0, 3.0]))
 }
 
 @test
@@ -68,176 +99,188 @@ function void test_downcast_array_untyped_succeeds_for_any_array() {
 
     result<array> cast_result = downcast<array>(input)
 
-    assert(Result.is_success(cast_result))
+    assert(Array.length(Result.unwrap(cast_result)) == 3)
 }
 
-# ─── choice downcast ─────────────────────────────────
-
-choice DowncastColor { Red  Green  Blue }
+# ─── Choice downcast ───
 
 @test
 function void test_downcast_enum_wrong_type() {
     integer input = 42
 
-    result<DowncastColor> r = downcast<DowncastColor>(input)
+    result<DowncastColor> cast_result = downcast<DowncastColor>(input)
 
-    assert(!Result.is_success(r))
+    assert(Result.is_failure(cast_result))
 }
 
-# ─── Tuple downcast ───────────────────────────────────────
+@test
+function void test_downcast_choice_matching_value_succeeds() {
+    result<DowncastColor> cast_result = try_downcast_color(DowncastColor.Green)
+
+    assert(cast_result == success(DowncastColor.Green))
+}
+
+# ─── Tuple downcast ───
 
 @test
 function void test_downcast_tuple_wrong_element_type() {
     (integer, string) input = (1, "hello")
 
-    result<(integer, integer)> r = downcast<(integer, integer)>(input)
+    result<(integer, integer)> cast_result = downcast<(integer, integer)>(input)
 
-    assert(!Result.is_success(r))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
 function void test_downcast_tuple_wrong_element_count() {
     (integer, string) input = (1, "hello")
 
-    result<(integer, string, boolean)> r = downcast<(integer, string, boolean)>(input)
+    result<(integer, string, boolean)> cast_result = downcast<(integer, string, boolean)>(input)
 
-    assert(!Result.is_success(r))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
 function void test_downcast_tuple_number_accepts_integer_element() {
     (integer, integer) input = (1, 2)
 
-    result<(number, number)> r = downcast<(number, number)>(input)
+    result<(number, number)> cast_result = downcast<(number, number)>(input)
 
     # integer elements satisfy a number element type (same widening rule as arrays)
-    assert(Result.is_success(r))
+    assert(cast_result == success((1.0, 2.0)))
 }
 
-# ─── Result downcast ──────────────────────────────────────
+# ─── Result, channel, and optional downcast ───
 
 @test
 function void test_downcast_result_wrong_type() {
     integer input = 42
 
-    result<result<integer>> r = downcast<result<integer>>(input)
+    result<result<integer>> cast_result = downcast<result<integer>>(input)
 
-    assert(!Result.is_success(r))
+    assert(Result.is_failure(cast_result))
 }
-
-# ─── Channel downcast ─────────────────────────────────────
 
 @test
 function void test_downcast_channel_wrong_type() {
     integer input = 42
 
-    result<channel<integer>> r = downcast<channel<integer>>(input)
+    result<channel<integer>> cast_result = downcast<channel<integer>>(input)
 
-    assert(!Result.is_success(r))
+    assert(Result.is_failure(cast_result))
 }
 
-# ─── is<T> predicate ─────────────────────────────────────────
+@test
+function void test_downcast_optional_verifies_inner_value() {
+    optional<integer> present = some(3)
+    optional<integer> absent = none
+    optional<string> wrong_inner = some("x")
+
+    assert(try_downcast_optional_integer(present) == success(some(3)))
+    assert(try_downcast_optional_integer(absent) == success(none), "none always matches")
+    assert(Result.is_failure(try_downcast_optional_integer(wrong_inner)))
+}
+
+# ─── is<T> predicate ───
 
 @test
-function void test_is_predicate_success() {
-    integer val = 42
+function void test_is_predicate_matches_runtime_type() {
+    integer value = 42
 
-    assert(is<integer>(val))
-    assert(!is<string>(val))
-    assert(!is<boolean>(val))
+    assert(is<integer>(value))
+    assert(!is<string>(value))
+    assert(!is<boolean>(value))
 }
 
 @test
 function void test_is_predicate_number_widens() {
-    integer val = 42
+    integer value = 42
 
-    assert(is<number>(val))  # integer widens to number
+    assert(is<number>(value))  # integer widens to number
     assert(!is<integer>(3.14))  # number does NOT narrow to integer
 }
 
 @test
 function void test_is_predicate_array() {
-    array<integer> arr = [1, 2, 3]
+    array<integer> values = [1, 2, 3]
 
-    assert(is<array<integer>>(arr))
-    assert(!is<array<string>>(arr))
+    assert(is<array<integer>>(values))
+    assert(!is<array<string>>(values))
 }
 
 @test
 function void test_is_predicate_returns_boolean() {
-    string val = "hello"
+    string text = "hello"
 
-    boolean check = is<string>(val)
+    boolean is_string = is<string>(text)
 
-    assert(check)
+    assert(is_string)
 }
 
 @test
-function void test_is_null_true() {
-    optional<integer> val = none
+function void test_is_none_true_for_empty_optional() {
+    optional<integer> empty = none
 
-    assert(is<none>(val))
-    assert(!is<string>(val))
+    assert(is<none>(empty))
+    assert(!is<string>(empty))
 }
 
 @test
-function void test_is_null_false() {
-    integer val = 42
+function void test_is_none_false_for_value() {
+    integer value = 42
 
-    assert(!is<none>(val))
+    assert(!is<none>(value))
 }
 
-# ─── is<T> usage in match / control flow ──────────────────────────
+# ─── is<T> combined with downcast ───
 
 @test
 function void test_is_with_downcast_pattern() {
-    integer val = 42
+    integer value = 42
 
     # Check type first, then downcast.
-    assert(is<integer>(val))
-    assert(!is<string>(val))
+    assert(is<integer>(value))
+    assert(!is<string>(value))
 
-    result<DowncastColor> cast_result = downcast<DowncastColor>(val)
-    assert(!Result.is_success(cast_result), "integer is not a DowncastColor at runtime")
+    result<DowncastColor> cast_result = downcast<DowncastColor>(value)
+    assert(Result.is_failure(cast_result), "integer is not a DowncastColor at runtime")
 }
 
-# ─── trusted_downcast<T> ─────────────────────────────────
-
-record OptPoint { integer x, integer y }
+# ─── trusted_downcast<T> ───
 
 @test
 function void test_trusted_downcast_success() {
     # Trusted downcast from integer to number (widening) succeeds without result wrapper.
-    integer val = 42
-    number n = trusted_downcast<number>(val)
+    integer value = 42
+    number widened = trusted_downcast<number>(value)
 
-    assert(Math.approximately_equal(n, 42.0))
+    assert(Math.approximately_equal(widened, 42.0))
 }
 
 @test
 function void test_trusted_downcast_fails() {
-    mutable boolean is_caught = false
+    mutable string caught = ""
 
     try {
-        # Trusted downcast from a choice to OptPoint — incompatible types, throws at runtime.
-        DowncastColor c = DowncastColor.Red
-        OptPoint _ = trusted_downcast<OptPoint>(c)
-    } catch(_err) {
-        is_caught = true
+        # Trusted downcast from a choice to a record — incompatible types, throws at runtime.
+        DowncastColor color = DowncastColor.Red
+        DowncastPoint _ = trusted_downcast<DowncastPoint>(color)
+    } catch(err) {
+        caught = err
     }
 
-    assert(is_caught)
+    assert(String.contains(caught, "trusted_downcast failed"))
 }
 
-# ─── Dictionary downcast ──────────────────────────────────
+# ─── Dictionary downcast ───
 
 @test
 function void test_downcast_dictionary_untyped_succeeds() {
-    dictionary<integer> input = { "a": 1, "b": 2 }
+    dictionary<integer> input = {"a": 1, "b": 2}
 
     result<dictionary> cast_result = downcast<dictionary>(input)
 
-    assert(Result.is_success(cast_result))
+    assert(Dictionary.length(Result.unwrap(cast_result)) == 2)
 }
 
 # ─── Nested type-argument verification (every level checked) ───
@@ -249,7 +292,7 @@ function void test_downcast_nested_array_wrong_element() {
 
     result<array<array<integer>>> cast_result = downcast<array<array<integer>>>(input)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
@@ -259,34 +302,34 @@ function void test_downcast_nested_array_widening_success() {
 
     result<array<array<number>>> cast_result = downcast<array<array<number>>>(input)
 
-    assert(Result.is_success(cast_result))
+    assert(cast_result == success([[1.0, 2.0], [3.0]]))
 }
 
 @test
 function void test_downcast_dictionary_value_wrong() {
-    dictionary<string> input = { "a": "x" }
+    dictionary<string> input = {"a": "x"}
 
     result<dictionary<integer>> cast_result = downcast<dictionary<integer>>(input)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
 function void test_downcast_dictionary_nested_array_wrong() {
-    dictionary<array<string>> input = { "a": ["x"] }
+    dictionary<array<string>> input = {"a": ["x"]}
 
     result<dictionary<array<integer>>> cast_result = downcast<dictionary<array<integer>>>(input)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
 function void test_downcast_dictionary_nested_array_widening_success() {
-    dictionary<array<integer>> input = { "a": [1, 2] }
+    dictionary<array<integer>> input = {"a": [1, 2]}
 
     result<dictionary<array<number>>> cast_result = downcast<dictionary<array<number>>>(input)
 
-    assert(Result.is_success(cast_result))
+    assert(cast_result == success({"a": [1.0, 2.0]}))
 }
 
 @test
@@ -295,7 +338,7 @@ function void test_downcast_result_inner_wrong() {
 
     result<result<integer>> cast_result = downcast<result<integer>>(input)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
@@ -304,7 +347,7 @@ function void test_downcast_reference_inner_wrong() {
 
     result<reference<integer>> cast_result = downcast<reference<integer>>(input)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
@@ -313,42 +356,36 @@ function void test_downcast_reference_inner_success() {
 
     result<reference<number>> cast_result = downcast<reference<number>>(input)
 
-    assert(Result.is_success(cast_result))
+    assert(Math.approximately_equal(Reference.get(Result.unwrap(cast_result)), 5.0))
 }
 
 # ─── Interface → record narrowing (the primary downcast use case) ───
 
-interface DcHasId { integer id }
-
-record DcUser { integer id, string name }
-
-record DcAdmin { integer id, boolean elevated }
-
 @test
 function void test_downcast_interface_to_record_success() {
-    # A value statically typed as the interface, holding a DcUser at runtime.
-    DcHasId thing = DcUser { id = 1, name = "Ada" }
+    # A value statically typed as the interface, holding a User at runtime.
+    HasId thing = User { id = 1, name = "Ada" }
 
-    result<DcUser> cast_result = downcast<DcUser>(thing)
+    result<User> cast_result = downcast<User>(thing)
 
-    assert(Result.is_success(cast_result))
+    assert(Result.unwrap(cast_result).name == "Ada")
 }
 
 @test
 function void test_downcast_interface_to_record_failure() {
-    # Same interface, but the runtime value is a DcAdmin, so DcUser fails.
-    DcHasId thing = DcAdmin { id = 2, elevated = true }
+    # Same interface, but the runtime value is an Admin, so User fails.
+    HasId thing = Admin { id = 2, is_elevated = true }
 
-    result<DcUser> cast_result = downcast<DcUser>(thing)
+    result<User> cast_result = downcast<User>(thing)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
 function void test_trusted_downcast_interface_to_record() {
-    DcHasId thing = DcUser { id = 7, name = "Grace" }
+    HasId thing = User { id = 7, name = "Grace" }
 
-    DcUser user = trusted_downcast<DcUser>(thing)
+    User user = trusted_downcast<User>(thing)
 
     assert(user.id == 7)
     assert(user.name == "Grace")
@@ -356,35 +393,27 @@ function void test_trusted_downcast_interface_to_record() {
 
 # ─── downcast / is through a generic type parameter ───
 
-function<T> result<DcUser> dc_try_user(T value) {
-    return downcast<DcUser>(value)
-}
-
-function<T> boolean dc_is_user(T value) {
-    return is<DcUser>(value)
-}
-
 @test
 function void test_downcast_via_generic_param_success() {
-    DcUser u = DcUser { id = 3, name = "Linus" }
+    User linus = User { id = 3, name = "Linus" }
 
-    result<DcUser> cast_result = dc_try_user(u)
+    result<User> cast_result = try_downcast_user(linus)
 
-    assert(Result.is_success(cast_result))
+    assert(Result.unwrap(cast_result).name == "Linus")
 }
 
 @test
 function void test_downcast_via_generic_param_failure() {
-    result<DcUser> cast_result = dc_try_user(42)
+    result<User> cast_result = try_downcast_user(42)
 
-    assert(!Result.is_success(cast_result))
+    assert(Result.is_failure(cast_result))
 }
 
 @test
 function void test_is_via_generic_param() {
-    DcUser u = DcUser { id = 4, name = "Tux" }
+    User tux = User { id = 4, name = "Tux" }
 
-    assert(dc_is_user(u))
-    assert(!dc_is_user("not a user"))
-    assert(!dc_is_user(99))
+    assert(is_user(tux))
+    assert(!is_user("not a user"))
+    assert(!is_user(99))
 }

@@ -13,6 +13,7 @@
 #include "lsp_analysis_service.hpp"
 #include "lsp_constants.hpp"
 #include "lsp_params.hpp"
+#include "lsp_path_utils.hpp"
 #include "lsp_server_state_lock.hpp"
 #include "lsp_string_utils.hpp"
 #include "lsp_workspace_handler.hpp"
@@ -50,7 +51,7 @@ void LspWorkspaceHandler::load_background_file(const std::string& path) {
     // stream at the end so the size can be checked (OOM protection) via tellg,
     // avoiding a separate fs::file_size stat that redundantly re-resolves the
     // path.
-    std::ifstream file(path, std::ios::in | std::ios::binary | std::ios::ate);
+    std::ifstream file(utf8_path(path), std::ios::in | std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
         return;
     }
@@ -165,7 +166,7 @@ void handle_file_changed(WriteStateLock& state, const std::string& uri,
 void check_luma_json_changes(const std::vector<ResolvedFileEvent>& resolved, LspHandlerContext& ctx,
                              const std::function<void(const std::string&)>& schedule_fn) {
     for (const auto& ev : resolved) {
-        if (std::filesystem::path(ev.path).filename().string() != "luma.json") {
+        if (utf8_path(ev.path).filename() != "luma.json") {
             continue;
         }
         ctx.workspace.load_project_config(ev.path, ctx.configuration.config(),

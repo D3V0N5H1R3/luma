@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_DIAGNOSTICS_DIAGNOSTIC_HPP
+#define LUMA_DIAGNOSTICS_DIAGNOSTIC_HPP
 
 #include <concepts>
 #include <cstddef>
@@ -105,3 +106,5 @@ concept HasDiagnostics = requires(const T& t) {
 // value types above, which it depends on) so existing includers of
 // diagnostic.hpp keep seeing them unchanged.
 #include "analysis/diagnostics/diagnostic_builder.hpp"
+
+#endif // LUMA_DIAGNOSTICS_DIAGNOSTIC_HPP

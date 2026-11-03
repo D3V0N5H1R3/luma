@@ -150,7 +150,9 @@ add_library(mbedtls_lib STATIC
 # reproducible builds. When upgrading Mbed TLS, diff the upstream library/
 # directory against this list and add/remove entries as needed.
 
-target_include_directories(mbedtls_lib PUBLIC
+# SYSTEM, like miniz: luma_core links mbedtls_lib PUBLIC, so its headers must not
+# trip the project's strict warning flags in consumers.
+target_include_directories(mbedtls_lib SYSTEM PUBLIC
     ${PROJECT_SOURCE_DIR}/external/mbedtls/include)
 target_include_directories(mbedtls_lib PRIVATE
     ${PROJECT_SOURCE_DIR}/external/mbedtls/library)
@@ -158,7 +160,8 @@ target_include_directories(mbedtls_lib PRIVATE
 # Vendored C: build to C99 and silence our strict warnings (see LumaTargetHelpers).
 luma_configure_vendored_c_target(mbedtls_lib)
 
-# Windows entropy/RNG backend used internally by Mbed TLS.
+# Windows entropy/RNG backend used internally by Mbed TLS (a system library with
+# no imported target, so it is linked by name).
 if(WIN32)
     target_link_libraries(mbedtls_lib PRIVATE bcrypt)
 endif()

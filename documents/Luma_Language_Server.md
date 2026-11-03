@@ -109,25 +109,25 @@ The server uses **full document sync** (`TextDocumentSyncKind.Full`). The editor
 
 ### Language Features
 
-| Method                                   | Direction       | Purpose                                                          |
-| ---------------------------------------- | --------------- | ---------------------------------------------------------------- |
-| `textDocument/hover`                     | Client → Server | Return type information for the symbol under the cursor          |
-| `textDocument/completion`                | Client → Server | Return completion items for stdlib members, keywords, and locals |
-| `completionItem/resolve`                 | Client → Server | Enrich a completion item with additional detail                  |
-| `textDocument/signatureHelp`             | Client → Server | Show parameter hints during function calls                       |
-| `textDocument/definition`                | Client → Server | Navigate to the declaration of a symbol                          |
-| `textDocument/typeDefinition`            | Client → Server | Navigate to the type definition of a symbol                      |
-| `textDocument/implementation`            | Client → Server | Navigate to implementations of an interface                      |
-| `textDocument/references`                | Client → Server | Find all references to a symbol                                  |
-| `textDocument/documentSymbol`            | Client → Server | Return the document outline (functions, types, namespaces)       |
-| `textDocument/codeAction`                | Client → Server | Suggest quick fixes for diagnostics                              |
-| `textDocument/formatting`                | Client → Server | Format the entire document                                       |
-| `textDocument/rename`                    | Client → Server | Rename a symbol across the document                              |
-| `textDocument/prepareRename`             | Client → Server | Validate and return the range of the symbol to rename            |
-| `textDocument/foldingRange`              | Client → Server | Return foldable regions (functions, blocks, comments)            |
-| `textDocument/documentLink`              | Client → Server | Return clickable links for `include` paths                       |
-| `textDocument/semanticTokens/full`       | Client → Server | Provide semantic highlighting tokens for the full document       |
-| `workspace/executeCommand`               | Client → Server | Execute a server-side command                                    |
+| Method                             | Direction       | Purpose                                                          |
+| ---------------------------------- | --------------- | ---------------------------------------------------------------- |
+| `textDocument/hover`               | Client → Server | Return type information for the symbol under the cursor          |
+| `textDocument/completion`          | Client → Server | Return completion items for stdlib members, keywords, and locals |
+| `completionItem/resolve`           | Client → Server | Enrich a completion item with additional detail                  |
+| `textDocument/signatureHelp`       | Client → Server | Show parameter hints during function calls                       |
+| `textDocument/definition`          | Client → Server | Navigate to the declaration of a symbol                          |
+| `textDocument/typeDefinition`      | Client → Server | Navigate to the type definition of a symbol                      |
+| `textDocument/implementation`      | Client → Server | Navigate to implementations of an interface                      |
+| `textDocument/references`          | Client → Server | Find all references to a symbol                                  |
+| `textDocument/documentSymbol`      | Client → Server | Return the document outline (functions, types, namespaces)       |
+| `textDocument/codeAction`          | Client → Server | Suggest quick fixes for diagnostics                              |
+| `textDocument/formatting`          | Client → Server | Format the entire document                                       |
+| `textDocument/rename`              | Client → Server | Rename a symbol across the document                              |
+| `textDocument/prepareRename`       | Client → Server | Validate and return the range of the symbol to rename            |
+| `textDocument/foldingRange`        | Client → Server | Return foldable regions (functions, blocks, comments)            |
+| `textDocument/documentLink`        | Client → Server | Return clickable links for `include` paths                       |
+| `textDocument/semanticTokens/full` | Client → Server | Provide semantic highlighting tokens for the full document       |
+| `workspace/executeCommand`         | Client → Server | Execute a server-side command                                    |
 
 ### Cancellation
 
@@ -164,6 +164,7 @@ When the user hovers over a token, the server identifies the token at the cursor
 
 - **Standard library module names** (e.g., `Math`): the hover shows `namespace Math` and the number of available functions.
 - **Standard library function calls** (e.g., `Math.floor`): the hover shows the return type from the stdlib signature registry.
+- **User code** — functions, parameters, variables, records, choices, interfaces, namespaces, and record fields: the hover shows the declaration in Luma syntax (e.g. `function integer add(integer a, integer b)`, `mutable integer total`, `record Point { number x, number y }`), followed by the doc comment when there is one.
 - **Type keywords and literals:** the hover shows the type (e.g., `integer`, `string`, `boolean`).
 
 The hover response uses Markdown formatting for readability.
@@ -179,6 +180,8 @@ Completion is triggered when the user types `.` after a standard library module 
 3. Returns a `CompletionItem` for each function with the function name and return type.
 
 Completion items use `CompletionItemKind.Function` and include the return type as detail text.
+
+At a position where only a type can be written — a function's return type (`function |`), a parameter's type, after `mutable`, inside a generic type's `<…>` (a built-in generic such as `array<`, a cast, or a PascalCase type — so a comparison typed as `i<n` is not mistaken for one), or after a generic bound's `:` — completion offers only type names: the built-in types and the document's records and choices.
 
 ---
 
@@ -220,7 +223,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel
 ```
 
-This produces `build/luma_lsp` on Linux and macOS, or `build\Release\luma_lsp.exe` on Windows with MSVC.
+This produces `build/luma_lsp` (`build\luma_lsp.exe` on Windows).
 
 ### Running
 
@@ -228,7 +231,7 @@ The server reads JSON-RPC messages from **stdin** and writes responses to **stdo
 
 ```bash
 build/luma_lsp              # Linux / macOS
-build\Release\luma_lsp.exe  # Windows (MSVC)
+build\luma_lsp.exe  # Windows
 ```
 
 The server blocks on stdin, waiting for LSP messages. Send an `initialize` request followed by `initialized` to begin a session. Send `shutdown` and then `exit` to stop the server.
@@ -255,11 +258,11 @@ The language server reads a `luma.json` file from the workspace root for per-pro
 }
 ```
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
+| Setting              | Type      | Default | Description                                                                                                                                                                                                                                                                 |
+| -------------------- | --------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `diagnostics.onSave` | `boolean` | `false` | When `true`, diagnostics are only published on file open and save — not while typing. Analysis still runs on every keystroke (hover and completion stay fresh), but red/yellow squiggles update only on save. Useful on large files where live diagnostics are distracting. |
-| `analysisDebounceMs` | `integer` | `50` | Milliseconds to wait after the last keystroke before starting analysis. Range: 0–5000. Increase on slow machines to reduce CPU usage during rapid typing. |
-| `analysisTimeoutMs` | `integer` | `10000` | Maximum time (ms) for a single analysis pass before it is cancelled. Range: 100–60000. Increase for very large files that time out. |
+| `analysisDebounceMs` | `integer` | `50`    | Milliseconds to wait after the last keystroke before starting analysis. Range: 0–5000. Increase on slow machines to reduce CPU usage during rapid typing.                                                                                                                   |
+| `analysisTimeoutMs`  | `integer` | `10000` | Maximum time (ms) for a single analysis pass before it is cancelled. Range: 100–60000. Increase for very large files that time out.                                                                                                                                         |
 
 Settings can also be configured per-editor (VS Code settings UI or Zed's `settings.json`). The editor sends changes to the server via `workspace/didChangeConfiguration`; a `luma.json` in the workspace root takes priority for project-wide consistency.
 
@@ -503,21 +506,18 @@ This avoids any third-party JSON dependency. The implementation supports only th
 
 The Content-Length framed stdin/stdout transport is **shared infrastructure**, defined once in `shared/protocol/` as `luma::protocol::StdioTransport` (layered on the `BufferedTransport` / `Transport` base). Both tools re-export it under their own namespace — `luma::lsp::StdioTransport` here and `luma::dap::Transport` in the debugger — so this is its single authoritative description; the [Debugger](Luma_Debugger.md) design document refers back here rather than repeating it.
 
-`StdioTransport` reads `Content-Length` headers from `stdin`, extracts the JSON body, and writes framed messages to `stdout`. Writes are mutex-protected (so the debugger can emit events from background threads), and an optional read timeout lets a server poll for input without blocking indefinitely.
+`StdioTransport` reads `Content-Length` headers from `stdin`, extracts the JSON body, and writes framed messages to `stdout`. Writes are mutex-protected (so the debugger can emit events from background threads). Reads block until data arrives or `stdin` reaches end-of-file — both servers rely on the editor closing the pipe to signal shutdown — and a read interrupted by a signal (`EINTR`) is retried rather than treated as a closed connection.
 
 ```cpp
 namespace luma::protocol {
 
 class StdioTransport : public BufferedTransport {
 public:
-    // Set the read timeout in milliseconds. 0 = no timeout (default).
-    void set_read_timeout(unsigned int timeout_ms);
-
     // Write a JSON message with Content-Length framing to stdout. Thread-safe.
     void write_message(const JsonValue& message) override;
 
 protected:
-    // Read raw bytes from stdin (honours the optional read timeout).
+    // Read raw bytes from stdin; returns 0 at end-of-file.
     [[nodiscard]] std::size_t read_raw(std::span<char> buf) override;
 };
 
@@ -582,8 +582,8 @@ struct MarkupContent {
     std::string value;
 };
 
-// SymbolKind enum values — from shared/symbols/symbol_kind.hpp (luma::SymbolKind).
-// Used directly via luma::SymbolKind and luma::to_lsp_symbol_kind().
+// SymbolKind enum values — from shared/symbols/symbol_kind.hpp (luma::symbols::SymbolKind).
+// Used directly via luma::symbols::SymbolKind and luma::symbols::to_lsp_symbol_kind().
 enum class SymbolKind : uint8_t {
     Namespace = 3,
     Field     = 8,
@@ -598,7 +598,7 @@ enum class SymbolKind : uint8_t {
 
 struct DocumentSymbol {
     std::string name;
-    luma::SymbolKind kind{luma::SymbolKind::Function};
+    luma::symbols::SymbolKind kind{luma::symbols::SymbolKind::Function};
     Range range;
     Range selection_range;
     std::vector<DocumentSymbol> children;
@@ -635,6 +635,7 @@ constexpr int kSemanticKeyword   = 5;
 constexpr int kSemanticString    = 6;
 constexpr int kSemanticNumber    = 7;
 constexpr int kSemanticOperator  = 8;
+constexpr int kSemanticDecorator = 9; // @main, @test annotations
 
 // Serialisation helpers.
 [[nodiscard]] JsonValue serialise_position(const Position& pos);
@@ -652,7 +653,7 @@ constexpr int kSemanticOperator  = 8;
 
 Luma `SourceLocation` uses 1-based lines and columns. LSP uses 0-based lines and 0-based character offsets. The conversion subtracts 1 from both during diagnostic serialisation.
 
-Important: the lexer stores the column **one past the last character** of each token (the column at the time `add_token` is called). Token hit-testing in `find_token_at` computes the start column as `location.column - lexeme.size()`.
+Important: the lexer stores the column **one past the last character** of each token (the column at the time `add_token` is called) and records the first character separately (`Token::start_location`). Token extents (`token_extents`) use that recorded start, falling back to `location.column - lexeme_column_width(lexeme)` — a width in codepoints, never bytes. Columns are codepoints internally and are converted to UTF-16 only at the protocol boundary (`PositionEncoder`).
 
 ### `lsp_server.hpp` / `lsp_server.cpp` — Server Logic
 
@@ -663,9 +664,9 @@ namespace luma::lsp {
 
 // Information about a user-defined function extracted from the AST.
 struct UserFunctionInfo {
-    std::string signature;        // e.g. "function greet(name: string) -> string"
+    std::string signature;        // e.g. "function string greet(string name)"
     std::string return_type;      // e.g. "string" — empty if void
-    std::string params_signature; // e.g. "(name: string)" — for signature help
+    std::string params_signature; // e.g. "(string name)" — for signature help
     SourceLocation location;
 };
 
@@ -854,7 +855,7 @@ The following modules were added to support scalability and advanced features:
 | `lsp_symbol_lookup.hpp`        | Convenience wrapper for semantic analysis queries.                                                              |
 | `lsp_token_classifier.hpp`     | Consolidated token + symbol classification for semantic tokens.                                                 |
 | `lsp_transport_wrapper`        | Owns the transport and write mutex; serialises outgoing messages.                                               |
-| `lsp_workspace_manager`        | Owns workspace roots and project (`luma.json`) configuration; provides `is_in_workspace()` path checks. |
+| `lsp_workspace_manager`        | Owns workspace roots and project (`luma.json`) configuration; provides `is_in_workspace()` path checks.         |
 
 ---
 
@@ -892,12 +893,22 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 1. Editor sends textDocument/hover with position
 2. LspServer looks up analysis_cache_[uri].tokens
 3. find_token_at() locates the token at the cursor position
-4. Token resolution order:
-   a. Stdlib module name → "namespace Math" + function count
-   b. Stdlib function call (Module.fn pattern) → return type + signature
-   c. User-defined function call → signature from user_functions
-   d. Symbol in definitions → type_string
-   e. Type keyword or literal → built-in type description
+4. Token resolution order (the first resolver that produces text wins):
+   - The member after a dot (`p.x`, `Math.sqrt`, `Geo.area`): stdlib
+     function, namespace function, record field, or choice variant — only
+     these, never an unrelated symbol that shares the member's name
+   - Any other identifier, innermost scope first:
+     a. Stdlib module name → "namespace Math" + function count
+     b. Parameter of the enclosing function → "(parameter) integer x"
+     c. Local variable of the enclosing function → "integer total"
+        ("mutable …" when mutable) — skipped at a call `name(…)` of a user
+        function, so a local declared later does not hide the function
+     d. User-defined function → its signature in Luma syntax
+        ("function integer add(integer a, integer b)") and doc comment
+     e. Record / choice / interface → its declaration with fields or variants
+     f. User namespace → member count
+     g. Module-level variable
+   - Type keyword or literal → built-in type description
 5. Return MarkupContent (markdown) or null if nothing found
 ```
 
@@ -935,7 +946,18 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 ```text
 1. Editor sends textDocument/definition with position
 2. find_token_at() locates the token at cursor
-3. Look up token text in definitions (top-level declarations).
+3. Resolution order (DefinitionResolver):
+   a. `obj.field` → the field in the record declaration of obj's type
+   b. A local variable or parameter in scope at the cursor (ScopeStack) → its
+      declaration: the last binding of the name (`<type> name =`, a
+      parameter, a `for`/`catch`/`case` binding) between the start of the
+      enclosing function and the cursor whose block is still open. A local
+      shadows every top-level symbol of that name; with no binding before the
+      cursor (a call made before a same-named local is declared) the name
+      falls through to the top-level lookup.
+   c. Top-level declaration in this file (definitions / user_functions),
+      following symbol_origins into included files
+   d. Top-level declaration in any other cached file
 4. Return Location{uri, range} or null
 ```
 
@@ -944,16 +966,29 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 ```text
 1. Editor sends textDocument/references with position
 2. find_token_at() locates the token at cursor
-3. Scan all tokens for identifiers matching the same name.
-4. Return Location[] for each match.
+3. Determine the target's namespace: the explicit `Ns.` receiver, or — for a
+   bare name — the namespace of the member whose declaration it is, or from
+   which `use` imports it.
+4. Collect occurrences from the identifier index (collect_scoped_occurrences):
+   - a local variable: only inside its enclosing function's body range
+     (declaration line to closing brace)
+   - a namespace member: `Ns.name` anywhere, its own declaration name, and
+     bare uses of a name imported with `use Ns` / `use Ns.name`. A bare
+     `name` inside `namespace Ns { … }` is not the member — as in the type
+     checker, members are reached only qualified or through `use`.
+   - a top-level symbol: bare uses not shadowed by a local and not bound to
+     a namespace member, in every cached document
+   - includeDeclaration=false drops the declaration's name token
+5. Return Location[] for each match.
 ```
 
 ### Rename Request
 
 ```text
 1. Editor sends textDocument/rename with position and newName
-2. find_token_at() locates the token at cursor
-3. Scan all tokens for identifiers matching the same name.
+2. find_token_at() locates the token at cursor; newName must be a valid,
+   non-reserved identifier and must not collide with an existing name
+3. Collect occurrences exactly as for Find References.
 4. Build TextEdit[] (one per occurrence) replacing the name.
 5. Return WorkspaceEdit{uri → TextEdit[]}.
 ```
@@ -964,10 +999,14 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 1. Editor sends textDocument/codeAction with range and context.diagnostics
 2. For each diagnostic in the request (falling back to all cached diagnostics
    when the request carries none), the server checks for known fixable patterns:
-   - `"cannot assign to immutable variable 'X'"` — inserts `mutable ` before the variable's declaration token.
-   - `"unused variable 'X'"` — renames all occurrences to `_X`.
+   - `"cannot assign to immutable variable 'X'"` — finds the nearest
+     `<type> X = …` declaration before the assignment in the same function
+     and inserts `mutable ` before its type (`mutable integer X = …`).
+   - `"unused variable 'X'"` — renames the occurrences in the enclosing function to `_X`.
    - `"function 'X' is declared but never called"` — renames all occurrences to `_X`.
    - `"variable 'X' is declared mutable but is never mutated"` — removes the `mutable` keyword and the space that follows it.
+   - `"undefined function 'X'"` / `"unknown type 'X'"` — offers `include "<path>"` for a cached
+     file that declares X, when that path is relative and stays inside the directory.
 3. Return CodeAction[] with WorkspaceEdit fixes.
 ```
 
@@ -975,20 +1014,41 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 
 ```text
 1. Editor sends textDocument/semanticTokens/full
-2. LspServer iterates analysis_cache_[uri].tokens.
-3. For each token, map TokenType → semantic token type index (0–8).
-4. Encode the token list in the LSP semantic tokens format (5 integers per token).
+2. A cached result whose content hash matches the analysed source is returned
+   as is (including an empty one); otherwise the tokens are recomputed.
+3. For each token, map TokenType → semantic token type index (0–9, see the
+   legend in §18); identifiers are classified from the analysis (function,
+   type, parameter, variable, namespace). Built-in type names that lex as
+   identifiers (`void`, `set`, `queue`, …) are types unless a user symbol
+   claims the name; the literal segments of an interpolated string are strings.
+4. Encode the token list in the LSP semantic tokens format (5 integers per
+   token, UTF-16 columns). A token spanning several lines (a triple-quoted
+   string) is emitted as one token per line.
 5. Return SemanticTokens{data: uint32[]}.
+```
+
+### Formatting Request
+
+```text
+1. Editor sends textDocument/formatting
+2. format_luma_source() rewrites the stored document text (indentation,
+   operator spacing outside strings, interpolations and comments).
+3. Return a single TextEdit replacing the whole document — from {0, 0} to the
+   end of its last line (UTF-16 length) — or [] when nothing changed.
 ```
 
 ---
 
 ## 17 — JSON-RPC Dispatch
 
-The message loop reads one message at a time, parses the JSON body, and dispatches based on the `method` field:
+The message loop reads one message at a time, parses the JSON body, and dispatches based on the `method` field (`dispatch_message`):
 
 - If the message has an `id` field, it is a **request** — the server must reply with a response.
 - If the message has no `id` field, it is a **notification** — no response is sent.
+- A message with `result` or `error` but no `method` is a **response** to a request the server sent (e.g. `workspace/configuration`); it gets no reply.
+- Any other message without a string `method` is answered with `InvalidRequest` (-32600), echoing its `id` when usable and `null` otherwise.
+
+Lifecycle rules (LSP 3.17): `initialize` must come first and may be sent only once — a second one gets `InvalidRequest`. Every other request, `shutdown` included, gets `ServerNotInitialized` (-32002) until `initialize` has succeeded, and `InvalidRequest` after `shutdown`. Lifecycle requests share the feature handlers' error handling, so a failing `initialize` (e.g. a client that offers no `utf-16` position encoding) receives an `InvalidParams` error response rather than none.
 
 ```text
 Method                                    Type           Handler
@@ -1069,7 +1129,7 @@ The `initialize` response advertises these server capabilities:
             "full": true
         }
     },
-    "serverInfo": { "name": "luma-lsp", "version": "0.15.0" }
+    "serverInfo": { "name": "luma-lsp", "version": "0.16.0" }
 }
 ```
 
@@ -1159,7 +1219,8 @@ This handling belongs to the shared stdio transport (`shared/protocol/`) and app
 ### Windows
 
 - Each binary sets `stdin` and `stdout` to binary mode at start-up using `_setmode(_fileno(stdin), _O_BINARY)` and `_setmode(_fileno(stdout), _O_BINARY)` to prevent `\r\n` translation that would corrupt `Content-Length` framing. The debugger additionally sets `stderr` to binary mode.
-- The shared transport guards its input polling (`WaitForSingleObject` on Windows, `poll` on POSIX) behind `_WIN32` branches to support its optional read timeout.
+- The shared transport reads `stdin` with `_read` on Windows and `read` on POSIX (retrying on `EINTR`), selected by a `_WIN32` branch.
+- File paths decoded from URIs and written in `include` declarations are UTF-8. The language server converts them with `utf8_path()` / `path_to_utf8()` (`lsp_path_utils.hpp`), because MSVC's `std::filesystem::path` reads a `std::string` in the ANSI code page — without this, workspaces in folders such as `C:\Users\José\` could not resolve their includes.
 
 ### Ubuntu and macOS
 
@@ -1169,7 +1230,8 @@ This handling belongs to the shared stdio transport (`shared/protocol/`) and app
 
 ## See Also
 
-- [Contributing](../CONTRIBUTING.md) — configuring editors to launch the server
+- [Development Environment](Luma_Development_Environment.md) — configuring editors to launch and debug the server
 - [Syntax Highlighting](Luma_Syntax_Highlighting.md) — TextMate and Tree-sitter grammars
 - [Debugger](Luma_Debugger.md) — the companion DAP debug adapter
 - [Software Architecture](Luma_Software_Architecture.md) — how the language server fits into the interpreter
+- [Manual Tests](Luma_Manual_Tests.md) — manual test plan covering the language server in VS Code and Zed

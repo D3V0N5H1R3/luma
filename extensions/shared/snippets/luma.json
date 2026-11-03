@@ -50,7 +50,7 @@
         "prefix": "interface",
         "body": [
             "interface ${1:Name} {",
-            "    function ${2:void} ${3:method}(${4})",
+            "    ${2:string} ${3:field}",
             "}"
         ],
         "description": "Interface declaration"
@@ -96,7 +96,7 @@
     "For Key Value": {
         "prefix": "forkv",
         "body": [
-            "for ${1:key}, ${2:value} in ${3:dictionary} {",
+            "for ${1:key}, ${2:value} in ${3:entries} {",
             "    $0",
             "}"
         ],
@@ -124,7 +124,7 @@
         "prefix": "match",
         "body": [
             "match ${1:value} {",
-            "    case ${2:pattern} {",
+            "    case ${2:0} {",
             "        $0",
             "    }",
             "}"
@@ -135,10 +135,10 @@
         "prefix": "matchresult",
         "body": [
             "match ${1:value} {",
-            "    case success(${2:s}) {",
+            "    success(${2:s}) {",
             "        $0",
             "    }",
-            "    case failure(${3:err}) {",
+            "    failure(${3:err}) {",
             "        ",
             "    }",
             "}"
@@ -195,15 +195,17 @@
     "Spawn Await": {
         "prefix": "spawn",
         "body": [
-            "task<${1:type}> ${2:t} = spawn ${3:function_call()}",
-            "${1:type} ${4:result} = await ${2:t}"
+            "task_scope {",
+            "    task<${1:integer}> ${2:t} = spawn ${3:function_call()}",
+            "    ${1:integer} ${4:value} = await ${2:t}",
+            "}"
         ],
-        "description": "Spawn a task and await its result"
+        "description": "Spawn a task inside a task_scope and await its result"
     },
     "Lambda": {
         "prefix": "lambda",
         "body": [
-            "(${1:params}) -> ${0:body}"
+            "(${1:integer} ${2:x}) -> ${0:x}"
         ],
         "description": "Lambda expression"
     },
@@ -217,14 +219,14 @@
     "Mutable Variable": {
         "prefix": "mut",
         "body": [
-            "mutable ${1:type} ${2:name} = ${0:value}"
+            "mutable ${1:integer} ${2:name} = ${0:value}"
         ],
         "description": "Mutable variable declaration"
     },
     "Variable": {
         "prefix": "var",
         "body": [
-            "${1:type} ${2:name} = ${0:value}"
+            "${1:integer} ${2:name} = ${0:value}"
         ],
         "description": "Immutable variable declaration"
     },
@@ -245,9 +247,9 @@
     "Channel": {
         "prefix": "channel",
         "body": [
-            "channel<${1:type}> ${2:ch} = Channel.new()",
+            "channel<${1:integer}> ${2:ch} = Channel.new()",
             "Channel.send(${2:ch}, ${3:value})",
-            "${1:type} ${4:received} = Channel.receive(${2:ch})"
+            "result<${1:integer}> ${4:received} = Channel.receive(${2:ch})"
         ],
         "description": "Create and use a channel"
     },
@@ -285,7 +287,7 @@
         "prefix": "dict",
         "body": [
             "dictionary<${1:string}> ${2:d} = {",
-            "    \"${3:key}\" = ${0:value}",
+            "    \"${3:key}\": ${0:value}",
             "}"
         ],
         "description": "Dictionary literal"
@@ -422,7 +424,7 @@
         "prefix": "interfacegeneric",
         "body": [
             "interface ${1:Name}<${2:T}> {",
-            "    ${2:T} ${0:get}()",
+            "    ${2:T} ${0:value}",
             "}"
         ],
         "description": "Generic interface declaration"
@@ -482,14 +484,14 @@
     "Unique Variable": {
         "prefix": "unique",
         "body": [
-            "unique ${1:type} ${2:name} = ${0:value}"
+            "unique ${1:integer} ${2:name} = ${0:value}"
         ],
         "description": "Unique ownership variable declaration"
     },
     "Borrow Variable": {
         "prefix": "borrow",
         "body": [
-            "borrow ${1:type} ${2:name} = ${0:value}"
+            "borrow ${1:integer} ${2:name} = ${0:value}"
         ],
         "description": "Borrowed reference variable declaration"
     },
@@ -503,8 +505,8 @@
     "Match Expression": {
         "prefix": "matchexpr",
         "body": [
-            "${1:type} ${2:result} = match ${3:value} {",
-            "    case ${4:pattern} { ${5:expr} }",
+            "${1:integer} ${2:outcome} = match ${3:value} {",
+            "    case ${4:0} { ${5:expr} }",
             "    else { ${0:default} }",
             "}"
         ],
@@ -514,7 +516,7 @@
         "prefix": "matchmulti",
         "body": [
             "match ${1:value} {",
-            "    case ${2:pattern1} | ${3:pattern2} {",
+            "    case ${2:1} | ${3:2} {",
             "        $0",
             "    }",
             "    else {",
@@ -527,14 +529,14 @@
     "Downcast": {
         "prefix": "downcast",
         "body": [
-            "result<${1:type}> ${2:r} = downcast<${1:type}>(${0:value})"
+            "result<${1:integer}> ${2:r} = downcast<${1:integer}>(${0:value})"
         ],
         "description": "Downcast a value to a specific type"
     },
     "Is Type Check": {
         "prefix": "is",
         "body": [
-            "if is<${1:type}>(${2:value}) {",
+            "if is<${1:integer}>(${2:value}) {",
             "    $0",
             "}"
         ],
@@ -543,7 +545,7 @@
     "Turbofish": {
         "prefix": "turbofish",
         "body": [
-            "${1:function_name}::<${2:type}>(${0:args})"
+            "${1:function_name}::<${2:integer}>(${0:args})"
         ],
         "description": "Function call with explicit type argument"
     },
@@ -552,8 +554,8 @@
         "body": [
             "@test",
             "function void ${1:test_name}() {",
-            "    ${2:type} ${3:result} = ${4:expression}",
-            "    assert(${3:result} == ${5:expected}, \"expected ${5:expected} but got \\${${3:result}}\")",
+            "    ${2:integer} ${3:actual} = ${4:expression}",
+            "    assert(${3:actual} == ${5:expected}, \"expected ${5:expected} but got \\${${3:actual}}\")",
             "}"
         ],
         "description": "Test function with assertion message"

@@ -1,6 +1,16 @@
 // Type checker unit tests — namespaces, downcast, optional chains, any-warn, return analysis.
 
+#include <algorithm>
+#include <string>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::Diagnostic;
+using luma::test::check;
+using luma::test::fails;
+using luma::test::fails_with_message;
+using luma::test::has_warnings;
+using luma::test::passes;
 
 // ─── Namespace ───
 
@@ -597,10 +607,8 @@ static void test_try_finally_body_is_type_checked() {
 }
 
 // ─── Match arm: unknown choice variant (shared binding helper) ───
-// Characterization for the one behavioural asymmetry preserved when the
-// per-arm binding logic was unified: a match *statement* arm naming a variant
-// the choice does not declare reports a "has no variant" diagnostic, whereas
-// the match *expression* path deliberately stays silent about it.
+// A match arm naming a variant the choice does not declare is an error in a
+// match *statement* and a match *expression* alike.
 static void test_match_statement_reports_unknown_choice_variant() {
     const auto diags = check("choice Shape { Circle(number r) Point }\n"
                              "function void describe(Shape s) {\n"
@@ -611,17 +619,16 @@ static void test_match_statement_reports_unknown_choice_variant() {
                              "    }\n"
                              "}\n");
 
-    bool found = false;
-    for (const auto& d : diags) {
-        if (d.message.find("has no variant") != std::string::npos &&
-            d.message.find("Ghost") != std::string::npos) {
-            found = true;
-        }
-    }
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(std::ranges::any_of(diags, [](const Diagnostic& d) {
+        return d.message.find("has no variant") != std::string::npos &&
+               d.message.find("Ghost") != std::string::npos;
+    }));
 }
 
-static void test_match_expression_silent_on_unknown_choice_variant() {
+// Regression: a match arm naming a variant the choice does not declare is
+// reported in both forms — statement and expression.  The expression form used
+// to stay silent, so `case Shape.Ghost` silently never matched.
+static void test_match_expression_reports_unknown_choice_variant() {
     const auto diags = check("choice Shape { Circle(number r) Point }\n"
                              "function number describe(Shape s) {\n"
                              "    return match s {\n"
@@ -631,9 +638,26 @@ static void test_match_expression_silent_on_unknown_choice_variant() {
                              "    }\n"
                              "}\n");
 
-    for (const auto& d : diags) {
-        ASSERT_TRUE(d.message.find("has no variant") == std::string::npos);
-    }
+    ASSERT_TRUE(std::ranges::any_of(diags, [](const Diagnostic& d) {
+        return d.message.find("has no variant") != std::string::npos &&
+               d.message.find("Ghost") != std::string::npos;
+    }));
+}
+
+static void test_match_unknown_unit_variant_reported() {
+    // A variant pattern without bindings is checked as well.
+    const auto diags = check("choice Light { Red, Green }\n"
+                             "function string name(Light l) {\n"
+                             "    return match l {\n"
+                             "        case Light.Red    { \"red\" }\n"
+                             "        case Light.Blue   { \"blue\" }\n"
+                             "        case Light.Green  { \"green\" }\n"
+                             "    }\n"
+                             "}\n");
+
+    ASSERT_TRUE(std::ranges::any_of(diags, [](const Diagnostic& d) {
+        return d.message.find("has no variant 'Blue'") != std::string::npos;
+    }));
 }
 
 // Regression: mutually-recursive interfaces used in an assignability check must
@@ -651,6 +675,261 @@ static void test_mutually_recursive_interfaces_terminate() {
                        "function void take_a(A a) {}\n"
                        "function void run(B b) {\n"
                        "    take_a(b)\n"
+                       "}\n"));
+}
+
+// ─── Regression: valueless if/match branches (F1) ───
+// A branch that falls through without a value used to be merged as the other
+// branch's type, so the variable silently held `none` at run time.
+
+static void test_if_branch_without_value_rejected() {
+    ASSERT_TRUE(fails_with_message("function string pick(boolean verbose) {\n"
+                                   "    string label = if verbose { \"loud\" } else { "
+                                   "print(\"quiet\") }\n"
+                                   "    return label\n"
+                                   "}\n",
+                                   "the 'else' branch of this 'if' produces no value"));
+    ASSERT_TRUE(fails_with_message("function integer pick(boolean c) {\n"
+                                   "    integer n = if c { 1 } else { }\n"
+                                   "    return n\n"
+                                   "}\n",
+                                   "produces no value"));
+    ASSERT_TRUE(fails_with_message("function integer pick(boolean c) {\n"
+                                   "    integer n = if c { } else { 2 }\n"
+                                   "    return n\n"
+                                   "}\n",
+                                   "the 'then' branch of this 'if' produces no value"));
+}
+
+static void test_if_without_else_in_value_position_rejected() {
+    // An if *statement* at the tail of a value block has an implicit,
+    // valueless else.
+    ASSERT_TRUE(fails_with_message("function string pick(integer k, boolean c) {\n"
+                                   "    string s = match k {\n"
+                                   "        case 1 { if c { \"a\" } }\n"
+                                   "        else { \"b\" }\n"
+                                   "    }\n"
+                                   "    return s\n"
+                                   "}\n",
+                                   "has no 'else' branch"));
+}
+
+static void test_match_arm_without_value_rejected() {
+    ASSERT_TRUE(fails_with_message("function string pick(integer k) {\n"
+                                   "    string s = match k { case 1 { \"one\" } else { } }\n"
+                                   "    return s\n"
+                                   "}\n",
+                                   "this match arm produces no value, but other arms produce "
+                                   "'string'"));
+}
+
+static void test_diverging_branch_excluded_regardless_of_order() {
+    // A `return` arm takes no part in the merge, wherever it appears.  The
+    // failure-first order used to give the match the type `void`.
+    ASSERT_TRUE(passes("function integer first(result<integer> r) {\n"
+                       "    integer v = match r {\n"
+                       "        failure(_e) { return 0 }\n"
+                       "        success(x) { x }\n"
+                       "    }\n"
+                       "    return v\n"
+                       "}\n"));
+    ASSERT_TRUE(passes("function integer first(result<integer> r) {\n"
+                       "    integer v = match r {\n"
+                       "        success(x) { x }\n"
+                       "        failure(_e) { return 0 }\n"
+                       "    }\n"
+                       "    return v\n"
+                       "}\n"));
+    ASSERT_TRUE(passes("function integer pick(boolean c) {\n"
+                       "    integer n = if c { return 0 } else { 5 }\n"
+                       "    return n\n"
+                       "}\n"));
+    // A nested if-expression all of whose branches return also diverges.
+    ASSERT_TRUE(passes("function integer pick(boolean a, boolean b) {\n"
+                       "    integer n = if a { 1 } else if b { return 2 } else { return 3 }\n"
+                       "    return n\n"
+                       "}\n"));
+}
+
+// A call that never returns (the catalog's never_returns marker, e.g.
+// Process.exit) leaves its branch like `return`: it takes no part in the
+// if/match value, and a function body ending in it does not fall through.
+static void test_never_returning_call_branch_diverges() {
+    ASSERT_TRUE(passes("function integer port(boolean c) {\n"
+                       "    integer p = if c { 8080 } else { Process.exit(1) }\n"
+                       "    return p\n"
+                       "}\n"));
+    ASSERT_TRUE(passes("function integer value(result<integer> r) {\n"
+                       "    integer v = match r {\n"
+                       "        success(x) { x }\n"
+                       "        failure(e) {\n"
+                       "            print(\"fatal: ${e}\")\n"
+                       "            Process.exit(2)\n"
+                       "        }\n"
+                       "    }\n"
+                       "    return v\n"
+                       "}\n"));
+    // Piping the exit code into Process.exit is the same call.
+    ASSERT_TRUE(passes("function integer port(boolean c) {\n"
+                       "    integer p = if c { 8080 } else { 1 |> Process.exit() }\n"
+                       "    return p\n"
+                       "}\n"));
+    // Return-path analysis agrees: a non-void function may end in the call.
+    ASSERT_TRUE(passes("function integer pick(boolean c) {\n"
+                       "    if c {\n"
+                       "        return 1\n"
+                       "    }\n"
+                       "    Process.exit(3)\n"
+                       "}\n"));
+    // An ordinary void call still produces no value.
+    ASSERT_TRUE(fails_with_message("function integer port(boolean c) {\n"
+                                   "    integer p = if c { 8080 } else { print(\"no\") }\n"
+                                   "    return p\n"
+                                   "}\n",
+                                   "produces no value"));
+    ASSERT_TRUE(fails_with_message("function integer pick(boolean c) {\n"
+                                   "    if c {\n"
+                                   "        return 1\n"
+                                   "    }\n"
+                                   "    print(\"no\")\n"
+                                   "}\n",
+                                   "may fall through"));
+}
+
+static void test_valueless_branches_in_statement_position_ok() {
+    // Branches that all produce no value (statement-like use) stay valid.
+    ASSERT_TRUE(passes("function void run(integer k, boolean c) {\n"
+                       "    if c { print(\"a\") } else { print(\"b\") }\n"
+                       "    match k {\n"
+                       "        case 1 { print(\"one\") }\n"
+                       "        else { }\n"
+                       "    }\n"
+                       "}\n"));
+}
+
+// ─── Regression: `case !=` is not a catch-all on its own (F3) ───
+
+static void test_bang_equals_arm_alone_requires_else() {
+    ASSERT_TRUE(fails_with_message("function string label(integer code) {\n"
+                                   "    return match code { case != 5 { \"other\" } }\n"
+                                   "}\n",
+                                   "must include an 'else' arm"));
+}
+
+static void test_bang_equals_with_matching_equality_arm_is_exhaustive() {
+    ASSERT_TRUE(passes("function string label(integer code) {\n"
+                       "    return match code {\n"
+                       "        case 5 { \"five\" }\n"
+                       "        case != 5 { \"other\" }\n"
+                       "    }\n"
+                       "}\n"));
+    ASSERT_TRUE(passes("function string label(string s) {\n"
+                       "    return match s {\n"
+                       "        case != \"quit\" { \"go\" }\n"
+                       "        case \"quit\" { \"stop\" }\n"
+                       "    }\n"
+                       "}\n"));
+    // A guarded equality arm does not cover the constant.
+    ASSERT_TRUE(fails("function string label(integer code, boolean c) {\n"
+                      "    return match code {\n"
+                      "        case 5 when c { \"five\" }\n"
+                      "        case != 5 { \"other\" }\n"
+                      "    }\n"
+                      "}\n"));
+    // Nor does an equality arm for another constant.
+    ASSERT_TRUE(fails("function string label(integer code) {\n"
+                      "    return match code {\n"
+                      "        case 4 { \"four\" }\n"
+                      "        case != 5 { \"other\" }\n"
+                      "    }\n"
+                      "}\n"));
+}
+
+// ─── Regression: patterns are checked against the subject type (F4) ───
+
+static void test_boolean_patterns_on_integer_subject_rejected() {
+    const auto diags = check("function string t(integer n) {\n"
+                             "    return match n { case true { \"t\" } case false { \"f\" } }\n"
+                             "}\n");
+
+    ASSERT_TRUE(std::ranges::any_of(diags, [](const Diagnostic& d) {
+        return d.message.find("match arm has 'true' pattern but subject is 'integer'") !=
+               std::string::npos;
+    }));
+    ASSERT_TRUE(std::ranges::any_of(diags, [](const Diagnostic& d) {
+        return d.message.find("match on 'integer' must include an 'else' arm") != std::string::npos;
+    }));
+}
+
+static void test_wrapper_patterns_checked_against_subject() {
+    ASSERT_TRUE(fails_with_message("function integer f(optional<integer> o) {\n"
+                                   "    return match o {\n"
+                                   "        success(v) { v }\n"
+                                   "        failure(_e) { 0 }\n"
+                                   "    }\n"
+                                   "}\n",
+                                   "match arm has 'success' pattern but subject is "
+                                   "'optional<integer>'"));
+    ASSERT_TRUE(fails_with_message("function integer f(result<integer> r) {\n"
+                                   "    return match r {\n"
+                                   "        case some(v) { v }\n"
+                                   "        case none { 0 }\n"
+                                   "    }\n"
+                                   "}\n",
+                                   "match arm has 'some' pattern but subject is"));
+    ASSERT_TRUE(fails_with_message("function integer f(string s) {\n"
+                                   "    return match s {\n"
+                                   "        case \"a\" | none { 1 }\n"
+                                   "        else { 0 }\n"
+                                   "    }\n"
+                                   "}\n",
+                                   "match arm has 'none' pattern but subject is 'string'"));
+}
+
+static void test_choice_pattern_from_other_choice_rejected() {
+    // Same variant name, different choice: the runtime test compares only the
+    // variant name, so `label` used to be bound to Shape.Circle's number.
+    ASSERT_TRUE(fails_with_message("choice Shape { Circle(number radius), Square(number side) }\n"
+                                   "choice Badge { Circle(string label) }\n"
+                                   "function string describe(Shape s) {\n"
+                                   "    return match s {\n"
+                                   "        case Badge.Circle(label) { label }\n"
+                                   "        else { \"other\" }\n"
+                                   "    }\n"
+                                   "}\n",
+                                   "match arm pattern 'Badge.Circle' is not a variant of the "
+                                   "subject's choice type 'Shape'"));
+    ASSERT_TRUE(
+        fails_with_message("choice Light { Red, Green }\n"
+                           "function string f(integer n) {\n"
+                           "    return match n { case Light.Red { \"r\" } else { \"x\" } }\n"
+                           "}\n",
+                           "match arm has choice 'Light.Red' pattern but subject is "
+                           "'integer'"));
+}
+
+static void test_namespaced_and_generic_choice_patterns_accepted() {
+    ASSERT_TRUE(passes("namespace Geo {\n"
+                       "    choice Shape { Circle(number r), Dot }\n"
+                       "    function number area(Shape s) {\n"
+                       "        return match s {\n"
+                       "            case Shape.Circle(r) { r * r }\n"
+                       "            case Geo.Shape.Dot { 0.0 }\n"
+                       "        }\n"
+                       "    }\n"
+                       "}\n"
+                       "function number outer(Geo.Shape s) {\n"
+                       "    return match s {\n"
+                       "        case Geo.Shape.Circle(r) { r }\n"
+                       "        case Geo.Shape.Dot { 0.0 }\n"
+                       "    }\n"
+                       "}\n"));
+    ASSERT_TRUE(passes("choice Tree<T> { Leaf(T value), Empty }\n"
+                       "function integer value_of(Tree<integer> t) {\n"
+                       "    return match t {\n"
+                       "        case Tree.Leaf(v) { v }\n"
+                       "        case Tree.Empty { 0 }\n"
+                       "    }\n"
                        "}\n"));
 }
 
@@ -726,6 +1005,22 @@ int main() {
     RUN(test_try_catch_body_is_type_checked);
     RUN(test_try_finally_body_is_type_checked);
     RUN(test_match_statement_reports_unknown_choice_variant);
-    RUN(test_match_expression_silent_on_unknown_choice_variant);
+    RUN(test_match_expression_reports_unknown_choice_variant);
+    RUN(test_match_unknown_unit_variant_reported);
+
+    // ─── Regression: if/match branch values, exhaustiveness, patterns ───
+
+    RUN(test_if_branch_without_value_rejected);
+    RUN(test_if_without_else_in_value_position_rejected);
+    RUN(test_match_arm_without_value_rejected);
+    RUN(test_diverging_branch_excluded_regardless_of_order);
+    RUN(test_never_returning_call_branch_diverges);
+    RUN(test_valueless_branches_in_statement_position_ok);
+    RUN(test_bang_equals_arm_alone_requires_else);
+    RUN(test_bang_equals_with_matching_equality_arm_is_exhaustive);
+    RUN(test_boolean_patterns_on_integer_subject_rejected);
+    RUN(test_wrapper_patterns_checked_against_subject);
+    RUN(test_choice_pattern_from_other_choice_rejected);
+    RUN(test_namespaced_and_generic_choice_patterns_accepted);
     return SUMMARY();
 }

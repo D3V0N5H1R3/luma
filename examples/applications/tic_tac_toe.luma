@@ -36,10 +36,6 @@ function Player opponent(Player player) {
     }
 }
 
-function boolean players_equal(Player left, Player right) {
-    return mark(left) == mark(right)
-}
-
 # ─── Board ───────────────────────────────────────────────
 
 function array<string> empty_board() {
@@ -56,12 +52,12 @@ function array<array<integer>> winning_lines() {
 
 function optional<Player> winner(array<string> board) {
     for line in winning_lines() {
-        string a = board[line[0]]
-        string b = board[line[1]]
-        string c = board[line[2]]
+        string first = board[line[0]]
+        string second = board[line[1]]
+        string third = board[line[2]]
 
-        if a != "-" && a == b && b == c {
-            return if a == "X" { some(Player.X) } else { some(Player.O) }
+        if first != "-" && first == second && second == third {
+            return if first == "X" { some(Player.X) } else { some(Player.O) }
         }
     }
 
@@ -74,9 +70,9 @@ function boolean is_full(array<string> board) {
 
 function array<integer> available_moves(array<string> board) {
     return Array.range(0, 9)
-    |> Result.unwrap_or([])
-    |> Array.filter((integer i) -> board[i] == "-")
-    |> Result.unwrap_or([])
+        |> Result.unwrap_or([])
+        |> Array.filter((integer i) -> board[i] == "-")
+        |> Result.unwrap_or([])
 }
 
 function result<array<string>> apply_move(array<string> board, integer index, Player player) {
@@ -102,7 +98,7 @@ function integer minimax(
 ) {
     match winner(board) {
     case some(champion) {
-        return if players_equal(champion, ai) { 10 - depth } else { depth - 10 }
+        return if champion == ai { 10 - depth } else { depth - 10 }
     }
     case none { }
     }
@@ -111,7 +107,7 @@ function integer minimax(
         return 0
     }
 
-    boolean is_maximizing = players_equal(to_move, ai)
+    boolean is_maximizing = to_move == ai
 
     mutable integer best = if is_maximizing { -1000 } else { 1000 }
     mutable integer current_alpha = alpha
@@ -137,18 +133,19 @@ function integer minimax(
     return best
 }
 
-function result<integer> best_move(array<string> board, Player to_move) {
+# none when the board is full: there is no move to choose.
+function optional<integer> best_move(array<string> board, Player to_move) {
     array<integer> moves = available_moves(board)
 
     if Array.is_empty(moves) {
-        return failure("no moves available")
+        return none
     }
 
-    mutable integer chosen = Array.first(moves) ?? 0
+    mutable integer chosen = moves[0]
     mutable integer best = -1000
 
     for move in moves {
-        array<string> next = apply_move(board, move, to_move)?
+        array<string> next = Result.unwrap_or(apply_move(board, move, to_move), board)
         integer value = minimax(next, opponent(to_move), to_move, 1, -1000, 1000)
 
         if value > best {
@@ -157,7 +154,7 @@ function result<integer> best_move(array<string> board, Player to_move) {
         }
     }
 
-    return success(chosen)
+    return some(chosen)
 }
 
 # ─── Self-Play ───────────────────────────────────────────
@@ -167,25 +164,16 @@ function result<integer> best_move(array<string> board, Player to_move) {
 function (array<string>, optional<Player>) play_out(array<string> start, Player first) {
     mutable array<string> board = start
     mutable Player to_move = first
-    mutable boolean is_over = false
 
-    for _ in 0..9 {
-        if !is_over {
-            match winner(board) {
-            case some(_champion) { is_over = true }
-            case none {
-                if is_full(board) {
-                    is_over = true
-                } else {
-                    integer move = Result.unwrap_or(best_move(board, to_move), -1)
-
-                    if move >= 0 {
-                        board = Result.unwrap_or(apply_move(board, move, to_move), board)
-                        to_move = opponent(to_move)
-                    }
-                }
-            }
-            }
+    while Optional.is_none(winner(board)) && !is_full(board) {
+        match best_move(board, to_move) {
+        case some(move) {
+            board = Result.unwrap_or(apply_move(board, move, to_move), board)
+            to_move = opponent(to_move)
+        }
+        case none {
+            break
+        }
         }
     }
 
@@ -197,7 +185,7 @@ function (array<string>, optional<Player>) play_out(array<string> start, Player 
 function string cell_label(array<string> board, integer index) {
     string value = board[index]
 
-    return if value == "-" { Converter.to_string(index) } else { value }
+    return if value == "-" { "${index}" } else { value }
 }
 
 function void print_board(array<string> board) {
@@ -205,10 +193,10 @@ function void print_board(array<string> board) {
         integer base = row * 3
 
         string left = cell_label(board, base)
-        string mid = cell_label(board, base + 1)
+        string middle = cell_label(board, base + 1)
         string right = cell_label(board, base + 2)
 
-        print("   ${left} | ${mid} | ${right}")
+        print("   ${left} | ${middle} | ${right}")
 
         if row < 2 {
             print("  ---+---+---")
@@ -216,8 +204,8 @@ function void print_board(array<string> board) {
     }
 }
 
-function string outcome_text(optional<Player> result_winner) {
-    return match result_winner {
+function string outcome_text(optional<Player> game_winner) {
+    return match game_winner {
     case some(champion) { "${mark(champion)} wins" }
     case none           { "draw" }
     }
@@ -246,9 +234,10 @@ function void main() {
 
     print_board(can_win)
 
-    integer winning = Result.unwrap_or(best_move(can_win, Player.X), -1)
-
-    print("\n  X to move chooses cell ${winning} (completes the top row)")
+    match best_move(can_win, Player.X) {
+    case some(cell) { print("\n  X to move chooses cell ${cell} (completes the top row)") }
+    case none       { print("\n  X has no move available") }
+    }
 
     # The AI must block the opponent's immediate threat.
     print("\n─── AI blocks the opponent ───")
@@ -257,9 +246,10 @@ function void main() {
 
     print_board(must_block)
 
-    integer block = Result.unwrap_or(best_move(must_block, Player.X), -1)
-
-    print("\n  X to move chooses cell ${block} (blocks O's top row)")
+    match best_move(must_block, Player.X) {
+    case some(cell) { print("\n  X to move chooses cell ${cell} (blocks O's top row)") }
+    case none       { print("\n  X has no move available") }
+    }
 }
 
 # ─── Tests ───────────────────────────────────────────────
@@ -319,7 +309,7 @@ function void test_ai_takes_immediate_win() {
     # X has two in the top row; the winning move is cell 2.
     array<string> board = ["X", "X", "-", "O", "O", "-", "-", "-", "-"]
 
-    assert(Result.unwrap_or(best_move(board, Player.X), -1) == 2,
+    assert(best_move(board, Player.X) == some(2),
         "X should complete the row at cell 2")
 }
 
@@ -328,7 +318,7 @@ function void test_ai_blocks_immediate_loss() {
     # O threatens the top row; X must block at cell 2.
     array<string> board = ["O", "O", "-", "X", "-", "-", "-", "-", "-"]
 
-    assert(Result.unwrap_or(best_move(board, Player.X), -1) == 2, "X should block at cell 2")
+    assert(best_move(board, Player.X) == some(2), "X should block at cell 2")
 }
 
 @test

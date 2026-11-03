@@ -103,50 +103,41 @@ bool ConstantFolder::try_fold_with(SourceLocation loc, ComputeFn compute) {
 
 bool ConstantFolder::try_fold_integer_arithmetic(std::int64_t l, std::int64_t r, TokenType op,
                                                  SourceLocation loc) {
-    // Attempt per-operation folding via named helpers.
-    // Operations that can overflow return nullopt, and we fall back to double.
+    // Attempt per-operation folding via named helpers.  An operation whose
+    // exact result does not fit in an int64 is NOT folded: the VM raises
+    // "integer overflow in <operation>" for it (an `integer` never silently
+    // widens to `number`), so the operator is left in the bytecode to raise at
+    // runtime.  With the type checker enabled, such a constant expression is
+    // already a compile error; this path matters for unchecked compilation
+    // (REPL, debugger expression evaluation).
+    std::optional<std::int64_t> result;
+
     switch (op) {
-        case TokenType::Plus: {
-            if (auto result = try_fold_add(l, r)) {
-                api_.emit_constant(Value{*result}, loc);
-                return true;
-            }
-            api_.emit_constant(Value{static_cast<double>(l) + static_cast<double>(r)}, loc);
-            return true;
-        }
-        case TokenType::Minus: {
-            if (auto result = try_fold_subtract(l, r)) {
-                api_.emit_constant(Value{*result}, loc);
-                return true;
-            }
-            api_.emit_constant(Value{static_cast<double>(l) - static_cast<double>(r)}, loc);
-            return true;
-        }
-        case TokenType::Star: {
-            if (auto result = try_fold_multiply(l, r)) {
-                api_.emit_constant(Value{*result}, loc);
-                return true;
-            }
-            api_.emit_constant(Value{static_cast<double>(l) * static_cast<double>(r)}, loc);
-            return true;
-        }
-        case TokenType::Percent: {
-            if (auto result = try_fold_modulo(l, r)) {
-                api_.emit_constant(Value{*result}, loc);
-                return true;
-            }
-            return false;
-        }
-        case TokenType::SlashSlash: {
-            if (auto result = try_fold_int_divide(l, r)) {
-                api_.emit_constant(Value{*result}, loc);
-                return true;
-            }
-            return false;
-        }
+        case TokenType::Plus:
+            result = try_fold_add(l, r);
+            break;
+        case TokenType::Minus:
+            result = try_fold_subtract(l, r);
+            break;
+        case TokenType::Star:
+            result = try_fold_multiply(l, r);
+            break;
+        case TokenType::Percent:
+            result = try_fold_modulo(l, r);
+            break;
+        case TokenType::SlashSlash:
+            result = try_fold_int_divide(l, r);
+            break;
         default:
             return false;
     }
+
+    if (!result) {
+        return false;
+    }
+
+    api_.emit_constant(Value{*result}, loc);
+    return true;
 }
 
 // ─── Number arithmetic ────────────────────────────────────────────────────────
@@ -292,7 +283,26 @@ bool ConstantFolder::try_fold_binary_at_compile_time(const LiteralExpression& lh
         }
     }
 
-    // Numeric comparison folding.
+    // Numeric equality folding.  Delegates to Value::equals — the VM's own
+    // Equal/NotEqual semantics — so the fold agrees with the runtime: an
+    // integer equals a number only when the number is exactly that whole value
+    // (`9007199254740993 == 9007199254740992.0` is false, although both round to
+    // the same double).
+    if (both_num && (op == TokenType::EqualsEquals || op == TokenType::BangEquals)) {
+        auto as_value = [](const LiteralExpression& lit) -> Value {
+            return lit.literal_type() == LiteralExpression::LiteralType::Integer
+                       ? Value{lit.integer_value()}
+                       : Value{lit.number_value()};
+        };
+
+        const bool equal = as_value(lhs).equals(as_value(rhs));
+        const bool result = op == TokenType::EqualsEquals ? equal : !equal;
+        api_.emit(result ? Op::True : Op::False, loc);
+        return true;
+    }
+
+    // Numeric ordering folding.  Mixed integer/number ordering compares via
+    // double, matching VM::compare_values.
     if (both_num) {
         return try_fold_comparison(as_double(lhs), as_double(rhs), op, loc);
     }

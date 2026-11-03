@@ -117,6 +117,13 @@ private:
     void register_handlers();
     void dispatch_request(const JsonValue& id, const std::string& method, const JsonValue& params);
     [[nodiscard]] bool dispatch_notification(const std::string& method, const JsonValue& params);
+    // Validate a decoded JSON-RPC message and route it to dispatch_request or
+    // dispatch_notification. Returns true when the client asked to exit.
+    [[nodiscard]] bool dispatch_message(const JsonValue& message);
+    // Send `produce()` as the response to request `id`, or a JSON-RPC error if
+    // it throws (InvalidParams for InvalidParamsError, InternalError otherwise).
+    template <typename Produce>
+    void respond(const JsonValue& id, const std::string& method, Produce&& produce);
 
     // ═══ Lifecycle (lsp_server_lifecycle.cpp) ═══
     [[nodiscard]] JsonValue handle_initialize(const JsonValue& params);
@@ -165,6 +172,9 @@ private:
     // ═══ Configuration State ═══
     ConfigurationManager configuration_;
     bool shutdown_requested_{false};
+    // Set once an `initialize` request succeeded: requests are accepted from
+    // then on, and a second `initialize` is rejected.
+    bool initialize_received_{false};
     std::atomic<bool> initialized_{false};
     int exit_code_{0};
 

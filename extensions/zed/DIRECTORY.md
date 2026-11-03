@@ -23,7 +23,7 @@ Syntax highlighting, language configuration, and language server integration for
 | Function names       | `function void main()`, `my_func()`                                                                                           |
 | Keywords             | `await` `choice` `else` `for` `function` `if` `match` `record` `return` `spawn` `task_scope` `while`                          |
 | Modifiers            | `borrow` `internal` `mutable` `unique`                                                                                        |
-| Numbers              | `42` `3.14` `0xFF` `0b1010`                                                                                                   |
+| Numbers              | `42` `3.14` `0xFF` `0o755` `0b1010`                                                                                           |
 | Operators            | `+` `-` `*` `/` `==` `&&` `\|\|` `\|>` `??` `->`                                                                              |
 | Properties           | `point.x`, `Person { name = "Alice" }`                                                                                        |
 | Standard library     | `Array.map` `Math.pi` `String.length`                                                                                         |
@@ -80,7 +80,7 @@ This nests under `lsp.luma-lsp.settings.luma` in `settings.json`, as shown above
 
 ### Automatic Download
 
-No action required — the extension resolves the correct platform binary (macOS arm64/x64, Linux arm64/x64, Windows arm64/x64) and downloads it into the extension directory.
+No action required — the extension resolves the correct platform binary (macOS arm64/x64, Linux arm64/x64, Windows arm64/x64), verifies it against the release's `SHA256SUMS`, and downloads it into the extension directory. Within a Zed session the downloaded binary is reused without contacting GitHub again, and when the latest release cannot be fetched or downloaded (offline, rate-limited) the newest previously downloaded version is used. Older versions are removed after a newer one is installed.
 
 ### Manual Binary Setup
 
@@ -90,18 +90,18 @@ Use the provided download script to fetch the binary:
 
 ```bash
 cd extensions/zed
-LUMA_VERSION=v0.15.0 ./scripts/download_binaries.sh
+LUMA_VERSION=v0.16.0 ./scripts/download_binaries.sh
 ```
 
 On Windows (PowerShell):
 
 ```powershell
 cd extensions\zed
-$env:LUMA_VERSION = "v0.15.0"
+$env:LUMA_VERSION = "v0.16.0"
 pwsh scripts\Download-Binaries.ps1
 ```
 
-Set `LUMA_VERSION` to the desired release tag, or omit it to download the latest release. The binary is placed at `bin/luma_lsp`.
+Set `LUMA_VERSION` to the desired release tag, or omit it to download the latest release. Both scripts verify the archive against the release's `SHA256SUMS` and refuse to install on a mismatch. The binary is placed at `bin/luma_lsp`.
 
 #### Option 2: Build from Source
 

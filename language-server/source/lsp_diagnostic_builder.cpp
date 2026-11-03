@@ -166,7 +166,17 @@ Diagnostic make_diagnostic(const luma::Diagnostic& diag, const std::string& sour
     const auto loc = diag.primary_location();
     const int start_line = loc.line > 0 ? loc.line - 1 : 0;
     const int start_col_cp = loc.column > 0 ? loc.column - 1 : 0; // 0-based codepoint column
-    const int end_col_cp = word_end_column(source, loc.line, loc.column, line_starts);
+    // Span ends are exclusive 1-based columns (one past the token), so a span
+    // on one line maps to the 0-based exclusive end `end.column - 1`.  Without
+    // a usable span end, extend to the end of the word at the start.
+    const auto primary_span = std::ranges::find_if(
+        diag.spans, [](const luma::DiagnosticSpan& span) { return span.is_primary; });
+    const bool has_span_end = primary_span != diag.spans.end() &&
+                              primary_span->end.line == loc.line &&
+                              primary_span->end.column > loc.column;
+    const int end_col_cp = has_span_end
+                               ? primary_span->end.column - 1
+                               : word_end_column(source, loc.line, loc.column, line_starts);
 
     // Map codepoint columns → byte offsets → UTF-16 code units for LSP.
     const auto line_text = get_line_text(source, line_starts, loc.line);

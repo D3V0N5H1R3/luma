@@ -64,8 +64,8 @@ function Handler with_cache(Handler handler) {
 
         string response = handler(path)
 
-        Reference.update(cache, (dictionary<string> c) -> {
-            return Dictionary.set(c, path, response)
+        Reference.update(cache, (dictionary<string> current) -> {
+            return Dictionary.set(current, path, response)
         })
 
         return response

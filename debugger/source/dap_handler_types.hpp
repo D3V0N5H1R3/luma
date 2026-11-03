@@ -21,7 +21,7 @@ using luma::json::JsonValue;
 // (nullopt=success, value=error) for execution control methods.
 
 struct ExecutionResult {
-    bool success;
+    bool success{false};
     std::string error_message;
 
     [[nodiscard]] static ExecutionResult ok() {
@@ -44,14 +44,13 @@ enum class PostResponseAction {
     // No additional action after response is sent.
     None,
 
-    // Emit the "initialized" event after the response is sent.
-    // Used exclusively by the initialize handler to signal that the
-    // client may now send configuration requests (setBreakpoints, etc.).
+    // Emit the "initialized" event after the response is sent.  Used by the
+    // initialize handler, and by restart to let the client re-send its
+    // configuration requests (setBreakpoints, etc.) for the new run.
     SendInitialized,
 
     // Mark the session as disconnected after the response is sent.
-    // Used by disconnect and terminate handlers to cleanly exit the
-    // protocol message loop.
+    // Used by the disconnect handler to cleanly exit the protocol message loop.
     Disconnect,
 
     // NOTE: Add new values here when handlers need to perform additional

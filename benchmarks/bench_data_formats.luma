@@ -99,8 +99,8 @@ function BenchResult run_data_format_benchmarks(BenchResult state) {
     # serialization only (construction is covered by "Xml.element construction"),
     # and "Xml.find_all" should measure the search, not the deserialize parse.
     xml serialize_node = Xml.element("div")
-    |> Xml.set_attribute("class", "main")
-    |> Xml.add_child(Xml.element("span") |> Xml.set_text("hello"))
+        |> Xml.set_attribute("class", "main")
+        |> Xml.add_child(Xml.element("span") |> Xml.set_text("hello"))
     xml find_doc = Result.unwrap(Xml.deserialize("<r><item/><item/><other/><item/></r>"))
     string nav_xml = "<root><child><leaf id=\"x\">v</leaf></child></root>"
     xml nav_doc = Result.unwrap(Xml.deserialize(nav_xml))
@@ -127,9 +127,9 @@ function BenchResult run_data_format_benchmarks(BenchResult state) {
 
     st = time_it(st, "Xml.element construction", 5000, () -> {
         xml _node = Xml.element("root")
-        |> Xml.add_child(Xml.element("a") |> Xml.set_text("1"))
-        |> Xml.add_child(Xml.element("b") |> Xml.set_text("2"))
-        |> Xml.add_child(Xml.element("c") |> Xml.set_text("3"))
+            |> Xml.add_child(Xml.element("a") |> Xml.set_text("1"))
+            |> Xml.add_child(Xml.element("b") |> Xml.set_text("2"))
+            |> Xml.add_child(Xml.element("c") |> Xml.set_text("3"))
     })
 
     st = time_it(st, "Xml.find_all", 2000, () -> {

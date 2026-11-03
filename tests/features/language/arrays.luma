@@ -5,6 +5,8 @@
 # Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Creation and Access ───
+
 @test
 function void test_array_creation_and_access() {
     array<integer> values = [10, 20, 30]
@@ -16,10 +18,10 @@ function void test_array_creation_and_access() {
 
 @test
 function void test_array_mutation() {
-    mutable array<integer> list = [1, 2, 3]
-    list[1] = 99
+    mutable array<integer> values = [1, 2, 3]
+    values[1] = 99
 
-    assert(list[1] == 99)
+    assert(values == [1, 99, 3])
 }
 
 @test
@@ -32,12 +34,47 @@ function void test_empty_array() {
 @test
 function void test_array_safe_access() {
     array<integer> values = [1, 2, 3]
-    optional<integer> found_result = Array.get(values, 1)
-    optional<integer> not_found_result = Array.get(values, 10)
 
-    assert(Optional.is_some(found_result))
-    assert(Optional.unwrap(found_result) == 2)
-    assert(!Optional.is_some(not_found_result))
+    optional<integer> found = Array.get(values, 1)
+    optional<integer> missing = Array.get(values, 10)
+
+    assert(found == some(2))
+    assert(missing == none)
+}
+
+@test
+function void test_array_single_element() {
+    array<integer> single = [42]
+
+    assert(Array.length(single) == 1)
+    assert(single[0] == 42)
+}
+
+@test
+function void test_array_of_strings() {
+    array<string> words = ["hello", "world"]
+
+    assert(words[0] == "hello")
+    assert(Array.length(words) == 2)
+}
+
+@test
+function void test_array_boolean() {
+    array<boolean> flags = [true, false, true]
+
+    assert(flags[0])
+    assert(!flags[1])
+    assert(flags[2])
+}
+
+@test
+function void test_array_nested() {
+    array<array<integer>> matrix = [[1, 2], [3, 4], [5, 6]]
+
+    assert(Array.length(matrix) == 3)
+    assert(matrix[0][0] == 1)
+    assert(matrix[1][1] == 4)
+    assert(matrix[2][0] == 5)
 }
 
 # ─── Slice Syntax ───
@@ -70,53 +107,6 @@ function void test_empty_slice() {
     assert(Array.length(sliced) == 0)
 }
 
-# ─── Additional array tests ───
-
-@test
-function void test_array_equality() {
-    array<integer> a = [1, 2, 3]
-    array<integer> b = [1, 2, 3]
-    array<integer> c = [1, 2, 4]
-
-    assert(a == b)
-    assert(a != c)
-}
-
-@test
-function void test_array_of_strings() {
-    array<string> words = ["hello", "world"]
-
-    assert(words[0] == "hello")
-    assert(Array.length(words) == 2)
-}
-
-@test
-function void test_array_nested() {
-    array<array<integer>> matrix = [[1, 2], [3, 4], [5, 6]]
-
-    assert(Array.length(matrix) == 3)
-    assert(matrix[0][0] == 1)
-    assert(matrix[1][1] == 4)
-    assert(matrix[2][0] == 5)
-}
-
-@test
-function void test_array_append() {
-    mutable array<integer> list = [1, 2]
-    list = Array.push(list, 3)
-
-    assert(Array.length(list) == 3)
-    assert(list[2] == 3)
-}
-
-@test
-function void test_array_contains() {
-    array<string> fruits = ["apple", "banana", "cherry"]
-
-    assert(Array.contains(fruits, "banana"))
-    assert(!Array.contains(fruits, "grape"))
-}
-
 @test
 function void test_array_slice_inclusive() {
     array<integer> values = [10, 20, 30, 40, 50]
@@ -144,25 +134,37 @@ function void test_array_slice_inclusive_negative_end() {
     assert(to_second_last[0] == 20)
     assert(to_second_last[2] == 40)
 
-    # The exclusive negative end is unaffected by the fix.
+    # An exclusive negative end stops before the last element.
     array<integer> exclusive = values[1 .. -1]
     assert(Array.length(exclusive) == 3)
     assert(exclusive[2] == 40)
 }
 
-@test
-function void test_array_single_element() {
-    array<integer> single = [42]
+# ─── Equality, Append, and Membership ───
 
-    assert(Array.length(single) == 1)
-    assert(single[0] == 42)
+@test
+function void test_array_equality() {
+    array<integer> original = [1, 2, 3]
+    array<integer> same_elements = [1, 2, 3]
+    array<integer> different_last = [1, 2, 4]
+
+    assert(original == same_elements)
+    assert(original != different_last)
 }
 
 @test
-function void test_array_boolean() {
-    array<boolean> flags = [true, false, true]
+function void test_array_append() {
+    mutable array<integer> values = [1, 2]
+    values = Array.push(values, 3)
 
-    assert(flags[0])
-    assert(!flags[1])
-    assert(flags[2])
+    assert(Array.length(values) == 3)
+    assert(values[2] == 3)
+}
+
+@test
+function void test_array_contains() {
+    array<string> fruits = ["apple", "banana", "cherry"]
+
+    assert(Array.contains(fruits, "banana"))
+    assert(!Array.contains(fruits, "grape"))
 }

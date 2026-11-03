@@ -24,12 +24,25 @@ suite("Built-in type list", () => {
         assert.ok(LUMA_BUILTIN_TYPE_SET.size > 0, "LUMA_BUILTIN_TYPE_SET should not be empty");
     });
 
-    test("TextMate `type` pattern matches the generated built-in type set", () => {
-        const types = extractTypeAlternation(grammar.repository.type.match).sort();
+    test("TextMate `type` patterns together match the generated built-in type set", () => {
+        // Reserved keywords and the contextual (identifier-lexed) names live in
+        // separate sub-patterns; together they must cover the whole set.
+        const patterns = grammar.repository.type.patterns as { match: string }[];
+        const types = [...new Set(patterns.flatMap((p) => extractTypeAlternation(p.match)))].sort();
         assert.deepStrictEqual(
             types,
             expected,
-            "luma.tmLanguage.json `type` pattern has drifted from builtin-types.json — " +
+            "luma.tmLanguage.json `type` patterns have drifted from builtin-types.json — " +
+                "re-run generate-builtin-types.py and update the grammar in tandem.",
+        );
+    });
+
+    test("TextMate `builtin_type_name` pattern matches the generated built-in type set", () => {
+        const types = extractTypeAlternation(grammar.repository.builtin_type_name.match).sort();
+        assert.deepStrictEqual(
+            types,
+            expected,
+            "luma.tmLanguage.json `builtin_type_name` pattern has drifted from builtin-types.json — " +
                 "re-run generate-builtin-types.py and update the grammar in tandem.",
         );
     });

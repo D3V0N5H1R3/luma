@@ -2,7 +2,7 @@
 #include "fuzz_pipeline.hpp"
 
 // LibFuzzer entry point for the Luma VM.
-// Exercises the full pipeline: lex → parse → resolve → type-check → compile →
+// Exercises the full pipeline: lex → parse → type-check → compile →
 // execute.  Uses sandboxed stdlib registration and tight resource limits to
 // prevent runaway execution.
 extern "C" int LLVMFuzzerInitialize(int* /*argc*/, char*** /*argv*/) {
@@ -12,6 +12,6 @@ extern "C" int LLVMFuzzerInitialize(int* /*argc*/, char*** /*argv*/) {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_vm_input_size,
+        data, size, luma::fuzz::k_max_vm_input_size,
         [&](const std::string& input) { luma::fuzz::run_full_pipeline(input); });
 }

@@ -1,10 +1,13 @@
 #include "breakpoint_manager.hpp"
 
 #include <filesystem>
+#include <format>
 
 #include "analysis/source/source_manager.hpp"
 #include "dap_breakpoint_validator.hpp"
 #include "dap_types.hpp"
+#include "debugger_messages.hpp"
+#include "diagnostic_log.hpp"
 #include "runtime/compiler/chunk.hpp"
 
 namespace luma::dap {
@@ -68,24 +71,23 @@ void BreakpointManager::preload_canonical_paths() {
 
 // ─── Resolution after compilation ───
 
-void BreakpointManager::resolve_pending_breakpoints() {
-    line_mgr_.resolve_pending_breakpoints();
+std::vector<Breakpoint> BreakpointManager::resolve_pending_breakpoints() {
+    auto newly_bound = line_mgr_.resolve_pending_breakpoints();
 
-    if (diagnostic_fn_) {
-        for (const auto& path : line_mgr_.get_unresolved_paths()) {
-            diagnostic_fn_("Breakpoint in '" + path +
-                           "' could not be resolved: file not found in compiled program");
-        }
+    for (const auto& path : line_mgr_.get_unresolved_paths()) {
+        report_or_log(diagnostic_fn_, std::format(messages::breakpoint::unresolved_format, path),
+                      "DAP: ");
     }
 
     update_breakpoints_active_flag();
+    return newly_bound;
 }
 
 // ─── Runtime check ───
 
 BreakpointManager::BreakpointCheckResult
 BreakpointManager::check_breakpoint(int file_id, int line,
-                                    const ConditionEvaluatorFn& eval_condition) const {
+                                    const ConditionEvaluatorFn& eval_condition) {
     // Phase 1: snapshot every breakpoint bound to this line (distinct requested
     // lines can snap to the same executable line) *without* recording a hit — a
     // conditional breakpoint only counts as hit when its condition holds.
@@ -97,8 +99,13 @@ BreakpointManager::check_breakpoint(int file_id, int line,
         matches = line_mgr_.find_matching_breakpoints(file_id, line);
     }
 
-    // Evaluate each breakpoint in turn; the first one that fully qualifies
-    // (condition holds AND hit condition satisfied) determines the stop / log.
+    // Evaluate every breakpoint bound to the line: each qualifying logpoint
+    // logs, each qualifying breakpoint records its hit, and the line stops if
+    // any non-logpoint qualifies.  Returning at the first qualifier would let a
+    // logpoint hide a real breakpoint on the same line and leave the others'
+    // hit counts unadvanced.
+    BreakpointCheckResult result;
+
     for (const auto& match : matches) {
         // Phase 2: evaluate the condition against the live frame, outside the
         // leaf lock.  A false condition is not a hit and must not advance the
@@ -132,40 +139,21 @@ BreakpointManager::check_breakpoint(int file_id, int line,
             }
         }
 
-        BreakpointCheckResult result;
-
         if (!match.log_message.empty()) {
-            result.log_message = match.log_message;
-            result.hit_breakpoint_id = match.id;
-            return result;
+            result.log_messages.push_back(match.log_message);
+            continue;
         }
 
-        result.should_break = true;
-        result.hit_breakpoint_id = match.id;
-        return result;
+        if (!result.should_break) {
+            result.should_break = true;
+            result.hit_breakpoint_id = match.id;
+        }
     }
 
-    return {};
+    return result;
 }
 
 // ─── Queries ───
-
-bool BreakpointManager::has_breakpoints_in_file(const std::string& source_path) const {
-    const auto abs_path = std::filesystem::absolute(source_path).string();
-    const std::scoped_lock lock(ctx_.mutex);
-    const int file_id = ctx_.find_file_id(abs_path);
-
-    if (file_id < 0) {
-        return false;
-    }
-
-    return line_mgr_.has_breakpoints_for_file_id(file_id);
-}
-
-bool BreakpointManager::has_breakpoints_for_file_id(int file_id) const {
-    const std::scoped_lock lock(ctx_.mutex);
-    return line_mgr_.has_breakpoints_for_file_id(file_id);
-}
 
 std::vector<int> BreakpointManager::get_breakpoint_locations(const std::string& path,
                                                              int start_line, int end_line) const {

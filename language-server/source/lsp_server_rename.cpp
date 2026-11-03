@@ -94,7 +94,6 @@ JsonValue LspRenameHandler::handle_rename(const JsonValue& params) {
         const auto& uri = ctx.uri;
 
         const auto& result_ref = *ctx.result;
-        const auto& tokens = result_ref.semantic.tokens;
         const auto& target_token = *ctx.token;
 
         // Do not rename stdlib modules.
@@ -104,19 +103,15 @@ JsonValue LspRenameHandler::handle_rename(const JsonValue& params) {
 
         const std::string target_name = target_token.lexeme;
 
-        // Detect namespace prefix at cursor position for namespace-aware rename.
-        std::string rename_ns;
-        {
-            const std::size_t ti = ctx.token_idx;
-            if (auto ns = extract_namespace_prefix(tokens, ti)) {
-                rename_ns = std::move(*ns);
-            }
-        }
+        // Namespace-aware rename: the explicit `Ns.` receiver at the cursor, or
+        // the enclosing namespace when the cursor is on one of its members
+        // (e.g. on the declaration inside `namespace Ns { … }`).
+        const std::string rename_ns = target_namespace_prefix(result_ref, ctx.token_idx);
 
         // Scope-aware rename.
         // For local variables: restrict to same function scope.
         // For top-level names: rename across all cached documents.
-        const bool is_local = is_local_variable(result_ref, target_name);
+        const bool is_local = rename_ns.empty() && is_local_variable(result_ref, target_name);
         const auto enclosing_fn =
             is_local ? find_enclosing_function(result_ref, target_token.location.line)
                      : std::nullopt;

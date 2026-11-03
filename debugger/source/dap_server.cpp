@@ -1,11 +1,13 @@
 #include "dap_server.hpp"
 
+#include <string_view>
 #include <type_traits>
 
 #include "dap_helpers.hpp"
 #include "dap_response_builders.hpp"
 #include "dap_types.hpp"
 #include "debug_session.hpp"
+#include "diagnostic_log.hpp"
 
 namespace luma::dap {
 
@@ -26,6 +28,17 @@ DapServer::DapServer(protocol::Transport& transport)
         if (ctx_.has_session()) {
             ctx_.session->terminate();
         }
+    });
+
+    // Framing/JSON errors the transport reports must not go to std::cerr: while
+    // a program runs, std::cerr is redirected into output events attributed to
+    // the debuggee (and swapped by the execution thread).
+    transport.set_error_callback([](std::string_view message) {
+        while (message.ends_with('\n')) {
+            message.remove_suffix(1);
+        }
+
+        write_adapter_diagnostic(message);
     });
 
     init_dispatch_table();
@@ -103,9 +116,9 @@ void DapServer::init_dispatch_table() {
     make_handler("exceptionInfo",
                  [this](const JsonValue& a) { return inspection_.handle_exception_info(a); });
 
-    // --- Step targets ---
-    make_handler("stepInTargets",
-                 [this](const JsonValue& a) { return inspection_.handle_step_in_targets(a); });
+    // --- Completions (debug console) ---
+    make_handler("completions",
+                 [this](const JsonValue& a) { return inspection_.handle_completions(a); });
 
     // --- Custom Luma extensions ---
     make_handler("luma/concurrencyState",
@@ -128,14 +141,12 @@ DapProtocolHandler::HandlerResult DapServer::convert_result(HandlerResult result
     switch (result.post_action) {
         case PostResponseAction::SendInitialized:
             proto_result.post_response_action = [this]() {
-                protocol_handler_.send_event(std::string{kEventInitialized},
+                protocol_handler_.send_event(std::string{k_event_initialized},
                                              JsonValue(JsonValue::ObjectType{}));
             };
             break;
         case PostResponseAction::Disconnect:
-            proto_result.post_response_action = [this]() {
-                protocol_handler_.signal_disconnect();
-            };
+            proto_result.post_response_action = [this]() { protocol_handler_.signal_disconnect(); };
             break;
         case PostResponseAction::None:
             break;

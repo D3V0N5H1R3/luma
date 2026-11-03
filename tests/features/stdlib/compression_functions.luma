@@ -5,6 +5,41 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# Exhaustive match over every Compression.Format variant.
+function string format_label(Compression.Format format) {
+    return match format {
+        case Compression.Format.Deflate { "deflate" }
+        case Compression.Format.Gzip    { "gzip" }
+        case Compression.Format.Zlib    { "zlib" }
+        case Compression.Format.Rle     { "rle" }
+    }
+}
+
+# Exhaustive match over every Compression.Error variant.  Beyond labelling a
+# category, this doubles as a check that Compression.Error is fully registered,
+# exhaustively matchable, and usable as a parameter type annotation.
+function string compression_error_label(Compression.Error category) {
+    return match category {
+        case Compression.Error.Corrupt           { "corrupt" }
+        case Compression.Error.Truncated         { "truncated" }
+        case Compression.Error.UnsupportedFormat { "unsupported_format" }
+        case Compression.Error.TooLarge          { "too_large" }
+    }
+}
+
+function string typed_outcome_label(result<string, Compression.Error> decoded) {
+    return match decoded {
+        success(_data) { "unexpected_success" }
+        failure(category) { compression_error_label(category) }
+    }
+}
+
+function void delete_if_present(string path) {
+    boolean _deleted = Result.unwrap_or(FileSystem.delete(path), false)
+}
+
+# ─── Run-length encoding ─────────────────────────────────
+
 @test
 function void test_compression_rle_encode() {
     assert(Compression.encode_rle("aaabbbcc") == "3a3b2c")
@@ -14,16 +49,17 @@ function void test_compression_rle_encode() {
 
 @test
 function void test_compression_rle_decode() {
-    result<string> r = Compression.decode_rle("3a3b2c")
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == "aaabbbcc")
+    result<string> decoded = Compression.decode_rle("3a3b2c")
+
+    assert(decoded == success("aaabbbcc"))
 }
 
 @test
 function void test_compression_rle_roundtrip() {
     string original = "aabbccddee"
-    string encoded = Compression.encode_rle(original)
-    string decoded = encoded
+
+    string decoded = original
+    |> Compression.encode_rle()
     |> Compression.decode_rle()
     |> Result.unwrap()
 
@@ -31,8 +67,25 @@ function void test_compression_rle_roundtrip() {
 }
 
 @test
+function void test_compression_rle_long_run() {
+    # Runs longer than 9 are split into single-digit chunks.
+    string twelve_as = "aaaaaaaaaaaa"
+
+    string encoded = Compression.encode_rle(twelve_as)
+    string decoded = encoded
+    |> Compression.decode_rle()
+    |> Result.unwrap()
+
+    assert(encoded == "9a3a")
+    assert(decoded == twelve_as)
+}
+
+# ─── Deflate and gzip ────────────────────────────────────
+
+@test
 function void test_compression_deflate_inflate() {
     string original = "hello world"
+
     string roundtripped = original
     |> Compression.deflate()
     |> Compression.inflate()
@@ -44,6 +97,7 @@ function void test_compression_deflate_inflate() {
 @test
 function void test_compression_gzip_gunzip() {
     string original = "test data 12345"
+
     string roundtripped = original
     |> Compression.gzip()
     |> Compression.gunzip()
@@ -54,72 +108,55 @@ function void test_compression_gzip_gunzip() {
 
 @test
 function void test_compression_compressed_size() {
-    integer size = Compression.compressed_size("hello world")
+    # compressed_size reports the byte size of the deflate encoding.
+    string original = "hello world"
+
+    integer size = Compression.compressed_size(original)
 
     assert(size > 0)
+    assert(size == String.byte_length(Compression.deflate(original)))
+}
+
+@test
+function void test_compression_compressed_size_smaller() {
+    string repetitive = Result.unwrap_or(String.repeat("A", 1000), "")
+
+    integer size = Compression.compressed_size(repetitive)
+
+    assert(size > 0)
+    assert(size < String.length(repetitive))
 }
 
 @test
 function void test_compression_inflate_malformed() {
-    result<string> r = Compression.inflate("not valid deflate")
+    result<string> inflated = Compression.inflate("not valid deflate")
 
-    assert(!Result.is_success(r))
+    assert(Result.is_failure(inflated))
 }
 
-@test
-function void test_compression_gzip_file() {
-    result<string> r = Compression.gzip_file("nonexistent_file.txt", "out.gz")
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_compression_gunzip_file() {
-    result<string> r = Compression.gunzip_file("nonexistent_file.gz")
-
-    assert(!Result.is_success(r))
-}
-
-# ───────────────────────────────────────────────────────────
-# deflate_with, gzip_with (level-controlled variants)
-# ───────────────────────────────────────────────────────────
+# ─── Level-controlled variants ───────────────────────────
 
 @test
 function void test_compression_deflate_with_round_trip() {
     string original = "hello world hello world hello world"
+
     string deflated = Result.unwrap(Compression.deflate_with(original, 9))
 
     assert(String.length(deflated) > 0)
-    assert(Result.unwrap(Compression.inflate(deflated)) == original)
+    assert(Compression.inflate(deflated) == success(original))
 }
 
 @test
 function void test_compression_gzip_with_round_trip() {
     string original = "hello world hello world hello world"
+
     string gzipped = Result.unwrap(Compression.gzip_with(original, 6))
 
     assert(String.length(gzipped) > 0)
-    assert(Result.unwrap(Compression.gunzip(gzipped)) == original)
+    assert(Compression.gunzip(gzipped) == success(original))
 }
 
-@test
-function void test_compression_gzip_file_with() {
-    assert(Result.is_success(
-        FileSystem.write_file("_test_gzip_src.txt", "hello hello hello hello")))
-
-    assert(Result.is_success(
-        Compression.gzip_file_with("_test_gzip_src.txt", "_test_gzip_out.gz", 6)))
-    assert(Result.unwrap(FileSystem.exists("_test_gzip_out.gz")))
-
-    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_gzip_src.txt"), false)
-
-    _ = Result.unwrap_or(FileSystem.delete("_test_gzip_out.gz"), false)
-}
-
-# ───────────────────────────────────────────────────────────
-# Additional positive coverage: empty, varied bytes, large
-# (multi-chunk) payloads, long RLE runs, real file round-trips.
-# ───────────────────────────────────────────────────────────
+# ─── Edge cases: empty, varied and large payloads ────────
 
 @test
 function void test_compression_deflate_inflate_empty() {
@@ -144,6 +181,7 @@ function void test_compression_gzip_gunzip_empty() {
 @test
 function void test_compression_deflate_varied_content() {
     string original = "Tab\tNewline\nUnicode: café ☕ 日本語 — end."
+
     string roundtripped = original
     |> Compression.deflate()
     |> Compression.inflate()
@@ -157,6 +195,7 @@ function void test_compression_large_deflate_roundtrip() {
     # Regression: data decompressing to many times its compressed size used to
     # fail because inflate assumed the whole output fit in a single buffer.
     string original = Result.unwrap_or(String.repeat("The quick brown fox. ", 5000), "")
+
     assert(String.length(original) > 64000)
 
     string roundtripped = original
@@ -170,6 +209,7 @@ function void test_compression_large_deflate_roundtrip() {
 @test
 function void test_compression_large_gzip_roundtrip() {
     string original = Result.unwrap_or(String.repeat("abcdefghij", 12000), "")
+
     assert(String.length(original) > 64000)
 
     string roundtripped = original
@@ -180,95 +220,115 @@ function void test_compression_large_gzip_roundtrip() {
     assert(roundtripped == original)
 }
 
+# ─── File compression ────────────────────────────────────
+# ctest runs suites in parallel from the repository root, so every file name
+# carries this suite's and test's name to stay unique.  Files are deleted
+# before the assertions so a failing assertion cannot leave them behind.
+
 @test
-function void test_compression_rle_long_run() {
-    # Runs longer than 9 are split into single-digit chunks.
-    string encoded = Compression.encode_rle("aaaaaaaaaaaa") # 12 x 'a'
-    assert(encoded == "9a3a")
+function void test_compression_gzip_file_missing_input_fails() {
+    string output_path = "_test_compression_missing_input_output.gz"
 
-    string decoded = encoded
-    |> Compression.decode_rle()
-    |> Result.unwrap()
+    result<string> gzipped =
+        Compression.gzip_file("_test_compression_no_such_file.txt", output_path)
+    result<boolean> has_output = FileSystem.exists(output_path)
+    delete_if_present(output_path)
 
-    assert(decoded == "aaaaaaaaaaaa")
+    assert(Result.is_failure(gzipped))
+    assert(has_output == success(false), "no output file is created for a missing input")
 }
 
 @test
-function void test_compression_compressed_size_smaller() {
-    string repetitive = Result.unwrap_or(String.repeat("A", 1000), "")
-    integer size = Compression.compressed_size(repetitive)
+function void test_compression_gunzip_file_missing_input_fails() {
+    result<string> gunzipped = Compression.gunzip_file("_test_compression_no_such_file.gz")
 
-    assert(size > 0)
-    assert(size < String.length(repetitive))
+    assert(Result.is_failure(gunzipped))
+}
+
+@test
+function void test_compression_gzip_file_with() {
+    string source_path = "_test_compression_gzip_file_with_source.txt"
+    string output_path = "_test_compression_gzip_file_with_output.gz"
+    string original = "hello hello hello hello"
+
+    result<boolean> written = FileSystem.write_file(source_path, original)
+    result<string> gzipped = Compression.gzip_file_with(source_path, output_path, 6)
+    result<boolean> has_output = FileSystem.exists(output_path)
+    result<string> restored = Compression.gunzip_file(output_path)
+    delete_if_present(source_path)
+    delete_if_present(output_path)
+
+    assert(Result.is_success(written))
+    assert(Result.is_success(gzipped))
+    assert(has_output == success(true))
+    assert(restored == success(original))
 }
 
 @test
 function void test_compression_gzip_file_gunzip_file_roundtrip() {
+    string source_path = "_test_compression_file_roundtrip_source.txt"
+    string output_path = "_test_compression_file_roundtrip_output.gz"
     string original = "round trip through the file system"
-    assert(Result.is_success(FileSystem.write_file("_test_rt_src.txt", original)))
 
-    assert(Result.is_success(Compression.gzip_file("_test_rt_src.txt", "_test_rt_out.gz")))
+    result<boolean> written = FileSystem.write_file(source_path, original)
+    result<string> gzipped = Compression.gzip_file(source_path, output_path)
+    result<string> restored = Compression.gunzip_file(output_path)
+    delete_if_present(source_path)
+    delete_if_present(output_path)
 
-    string restored = Result.unwrap(Compression.gunzip_file("_test_rt_out.gz"))
-    assert(restored == original)
-
-    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_rt_src.txt"), false)
-
-    _ = Result.unwrap_or(FileSystem.delete("_test_rt_out.gz"), false)
+    assert(Result.is_success(written))
+    assert(Result.is_success(gzipped))
+    assert(restored == success(original))
 }
 
-# ───────────────────────────────────────────────────────────
-# Additional negative coverage: malformed RLE / gzip input and
-# out-of-range compression levels.
-# ───────────────────────────────────────────────────────────
+# ─── Malformed input and invalid levels ──────────────────
 
 @test
 function void test_compression_decode_rle_zero_count() {
-    assert(!Result.is_success(Compression.decode_rle("0a")))
+    assert(Result.is_failure(Compression.decode_rle("0a")))
 }
 
 @test
 function void test_compression_decode_rle_missing_char() {
-    assert(!Result.is_success(Compression.decode_rle("3")))
+    assert(Result.is_failure(Compression.decode_rle("3")))
 }
 
 @test
 function void test_compression_decode_rle_no_digit() {
-    assert(!Result.is_success(Compression.decode_rle("aaa")))
+    assert(Result.is_failure(Compression.decode_rle("aaa")))
 }
 
 @test
 function void test_compression_gunzip_bad_magic() {
-    assert(!Result.is_success(Compression.gunzip("this is definitely not gzip data!!")))
+    assert(Result.is_failure(Compression.gunzip("this is definitely not gzip data!!")))
 }
 
 @test
 function void test_compression_gunzip_too_short() {
-    assert(!Result.is_success(Compression.gunzip("short")))
+    assert(Result.is_failure(Compression.gunzip("short")))
 }
 
 @test
 function void test_compression_deflate_with_invalid_level() {
-    assert(!Result.is_success(Compression.deflate_with("data", 0)))
-    assert(!Result.is_success(Compression.deflate_with("data", 10)))
+    # The runtime accepts levels 1–9.
+    assert(Result.is_failure(Compression.deflate_with("data", 0)))
+    assert(Result.is_failure(Compression.deflate_with("data", 10)))
 }
 
 @test
 function void test_compression_gzip_with_invalid_level() {
-    assert(!Result.is_success(Compression.gzip_with("data", 0)))
-    assert(!Result.is_success(Compression.gzip_with("data", 99)))
+    # The runtime accepts levels 1–9.
+    assert(Result.is_failure(Compression.gzip_with("data", 0)))
+    assert(Result.is_failure(Compression.gzip_with("data", 99)))
 }
 
-# ───────────────────────────────────────────────────────────
-# Compression.Format + generic Compression.compress/decompress.
-#
+# ─── Compression.Format with compress/decompress ─────────
 # The per-algorithm functions above (deflate/inflate, gzip/gunzip,
 # encode_rle/decode_rle) remain the primary API.  Compression.compress and
 # Compression.decompress exist for callers that decide the algorithm at
 # runtime — e.g. from user input or config — and would otherwise need a
 # hand-written switch over algorithm names, mirroring Hash.Algorithm +
 # Hash.digest.
-# ───────────────────────────────────────────────────────────
 
 @test
 function void test_compression_compress_deflate_matches_direct() {
@@ -296,130 +356,114 @@ function void test_compression_compress_rle_matches_direct() {
 @test
 function void test_compression_decompress_deflate_roundtrip() {
     string original = "hello world"
-    string compressed = Compression.compress(original, Compression.Format.Deflate)
-    string roundtripped =
-        Result.unwrap(Compression.decompress(compressed, Compression.Format.Deflate))
 
-    assert(roundtripped == original)
+    string compressed = Compression.compress(original, Compression.Format.Deflate)
+    result<string> roundtripped = Compression.decompress(compressed, Compression.Format.Deflate)
+
+    assert(roundtripped == success(original))
 }
 
 @test
 function void test_compression_decompress_gzip_roundtrip() {
     string original = "hello world"
-    string compressed = Compression.compress(original, Compression.Format.Gzip)
-    string roundtripped = Result.unwrap(Compression.decompress(compressed, Compression.Format.Gzip))
 
-    assert(roundtripped == original)
+    string compressed = Compression.compress(original, Compression.Format.Gzip)
+    result<string> roundtripped = Compression.decompress(compressed, Compression.Format.Gzip)
+
+    assert(roundtripped == success(original))
 }
 
 @test
 function void test_compression_decompress_rle_roundtrip() {
     string original = "aaabbbcc"
-    string compressed = Compression.compress(original, Compression.Format.Rle)
-    string roundtripped = Result.unwrap(Compression.decompress(compressed, Compression.Format.Rle))
 
-    assert(roundtripped == original)
+    string compressed = Compression.compress(original, Compression.Format.Rle)
+    result<string> roundtripped = Compression.decompress(compressed, Compression.Format.Rle)
+
+    assert(roundtripped == success(original))
 }
 
 @test
 function void test_compression_decompress_malformed_fails_per_format() {
-    assert(!Result.is_success(
+    assert(Result.is_failure(
         Compression.decompress("not valid deflate", Compression.Format.Deflate)))
-    assert(!Result.is_success(
+    assert(Result.is_failure(
         Compression.decompress("not a valid gzip stream!!", Compression.Format.Gzip)))
-    assert(!Result.is_success(Compression.decompress("0a", Compression.Format.Rle)))
+    assert(Result.is_failure(Compression.decompress("0a", Compression.Format.Rle)))
 }
 
-# Exhaustive match over Compression.Format, exercised through the generic
-# compress/decompress entry points — the "algorithm decided at runtime" path.
 @test
 function void test_compression_format_runtime_dispatch() {
+    # The "algorithm decided at runtime" path: every variant round-trips
+    # through the generic compress/decompress entry points.
     array<Compression.Format> formats = [
         Compression.Format.Deflate,
         Compression.Format.Gzip,
         Compression.Format.Zlib,
         Compression.Format.Rle
     ]
-
     string original = "aaabbbcc round trip"
+    mutable array<string> labels = []
 
     for format in formats {
-        string label = match format {
-            case Compression.Format.Deflate { "deflate" }
-            case Compression.Format.Gzip { "gzip" }
-            case Compression.Format.Zlib { "zlib" }
-            case Compression.Format.Rle { "rle" }
-        }
-
-        assert(String.length(label) > 0)
-
         string compressed = Compression.compress(original, format)
-        string roundtripped = Result.unwrap(Compression.decompress(compressed, format))
+        result<string> roundtripped = Compression.decompress(compressed, format)
 
-        assert(roundtripped == original)
+        assert(roundtripped == success(original), "${format_label(format)} round-trips")
+        labels = Array.push(labels, format_label(format))
     }
+
+    assert(labels == ["deflate", "gzip", "zlib", "rle"])
 }
 
-# ─── Compression.Error (opt-in typed decompression errors) ───
-
-# Exhaustive match over every Compression.Error variant.  Beyond labelling a
-# category, this doubles as a check that Compression.Error is fully registered,
-# exhaustively matchable, and usable as a parameter type annotation.
-function string compression_error_label(Compression.Error e) {
-    return match e {
-        case Compression.Error.Corrupt           { "corrupt" }
-        case Compression.Error.Truncated         { "truncated" }
-        case Compression.Error.UnsupportedFormat { "unsupported_format" }
-        case Compression.Error.TooLarge          { "too_large" }
-    }
-}
+# ─── Compression.Error (opt-in typed decompression errors) ─
 
 @test
 function void test_compression_gunzip_typed_success() {
-    string gz = Compression.gzip("typed hello")
-    result<string, Compression.Error> r = Compression.gunzip_typed(gz)
+    string gzipped = Compression.gzip("typed hello")
 
-    assert(Result.is_success(r), "gunzip_typed decodes a valid gzip stream")
-    assert(Result.unwrap(r) == "typed hello")
+    result<string, Compression.Error> decoded = Compression.gunzip_typed(gzipped)
+
+    assert(Result.is_success(decoded), "gunzip_typed decodes a valid gzip stream")
+    assert(Result.unwrap(decoded) == "typed hello")
 }
 
 @test
 function void test_compression_gunzip_typed_unsupported_format() {
     # A 20-byte blob with the wrong magic is classified as UnsupportedFormat.
-    result<string, Compression.Error> r = Compression.gunzip_typed("not a gzip stream!!!")
+    result<string, Compression.Error> decoded = Compression.gunzip_typed("not a gzip stream!!!")
 
-    string label = match r {
-        success(_s) { "unexpected_success" }
-        failure(e) { compression_error_label(e) }
-    }
+    assert(typed_outcome_label(decoded) == "unsupported_format",
+        "wrong magic classifies as UnsupportedFormat")
+}
 
-    assert(label == "unsupported_format", "wrong magic classifies as UnsupportedFormat")
+@test
+function void test_compression_gunzip_typed_truncated() {
+    # A valid gzip stream cut off part-way through ends before a complete unit
+    # was decoded.
+    string gzipped = Compression.gzip("hello world hello world")
+    string truncated = String.substring(gzipped, 0, 15)
+
+    result<string, Compression.Error> decoded = Compression.gunzip_typed(truncated)
+
+    assert(String.byte_length(truncated) < String.byte_length(gzipped))
+    assert(typed_outcome_label(decoded) == "truncated", "a cut-off stream classifies as Truncated")
 }
 
 @test
 function void test_compression_inflate_typed_corrupt() {
-    result<string, Compression.Error> r = Compression.inflate_typed("not valid deflate data")
+    result<string, Compression.Error> decoded = Compression.inflate_typed("not valid deflate data")
 
-    string label = match r {
-        success(_s) { "unexpected_success" }
-        failure(e) { compression_error_label(e) }
-    }
-
-    assert(label == "corrupt", "malformed deflate classifies as Corrupt")
+    assert(typed_outcome_label(decoded) == "corrupt", "malformed deflate classifies as Corrupt")
 }
 
 @test
 function void test_compression_decompress_typed_rle_corrupt() {
     # A zero run-count is a malformed RLE stream.
-    result<string, Compression.Error> r =
+    result<string, Compression.Error> decoded =
         Compression.decompress_typed("0a", Compression.Format.Rle)
 
-    string label = match r {
-        success(_s) { "unexpected_success" }
-        failure(e) { compression_error_label(e) }
-    }
-
-    assert(label == "corrupt", "a zero RLE count classifies as Corrupt")
+    assert(typed_outcome_label(decoded) == "corrupt", "a zero RLE count classifies as Corrupt")
 }
 
 @test
@@ -427,89 +471,75 @@ function void test_compression_decompress_typed_roundtrip_all_formats() {
     array<Compression.Format> formats = [
         Compression.Format.Deflate,
         Compression.Format.Gzip,
+        Compression.Format.Zlib,
         Compression.Format.Rle
     ]
-
     string original = "aaabbbcc typed round trip"
 
     for format in formats {
         string compressed = Compression.compress(original, format)
-        result<string, Compression.Error> r = Compression.decompress_typed(compressed, format)
+        result<string, Compression.Error> decoded = Compression.decompress_typed(compressed, format)
 
-        assert(Result.is_success(r), "decompress_typed round-trips every format")
-        assert(Result.unwrap(r) == original)
+        assert(Result.is_success(decoded), "decompress_typed round-trips ${format_label(format)}")
+        assert(Result.unwrap(decoded) == original)
     }
 }
 
-# ─── Zlib (RFC 1950) ───
+# ─── Zlib (RFC 1950) ─────────────────────────────────────
 
 @test
 function void test_compression_zlib_roundtrip() {
     string original = "hello zlib world, hello zlib world"
-    string compressed = Compression.zlib_compress(original)
-    string restored = Result.unwrap(Compression.zlib_decompress(compressed))
 
-    assert(restored == original)
-    # zlib output differs from raw deflate (it has a header/trailer)
-    assert(compressed != Compression.deflate(original))
+    string compressed = Compression.zlib_compress(original)
+    result<string> restored = Compression.zlib_decompress(compressed)
+
+    assert(restored == success(original))
+    assert(compressed != Compression.deflate(original), "zlib adds a header and trailer")
 }
 
 @test
 function void test_compression_zlib_compress_with() {
     string original = "aaaaaaaaaabbbbbbbbbbcccccccccc"
+
     string compressed = Result.unwrap(Compression.zlib_compress_with(original, 9))
 
-    assert(Result.unwrap(Compression.zlib_decompress(compressed)) == original)
-    # Invalid level fails
-    assert(Result.is_failure(Compression.zlib_compress_with(original, 99)))
+    assert(Compression.zlib_decompress(compressed) == success(original))
+    assert(Result.is_failure(Compression.zlib_compress_with(original, 99)),
+        "an out-of-range level fails")
 }
 
 @test
 function void test_compression_zlib_via_format() {
     string original = "dispatch through Compression.Format.Zlib"
-    string compressed = Compression.compress(original, Compression.Format.Zlib)
-    string restored = Result.unwrap(Compression.decompress(compressed, Compression.Format.Zlib))
 
-    assert(restored == original)
+    string compressed = Compression.compress(original, Compression.Format.Zlib)
+    result<string> restored = Compression.decompress(compressed, Compression.Format.Zlib)
+
+    assert(restored == success(original))
     assert(compressed == Compression.zlib_compress(original))
 }
 
 @test
 function void test_compression_zlib_decompress_typed() {
     string compressed = Compression.zlib_compress("typed zlib")
-    result<string, Compression.Error> r = Compression.zlib_decompress_typed(compressed)
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == "typed zlib")
 
-    # Malformed input classifies as an error
-    result<string, Compression.Error> bad = Compression.zlib_decompress_typed("not zlib data")
-    assert(Result.is_failure(bad))
+    result<string, Compression.Error> decoded = Compression.zlib_decompress_typed(compressed)
+    result<string, Compression.Error> malformed = Compression.zlib_decompress_typed("not zlib data")
+
+    assert(Result.is_success(decoded))
+    assert(Result.unwrap(decoded) == "typed zlib")
+    assert(typed_outcome_label(malformed) == "corrupt", "malformed zlib classifies as Corrupt")
 }
 
 @test
 function void test_compression_detect_format() {
-    string gzipped = Compression.gzip("detect me")
-    optional<Compression.Format> gz = Compression.detect_format(gzipped)
-    assert(Optional.is_some(gz))
-    string gz_label = match Optional.unwrap(gz) {
-        case Compression.Format.Gzip { "gzip" }
-        case Compression.Format.Zlib { "zlib" }
-        case Compression.Format.Deflate { "deflate" }
-        case Compression.Format.Rle { "rle" }
-    }
-    assert(gz_label == "gzip")
+    optional<Compression.Format> gzip_format = Compression.detect_format(Compression.gzip("detect"))
+    optional<Compression.Format> zlib_format =
+        Compression.detect_format(Compression.zlib_compress("detect"))
 
-    string zlibbed = Compression.zlib_compress("detect me")
-    optional<Compression.Format> zl = Compression.detect_format(zlibbed)
-    assert(Optional.is_some(zl))
-    string zl_label = match Optional.unwrap(zl) {
-        case Compression.Format.Gzip { "gzip" }
-        case Compression.Format.Zlib { "zlib" }
-        case Compression.Format.Deflate { "deflate" }
-        case Compression.Format.Rle { "rle" }
-    }
-    assert(zl_label == "zlib")
-
-    # Unrecognised container returns none
-    assert(Optional.is_none(Compression.detect_format("plain text")))
+    assert(format_label(Optional.unwrap(gzip_format)) == "gzip")
+    assert(format_label(Optional.unwrap(zlib_format)) == "zlib")
+    assert(Optional.is_none(Compression.detect_format("plain text")),
+        "an unrecognised container is none")
 }

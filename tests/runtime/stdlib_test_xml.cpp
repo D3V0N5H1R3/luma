@@ -1,7 +1,15 @@
 // Standard library tests: Xml.
 
+#include <cstddef>
+#include <string>
+
 #include "common/resource_limits.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
+using luma::test::LumaTempFile;
 
 static void test_xml_add_child() {
     const auto v = eval("Xml.child_count(Xml.add_child("
@@ -84,7 +92,7 @@ static void test_xml_module() {
 }
 
 static void test_xml_parse_serialize() {
-    auto result = eval(
+    const auto result = eval(
         "Xml.deserialize(\"<root><item>hello</item></root>\") |> Result.unwrap() |> Xml.tag()");
 
     ASSERT_EQ(result.as_string(), "root");
@@ -95,7 +103,7 @@ static void test_xml_serialize_pretty() {
         eval("Xml.serialize_pretty(Result.unwrap(Xml.deserialize(\"<root><a/></root>\")))");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().find('\n') != std::string::npos);
+    ASSERT_NE(v.as_string().find('\n'), std::string::npos);
 }
 
 static void test_xml_set_attribute() {
@@ -144,7 +152,7 @@ static void test_xml_attributes_dict() {
 
     const auto* x = v.as_dictionary()->find("x");
 
-    ASSERT_TRUE(x != nullptr);
+    ASSERT_NE(x, nullptr);
     ASSERT_EQ(x->as_string(), "1");
 }
 
@@ -152,14 +160,14 @@ static void test_xml_set_cdata_serialize() {
     const auto v = eval("Xml.serialize(Xml.set_cdata(Xml.element(\"s\"), \"a<b\"))");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().find("<![CDATA[a<b]]>") != std::string::npos);
+    ASSERT_NE(v.as_string().find("<![CDATA[a<b]]>"), std::string::npos);
 }
 
 static void test_xml_add_comment_serialize() {
     const auto v = eval("Xml.serialize(Xml.add_comment(Xml.element(\"d\"), \"hi\"))");
 
     ASSERT_TRUE(v.is_string());
-    ASSERT_TRUE(v.as_string().find("<!--hi-->") != std::string::npos);
+    ASSERT_NE(v.as_string().find("<!--hi-->"), std::string::npos);
 }
 
 static void test_xml_to_dictionary() {
@@ -171,7 +179,7 @@ static void test_xml_to_dictionary() {
 
     const auto* a = v.as_dictionary()->find("a");
 
-    ASSERT_TRUE(a != nullptr);
+    ASSERT_NE(a, nullptr);
     ASSERT_EQ(a->as_string(), "1");
 }
 
@@ -262,7 +270,7 @@ static void test_xml_find_all_descendants() {
 static void test_xml_get_path() {
     const auto v =
         eval("Result.unwrap(Xml.text(Result.unwrap(Xml.get_path(Result.unwrap(Xml.deserialize("
-             "\"<lib><book><title>A</title></book></lib>\")), \"book/title\")))))");
+             "\"<lib><book><title>A</title></book></lib>\")), \"book/title\"))))");
 
     ASSERT_EQ(v.as_string(), "A");
 }
@@ -271,7 +279,7 @@ static void test_xml_get_path_indexed() {
     const auto v =
         eval("Result.unwrap(Xml.text(Result.unwrap(Xml.get_path(Result.unwrap(Xml.deserialize("
              "\"<lib><book><title>A</title></book>"
-             "<book><title>B</title></book></lib>\")), \"book[1]/title\")))))");
+             "<book><title>B</title></book></lib>\")), \"book[1]/title\"))))");
 
     ASSERT_EQ(v.as_string(), "B");
 }
@@ -369,13 +377,13 @@ static void test_xml_cdata_roundtrip() {
     const auto v =
         eval("Xml.serialize(Result.unwrap(Xml.deserialize(\"<s><![CDATA[x<y&z]]></s>\")))");
 
-    ASSERT_TRUE(v.as_string().find("<![CDATA[x<y&z]]>") != std::string::npos);
+    ASSERT_NE(v.as_string().find("<![CDATA[x<y&z]]>"), std::string::npos);
 }
 
 static void test_xml_comment_roundtrip() {
     const auto v = eval("Xml.serialize(Result.unwrap(Xml.deserialize(\"<d><!--note--></d>\")))");
 
-    ASSERT_TRUE(v.as_string().find("<!--note-->") != std::string::npos);
+    ASSERT_NE(v.as_string().find("<!--note-->"), std::string::npos);
 }
 
 static void test_xml_self_closing() {
@@ -488,8 +496,8 @@ static void test_xml_deserialize_too_deep() {
 }
 
 static void test_xml_wrong_type_throws() {
-    ASSERT_THROWS(eval("Xml.tag(42)"));
-    ASSERT_THROWS(eval("Xml.serialize(\"not xml\")"));
+    ASSERT_EVAL_THROWS("Xml.tag(42)", "Xml.tag: expected xml, got 'integer'");
+    ASSERT_EVAL_THROWS("Xml.serialize(\"not xml\")", "Xml.serialize: expected xml, got 'string'");
 }
 
 static void test_xml_deserialize_file_missing() {
@@ -517,13 +525,17 @@ static void test_xml_invalid_names_rejected() {
     // unparseable markup and could inject structure.  Construction now rejects
     // any name outside the grammar the parser accepts, at every name-setting
     // entry point (element, set_tag, set_attribute, from_dictionary).
-    ASSERT_THROWS(eval("Xml.element(\"bad tag\")"));
-    ASSERT_THROWS(eval("Xml.element(\"a<b\")"));
-    ASSERT_THROWS(eval("Xml.element(\"\")"));
-    ASSERT_THROWS(eval("Xml.set_tag(Xml.element(\"ok\"), \"bad tag\")"));
-    ASSERT_THROWS(eval("Xml.set_attribute(Xml.element(\"ok\"), \"bad name\", \"v\")"));
-    ASSERT_THROWS(eval("Xml.from_dictionary(\"bad root\", {\"k\": \"v\"})"));
-    ASSERT_THROWS(eval("Xml.from_dictionary(\"root\", {\"bad key\": \"v\"})"));
+    ASSERT_EVAL_THROWS("Xml.element(\"bad tag\")", "Xml.element: invalid XML name 'bad tag'");
+    ASSERT_EVAL_THROWS("Xml.element(\"a<b\")", "Xml.element: invalid XML name 'a<b'");
+    ASSERT_EVAL_THROWS("Xml.element(\"\")", "Xml.element: invalid XML name ''");
+    ASSERT_EVAL_THROWS("Xml.set_tag(Xml.element(\"ok\"), \"bad tag\")",
+                       "Xml.set_tag: invalid XML name 'bad tag'");
+    ASSERT_EVAL_THROWS("Xml.set_attribute(Xml.element(\"ok\"), \"bad name\", \"v\")",
+                       "Xml.set_attribute: invalid XML name 'bad name'");
+    ASSERT_EVAL_THROWS("Xml.from_dictionary(\"bad root\", {\"k\": \"v\"})",
+                       "Xml.from_dictionary: invalid XML name 'bad root'");
+    ASSERT_EVAL_THROWS("Xml.from_dictionary(\"root\", {\"bad key\": \"v\"})",
+                       "Xml.from_dictionary: invalid XML name 'bad key'");
 }
 
 static void test_xml_valid_punctuation_names_round_trip() {
@@ -636,11 +648,30 @@ static void test_xml_deserialize_detailed_failure_location() {
 
     const auto& err = v.as_result()->owned_inner->as_record();
     ASSERT_EQ(err->type_name, std::string{"ParseError"});
-    ASSERT_TRUE(err->find_field("line")->as_integer() >= 1);
-    ASSERT_TRUE(err->find_field("column")->as_integer() >= 1);
+    ASSERT_GE(err->find_field("line")->as_integer(), 1);
+    ASSERT_GE(err->find_field("column")->as_integer(), 1);
+}
+
+static void test_xml_secondary_args_are_type_checked() {
+    // Regression: Xml functions read later arguments with unchecked
+    // as_string()/as_integer(); a wrong type (smuggled past the type checker
+    // through array<any>) surfaced as an opaque internal error instead of a
+    // qualified type error.
+    const auto v = eval(R"(
+        array<any> mixed = [42]
+        mutable string message = ""
+        try {
+            boolean found = Xml.has_attribute(Xml.element("a"), mixed[0])
+        } catch (e) {
+            message = e
+        }
+        message
+    )");
+    ASSERT_EQ(v.as_string(), std::string{"Xml.has_attribute: expected string, got 'integer'"});
 }
 
 int main() {
+    RUN(test_xml_secondary_args_are_type_checked);
     RUN(test_xml_add_child);
     RUN(test_xml_attribute);
     RUN(test_xml_child_count);

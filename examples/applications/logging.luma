@@ -23,10 +23,10 @@ function void show_log_levels() {
     Log.warning("config file not found, using defaults")
     Log.error("failed to connect to database")
 
-    # Raise the level — only warn and above get through.
+    # Raise the level — only Warning and above get through.
     Log.set_level(Log.Level.Warning)
 
-    print("\nLevel raised to Warn:")
+    print("\nLevel raised to Warning:")
 
     Log.debug("this is suppressed")
     Log.information("this is suppressed")
@@ -63,11 +63,11 @@ function void show_structured_context() {
 function void show_output_routing() {
     print("\n=== Output Routing ===")
 
-    result<void> ok = Log.set_output("stderr")
+    result<void> routing = Log.set_output("stderr")
 
-    match ok {
+    match routing {
         success(_) { Log.information("routed to stderr") }
-        failure(e) { print("Could not set output: ${e}") }
+        failure(error) { print("Could not set output: ${error}") }
     }
 }
 
@@ -93,14 +93,14 @@ function void show_application_lifecycle() {
     Log.set_level(Log.Level.Debug)
 }
 
-# Replace the log line template with a custom literal prefix.
+# Replace the log line template with a custom one.
 function void show_custom_line_prefix() {
-    # set_format replaces the entire log line template. Since Luma's
-    # ${...} syntax is reserved for string interpolation, pass a
-    # literal prefix string — the message text is still appended.
+    # set_format replaces the entire log line template, which uses the
+    # ${level}, ${message}, and ${timestamp} placeholders. Escape the '$'
+    # so Luma passes the placeholders through instead of interpolating them.
     print("\n=== Custom Line Prefix ===")
 
-    Log.set_format("[MYAPP] ")
+    Log.set_format("[MYAPP] \${level}: \${message}")
     Log.information("this line carries the [MYAPP] prefix on stderr")
     Log.warning("cache miss rate high")
 }

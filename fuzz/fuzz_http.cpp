@@ -59,7 +59,7 @@ namespace {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             // ── Never-crash: arbitrary bytes are parsed into parts, never crash.
             const auto p1 = luma::parse_url(input);
             luma::fuzz::do_not_optimize(p1.port);

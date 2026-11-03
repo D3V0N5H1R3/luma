@@ -11,7 +11,29 @@
 #include <string_view>
 #include <utility>
 
+#include "common/path_utils.hpp"
+
 namespace luma::lsp {
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UTF-8 path conversion
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Every path the server handles as text — decoded from a file:// URI or
+// written in an include — is UTF-8. On MSVC, std::filesystem::path{std::string}
+// and path::string() use the ANSI code page instead, so a workspace under a
+// non-ASCII folder (C:\Users\José\…) would never be found. Convert with these
+// helpers; on POSIX they are the plain conversions.
+using luma::path_to_utf8;
+
+// Filesystem path from UTF-8 text. Text that is not valid UTF-8 falls back to
+// the native narrow conversion rather than throwing.
+[[nodiscard]] inline std::filesystem::path utf8_path(std::string_view utf8) {
+    if (auto path = luma::try_path_from_utf8(utf8)) {
+        return std::move(*path);
+    }
+    return std::filesystem::path{std::string{utf8}};
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Path safety checks
@@ -23,7 +45,7 @@ namespace luma::lsp {
 // Returns true if the include path is safe to use (no traversal, no
 // absolute paths).  Used by analysis and completion.
 [[nodiscard]] inline bool is_safe_include_path(std::string_view path) {
-    const auto fs_path = std::filesystem::path(path);
+    const auto fs_path = utf8_path(path);
 
     if (fs_path.is_absolute()) {
         return false;
@@ -60,7 +82,7 @@ read_file_with_hash(const std::filesystem::path& path, std::size_t max_size = 0)
         }
     }
 
-    std::ifstream ifs(path);
+    std::ifstream ifs(path, std::ios::in | std::ios::binary);
     if (!ifs) {
         return std::nullopt;
     }

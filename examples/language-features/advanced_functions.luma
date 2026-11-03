@@ -27,6 +27,8 @@ function string create_tag(string name, string colour, boolean bold) {
 
 # ── Mutable parameters ──
 
+# `mutable` lets the body reassign its own copy of `n`; the caller's
+# argument is never changed.
 function integer count_down(mutable integer n) {
     mutable integer steps = 0
 
@@ -36,12 +38,6 @@ function integer count_down(mutable integer n) {
     }
 
     return steps
-}
-
-function string describe_parity(integer n) {
-    string word = if n % 2 == 0 { "even" } else { "odd" }
-
-    return "${n} is ${word}"
 }
 
 @main
@@ -100,7 +96,13 @@ function void main() {
 
     array<integer> numbers = [1, 2, 3, 4, 5]
 
-    array<string> labels = (numbers |> Array.map(describe_parity)) ?? []
+    array<string> labels = numbers
+        |> Array.map((integer n) -> {
+            string word = if n % 2 == 0 { "even" } else { "odd" }
+
+            return "${n} is ${word}"
+        })
+        |> Result.unwrap_or([])
 
     for label in labels {
         print("  ${label}")
@@ -112,6 +114,6 @@ function void main() {
 
     function(integer) -> boolean is_even = (integer x) -> x % 2 == 0
 
-    array<integer> evens = Result.unwrap(Array.filter(numbers, is_even))
+    array<integer> evens = Array.filter(numbers, is_even) ?? []
     print("evens from ${numbers}: ${evens}")
 }

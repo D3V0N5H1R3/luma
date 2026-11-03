@@ -92,7 +92,7 @@ suite("Grammar Structure", () => {
 
         // Valid Luma numerics still tokenise (canonical grammar: no separators,
         // digits required on both sides of the decimal point).
-        for (const valid of ["1000", "1.0", "3.14e10", "0xFF", "0b1010"]) {
+        for (const valid of ["1000", "1.0", "3.14e10", "0xFF", "0o755", "0O17", "0b1010"]) {
             assert.ok(
                 tokenisesAsNumber(valid),
                 `expected "${valid}" to tokenise as a numeric literal`,
@@ -100,7 +100,7 @@ suite("Grammar Structure", () => {
         }
 
         // Invalid forms must not tokenise as a whole numeric literal.
-        for (const invalid of ["1_000", "0xFF_FF", "0b10_10", "1."]) {
+        for (const invalid of ["1_000", "0xFF_FF", "0o7_55", "0o8", "0b10_10", "1."]) {
             assert.ok(
                 !tokenisesAsNumber(invalid),
                 `"${invalid}" must not tokenise as a numeric literal`,
@@ -238,6 +238,114 @@ suite("Grammar Structure", () => {
         const repoKeys = new Set(Object.keys(grammar.repository));
         const missing = allRefs.filter((ref) => !repoKeys.has(ref));
         assert.deepStrictEqual(missing, [], `Unresolved pattern references: ${missing.join(", ")}`);
+    });
+
+    test("`when` match guards are scoped as control keywords", () => {
+        const re = new RegExp(grammar.repository.keyword_control.match);
+        assert.ok(re.test("case >= 0 when n == 0 {"));
+    });
+
+    test("Typed bindings accept one level of nested generics", () => {
+        const re = new RegExp(grammar.repository.typed_binding.match);
+        const match = re.exec("array<array<integer>> grid = []");
+        assert.ok(match, "array<array<integer>> grid should be a typed binding");
+        assert.strictEqual(
+            match[2],
+            "<array<integer>>",
+            "group 2 should capture the generic arguments",
+        );
+        assert.strictEqual(match[3], "grid");
+        assert.strictEqual(
+            grammar.repository.typed_binding.captures["2"].patterns[0].include,
+            "#type_arguments",
+            "generic arguments are a type position",
+        );
+    });
+
+    test("Spans known to hold only types scope every built-in type name", () => {
+        const builtin = new RegExp(grammar.repository.builtin_type_name.match);
+        const typeArguments = grammar.repository.type_arguments.patterns as { include?: string }[];
+        assert.ok(typeArguments.some((p) => p.include === "#builtin_type_name"));
+        assert.ok(builtin.test("(set, set)"), "a bare container name inside a type span is a type");
+
+        const tupleBegin = new RegExp(grammar.repository.tuple_type_binding.begin);
+        assert.ok(tupleBegin.test("(set, set) pair = Set.partition(s, f)"));
+        assert.ok(!tupleBegin.test("(a, b) == pair"), "a comparison is not a tuple-typed binding");
+        assert.ok(!tupleBegin.test("(number a) -> a"), "a lambda is not a tuple-typed binding");
+
+        const functionBegin = new RegExp(grammar.repository.function_type.begin);
+        assert.ok(functionBegin.test("function(socket) -> void"));
+        assert.ok(
+            !functionBegin.test("function void main() {"),
+            "a declaration is not a function type",
+        );
+
+        // `function (T, U) name(` declares a function with a tuple return type;
+        // #function_declaration must win that tie, and #function_type must still
+        // claim `function(` before the bare keyword rule does.
+        const includes = grammar.patterns.map((p: { include?: string }) => p.include);
+        assert.ok(includes.indexOf("#function_declaration") < includes.indexOf("#function_type"));
+        assert.ok(includes.indexOf("#function_type") < includes.indexOf("#keyword_declaration"));
+    });
+
+    test("Function declarations accept a namespace-qualified return type", () => {
+        const re = new RegExp(grammar.repository.function_declaration.patterns[0].match);
+        const match = re.exec("function DateTime.TimeParts parse(string text) {");
+        assert.ok(match, "a qualified return type should still name the function");
+        assert.strictEqual(match[2], "parse");
+    });
+
+    test("Lambda parameter lists match typed parameters (Luma lambdas are always typed)", () => {
+        const lambda = grammar.repository.lambda;
+        const begin = new RegExp(lambda.begin);
+        assert.ok(begin.test("(number a, number b) -> a + b"));
+        assert.ok(begin.test("() -> 42"));
+        assert.ok(!begin.test("(number, number) pair = (1, 2)"), "a tuple type is not a lambda");
+
+        const parameter = new RegExp(lambda.patterns[0].match, "g");
+        const names = [..."mutable array<integer> values, number b".matchAll(parameter)].map(
+            (m) => m[3],
+        );
+        assert.deepStrictEqual(names, ["values", "b"]);
+        assert.strictEqual(
+            lambda.patterns[0].captures["2"].patterns[0].include,
+            "#builtin_type_name",
+            "a lambda parameter's type capture is a known type position",
+        );
+    });
+
+    test("Container/handle type names are types only in type position (they lex as identifiers)", () => {
+        const patterns = grammar.repository.type.patterns as { match: string }[];
+        const isType = (text: string, word: string): boolean => {
+            const index = text.indexOf(word);
+            return patterns.some((p) => {
+                const re = new RegExp(p.match, "g");
+                return [...text.matchAll(re)].some((m) => m.index === index && m[0] === word);
+            });
+        };
+
+        const typePositions: Array<[string, string]> = [
+            ["set<integer> s = Set.new()", "set"],
+            ["socket s = conn", "socket"],
+            ["function(integer) -> void", "void"],
+            ["array<task<integer>> ts = []", "task"],
+            ["x = integer", "integer"],
+            ["decimal d = 1.5", "decimal"],
+        ];
+        for (const [text, word] of typePositions) {
+            assert.ok(isType(text, word), `"${word}" should be a type in: ${text}`);
+        }
+
+        const variablePositions: Array<[string, string]> = [
+            ["print(task)", "task"],
+            ["for x in set {", "set"],
+            ["job.task = 1", "task"],
+            ["queue with { size = 1 }", "queue"],
+            ["return stack", "stack"],
+        ];
+        for (const [text, word] of variablePositions) {
+            assert.ok(!isType(text, word), `"${word}" should not be a type in: ${text}`);
+        }
     });
 });
 

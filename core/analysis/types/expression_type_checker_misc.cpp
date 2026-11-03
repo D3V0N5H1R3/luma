@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "analysis/ast/declaration.hpp"
@@ -21,17 +22,45 @@
 
 namespace luma {
 
+namespace {
+
+// The expression a `{ ... }` block yields as its value, if its last statement
+// is an expression statement.
+const Expression* block_value_expression(const std::vector<std::unique_ptr<Statement>>& body) {
+    if (body.empty() || body.back()->kind != StatementKind::Expression) {
+        return nullptr;
+    }
+
+    return static_cast<const ExpressionStatement&>(*body.back()).expression.get();
+}
+
+} // namespace
+
 TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
     auto scope = tc_.make_scope_guard();
 
-    // Lambda bodies are independent scopes — the pipe flag must not leak in.
+    // Lambda bodies are independent scopes — the pipe flag must not leak in,
+    // and a `break`/`continue` in the body cannot leave an enclosing loop.
     const bool saved_in_pipe = tc_.context().is_in_pipe;
     tc_.context().is_in_pipe = false;
+
+    auto saved_loop_flows = std::exchange(tc_.context().loop_flows, {});
+    const ScopeGuard restore_loop_flows{
+        [&] { tc_.context().loop_flows = std::move(saved_loop_flows); }};
+
+    const bool saved_in_inferred_expression_lambda =
+        std::exchange(tc_.context().in_inferred_expression_lambda,
+                      expr.is_expression_body() && !expr.return_type);
+    const ScopeGuard restore_in_inferred_expression_lambda{
+        [&] { tc_.context().in_inferred_expression_lambda = saved_in_inferred_expression_lambda; }};
 
     TypeInfo func_type{
         .kind = TypeInfo::Kind::Func, .name = {}, .inner_types = {}, .return_type = {}};
 
     for (const auto& param : expr.parameters) {
+        (void)type_check_helpers::report_unknown_types(
+            tc_, param.type, std::format(" for lambda parameter '{}'", param.name), expr.location);
+
         const auto param_type = tc_.resolve_type(param.type);
 
         func_type.inner_types.push_back(param_type);
@@ -45,6 +74,9 @@ TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
     const auto saved_return = tc_.context().current_return_type;
 
     if (expr.return_type) {
+        (void)type_check_helpers::report_unknown_types(
+            tc_, *expr.return_type, " for the lambda return type", expr.location);
+
         tc_.context().current_return_type = tc_.resolve_type(*expr.return_type);
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access): assigned on the line above.
         func_type.return_type = std::make_shared<TypeInfo>(*tc_.context().current_return_type);
@@ -65,6 +97,9 @@ TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
                                       body_type.to_string(), current_return_type->to_string()),
                           expr.expression_body()->location,
                           "change the return type annotation or adjust the lambda body");
+            } else {
+                type_check_helpers::mark_numeric_widening(tc_, *expr.expression_body(),
+                                                          *current_return_type, body_type);
             }
         } else {
             // No explicit return type — infer from the expression body.
@@ -72,8 +107,36 @@ TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
             tc_.context().current_return_type = body_type;
         }
     } else {
+        // A block body yields a value only through `return <value>` (or a
+        // failure propagated with '?'); one that never does returns nothing,
+        // so its type is `void` rather than the permissive StdlibAny.
+        const bool saved_has_value_return = tc_.context().has_value_return;
+        tc_.context().has_value_return = false;
+
         for (const auto& s : expr.statements()) {
             tc_.check_statement(*s);
+        }
+
+        if (!expr.return_type && !tc_.context().has_value_return) {
+            func_type.return_type =
+                std::make_shared<TypeInfo>(TypeInfo::make(TypeInfo::Kind::Void));
+        }
+
+        tc_.context().has_value_return = saved_has_value_return;
+
+        // A block body with a declared, concrete return type must return a
+        // value on every path, exactly like a function body.
+        const auto& declared_return = tc_.context().current_return_type;
+
+        if (expr.return_type && declared_return && declared_return->kind != TypeInfo::Kind::Void &&
+            declared_return->kind != TypeInfo::Kind::StdlibAny &&
+            declared_return->kind != TypeInfo::Kind::Unknown &&
+            !tc_.definitely_returns(expr.statements())) {
+            tc_.error(std::format("lambda declares return type '{}' but may fall through "
+                                  "without returning a value — add a return statement on all "
+                                  "paths",
+                                  declared_return->to_string()),
+                      expr.location, "ensure every code path ends with a return statement");
         }
     }
 
@@ -84,17 +147,40 @@ TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
 }
 
 TypeInfo ExpressionTypeChecker::visit_if(const IfExpression& expr) {
-    return infer_conditional_result(
+    TypeInfo then_type = TypeInfo::make(TypeInfo::Kind::Void);
+    TypeInfo else_type = TypeInfo::make(TypeInfo::Kind::Void);
+
+    const auto result = infer_conditional_result(
         *expr.condition,
         [&] {
-            return expr.then_expr() != nullptr ? infer_expression_type(*expr.then_expr())
-                                               : infer_block_result(expr.then_body());
+            then_type = expr.then_expr() != nullptr ? infer_expression_type(*expr.then_expr())
+                                                    : infer_block_result(expr.then_body());
+            return then_type;
         },
         [&] {
-            return expr.else_expr() != nullptr ? infer_expression_type(*expr.else_expr())
-                                               : infer_block_result(expr.else_body());
+            else_type = expr.else_expr() != nullptr ? infer_expression_type(*expr.else_expr())
+                                                    : infer_block_result(expr.else_body());
+            return else_type;
         },
+        {.then_exits = branch_diverges(expr.then_expr(), expr.then_body()),
+         .else_exits = branch_diverges(expr.else_expr(), expr.else_body())},
         expr.location);
+
+    // A branch narrower than the merged type (`if c { 1 } else { 2.5 }`) widens.
+    const auto* then_value =
+        expr.then_expr() != nullptr ? expr.then_expr() : block_value_expression(expr.then_body());
+    const auto* else_value =
+        expr.else_expr() != nullptr ? expr.else_expr() : block_value_expression(expr.else_body());
+
+    if (then_value != nullptr) {
+        type_check_helpers::mark_numeric_widening(tc_, *then_value, result, then_type);
+    }
+
+    if (else_value != nullptr) {
+        type_check_helpers::mark_numeric_widening(tc_, *else_value, result, else_type);
+    }
+
+    return result;
 }
 
 TypeInfo ExpressionTypeChecker::infer_if_statement_result(const IfStatement& stmt) {
@@ -104,12 +190,52 @@ TypeInfo ExpressionTypeChecker::infer_if_statement_result(const IfStatement& stm
             return stmt.else_body.empty() ? TypeInfo::make(TypeInfo::Kind::Void)
                                           : infer_block_result(stmt.else_body);
         },
+        {.then_exits = tc_.never_falls_through(stmt.then_body),
+         .else_exits = !stmt.else_body.empty() && tc_.never_falls_through(stmt.else_body),
+         .has_else = !stmt.else_body.empty()},
         stmt.location);
 }
 
-TypeInfo ExpressionTypeChecker::infer_conditional_result(
-    const Expression& condition, const std::function<TypeInfo()>& compute_then,
-    const std::function<TypeInfo()>& compute_else, const SourceLocation& location) {
+bool ExpressionTypeChecker::expression_diverges(const Expression& expr) const {
+    if (expr.kind == ExpressionKind::If) {
+        const auto& if_expr = static_cast<const IfExpression&>(expr);
+
+        return branch_diverges(if_expr.then_expr(), if_expr.then_body()) &&
+               branch_diverges(if_expr.else_expr(), if_expr.else_body());
+    }
+
+    if (expr.kind == ExpressionKind::Match) {
+        const auto& match_expr = static_cast<const MatchExpression&>(expr);
+
+        // A non-exhaustive match is already an error, so every arm diverging
+        // means the match never produces a value.
+        return !match_expr.arms.empty() &&
+               std::ranges::all_of(match_expr.arms,
+                                   [this](const MatchArm& arm) { return arm_diverges(arm); });
+    }
+
+    // A call that never returns (Process.exit) leaves the branch like `return`.
+    return type_check_helpers::is_never_returning_call(tc_, expr);
+}
+
+bool ExpressionTypeChecker::branch_diverges(const Expression* expr,
+                                            const std::vector<StatementPtr>& body) const {
+    if (expr != nullptr) {
+        return expression_diverges(*expr);
+    }
+
+    return tc_.never_falls_through(body);
+}
+
+bool ExpressionTypeChecker::arm_diverges(const MatchArm& arm) const {
+    return branch_diverges(arm.body_expr.get(), arm.body);
+}
+
+TypeInfo
+ExpressionTypeChecker::infer_conditional_result(const Expression& condition,
+                                                const std::function<TypeInfo()>& compute_then,
+                                                const std::function<TypeInfo()>& compute_else,
+                                                BranchExits exits, const SourceLocation& location) {
     const auto cond_type = infer_expression_type(condition);
 
     (void)type_check_helpers::require_boolean_operand(tc_, cond_type, "if condition",
@@ -153,42 +279,89 @@ TypeInfo ExpressionTypeChecker::infer_conditional_result(
 
     const auto after_else = tc_.context().current_scope->snapshot_ownership();
 
-    // Look up a variable's consumed state within a branch snapshot, falling
-    // back to its pre-branch state when the branch left it untouched.
-    const auto consumed_in_branch = [](const TypeScope::OwnershipSnapshot& snapshot,
-                                       const std::string& name, bool fallback) {
-        const auto entry = std::ranges::find_if(
-            snapshot, [&](const auto& ownership) { return ownership.first == name; });
+    // Only branches that fall through reach the code after the conditional.
+    std::vector<TypeScope::OwnershipSnapshot> falling_through;
 
-        return entry != snapshot.end() ? entry->second : fallback;
-    };
-
-    // Merge: a variable consumed in either branch is consumed afterwards.
-    for (const auto& [name, was_consumed_before] : before) {
-        const bool consumed_in_then = consumed_in_branch(after_then, name, was_consumed_before);
-        const bool consumed_in_else = consumed_in_branch(after_else, name, was_consumed_before);
-
-        if (consumed_in_then || consumed_in_else) {
-            tc_.context().current_scope->mark_consumed(name, true);
-        }
+    if (!exits.then_exits) {
+        falling_through.push_back(after_then);
     }
 
-    return merge_if_branch_types(then_type, else_type, location);
+    if (!exits.else_exits) {
+        falling_through.push_back(after_else);
+    }
+
+    match_arm_binding::merge_branch_ownership(tc_, before, falling_through);
+
+    return merge_if_branch_types(then_type, else_type, exits, location);
 }
 
+namespace {
+
+// A branch type that may stand for a missing value without proof — error
+// recovery (Unknown) or a permissive stdlib result (StdlibAny) — so a
+// "produces no value" diagnostic against it would be a guess.
+[[nodiscard]] bool is_indefinite(const TypeInfo& type) {
+    return type.kind == TypeInfo::Kind::Unknown || type.kind == TypeInfo::Kind::StdlibAny;
+}
+
+} // namespace
+
 TypeInfo ExpressionTypeChecker::merge_if_branch_types(const TypeInfo& then_type,
-                                                      const TypeInfo& else_type,
+                                                      const TypeInfo& else_type, BranchExits exits,
                                                       const SourceLocation& location) {
-    if (then_type.kind == TypeInfo::Kind::Void && else_type.kind == TypeInfo::Kind::Void) {
+    // A branch that never falls through (return, break, continue) produces no
+    // value for the conditional, so only the other branch decides its type.
+    if (exits.then_exits && exits.else_exits) {
         return TypeInfo::make(TypeInfo::Kind::Void);
     }
 
-    if (then_type.kind == TypeInfo::Kind::Void) {
+    if (exits.then_exits) {
         return else_type;
     }
 
-    if (else_type.kind == TypeInfo::Kind::Void) {
+    if (exits.else_exits) {
         return then_type;
+    }
+
+    const bool then_void = then_type.kind == TypeInfo::Kind::Void;
+    const bool else_void = else_type.kind == TypeInfo::Kind::Void;
+
+    if (then_void && else_void) {
+        return TypeInfo::make(TypeInfo::Kind::Void);
+    }
+
+    if (then_void || else_void) {
+        // One branch falls through without a value while the other produces
+        // one: used as a value, the conditional would silently yield `none`.
+        const auto& value_type = then_void ? else_type : then_type;
+
+        if (!is_indefinite(value_type)) {
+            if (!exits.has_else) {
+                tc_.error(std::format("this 'if' has no 'else' branch, so it produces no value "
+                                      "when its condition is false, but its 'then' branch "
+                                      "produces '{}'",
+                                      value_type.to_string()),
+                          location, "add an 'else' branch that produces a value of the same type");
+            } else {
+                tc_.error(std::format("the '{}' branch of this 'if' produces no value, but the "
+                                      "'{}' branch produces '{}'",
+                                      then_void ? "then" : "else", then_void ? "else" : "then",
+                                      value_type.to_string()),
+                          location,
+                          std::format("end every branch with a value of type '{}', or leave the "
+                                      "branch early with 'return'",
+                                      value_type.to_string()));
+            }
+        }
+
+        return value_type;
+    }
+
+    // Like match arms: an unknown (error-recovery or type-parameter) then-branch
+    // adopts the else-branch's concrete type, so the result is not silently
+    // permissive.
+    if (then_type.kind == TypeInfo::Kind::Unknown && else_type.kind != TypeInfo::Kind::Unknown) {
+        return else_type;
     }
 
     if (!tc_.is_assignable(then_type, else_type) && !tc_.is_assignable(else_type, then_type)) {
@@ -221,8 +394,13 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
 
     std::vector<TypeScope::OwnershipSnapshot> arm_snapshots;
 
-    TypeInfo result_type = TypeInfo::make(TypeInfo::Kind::Unknown);
-    bool first{true};
+    // Expression-bodied arms, widened to the match's result type afterwards.
+    std::vector<std::pair<const Expression*, TypeInfo>> arm_values;
+
+    // Each arm's type, and whether it diverges, merged after all arms are
+    // checked so the result does not depend on the order of the arms.
+    std::vector<ArmOutcome> outcomes;
+    outcomes.reserve(arms.size());
 
     for (const auto& arm : arms) {
         // Restore to pre-match state before each arm.
@@ -230,15 +408,13 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
 
         tc_.push_scope();
 
-        if (arm.comparison_value()) {
-            (void)infer_expression_type(*arm.comparison_value());
-        }
+        match_arm_binding::check_arm_patterns(tc_, arm, subject_type, location);
 
         // Bind success/failure/some names.
         match_arm_binding::bind_arm_names(tc_, arm, subject_type);
 
         // Bind choice variant destructured fields.
-        match_arm_binding::bind_choice_fields(tc_, arm, subject_type, location, false);
+        match_arm_binding::bind_choice_fields(tc_, arm, subject_type, location);
 
         // Bind record destructured fields.
         if (arm.kind() == MatchArm::Kind::RecordCase) {
@@ -258,39 +434,103 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
 
         if (arm.body_expr) {
             arm_type = infer_expression_type(*arm.body_expr);
+            arm_values.emplace_back(arm.body_expr.get(), arm_type);
         } else {
             arm_type = infer_block_result(arm.body);
-        }
 
-        if (first) {
-            result_type = arm_type;
-            first = false;
-        } else if (result_type.kind == TypeInfo::Kind::Unknown &&
-                   arm_type.kind != TypeInfo::Kind::Unknown &&
-                   arm_type.kind != TypeInfo::Kind::Void) {
-            // First arm resolved to Unknown (error recovery); adopt this arm's type.
-            result_type = arm_type;
-        } else if (result_type.kind != TypeInfo::Kind::Void &&
-                   arm_type.kind != TypeInfo::Kind::Void &&
-                   result_type.kind != TypeInfo::Kind::Unknown &&
-                   arm_type.kind != TypeInfo::Kind::Unknown) {
-            if (!tc_.is_assignable(result_type, arm_type) &&
-                !tc_.is_assignable(arm_type, result_type)) {
-                tc_.error(std::format("match arms have different types: '{}' and '{}'",
-                                      result_type.to_string(), arm_type.to_string()),
-                          location, "ensure all match arms return the same type");
+            if (const auto* value = block_value_expression(arm.body)) {
+                arm_values.emplace_back(value, arm_type);
             }
         }
 
+        outcomes.push_back({.type = arm_type,
+                            .diverges = arm_diverges(arm),
+                            .location = arm.location.value_or(location)});
+
         tc_.pop_scope();
 
-        // Capture ownership state after this arm.
-        arm_snapshots.push_back(tc_.context().current_scope->snapshot_ownership());
+        // Capture ownership state after this arm, unless the arm never
+        // reaches the code after the match.
+        if (!outcomes.back().diverges) {
+            arm_snapshots.push_back(tc_.context().current_scope->snapshot_ownership());
+        }
     }
 
-    match_arm_binding::merge_arm_ownership(tc_, before, arm_snapshots);
+    match_arm_binding::merge_branch_ownership(tc_, before, arm_snapshots);
+
+    const auto result_type = merge_match_arm_types(outcomes, location);
+
+    for (const auto& [arm_value, arm_type] : arm_values) {
+        type_check_helpers::mark_numeric_widening(tc_, *arm_value, result_type, arm_type);
+    }
 
     return result_type;
+}
+
+TypeInfo ExpressionTypeChecker::merge_match_arm_types(const std::vector<ArmOutcome>& outcomes,
+                                                      const SourceLocation& location) {
+    if (outcomes.empty()) {
+        return TypeInfo::make(TypeInfo::Kind::Unknown);
+    }
+
+    std::optional<TypeInfo> result_type;
+    const ArmOutcome* valueless_arm{nullptr};
+
+    for (const auto& outcome : outcomes) {
+        // An arm that never falls through (return, break, continue) produces
+        // no value for the match, wherever it appears among the arms.
+        if (outcome.diverges) {
+            continue;
+        }
+
+        const auto& arm_type = outcome.type;
+
+        if (arm_type.kind == TypeInfo::Kind::Void) {
+            if (valueless_arm == nullptr) {
+                valueless_arm = &outcome;
+            }
+
+            continue;
+        }
+
+        // An Unknown arm (error recovery) adopts the next concrete arm type.
+        if (!result_type || (result_type->kind == TypeInfo::Kind::Unknown &&
+                             arm_type.kind != TypeInfo::Kind::Unknown)) {
+            result_type = arm_type;
+            continue;
+        }
+
+        if (arm_type.kind == TypeInfo::Kind::Unknown) {
+            continue;
+        }
+
+        if (!tc_.is_assignable(*result_type, arm_type) &&
+            !tc_.is_assignable(arm_type, *result_type)) {
+            tc_.error(std::format("match arms have different types: '{}' and '{}'",
+                                  result_type->to_string(), arm_type.to_string()),
+                      location, "ensure all match arms return the same type");
+        } else if (!tc_.is_assignable(*result_type, arm_type)) {
+            // A wider arm widens the whole match, as for if branches:
+            // `case 1 { 2 } else { 2.5 }` is a number.
+            result_type = arm_type;
+        }
+    }
+
+    if (!result_type) {
+        // Every arm diverges or none produces a value.
+        return TypeInfo::make(TypeInfo::Kind::Void);
+    }
+
+    if (valueless_arm != nullptr && !is_indefinite(*result_type)) {
+        tc_.error(std::format("this match arm produces no value, but other arms produce '{}'",
+                              result_type->to_string()),
+                  valueless_arm->location,
+                  std::format("end the arm with a value of type '{}', or leave it early with "
+                              "'return'",
+                              result_type->to_string()));
+    }
+
+    return *result_type;
 }
 
 bool ExpressionTypeChecker::check_internal_record_access(const RecordCreationExpression& expr) {
@@ -298,16 +538,15 @@ bool ExpressionTypeChecker::check_internal_record_access(const RecordCreationExp
         return false;
     }
 
-    const auto split = split_module(expr.type_name);
+    const auto ns = type_check_helpers::owning_namespace(expr.type_name);
 
-    if (!split) {
+    if (ns.empty()) {
         return false;
     }
 
-    const auto ns = split->first;
-    const auto short_name = split->second;
+    const auto short_name = symbols::qualified_member(expr.type_name);
 
-    if (tc_.context().current_namespace == ns) {
+    if (type_check_helpers::is_within_namespace(tc_.context().current_namespace, ns)) {
         return false;
     }
 
@@ -346,6 +585,9 @@ void ExpressionTypeChecker::check_record_provided_fields(const RecordDeclaration
                     "ensure the field value matches the type declared in the record");
                 tc_.error(diag.message, init_it->value->location, diag.hint,
                           DiagnosticCode::TypeMismatch);
+            } else {
+                type_check_helpers::mark_numeric_widening(tc_, *init_it->value, expected_type,
+                                                          actual_type);
             }
         }
     }
@@ -496,6 +738,9 @@ TypeInfo ExpressionTypeChecker::visit_record_with(const RecordWithExpression& ex
                     "ensure the override value matches the field's declared type");
                 tc_.error(diag.message, override_field.value->location, diag.hint,
                           DiagnosticCode::TypeMismatch);
+            } else {
+                type_check_helpers::mark_numeric_widening(tc_, *override_field.value, expected_type,
+                                                          actual_type);
             }
         }
     }

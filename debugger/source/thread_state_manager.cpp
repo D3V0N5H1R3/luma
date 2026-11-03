@@ -103,8 +103,15 @@ std::vector<std::pair<int, std::string>> ThreadStateManager::get_threads() const
 }
 
 bool ThreadStateManager::all_threads_stopped() const {
+    // Compare the atomic paused counter against the registry size instead of
+    // locking every ThreadState: this runs on execution threads when they stop,
+    // and taking each per-thread lock while holding the registry lock would
+    // stall them (and every other thread waiting on the registry) for as long
+    // as the protocol thread holds one ThreadState lock, e.g. during a
+    // several-second evaluate.  paused_count_ is only changed under the
+    // owning ThreadState lock, alongside is_paused.
     const auto lock = lock_states();
-    return count_paused_locked() >= static_cast<int>(thread_state_map_.size());
+    return paused_count() >= static_cast<int>(thread_state_map_.size());
 }
 
 void ThreadStateManager::increment_paused_count() {
@@ -117,24 +124,6 @@ void ThreadStateManager::decrement_paused_count() {
 
 int ThreadStateManager::paused_count() const noexcept {
     return paused_count_.load(std::memory_order_acquire);
-}
-
-int ThreadStateManager::count_paused_locked() const {
-#ifndef NDEBUG
-    assert(detail::dap_lock_is_held(DapLockId::ThreadStates) &&
-           "count_paused_locked() requires the thread states lock");
-#endif
-    int count = 0;
-
-    for (const auto& [id, state] : thread_state_map_) {
-        const auto ts_lock = lock_state(*state);
-
-        if (state->is_paused) {
-            ++count;
-        }
-    }
-
-    return count;
 }
 
 void ThreadStateManager::signal_all_vms_pause_check() {

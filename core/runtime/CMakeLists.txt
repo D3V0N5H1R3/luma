@@ -1,18 +1,71 @@
 # core/runtime/CMakeLists.txt
 # Compiler, VM, standard library, and the main luma executable.
 
+# ─── Vendored dependencies ───────────────────────────────────────────────────
+# Defined first so the stdlib OBJECT libraries below can link them and inherit
+# their usage requirements (SYSTEM include dirs, compile definitions).
+
+# Vendored miniz (compression) — always linked.
+include(${PROJECT_SOURCE_DIR}/cmake/LumaMiniz.cmake)
+
+# Vendored Mbed TLS — always linked (Hash module dependency) + HTTPS support.
+#
+# mbedtls_lib is linked unconditionally because the Hash stdlib module
+# (hash_digest.cpp, hash_file.cpp) uses the Mbed TLS Message Digest API
+# (mbedtls_md, mbedtls_md_hmac) for all cryptographic hashing — SHA-256,
+# SHA-512, MD5, HMAC — with no TLS-off fallback. Hashing is not a TLS/HTTPS
+# feature: it is an independent use of mbedtls as a crypto library, so it must
+# be available regardless of LUMA_FEATURE_TLS.
+include(${PROJECT_SOURCE_DIR}/cmake/LumaMbedTLS.cmake)
+
+# luma_tls bundles everything a TLS-aware translation unit needs: mbedtls_lib and,
+# with LUMA_FEATURE_TLS, the LUMA_HAS_TLS macro that compiles in the TLS/HTTPS
+# protocol layer (ssl/x509 for HTTPS, ctr_drbg/entropy for Random.secure_*) plus
+# the platform CA-cert libraries used by load_system_ca_certs() in
+# http_module_tls.cpp. Without the macro those paths are compiled out and every
+# https:// request / secure_* call returns a "requires TLS" failure. Linking this
+# target is how the macro reaches OBJECT libraries too, which a definition on
+# luma_core alone would not (their objects are consumed via $<TARGET_OBJECTS:>).
+add_library(luma_tls INTERFACE)
+target_link_libraries(luma_tls INTERFACE mbedtls_lib)
+
+if(LUMA_FEATURE_TLS)
+    target_compile_definitions(luma_tls INTERFACE LUMA_HAS_TLS=1)
+
+    # Windows system libraries have no imported targets, so they are linked by name.
+    if(WIN32)
+        target_link_libraries(luma_tls INTERFACE crypt32)
+    elseif(APPLE)
+        # REQUIRED: http_module_tls.cpp calls these frameworks unconditionally, so a
+        # missing framework must fail at configure time rather than at link time.
+        find_library(LUMA_SECURITY_FRAMEWORK Security REQUIRED)
+        find_library(LUMA_COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+        target_link_libraries(luma_tls
+            INTERFACE
+                ${LUMA_SECURITY_FRAMEWORK}
+                ${LUMA_COREFOUNDATION_FRAMEWORK}
+        )
+    endif()
+
+    message(STATUS "TLS enabled — Http module supports HTTPS via Mbed TLS")
+else()
+    message(STATUS "TLS disabled — Http module will only support plain HTTP")
+endif()
+
 # ─── Stdlib OBJECT libraries (grouped for faster incremental builds) ─────────
-# Macro to reduce boilerplate when adding stdlib OBJECT libraries.
-# Usage: luma_add_stdlib_library(name SOURCES src1 src2 ... [INCLUDES dir...])
+# Helper to reduce boilerplate when adding stdlib OBJECT libraries.
+# Usage: luma_add_stdlib_library(name SOURCES src1 src2 ... [DEPENDS target...])
+#
+# OBJECT libraries are consumed via $<TARGET_OBJECTS:> and so inherit nothing from
+# luma_core. DEPENDS links the targets whose usage requirements (vendored SYSTEM
+# include dirs, LUMA_HAS_TLS) the sources need; the libraries themselves are
+# linked into the final binaries through luma_core.
 
 function(luma_add_stdlib_library name)
-    cmake_parse_arguments(_STDLIB "" "" "SOURCES;INCLUDES" ${ARGN})
+    cmake_parse_arguments(_STDLIB "" "" "SOURCES;DEPENDS" ${ARGN})
     luma_add_library(luma_stdlib_${name} OBJECT ${_STDLIB_SOURCES})
-    if(_STDLIB_INCLUDES)
-        # INCLUDES carries vendored third-party dependency directories (miniz,
-        # mbedtls); mark them SYSTEM so their headers do not emit warnings under
-        # the project's strict warning flags.
-        target_include_directories(luma_stdlib_${name} SYSTEM PRIVATE ${_STDLIB_INCLUDES})
+    if(_STDLIB_DEPENDS)
+        target_link_libraries(luma_stdlib_${name} PRIVATE ${_STDLIB_DEPENDS})
     endif()
 endfunction()
 
@@ -48,7 +101,7 @@ luma_platform_source_pair(_platform_terminal stdlib/io/platform_terminal)
 luma_platform_source_pair(_terminal_input stdlib/io/terminal_input)
 
 luma_add_stdlib_library(io
-    INCLUDES ${PROJECT_SOURCE_DIR}/external/mbedtls/include
+    DEPENDS luma_tls
     SOURCES
         stdlib/io/filesystem_module.cpp
         stdlib/io/filesystem_operations.cpp
@@ -72,7 +125,7 @@ luma_add_stdlib_library(io
 )
 
 luma_add_stdlib_library(data
-    INCLUDES ${PROJECT_SOURCE_DIR}/external/miniz
+    DEPENDS miniz_lib
     SOURCES
         stdlib/text/string_module.cpp
         stdlib/text/string_module_search.cpp
@@ -94,7 +147,7 @@ luma_add_stdlib_library(data
 )
 
 luma_add_stdlib_library(math
-    INCLUDES ${PROJECT_SOURCE_DIR}/external/mbedtls/include
+    DEPENDS luma_tls
     SOURCES
         stdlib/math/math_module.cpp
         stdlib/math/bits_module.cpp
@@ -119,7 +172,7 @@ luma_add_stdlib_library(concurrency
 )
 
 luma_add_stdlib_library(utility
-    INCLUDES ${PROJECT_SOURCE_DIR}/external/miniz
+    DEPENDS miniz_lib
     SOURCES
         stdlib/system/datetime_module.cpp
         stdlib/system/datetime_arithmetic.cpp
@@ -135,10 +188,6 @@ luma_add_stdlib_library(utility
         stdlib/collections/keyvaluestore_module.cpp
 )
 
-# OBJECT libraries don't inherit include directories from their consumers
-# (luma_core), so vendored dependency include dirs must be set explicitly
-# via the INCLUDES parameter of luma_add_stdlib_library above.
-
 # ─── Core Library ────────────────────────────────────────────────────────────
 # Compiler, VM, and standard library.  Stdlib modules are compiled as separate
 # OBJECT libraries above and linked here for faster incremental builds.
@@ -146,7 +195,6 @@ luma_add_stdlib_library(utility
 luma_platform_source_pair(_line_editor repl/line_editor)
 
 luma_add_library(luma_core STATIC
-    cli/terminal.cpp
     cli/cli.cpp
     cli/cli_args.cpp
     cli/cli_commands.cpp
@@ -190,6 +238,7 @@ luma_add_library(luma_core STATIC
     compiler/compilation_cache.cpp
     compiler/compilation_pipeline.cpp
     compiler/program_loader.cpp
+    compiler/source_dependency.cpp
     vm/vm.cpp
     vm/vm_exception_manager.cpp
     vm/vm_exception_handler.cpp
@@ -208,7 +257,6 @@ luma_add_library(luma_core STATIC
 
     # Stdlib — core and infrastructure
     stdlib/common/core_builtins_module.cpp
-    stdlib/common/lazy_registry.cpp
 )
 
 target_sources(luma_core PRIVATE
@@ -220,9 +268,18 @@ target_sources(luma_core PRIVATE
     $<TARGET_OBJECTS:luma_stdlib_utility>
 )
 
-target_link_libraries(luma_core PUBLIC luma_analysis Threads::Threads PRIVATE luma_shared)
+target_link_libraries(luma_core
+    PUBLIC
+        luma_analysis
+        luma_tls
+        miniz_lib
+        Threads::Threads
+    PRIVATE
+        luma_shared
+)
 
-# Link Winsock on Windows for the Socket module.
+# Link Winsock on Windows for the Socket module. Windows system libraries have no
+# imported targets, so they are linked by name.
 if(WIN32)
     target_link_libraries(luma_core PUBLIC ws2_32)
 endif()
@@ -244,54 +301,6 @@ source_group("stdlib\\system"
     REGULAR_EXPRESSION "stdlib/system/")
 source_group("stdlib\\concurrency"
     REGULAR_EXPRESSION "stdlib/concurrency/")
-
-# Vendored miniz (compression) — always linked.
-include(${PROJECT_SOURCE_DIR}/cmake/LumaMiniz.cmake)
-target_link_libraries(luma_core PUBLIC miniz_lib)
-
-# Vendored Mbed TLS — always linked (Hash module dependency) + HTTPS support.
-#
-# mbedtls_lib is linked unconditionally because the Hash stdlib module
-# (hash_digest.cpp, hash_file.cpp) uses the Mbed TLS Message Digest API
-# (mbedtls_md, mbedtls_md_hmac) for all cryptographic hashing — SHA-256,
-# SHA-512, MD5, HMAC — with no TLS-off fallback. Hashing is not a TLS/HTTPS
-# feature: it is an independent use of mbedtls as a crypto library, so it must
-# be available regardless of LUMA_FEATURE_TLS.
-#
-# LUMA_HAS_TLS enables the TLS/HTTPS protocol layer on top:
-#   * luma_core / luma_stdlib_io / luma_stdlib_math need LUMA_HAS_TLS=1 to
-#     compile their TLS code paths (ssl/x509 for HTTPS, ctr_drbg/entropy for
-#     Random.secure_*). Without the macro those paths are compiled out and
-#     every https:// request / secure_* call returns a "requires TLS" failure.
-#   * OBJECT libraries must define the macro themselves — a PUBLIC define on
-#     luma_core does not reach objects consumed via $<TARGET_OBJECTS:>.
-#
-# Platform CA-cert libraries (crypt32, Security.framework) are TLS-only: they
-# are used exclusively by load_system_ca_certs() in http_module_tls.cpp and
-# are not needed for plain cryptographic hashing.
-include(${PROJECT_SOURCE_DIR}/cmake/LumaMbedTLS.cmake)
-target_link_libraries(luma_core PUBLIC mbedtls_lib)
-
-if(LUMA_FEATURE_TLS)
-    target_compile_definitions(luma_core PUBLIC LUMA_HAS_TLS=1)
-    target_compile_definitions(luma_stdlib_math PRIVATE LUMA_HAS_TLS=1)
-    target_compile_definitions(luma_stdlib_io PRIVATE LUMA_HAS_TLS=1)
-
-    # Platform CA-cert libraries (only needed for HTTPS certificate loading).
-    if(WIN32)
-        target_link_libraries(luma_core PUBLIC crypt32)
-    elseif(APPLE)
-        find_library(SECURITY_FW Security)
-        find_library(COREFOUNDATION_FW CoreFoundation)
-        if(SECURITY_FW AND COREFOUNDATION_FW)
-            target_link_libraries(luma_core PUBLIC ${SECURITY_FW} ${COREFOUNDATION_FW})
-        endif()
-    endif()
-
-    message(STATUS "TLS enabled — Http module supports HTTPS via Mbed TLS")
-else()
-    message(STATUS "TLS disabled — Http module will only support plain HTTP")
-endif()
 
 # ─── Main executable ────────────────────────────────────────────────────────
 

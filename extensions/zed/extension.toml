@@ -1,10 +1,14 @@
 id = "luma"
 name = "Luma"
 description = "Syntax highlighting, language configuration, snippets, and language server integration for the Luma programming language."
-version = "0.15.0"
+version = "0.16.0"
 schema_version = 1
 authors = ["Luma Contributors"]
 repository = "https://github.com/d3v0n5h1r3/luma"
+
+# Top-level key: it must come before the first [table] header, or TOML files
+# it under that table (e.g. `lib.snippets`) and Zed never loads the snippets.
+snippets = ["snippets/luma.json"]
 
 # Declares that this extension ships a compiled Rust/WASM library. Zed only
 # builds and loads the WASM component when `kind = "Rust"` is present, and the
@@ -17,8 +21,11 @@ repository = "https://github.com/d3v0n5h1r3/luma"
 kind = "Rust"
 version = "0.7.0"
 
-snippets = ["snippets/luma.json"]
-
+# The highlight and other queries in languages/luma/ are written against this
+# grammar, so both must come from the same commit. Development builds track
+# `main`; the release workflow (.github/workflows/release-zed.yml) rewrites
+# `rev` to the tagged commit's SHA so a published extension never pairs its
+# queries with a later, incompatible grammar.
 [grammars.luma]
 repository = "https://github.com/D3V0N5H1R3/luma"
 rev = "main"

@@ -27,7 +27,13 @@ inline constexpr std::size_t k_pipe_buffer_size{256};
 // Execute a command and capture its stdout.  Uses CreateProcess on Windows and
 // fork + execvp on POSIX to avoid shell metacharacter injection.  Returns
 // {exit_code, output}; a negative exit code signals a spawn/execution failure.
-// May throw RuntimeError if the command string has mismatched quotes.
+// May throw RuntimeError if the command string has mismatched quotes, or — on
+// Windows — if the program is a batch script (see is_windows_batch_script).
+//
+// Every launch path restricts what the child inherits to its own stdout /
+// stderr pipe ends (POSIX: close-on-exec pipes; Windows:
+// PROC_THREAD_ATTRIBUTE_HANDLE_LIST), so a child never holds a copy of another
+// concurrent launch's pipe, an open socket, or a log file.
 [[nodiscard]] std::pair<int, std::string> execute_command(std::string_view cmd);
 
 // Result of execute_command_captured: the child's exit code plus its stdout and
@@ -73,11 +79,15 @@ struct CapturedOutput {
 [[nodiscard]] CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings);
 
 // Like execute_argv_captured, but bounds the child's lifetime: if it has not
-// exited within `timeout_ms` milliseconds it is forcibly killed (SIGKILL on
-// POSIX, TerminateProcess on Windows) and the returned CapturedOutput has
+// exited within `timeout_ms` milliseconds it is forcibly killed together with
+// its descendants (SIGKILL to its own process group on POSIX, a kill-on-close
+// Job Object on Windows) and the returned CapturedOutput has
 // `timed_out == true` (with empty output and a sentinel exit_code).  Backs
-// Process.run_command_timeout.  A non-positive `timeout_ms` is the caller's
-// responsibility to reject before calling.
+// Process.run_command_timeout.  On POSIX the child's own process group makes it
+// a background job, so its stdin is /dev/null (it can never be stopped by
+// SIGTTIN) and, on Linux, it is SIGKILLed if the launching thread dies.  A
+// non-positive `timeout_ms` is the caller's responsibility to reject before
+// calling.
 [[nodiscard]] CapturedOutput execute_argv_captured_timeout(std::vector<std::string> argv_strings,
                                                            std::int64_t timeout_ms);
 
@@ -108,7 +118,111 @@ enum class SignalKind {
 [[nodiscard]] std::optional<std::vector<std::pair<std::string, std::string>>>
 all_environment_variables();
 
+// True when `program` (argv[0] of a launch request) names a Windows batch
+// script — a `.bat` or `.cmd` file, compared case-insensitively.  CreateProcess
+// silently runs such a file through `cmd.exe /c`, which re-parses the whole
+// command line with cmd's own metacharacter rules (`&`, `|`, `<`, `>`, `^`, `%`)
+// that the MSVC-CRT quoting in build_windows_cmdline cannot neutralise — the
+// "BatBadBut" injection class.  The Windows launch paths therefore refuse batch
+// scripts outright; a program that really wants cmd semantics must name
+// `cmd.exe` explicitly.  Win32 path normalisation is mirrored so the check
+// cannot be sidestepped: trailing path separators and `.` components
+// (`x.bat\.`, `x.bat/.`, `x.cmd\.\.`), trailing dots / spaces (`x.bat. `), an
+// NTFS alternate-data-stream suffix (`x.bat::$DATA`), the directory part, and a
+// drive prefix (`C:x.bat`) are stripped repeatedly until nothing changes, and
+// only then is the extension compared.  Pure string logic, so it is defined
+// inline and unit tested on every platform; the Windows launch layer
+// additionally checks the path CreateProcess would resolve (see
+// windows_launch_refusal).
+[[nodiscard]] inline bool is_windows_batch_script(std::string_view program) {
+    const auto is_ascii_letter = [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    };
+
+    const auto is_normalised_away = [](char c) {
+        return c == '.' || c == ' ' || c == '/' || c == '\\';
+    };
+
+    const auto has_batch_extension = [](std::string_view name) {
+        constexpr std::size_t k_extension_length{4};
+
+        if (name.size() < k_extension_length) {
+            return false;
+        }
+
+        std::string extension{name.substr(name.size() - k_extension_length)};
+
+        for (char& c : extension) {
+            if (c >= 'A' && c <= 'Z') {
+                c = static_cast<char>(c - 'A' + 'a');
+            }
+        }
+
+        return extension == ".bat" || extension == ".cmd";
+    };
+
+    std::string_view name = program;
+
+    if (has_batch_extension(name)) {
+        return true;
+    }
+
+    // Each step can expose a suffix another step removes ("x.bat. ::$DATA\."),
+    // so iterate to a fixed point.  Every intermediate form is checked too
+    // (conservatively also refusing e.g. a `.bat`-named stream of another
+    // file), so no ordering of the steps can hide the extension.
+    for (std::size_t previous_size = name.size() + 1; name.size() != previous_size;) {
+        previous_size = name.size();
+
+        while (!name.empty() && is_normalised_away(name.back())) {
+            name.remove_suffix(1);
+        }
+
+        if (has_batch_extension(name)) {
+            return true;
+        }
+
+        if (const auto separator = name.find_last_of("/\\"); separator != std::string_view::npos) {
+            name.remove_prefix(separator + 1);
+        }
+
+        if (name.size() >= 2 && name[1] == ':' && is_ascii_letter(name[0])) {
+            name.remove_prefix(2);
+        }
+
+        if (const auto colon = name.find(':'); colon != std::string_view::npos) {
+            name = name.substr(0, colon);
+        }
+
+        if (has_batch_extension(name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// True when `program` ends in a character Win32 path normalisation silently
+// drops — a dot, a space, or a path separator.  No real program needs such a
+// name, and it is exactly the shape used to disguise a batch script from an
+// extension check, so the Windows launch layer refuses it outright.
+[[nodiscard]] inline bool has_normalised_away_suffix(std::string_view program) {
+    return !program.empty() && (program.back() == '.' || program.back() == ' ' ||
+                                program.back() == '/' || program.back() == '\\');
+}
+
 #ifdef _WIN32
+// Why the Windows launch layer refuses to start `program` (argv[0]), or nullopt
+// when it may be launched.  Refuses a batch script by name
+// (is_windows_batch_script), a name ending in a character Win32 normalises away
+// (has_normalised_away_suffix), and — because the textual check cannot see
+// everything CreateProcess does — a program whose resolved path is a batch
+// script: a name with a directory part is resolved with GetFullPathNameW, a bare
+// name is searched for with SearchPathW (`.exe` appended to an extension-less
+// name, as CreateProcess does; never PATHEXT), and an existing file's 8.3 short
+// name is expanded with GetLongPathNameW before the extension is checked again.
+[[nodiscard]] std::optional<std::string> windows_launch_refusal(std::string_view program);
+
 // Quote an argv vector into a single Windows command-line string following the
 // MSVC C runtime's parsing rules (backslash and quote doubling) so a child
 // launched via CreateProcess reconstructs exactly the same arguments, closing

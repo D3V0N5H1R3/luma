@@ -14,6 +14,7 @@
 
 #include "analysis/source/source_location.hpp"
 #include "common/escape.hpp"
+#include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -366,17 +367,18 @@ private:
 void register_xml_parser(const EnvPtr& env) {
     ModuleBuilder{"Xml", env}
         .func("deserialize", 1)
-        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& text = expect_string(args[0], "Xml.deserialize", loc);
+
             return wrap_result_operation(
                 "Xml", "deserialize",
-                [&]() -> Value {
-                    return make_success_value(Value{xml_parse_string(args[0].as_string())});
-                },
+                [&]() -> Value { return make_success_value(Value{xml_parse_string(text)}); },
                 error_codes::parse_error);
         })
         .func("deserialize_file", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            auto safe_path = validate_path(args[0].as_string(), loc);
+            const auto& path = expect_string(args[0], "Xml.deserialize_file", loc);
+            auto safe_path = validate_path(path, loc);
 
             // Bound the on-disk size before slurping the whole file into memory,
             // the same guard FileSystem.read_file and Hash.*_file use.  Fail
@@ -387,13 +389,14 @@ void register_xml_parser(const EnvPtr& env) {
             if (size_ec) {
                 return failure_msg("Xml", "deserialize_file",
                                    std::format("cannot determine the size of '{}': {}",
-                                               safe_path.string(), size_ec.message()),
+                                               path_to_utf8(safe_path), size_ec.message()),
                                    error_codes::io_error);
             }
             if (file_bytes > ResourceLimits::max_string_size) {
                 return failure_msg("Xml", "deserialize_file",
                                    std::format("file '{}' exceeds the maximum size of {} bytes",
-                                               safe_path.string(), ResourceLimits::max_string_size),
+                                               path_to_utf8(safe_path),
+                                               ResourceLimits::max_string_size),
                                    error_codes::io_error);
             }
 
@@ -401,7 +404,7 @@ void register_xml_parser(const EnvPtr& env) {
 
             if (!file.is_open()) {
                 return failure_msg("Xml", "deserialize_file",
-                                   std::format("cannot open '{}'", safe_path.string()),
+                                   std::format("cannot open '{}'", path_to_utf8(safe_path)),
                                    error_codes::io_error);
             }
 
@@ -414,7 +417,7 @@ void register_xml_parser(const EnvPtr& env) {
             // parser and be misreported as a parse error.
             if (file.bad()) {
                 return failure_msg("Xml", "deserialize_file",
-                                   std::format("error reading '{}'", safe_path.string()),
+                                   std::format("error reading '{}'", path_to_utf8(safe_path)),
                                    error_codes::io_error);
             }
 
@@ -426,9 +429,11 @@ void register_xml_parser(const EnvPtr& env) {
                 error_codes::parse_error);
         })
         .func("is_valid", 1)
-        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& text = expect_string(args[0], "Xml.is_valid", loc);
+
             try {
-                static_cast<void>(xml_parse_string(args[0].as_string()));
+                static_cast<void>(xml_parse_string(text));
 
                 return Value{true};
             } catch (...) {

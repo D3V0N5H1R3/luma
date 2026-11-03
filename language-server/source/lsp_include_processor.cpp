@@ -112,7 +112,7 @@ namespace {
                                          AnalysisResult& result,
                                          const std::function<void(const std::string&)>& log) {
     if (!is_safe_include_path(inc.path)) {
-        const auto inc_fs_path = std::filesystem::path(inc.path);
+        const auto inc_fs_path = utf8_path(inc.path);
         const auto msg =
             inc_fs_path.is_absolute()
                 ? std::format("Include rejected: '{}' is an absolute path", inc.path)
@@ -150,7 +150,7 @@ constexpr std::uintmax_t k_max_include_bytes = luma::lsp::constants::limits::max
 [[nodiscard]] std::optional<std::pair<std::string, std::size_t>>
 read_include_content(const IncludeDeclaration& inc, const std::filesystem::path& inc_path,
                      IncludeProcessingContext& ctx) {
-    const auto inc_key = inc_path.string();
+    const auto inc_key = path_to_utf8(inc_path);
 
     auto pre_it = ctx.pre_read.find(inc_key);
     if (pre_it != ctx.pre_read.end()) {
@@ -184,7 +184,7 @@ read_include_content(const IncludeDeclaration& inc, const std::filesystem::path&
 [[nodiscard]] std::optional<LoadedInclude>
 load_and_cache_include_file(const IncludeDeclaration& inc, const std::filesystem::path& inc_path,
                             IncludeProcessingContext& ctx) {
-    const auto inc_key = inc_path.string();
+    const auto inc_key = path_to_utf8(inc_path);
 
     auto content_pair = read_include_content(inc, inc_path, ctx);
     if (!content_pair) {
@@ -258,7 +258,7 @@ should_process_nested_include(const std::string& include_path,
     if (!is_safe_resolved_path(resolved_path)) {
         return false;
     }
-    return !already_included.contains(resolved_path.string());
+    return !already_included.contains(path_to_utf8(resolved_path));
 }
 
 // Process a single nested include: read content, lex, parse, and collect
@@ -268,7 +268,7 @@ process_single_nested_include(const IncludeDeclaration& parent_inc,
                               const IncludeDeclaration& nested_inc,
                               const std::filesystem::path& nested_path,
                               IncludeProcessingContext& ctx) {
-    const auto nk = nested_path.string();
+    const auto nk = path_to_utf8(nested_path);
     std::string nsrc;
     std::size_t nhash{0};
 
@@ -351,7 +351,7 @@ void resolve_nested_includes(const IncludeDeclaration& parent_inc, Program& inc_
         }
 
         const auto& nested_inc = static_cast<const IncludeDeclaration&>(*d);
-        const auto nested_path = inc_dir / std::filesystem::path(nested_inc.path);
+        const auto nested_path = inc_dir / utf8_path(nested_inc.path);
 
         if (!should_process_nested_include(nested_inc.path, nested_path, ctx.included_set)) {
             continue;
@@ -389,13 +389,13 @@ static void process_single_include(const IncludeDeclaration& inc,
                                    IncludeProcessingContext& ctx,
                                    std::vector<std::unique_ptr<Declaration>>& merged_decls,
                                    const std::function<void(const std::string&)>& log) {
-    const auto inc_path = base_dir / std::filesystem::path(inc.path);
+    const auto inc_path = base_dir / utf8_path(inc.path);
 
     if (!validate_include_path(inc, inc_path, ctx.result, log)) {
         return;
     }
 
-    const auto inc_key = inc_path.string();
+    const auto inc_key = path_to_utf8(inc_path);
 
     try {
         auto loaded = load_and_cache_include_file(inc, inc_path, ctx);

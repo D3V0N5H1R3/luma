@@ -5,10 +5,66 @@ import * as path from "node:path";
 
 import type * as vscode from "vscode";
 
-import { shouldUpdateBinary } from "../../utils/binary/update";
+import { discardBackup, removeStaleBackups, shouldUpdateBinary } from "../../utils/binary/update";
 import { LSP_CONFIG } from "../../utils/binary/types";
 import { getBinaryFilename } from "../../utils/binary/platform";
 import type { GithubRelease } from "../../utils/binary/types";
+
+function makeOutput(lines: string[]): vscode.OutputChannel {
+    return { appendLine: (line: string) => lines.push(line) } as unknown as vscode.OutputChannel;
+}
+
+suite("binary backup cleanup", () => {
+    let bin_dir: string;
+
+    setup(() => {
+        bin_dir = fs.mkdtempSync(path.join(os.tmpdir(), "luma-backup-"));
+    });
+
+    teardown(() => {
+        fs.rmSync(bin_dir, { recursive: true, force: true });
+    });
+
+    test("a backup that cannot be deleted yet is reported, not thrown", () => {
+        // Windows refuses to delete a running executable (EPERM); a successful
+        // update must not be reported as a failure because of it.
+        const lines: string[] = [];
+        const locked = (): void => {
+            throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+        };
+
+        const removed = discardBackup(
+            path.join(bin_dir, "luma_lsp.old-1"),
+            makeOutput(lines),
+            locked,
+        );
+
+        assert.strictEqual(removed, false);
+        assert.ok(lines.some((line) => line.includes("EPERM")));
+    });
+
+    test("removes leftover backups of the binary, including the legacy .tmp name", () => {
+        for (const name of [
+            "luma_lsp.old-1",
+            "luma_lsp.old-2",
+            "luma_lsp.tmp",
+            "luma_lsp",
+            "luma_dap.old-1",
+        ]) {
+            fs.writeFileSync(path.join(bin_dir, name), "stub");
+        }
+
+        removeStaleBackups(bin_dir, "luma_lsp", makeOutput([]));
+
+        assert.deepStrictEqual(fs.readdirSync(bin_dir).sort(), ["luma_dap.old-1", "luma_lsp"]);
+    });
+
+    test("tolerates a missing bin directory", () => {
+        assert.doesNotThrow(() =>
+            removeStaleBackups(path.join(bin_dir, "missing"), "luma_lsp", makeOutput([])),
+        );
+    });
+});
 
 function makeRelease(tag: string): GithubRelease {
     return { tag_name: tag, assets: [] };

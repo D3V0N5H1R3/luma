@@ -1,6 +1,14 @@
 // Standard library tests: Encoder.
 
+#include <array>
+#include <cstdint>
+#include <string>
+
 #include "stdlib_test_helpers.hpp"
+
+using luma::SourceLocation;
+using luma::Value;
+using luma::test::eval;
 
 static void test_encoder_base64_decode() {
     ASSERT_EVAL_STR("Encoder.decode_base64(\"aGVsbG8=\")", "hello");
@@ -124,8 +132,8 @@ static void test_encoder_url_decode_invalid() {
 
 static void test_encoder_rejects_non_string() {
     // Every Encoder function expects a string argument.
-    ASSERT_TRUE(luma::test::eval_throws("Encoder.encode_base64(123)"));
-    ASSERT_TRUE(luma::test::eval_throws("Encoder.decode_url(true)"));
+    ASSERT_EVAL_THROWS("Encoder.encode_base64(123)", "Encoder.encode_base64: expected string");
+    ASSERT_EVAL_THROWS("Encoder.decode_url(true)", "Encoder.decode_url: expected string");
 }
 
 static void test_encoder_module() {
@@ -180,6 +188,31 @@ static void test_encoder_text_latin1() {
 
     // A codepoint above U+00FF cannot be represented in Latin-1.
     ASSERT_EVAL_FAILURE("Encoder.encode_text(\"😀\", Encoder.Encoding.Latin1)");
+}
+
+static void test_encoder_text_rejects_ill_formed_utf8_cleanly() {
+    // A Luma string normally holds valid UTF-8, but a native caller can pass
+    // arbitrary bytes.  encode_text advances by the length utf8_decode actually
+    // consumed, so a truncated sequence or a stray continuation byte is reported
+    // as U+FFFD (not representable) instead of being stepped over by the lead
+    // byte's nominal length.
+    const auto env = luma::test::make_std_env();
+    const SourceLocation loc{};
+    const auto encode = env->get("Encoder.encode_text", loc);
+    const auto latin1 = eval("Encoder.Encoding.Latin1");
+
+    const std::string truncated_sequence{"A\xE2\x82"};
+    // Appending "B" separately keeps the hex escape from swallowing it.
+    const std::string stray_continuation = std::string{"A\x80"} + "B";
+    const std::array<std::string, 2> ill_formed{truncated_sequence, stray_continuation};
+
+    for (const auto& bytes : ill_formed) {
+        const std::array<Value, 2> args{Value{bytes}, latin1};
+        const auto v = encode.as_native_function()->function(args, loc);
+
+        ASSERT_RESULT_FAILURE(v);
+        ASSERT_NE(v.as_result()->owned_inner->as_string().find("U+FFFD"), std::string::npos);
+    }
 }
 
 static void test_encoder_decode_text_failures() {
@@ -277,6 +310,7 @@ int main() {
     RUN(test_encoder_text_utf8_roundtrip);
     RUN(test_encoder_text_ascii);
     RUN(test_encoder_text_latin1);
+    RUN(test_encoder_text_rejects_ill_formed_utf8_cleanly);
     RUN(test_encoder_decode_text_failures);
     RUN(test_encoder_decode_base64_typed_success);
     RUN(test_encoder_decode_base64_typed_invalid);

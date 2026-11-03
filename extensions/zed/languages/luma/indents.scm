@@ -2,59 +2,24 @@
 ; Luma — Tree-sitter Indentation Queries
 ;
 ; Controls automatic indentation in the Zed editor.
+;
+; Zed indents the lines inside a node captured as @indent, and the @end
+; capture marks the token that closes it. The capture must be the whole
+; node: an @indent on the opening `{` alone covers a single line and so
+; never indents the body.
 ; ═══════════════════════════════════════════════════════════════════
 
-; Increase indent inside blocks opened by {
-(block) @indent
+; Blocks, declaration bodies, match arms, dictionaries, task scopes.
+(_
+  "{"
+  "}" @end) @indent
 
-; Decrease indent for the closing }
-(block
-  "}" @outdent)
+; Array literals and generic/index brackets spanning multiple lines.
+(_
+  "["
+  "]" @end) @indent
 
-; Record declarations
-(record_declaration
-  "{" @indent
-  "}" @outdent)
-
-; Choice declarations
-(choice_declaration
-  "{" @indent
-  "}" @outdent)
-
-; Interface declarations
-(interface_declaration
-  "{" @indent
-  "}" @outdent)
-
-; Namespace declarations
-(namespace_declaration
-  "{" @indent
-  "}" @outdent)
-
-; Match expressions
-(match_expression
-  "{" @indent
-  "}" @outdent)
-
-; Dictionary literals
-(dictionary_literal
-  "{" @indent
-  "}" @outdent)
-
-; NOTE: for_statement, while_statement, if_statement, and try_statement
-; all use (block) nodes, which are already handled by the generic (block)
-; @indent rule above.  Listing them again would cause double indentation.
-
-; Task scope
-(task_scope_expression
-  "{" @indent
-  "}" @outdent)
-
-; Lambda expressions with blocks
-(lambda_expression
-  (block) @indent)
-
-; Array literals spanning multiple lines
-(array_literal
-  "[" @indent
-  "]" @outdent)
+; Parameter and argument lists spanning multiple lines.
+(_
+  "("
+  ")" @end) @indent

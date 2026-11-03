@@ -3,24 +3,46 @@
 #
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
+#
+# Every timestamp is built from explicit UTC components, so no test depends on
+# the host's time zone.  Only the clock tests at the top read the current time,
+# and they assert properties that hold at any moment.
 # ═══════════════════════════════════════════════════════════
 
-@test
-function void test_datetime_now_ms() {
-    number current_ms = DateTime.milliseconds_since_start()
+# ─── Clock ───────────────────────────────────────────────
 
-    assert(current_ms >= 0)
+@test
+function void test_datetime_milliseconds_since_start() {
+    number first_reading = DateTime.milliseconds_since_start()
+    number second_reading = DateTime.milliseconds_since_start()
+
+    assert(first_reading >= 0)
+    assert(second_reading >= first_reading, "the program clock never runs backwards")
 }
 
 @test
 function void test_datetime_now_unix() {
+    # 1577836800 is 2020-01-01T00:00:00Z — any working clock is past it.
     number current_unix = DateTime.now_unix()
 
     assert(current_unix > 1577836800)
 }
 
 @test
-function void test_datetime_difference() {
+function void test_datetime_now_iso_string() {
+    string iso = Result.unwrap(DateTime.now_iso_string())
+
+    assert(String.length(iso) == 20, "now_iso_string has the YYYY-MM-DDTHH:MM:SSZ shape")
+    assert("T" in iso)
+    assert(String.ends_with(iso, "Z"), "the current time is rendered in UTC")
+}
+
+# ─── Millisecond arithmetic ──────────────────────────────
+# add_milliseconds and difference_milliseconds operate on millisecond-valued
+# inputs such as milliseconds_since_start() readings.
+
+@test
+function void test_datetime_difference_milliseconds() {
     number start_ms = DateTime.milliseconds_since_start()
     number end_ms = start_ms + 100.0
 
@@ -29,11 +51,13 @@ function void test_datetime_difference() {
 }
 
 @test
-function void test_datetime_add_ms() {
-    number timestamp = 1000.0
+function void test_datetime_add_milliseconds() {
+    number start_ms = 1000.0
 
-    assert(Math.approximately_equal(DateTime.add_milliseconds(timestamp, 500), 1500.0, 0.001))
+    assert(Math.approximately_equal(DateTime.add_milliseconds(start_ms, 500), 1500.0, 0.001))
 }
+
+# ─── Construction and components ────────────────────────
 
 @test
 function void test_datetime_from_parts_and_components() {
@@ -50,12 +74,12 @@ function void test_datetime_from_parts_and_components() {
 
 @test
 function void test_datetime_day_of_week() {
-    # 2024-03-15 is a Friday = 5
-    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    # 2024-03-15 is a Friday (5); 2024-03-17 is a Sunday (7).
+    number friday = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    number sunday = Result.unwrap(DateTime.from_parts(2024, 3, 17, 0, 0, 0))
 
-    integer day_of_week = Result.unwrap(DateTime.day_of_week(timestamp))
-
-    assert(day_of_week == 5)
+    assert(DateTime.day_of_week(friday) == success(5))
+    assert(DateTime.day_of_week(sunday) == success(7), "Sunday is the last ISO day")
 }
 
 @test
@@ -96,25 +120,26 @@ function void test_datetime_days_in_month() {
 function void test_datetime_to_parts() {
     number timestamp = Result.unwrap(DateTime.from_parts(2024, 6, 15, 12, 30, 45))
 
-    assert(Result.unwrap(DateTime.to_parts(timestamp)).year == 2024)
-    assert(Result.unwrap(DateTime.to_parts(timestamp)).month == 6)
-    assert(Result.unwrap(DateTime.to_parts(timestamp)).day == 15)
-    assert(Result.unwrap(DateTime.to_parts(timestamp)).hour == 12)
-    assert(Result.unwrap(DateTime.to_parts(timestamp)).minute == 30)
-    assert(Result.unwrap(DateTime.to_parts(timestamp)).second == 45)
+    DateTime.TimeParts parts = Result.unwrap(DateTime.to_parts(timestamp))
+
+    assert(parts.year == 2024)
+    assert(parts.month == 6)
+    assert(parts.day == 15)
+    assert(parts.hour == 12)
+    assert(parts.minute == 30)
+    assert(parts.second == 45)
 }
 
 @test
 function void test_datetime_iso_string_roundtrip() {
     number timestamp = Result.unwrap(DateTime.from_parts(2026, 4, 8, 14, 30, 0))
 
-    string iso_string = Result.unwrap(DateTime.to_iso_string(timestamp))
+    result<string> iso_string = DateTime.to_iso_string(timestamp)
+    number date_only = Result.unwrap(DateTime.from_iso_string("2026-04-08"))
 
-    assert(String.starts_with(iso_string, "2026-04-08"))
-
-    result<number> parsed = DateTime.from_iso_string("2026-04-08")
-
-    assert(Result.is_success(parsed))
+    assert(iso_string == success("2026-04-08T14:30:00Z"))
+    assert(DateTime.to_iso_string(date_only) == success("2026-04-08T00:00:00Z"),
+        "a date-only ISO string parses to midnight UTC")
 }
 
 @test
@@ -134,66 +159,68 @@ function void test_datetime_from_parts_invalid() {
     assert(Result.is_failure(bad_second), "second 61 should fail")
 }
 
-# ─── now_iso_string ───
-
-@test
-function void test_datetime_now_iso_string() {
-    result<string> iso = DateTime.now_iso_string()
-
-    assert(Result.is_success(iso))
-    assert("T" in Result.unwrap(iso))
-    assert("Z" in Result.unwrap(iso))
-}
-
-# ─── difference_seconds / hours / days ───
+# ─── difference_seconds / hours / days ───────────────────
 
 @test
 function void test_datetime_difference_seconds() {
-    number t1 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 30, 0))
-    number t2 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 31, 40))
+    number earlier = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 30, 0))
+    number later = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 31, 40))
 
-    assert(Math.approximately_equal(DateTime.difference_seconds(t1, t2), 100.0, 0.001))
+    assert(Math.approximately_equal(DateTime.difference_seconds(earlier, later), 100.0, 0.001))
 }
 
 @test
 function void test_datetime_difference_hours() {
-    number t1 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 0, 0))
-    number t2 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 13, 0, 0))
+    number earlier = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 0, 0))
+    number later = Result.unwrap(DateTime.from_parts(2024, 3, 15, 13, 0, 0))
 
-    assert(Math.approximately_equal(DateTime.difference_hours(t1, t2), 3.0, 0.001))
+    assert(Math.approximately_equal(DateTime.difference_hours(earlier, later), 3.0, 0.001))
 }
 
 @test
 function void test_datetime_difference_days() {
-    number t1 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
-    number t2 = Result.unwrap(DateTime.from_parts(2024, 3, 17, 0, 0, 0))
+    number earlier = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    number later = Result.unwrap(DateTime.from_parts(2024, 3, 17, 0, 0, 0))
 
-    assert(Math.approximately_equal(DateTime.difference_days(t1, t2), 2.0, 0.001))
+    assert(Math.approximately_equal(DateTime.difference_days(earlier, later), 2.0, 0.001))
 }
 
-# ─── difference_months / years ───
+@test
+function void test_datetime_difference_is_absolute() {
+    # The difference functions ignore argument order.
+    number earlier = Result.unwrap(DateTime.from_parts(2020, 6, 1, 0, 0, 0))
+    number later = Result.unwrap(DateTime.from_parts(2024, 6, 1, 0, 0, 0))
+
+    assert(Math.approximately_equal(DateTime.difference_seconds(later, earlier),
+        DateTime.difference_seconds(earlier, later), 0.001))
+    assert(DateTime.difference_months(later, earlier) == success(48))
+    assert(DateTime.difference_years(later, earlier) == success(4))
+}
+
+# ─── difference_months / years ───────────────────────────
 
 @test
 function void test_datetime_difference_months() {
-    number t1 = Result.unwrap(DateTime.from_parts(2024, 1, 15, 0, 0, 0))
-    number t2 = Result.unwrap(DateTime.from_parts(2024, 4, 15, 0, 0, 0))
+    number earlier = Result.unwrap(DateTime.from_parts(2024, 1, 15, 0, 0, 0))
+    number later = Result.unwrap(DateTime.from_parts(2024, 4, 15, 0, 0, 0))
 
-    assert(Result.unwrap(DateTime.difference_months(t1, t2)) == 3)
+    assert(Result.unwrap(DateTime.difference_months(earlier, later)) == 3)
 }
 
 @test
 function void test_datetime_difference_years() {
-    number t1 = Result.unwrap(DateTime.from_parts(2020, 6, 1, 0, 0, 0))
-    number t2 = Result.unwrap(DateTime.from_parts(2024, 6, 1, 0, 0, 0))
+    number earlier = Result.unwrap(DateTime.from_parts(2020, 6, 1, 0, 0, 0))
+    number later = Result.unwrap(DateTime.from_parts(2024, 6, 1, 0, 0, 0))
 
-    assert(Result.unwrap(DateTime.difference_years(t1, t2)) == 4)
+    assert(Result.unwrap(DateTime.difference_years(earlier, later)) == 4)
 }
 
-# ─── add_seconds / hours / days ───
+# ─── add_seconds / hours / days ──────────────────────────
 
 @test
 function void test_datetime_add_seconds() {
     number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 30, 0))
+
     number added = DateTime.add_seconds(base, 60.0)
 
     assert(Result.unwrap(DateTime.minute(added)) == 31)
@@ -202,6 +229,7 @@ function void test_datetime_add_seconds() {
 @test
 function void test_datetime_add_hours() {
     number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 0, 0))
+
     number added = DateTime.add_hours(base, 5.0)
 
     assert(Result.unwrap(DateTime.hour(added)) == 15)
@@ -210,29 +238,46 @@ function void test_datetime_add_hours() {
 @test
 function void test_datetime_add_days() {
     number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+
     number added = DateTime.add_days(base, 3.0)
 
     assert(Result.unwrap(DateTime.day_of_month(added)) == 18)
 }
 
-# ─── add_months / years ───
+@test
+function void test_datetime_add_minutes_weeks() {
+    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 0, 0))
+
+    number ninety_minutes_later = DateTime.add_minutes(base, 90.0)
+    number two_weeks_later = DateTime.add_weeks(base, 2.0)
+
+    assert(Math.approximately_equal(
+        DateTime.difference_minutes(base, ninety_minutes_later), 90.0, 0.001))
+    assert(Math.approximately_equal(DateTime.difference_weeks(base, two_weeks_later), 2.0, 0.001))
+    assert(Math.approximately_equal(DateTime.difference_days(base, two_weeks_later), 14.0, 0.001),
+        "two weeks is 14 days")
+}
+
+# ─── add_months / years ──────────────────────────────────
 
 @test
 function void test_datetime_add_months() {
+    # Jan 31 + 1 month → Feb 29 (2024 is a leap year, day clamped).
     number base = Result.unwrap(DateTime.from_parts(2024, 1, 31, 0, 0, 0))
+
     number added = Result.unwrap(DateTime.add_months(base, 1))
 
-    # Jan 31 + 1 month → Feb 29 (2024 is a leap year, day clamped)
     assert(Result.unwrap(DateTime.month(added)) == 2)
     assert(Result.unwrap(DateTime.day_of_month(added)) == 29)
 }
 
 @test
 function void test_datetime_add_years() {
+    # Feb 29 + 1 year → Feb 28 (2025 is not a leap year).
     number base = Result.unwrap(DateTime.from_parts(2024, 2, 29, 12, 0, 0))
+
     number added = Result.unwrap(DateTime.add_years(base, 1))
 
-    # Feb 29 + 1 year → Feb 28 (2025 is not a leap year)
     assert(Result.unwrap(DateTime.year(added)) == 2025)
     assert(Result.unwrap(DateTime.day_of_month(added)) == 28)
 }
@@ -240,13 +285,14 @@ function void test_datetime_add_years() {
 @test
 function void test_datetime_add_months_negative() {
     number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+
     number subtracted = Result.unwrap(DateTime.add_months(base, -2))
 
     assert(Result.unwrap(DateTime.month(subtracted)) == 1)
     assert(Result.unwrap(DateTime.year(subtracted)) == 2024)
 }
 
-# ─── timezone (fixed UTC offset) ───
+# ─── Timezone (fixed UTC offset) ─────────────────────────
 
 @test
 function void test_datetime_offset_hours() {
@@ -257,177 +303,177 @@ function void test_datetime_offset_hours() {
 
 @test
 function void test_datetime_to_offset() {
-    # 2024-03-15 14:30:00 UTC
-    number utc_ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
+    # 2024-03-15 14:30:00 UTC is 16:30 local at UTC+02:00.
+    number utc_timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
     number offset = DateTime.offset_hours(2.0)
-    number local_ts = Result.unwrap(DateTime.to_offset(utc_ts, offset))
 
-    # Local time should be 2 hours ahead → 16:30
-    assert(Result.unwrap(DateTime.hour(local_ts)) == 16)
-    assert(Result.unwrap(DateTime.minute(local_ts)) == 30)
+    number local_timestamp = Result.unwrap(DateTime.to_offset(utc_timestamp, offset))
+
+    assert(Result.unwrap(DateTime.hour(local_timestamp)) == 16)
+    assert(Result.unwrap(DateTime.minute(local_timestamp)) == 30)
 }
 
 @test
 function void test_datetime_from_offset() {
     # Given a local timestamp at UTC+05:30, recover the UTC timestamp.
-    number utc_ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
+    number utc_timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
     number offset = DateTime.offset_hours(5.5)
-    number local_ts = Result.unwrap(DateTime.to_offset(utc_ts, offset))
-    number recovered = Result.unwrap(DateTime.from_offset(local_ts, offset))
+    number local_timestamp = Result.unwrap(DateTime.to_offset(utc_timestamp, offset))
 
-    assert(Math.approximately_equal(recovered, utc_ts, 0.001))
+    number recovered = Result.unwrap(DateTime.from_offset(local_timestamp, offset))
+
+    assert(Math.approximately_equal(recovered, utc_timestamp, 0.001))
 }
 
 @test
 function void test_datetime_to_offset_invalid() {
-    number utc_ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
+    # Valid offsets run from -720 (UTC-12:00) to +840 (UTC+14:00) minutes.
+    number utc_timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
 
-    # Offset of +15 hours (900 minutes) exceeds the valid range.
-    assert(Result.is_failure(DateTime.to_offset(utc_ts, 900.0)))
-    assert(Result.is_failure(DateTime.to_offset(utc_ts, -800.0)))
+    assert(Result.is_failure(DateTime.to_offset(utc_timestamp, 900.0)))
+    assert(Result.is_failure(DateTime.to_offset(utc_timestamp, -800.0)))
 }
 
 @test
 function void test_datetime_to_iso_string_offset() {
-    number utc_ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
+    number utc_timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
 
-    # UTC+05:30 → 20:00 local
-    string iso_plus = Result.unwrap(DateTime.to_iso_string_offset(utc_ts, 330.0))
+    result<string> iso_plus = DateTime.to_iso_string_offset(utc_timestamp, 330.0)
+    result<string> iso_minus = DateTime.to_iso_string_offset(utc_timestamp, -300.0)
+    result<string> iso_utc = DateTime.to_iso_string_offset(utc_timestamp, 0.0)
 
-    assert(iso_plus == "2024-03-15T20:00:00+05:30")
-
-    # UTC-05:00 → 09:30 local
-    string iso_minus = Result.unwrap(DateTime.to_iso_string_offset(utc_ts, -300.0))
-
-    assert(iso_minus == "2024-03-15T09:30:00-05:00")
-
-    # Zero offset → "Z" suffix
-    string iso_z = Result.unwrap(DateTime.to_iso_string_offset(utc_ts, 0.0))
-
-    assert("Z" in iso_z)
+    assert(iso_plus == success("2024-03-15T20:00:00+05:30"), "UTC+05:30 renders 20:00 local")
+    assert(iso_minus == success("2024-03-15T09:30:00-05:00"), "UTC-05:00 renders 09:30 local")
+    assert(iso_utc == success("2024-03-15T14:30:00Z"), "a zero offset renders the Z suffix")
 }
 
 @test
 function void test_datetime_from_parts_offset() {
-    # Build 2024-03-15 20:00:00 at UTC+05:30 → should equal 14:30 UTC
-    number utc_ts = Result.unwrap(DateTime.from_parts_offset(2024, 3, 15, 20, 0, 0, 330.0))
+    # 2024-03-15 20:00:00 at UTC+05:30 is 14:30 UTC.
+    number utc_timestamp = Result.unwrap(DateTime.from_parts_offset(2024, 3, 15, 20, 0, 0, 330.0))
 
-    assert(Result.unwrap(DateTime.hour(utc_ts)) == 14)
-    assert(Result.unwrap(DateTime.minute(utc_ts)) == 30)
+    assert(Result.unwrap(DateTime.hour(utc_timestamp)) == 14)
+    assert(Result.unwrap(DateTime.minute(utc_timestamp)) == 30)
 }
 
 @test
 function void test_datetime_from_parts_offset_invalid() {
-    # Invalid offset
-    assert(Result.is_failure(DateTime.from_parts_offset(2024, 3, 15, 12, 0, 0, 900.0)))
-    # Invalid month
-    assert(Result.is_failure(DateTime.from_parts_offset(2024, 13, 15, 12, 0, 0, 60.0)))
+    assert(Result.is_failure(DateTime.from_parts_offset(2024, 3, 15, 12, 0, 0, 900.0)),
+        "offset above +840 fails")
+    assert(Result.is_failure(DateTime.from_parts_offset(2024, 13, 15, 12, 0, 0, 60.0)),
+        "month 13 fails")
 }
 
 @test
 function void test_datetime_from_iso_string_with_offset() {
-    # Parse ISO string with positive offset
-    number ts_plus = Result.unwrap(DateTime.from_iso_string("2024-03-15T20:00:00+05:30"))
+    # All three strings name the same instant, 14:30 UTC.
+    number from_plus = Result.unwrap(DateTime.from_iso_string("2024-03-15T20:00:00+05:30"))
+    number from_minus = Result.unwrap(DateTime.from_iso_string("2024-03-15T09:30:00-05:00"))
+    number from_utc = Result.unwrap(DateTime.from_iso_string("2024-03-15T14:30:00Z"))
 
-    assert(Result.unwrap(DateTime.hour(ts_plus)) == 14)
-    assert(Result.unwrap(DateTime.minute(ts_plus)) == 30)
-
-    # Parse ISO string with negative offset
-    number ts_minus = Result.unwrap(DateTime.from_iso_string("2024-03-15T09:30:00-05:00"))
-
-    assert(Result.unwrap(DateTime.hour(ts_minus)) == 14)
-    assert(Result.unwrap(DateTime.minute(ts_minus)) == 30)
-
-    # Parse ISO string with Z (should behave as before)
-    number ts_z = Result.unwrap(DateTime.from_iso_string("2024-03-15T14:30:00Z"))
-
-    assert(Result.unwrap(DateTime.hour(ts_z)) == 14)
-    assert(Result.unwrap(DateTime.minute(ts_z)) == 30)
+    assert(Result.unwrap(DateTime.hour(from_plus)) == 14)
+    assert(Result.unwrap(DateTime.minute(from_plus)) == 30)
+    assert(Result.unwrap(DateTime.hour(from_minus)) == 14)
+    assert(Result.unwrap(DateTime.minute(from_minus)) == 30)
+    assert(Result.unwrap(DateTime.hour(from_utc)) == 14)
+    assert(Result.unwrap(DateTime.minute(from_utc)) == 30)
 }
 
-# ─── Additional negative tests ───────────────────────────
+@test
+function void test_datetime_zoned() {
+    DateTime.Zoned plus_one = Result.unwrap(DateTime.zoned(0.0, 60))
+    DateTime.Zoned utc = Result.unwrap(DateTime.zoned(0.0, 0))
+
+    DateTime.TimeParts parts = Result.unwrap(DateTime.zoned_to_parts(plus_one))
+
+    assert(plus_one.offset_minutes == 60, "offset stored")
+    assert(DateTime.zoned_to_iso_string(plus_one) == success("1970-01-01T01:00:00+01:00"),
+        "renders with the offset")
+    assert(DateTime.zoned_to_iso_string(utc) == success("1970-01-01T00:00:00Z"),
+        "zero offset renders Z")
+    assert(parts.year == 1970, "year")
+    assert(parts.hour == 1, "hour reflects the offset")
+    assert(Result.is_failure(DateTime.zoned(0.0, 900)), "offset above +840 fails")
+    assert(Result.is_failure(DateTime.zoned(0.0, -800)), "offset below -720 fails")
+}
+
+# ─── Invalid calendar input ──────────────────────────────
 
 @test
 function void test_datetime_days_in_month_invalid_month() {
-    # Month 0 and 13 are invalid.
     assert(Result.is_failure(DateTime.days_in_month(2024, 0)), "month 0 should fail")
     assert(Result.is_failure(DateTime.days_in_month(2024, 13)), "month 13 should fail")
 }
 
 @test
 function void test_datetime_from_iso_string_invalid_format() {
-    # Completely invalid ISO string should fail.
     assert(Result.is_failure(DateTime.from_iso_string("not-a-date")))
 }
 
 @test
 function void test_datetime_from_parts_feb_29_non_leap_year() {
     # 2023 is not a leap year — February 29 should fail.
-    result<number> r = DateTime.from_parts(2023, 2, 29, 0, 0, 0)
+    result<number> feb_29 = DateTime.from_parts(2023, 2, 29, 0, 0, 0)
 
-    assert(Result.is_failure(r), "Feb 29 on non-leap year should fail")
+    assert(Result.is_failure(feb_29), "Feb 29 on non-leap year should fail")
 }
 
 @test
 function void test_datetime_from_parts_feb_29_leap_year() {
     # 2024 is a leap year — February 29 should succeed.
-    result<number> r = DateTime.from_parts(2024, 2, 29, 0, 0, 0)
+    result<number> feb_29 = DateTime.from_parts(2024, 2, 29, 0, 0, 0)
 
-    assert(Result.is_success(r), "Feb 29 on leap year should succeed")
+    assert(Result.is_success(feb_29), "Feb 29 on leap year should succeed")
+    assert(DateTime.day_of_month(Result.unwrap(feb_29)) == success(29))
 }
 
 # ─── DateTime.format ─────────────────────────────────────
 
 @test
 function void test_datetime_format_basic() {
-    # 2024-01-15 10:30:45 UTC
-    number ts = Result.unwrap(DateTime.from_parts(2024, 1, 15, 10, 30, 45))
-    result<string> r = DateTime.format(ts, "YYYY-MM-DD hh:mm:ss")
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 1, 15, 10, 30, 45))
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == "2024-01-15 10:30:45")
+    result<string> formatted = DateTime.format(timestamp, "YYYY-MM-DD hh:mm:ss")
+
+    assert(formatted == success("2024-01-15 10:30:45"))
 }
 
 # ─── DateTime.is_before / DateTime.is_after ──────────────
 
 @test
 function void test_datetime_is_before() {
-    number a = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
-    number b = Result.unwrap(DateTime.from_parts(2024, 6, 15, 0, 0, 0))
+    number earlier = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
+    number later = Result.unwrap(DateTime.from_parts(2024, 6, 15, 0, 0, 0))
 
-    assert(DateTime.is_before(a, b))
-    assert(!DateTime.is_before(b, a))
-    assert(!DateTime.is_before(a, a))
+    assert(DateTime.is_before(earlier, later))
+    assert(!DateTime.is_before(later, earlier))
+    assert(!DateTime.is_before(earlier, earlier), "an instant is not before itself")
 }
 
 @test
 function void test_datetime_is_after() {
-    number a = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
-    number b = Result.unwrap(DateTime.from_parts(2024, 6, 15, 0, 0, 0))
+    number earlier = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
+    number later = Result.unwrap(DateTime.from_parts(2024, 6, 15, 0, 0, 0))
 
-    assert(DateTime.is_after(b, a))
-    assert(!DateTime.is_after(a, b))
-    assert(!DateTime.is_after(a, a))
+    assert(DateTime.is_after(later, earlier))
+    assert(!DateTime.is_after(earlier, later))
+    assert(!DateTime.is_after(earlier, earlier), "an instant is not after itself")
 }
 
-# ─── from_iso_string: full round-trip ────────────────────
+# ─── ISO 8601 parsing ────────────────────────────────────
 
 @test
 function void test_datetime_iso_string_full_roundtrip() {
     # A full date-time formatted by to_iso_string must parse back to the
     # same instant via from_iso_string (the codec round-trip property).
-    number ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
-    string iso = Result.unwrap(DateTime.to_iso_string(ts))
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
 
-    assert("T" in iso, "full ISO string contains a 'T' separator")
-    assert("Z" in iso, "UTC ISO string ends with 'Z'")
-
+    string iso = Result.unwrap(DateTime.to_iso_string(timestamp))
     number recovered = Result.unwrap(DateTime.from_iso_string(iso))
 
-    assert(Math.approximately_equal(recovered, ts, 0.001))
+    assert(iso == "2024-03-15T14:30:45Z", "UTC ISO string uses the T separator and Z suffix")
+    assert(Math.approximately_equal(recovered, timestamp, 0.001))
 }
-
-# ─── from_iso_string: malformed input (never crashes, returns failure) ───
 
 @test
 function void test_datetime_from_iso_string_malformed() {
@@ -442,8 +488,6 @@ function void test_datetime_from_iso_string_malformed() {
         "offset without minutes should fail")
 }
 
-# ─── from_iso_string: out-of-range calendar fields ───
-
 @test
 function void test_datetime_from_iso_string_out_of_range() {
     # Year and month outside the supported 0001-9999 / 1-12 ranges are rejected
@@ -454,13 +498,13 @@ function void test_datetime_from_iso_string_out_of_range() {
     assert(Result.is_failure(DateTime.from_iso_string("2024-13-15")), "month 13 should fail")
 }
 
-# ─── DateTime.ParseError (opt-in typed parse errors) ───
+# ─── DateTime.ParseError (opt-in typed parse errors) ─────
 
 # Exhaustive match over every ParseError variant.  Beyond labelling a category,
 # this doubles as a check that DateTime.ParseError is fully registered,
 # exhaustively matchable, and usable as a parameter type annotation.
-function string parse_error_label(DateTime.ParseError e) {
-    return match e {
+function string parse_error_label(DateTime.ParseError category) {
+    return match category {
         case DateTime.ParseError.Empty                { "empty" }
         case DateTime.ParseError.InvalidFormat        { "invalid_format" }
         case DateTime.ParseError.OutOfRange           { "out_of_range" }
@@ -468,58 +512,57 @@ function string parse_error_label(DateTime.ParseError e) {
     }
 }
 
+# Run the typed parser and label its outcome; an unexpected success gets its
+# own label so it can never pass for a failure category.
+function string typed_parse_label(string text) {
+    return match DateTime.from_iso_string_typed(text) {
+        success(_timestamp) { "unexpected_success" }
+        failure(category) { parse_error_label(category) }
+    }
+}
+
 @test
 function void test_datetime_from_iso_string_typed_success() {
-    result<number, DateTime.ParseError> r =
+    result<number, DateTime.ParseError> parsed =
         DateTime.from_iso_string_typed("2024-03-15T14:30:00Z")
 
-    assert(Result.is_success(r), "a valid ISO string parses")
-    assert(Math.approximately_equal(Result.unwrap(r), 1710513000.0, 0.001))
+    assert(Result.is_success(parsed), "a valid ISO string parses")
+    assert(Math.approximately_equal(Result.unwrap(parsed), 1710513000.0, 0.001))
 }
 
 @test
 function void test_datetime_from_iso_string_typed_classifies() {
     # Each failure is a match-able typed choice, not an opaque string.
-    assert(parse_error_label(classify_iso("")) == "empty")
-    assert(parse_error_label(classify_iso("not-a-date")) == "invalid_format")
-    assert(parse_error_label(classify_iso("2024-13-01")) == "out_of_range")
-    assert(parse_error_label(classify_iso("2024-03-15T14:30:00.5Z")) == "unsupported_precision")
+    assert(typed_parse_label("") == "empty")
+    assert(typed_parse_label("not-a-date") == "invalid_format")
+    assert(typed_parse_label("2024-13-01") == "out_of_range")
+    assert(typed_parse_label("2024-03-15T14:30:00.5Z") == "unsupported_precision")
 }
 
-# Helper: run the typed parser and return its ParseError, asserting it failed.
-function DateTime.ParseError classify_iso(string text) {
-    result<number, DateTime.ParseError> r = DateTime.from_iso_string_typed(text)
-
-    return match r {
-        success(_ts) { DateTime.ParseError.InvalidFormat }
-        failure(e) { e }
-    }
-}
-
-# ─── component accessors / format / to_parts on out-of-range instant ───
+# ─── Out-of-range and non-finite instants ────────────────
 
 @test
 function void test_datetime_components_out_of_range() {
     # A timestamp far outside the year 0001-9999 window must fail every
     # decomposition rather than read out-of-range calendar data.
-    number bad = -99999999999.0
+    number out_of_range = -99999999999.0
 
-    assert(Result.is_failure(DateTime.year(bad)), "year out of range")
-    assert(Result.is_failure(DateTime.month(bad)), "month out of range")
-    assert(Result.is_failure(DateTime.day_of_month(bad)), "day_of_month out of range")
-    assert(Result.is_failure(DateTime.hour(bad)), "hour out of range")
-    assert(Result.is_failure(DateTime.minute(bad)), "minute out of range")
-    assert(Result.is_failure(DateTime.second(bad)), "second out of range")
-    assert(Result.is_failure(DateTime.day_of_week(bad)), "day_of_week out of range")
+    assert(Result.is_failure(DateTime.year(out_of_range)), "year out of range")
+    assert(Result.is_failure(DateTime.month(out_of_range)), "month out of range")
+    assert(Result.is_failure(DateTime.day_of_month(out_of_range)), "day_of_month out of range")
+    assert(Result.is_failure(DateTime.hour(out_of_range)), "hour out of range")
+    assert(Result.is_failure(DateTime.minute(out_of_range)), "minute out of range")
+    assert(Result.is_failure(DateTime.second(out_of_range)), "second out of range")
+    assert(Result.is_failure(DateTime.day_of_week(out_of_range)), "day_of_week out of range")
 }
 
 @test
 function void test_datetime_format_and_to_parts_out_of_range() {
-    number bad = -99999999999.0
+    number out_of_range = -99999999999.0
 
-    assert(Result.is_failure(DateTime.format(bad, "YYYY-MM-DD")), "format out of range")
-    assert(Result.is_failure(DateTime.to_parts(bad)), "to_parts out of range")
-    assert(Result.is_failure(DateTime.to_iso_string(bad)), "to_iso_string out of range")
+    assert(Result.is_failure(DateTime.format(out_of_range, "YYYY-MM-DD")), "format out of range")
+    assert(Result.is_failure(DateTime.to_parts(out_of_range)), "to_parts out of range")
+    assert(Result.is_failure(DateTime.to_iso_string(out_of_range)), "to_iso_string out of range")
 }
 
 @test
@@ -527,47 +570,50 @@ function void test_datetime_non_finite_input() {
     # Infinity and NaN are reachable IEEE-754 number values.  Every decomposition
     # must reject them cleanly rather than convert them to time_t (undefined
     # behaviour) when reading calendar fields.
-    number inf_val = Math.infinity
-    number nan_val = Math.infinity - Math.infinity
+    number infinite = Math.infinity
+    number not_a_number = Math.nan
 
-    assert(Result.is_failure(DateTime.year(inf_val)), "year(inf) should fail")
-    assert(Result.is_failure(DateTime.to_iso_string(inf_val)), "to_iso_string(inf) should fail")
-    assert(Result.is_failure(DateTime.year(nan_val)), "year(nan) should fail")
-    assert(Result.is_failure(DateTime.to_parts(nan_val)), "to_parts(nan) should fail")
-    assert(Result.is_failure(DateTime.format(nan_val, "YYYY")), "format(nan) should fail")
+    assert(Result.is_failure(DateTime.year(infinite)), "year(inf) should fail")
+    assert(Result.is_failure(DateTime.to_iso_string(infinite)), "to_iso_string(inf) should fail")
+    assert(Result.is_failure(DateTime.year(not_a_number)), "year(nan) should fail")
+    assert(Result.is_failure(DateTime.to_parts(not_a_number)), "to_parts(nan) should fail")
+    assert(Result.is_failure(DateTime.format(not_a_number, "YYYY")), "format(nan) should fail")
 }
+
+# ─── DateTime.Duration ───────────────────────────────────
 
 @test
 function void test_datetime_break_duration_components() {
-    DateTime.Duration d = DateTime.break_duration(3725.0)
+    DateTime.Duration duration = DateTime.break_duration(3725.0)
 
-    assert(d.days == 0, "days")
-    assert(d.hours == 1, "hours")
-    assert(d.minutes == 2, "minutes")
-    assert(d.seconds == 5, "seconds")
-    assert(d.milliseconds == 0, "milliseconds")
-    assert(!d.negative, "not negative")
+    assert(duration.days == 0, "days")
+    assert(duration.hours == 1, "hours")
+    assert(duration.minutes == 2, "minutes")
+    assert(duration.seconds == 5, "seconds")
+    assert(duration.milliseconds == 0, "milliseconds")
+    assert(!duration.negative, "not negative")
 }
 
 @test
 function void test_datetime_break_duration_days_and_millis() {
-    DateTime.Duration d = DateTime.break_duration(90061.5)
+    DateTime.Duration duration = DateTime.break_duration(90061.5)
 
-    assert(d.days == 1, "days")
-    assert(d.hours == 1, "hours")
-    assert(d.minutes == 1, "minutes")
-    assert(d.seconds == 1, "seconds")
-    assert(d.milliseconds == 500, "milliseconds")
+    assert(duration.days == 1, "days")
+    assert(duration.hours == 1, "hours")
+    assert(duration.minutes == 1, "minutes")
+    assert(duration.seconds == 1, "seconds")
+    assert(duration.milliseconds == 500, "milliseconds")
 }
 
 @test
 function void test_datetime_break_duration_negative() {
-    DateTime.Duration d = DateTime.break_duration(-3725.0)
+    # The sign lives in the negative flag; the components stay non-negative.
+    DateTime.Duration duration = DateTime.break_duration(-3725.0)
 
-    assert(d.negative, "negative")
-    assert(d.hours == 1, "hours")
-    assert(d.minutes == 2, "minutes")
-    assert(d.seconds == 5, "seconds")
+    assert(duration.negative, "negative")
+    assert(duration.hours == 1, "hours")
+    assert(duration.minutes == 2, "minutes")
+    assert(duration.seconds == 5, "seconds")
 }
 
 @test
@@ -590,15 +636,15 @@ function void test_datetime_format_duration_zero_and_negative() {
 # An exhaustive match over every DateTime.Weekday variant. With no else branch
 # it only type-checks if the choice declares exactly these seven variants, so it
 # doubles as a check that DateTime.Weekday is fully registered and annotatable.
-function string weekday_abbrev(DateTime.Weekday w) {
-    return match w {
-    case DateTime.Weekday.Monday    { "Mon" }
-    case DateTime.Weekday.Tuesday   { "Tue" }
-    case DateTime.Weekday.Wednesday { "Wed" }
-    case DateTime.Weekday.Thursday  { "Thu" }
-    case DateTime.Weekday.Friday    { "Fri" }
-    case DateTime.Weekday.Saturday  { "Sat" }
-    case DateTime.Weekday.Sunday    { "Sun" }
+function string weekday_abbreviation(DateTime.Weekday weekday) {
+    return match weekday {
+        case DateTime.Weekday.Monday    { "Mon" }
+        case DateTime.Weekday.Tuesday   { "Tue" }
+        case DateTime.Weekday.Wednesday { "Wed" }
+        case DateTime.Weekday.Thursday  { "Thu" }
+        case DateTime.Weekday.Friday    { "Fri" }
+        case DateTime.Weekday.Saturday  { "Sat" }
+        case DateTime.Weekday.Sunday    { "Sun" }
     }
 }
 
@@ -606,32 +652,32 @@ function string weekday_abbrev(DateTime.Weekday w) {
 function void test_datetime_weekday_from_timestamp() {
     # 2024-03-15 is a Friday.
     number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
-    DateTime.Weekday w = Result.unwrap(DateTime.weekday(timestamp))
 
-    assert(w == DateTime.Weekday.Friday)
-    assert(weekday_abbrev(w) == "Fri")
-    assert(DateTime.weekday_name(w) == "Friday")
-    assert(DateTime.weekday_number(w) == 5)
+    DateTime.Weekday weekday = Result.unwrap(DateTime.weekday(timestamp))
 
-    # The typed accessor agrees with the existing integer day_of_week accessor.
-    assert(DateTime.weekday_number(w) == Result.unwrap(DateTime.day_of_week(timestamp)))
+    assert(weekday == DateTime.Weekday.Friday)
+    assert(weekday_abbreviation(weekday) == "Fri")
+    assert(DateTime.weekday_name(weekday) == "Friday")
+    assert(DateTime.weekday_number(weekday) == 5)
+    assert(DateTime.weekday_number(weekday) == Result.unwrap(DateTime.day_of_week(timestamp)),
+        "the typed accessor agrees with the integer day_of_week accessor")
 }
 
 @test
 function void test_datetime_weekday_is_exhaustive() {
-    # Each variant maps through the exhaustive match.
-    assert(weekday_abbrev(DateTime.Weekday.Monday) == "Mon")
-    assert(weekday_abbrev(DateTime.Weekday.Tuesday) == "Tue")
-    assert(weekday_abbrev(DateTime.Weekday.Wednesday) == "Wed")
-    assert(weekday_abbrev(DateTime.Weekday.Thursday) == "Thu")
-    assert(weekday_abbrev(DateTime.Weekday.Friday) == "Fri")
-    assert(weekday_abbrev(DateTime.Weekday.Saturday) == "Sat")
-    assert(weekday_abbrev(DateTime.Weekday.Sunday) == "Sun")
+    DateTime.Weekday monday = DateTime.Weekday.Monday
+
+    assert(weekday_abbreviation(DateTime.Weekday.Monday) == "Mon")
+    assert(weekday_abbreviation(DateTime.Weekday.Tuesday) == "Tue")
+    assert(weekday_abbreviation(DateTime.Weekday.Wednesday) == "Wed")
+    assert(weekday_abbreviation(DateTime.Weekday.Thursday) == "Thu")
+    assert(weekday_abbreviation(DateTime.Weekday.Friday) == "Fri")
+    assert(weekday_abbreviation(DateTime.Weekday.Saturday) == "Sat")
+    assert(weekday_abbreviation(DateTime.Weekday.Sunday) == "Sun")
 
     # Variants compare by identity, and the type annotates a local.
-    DateTime.Weekday w = DateTime.Weekday.Monday
-    assert(w == DateTime.Weekday.Monday)
-    assert(w != DateTime.Weekday.Sunday)
+    assert(monday == DateTime.Weekday.Monday)
+    assert(monday != DateTime.Weekday.Sunday)
 }
 
 @test
@@ -649,10 +695,10 @@ function void test_datetime_weekday_from_number() {
 @test
 function void test_datetime_weekday_number_roundtrip() {
     # weekday_number ∘ weekday_from_number is the identity on 1..7.
-    for n in 1 ..= 7 {
-        DateTime.Weekday w = Result.unwrap(DateTime.weekday_from_number(n))
+    for i in 1 ..= 7 {
+        DateTime.Weekday weekday = Result.unwrap(DateTime.weekday_from_number(i))
 
-        assert(DateTime.weekday_number(w) == n)
+        assert(DateTime.weekday_number(weekday) == i)
     }
 }
 
@@ -661,20 +707,20 @@ function void test_datetime_weekday_number_roundtrip() {
 # An exhaustive match over every DateTime.Month variant. With no else branch it
 # only type-checks if the choice declares exactly these twelve variants, so it
 # doubles as a check that DateTime.Month is fully registered and annotatable.
-function string month_abbrev(DateTime.Month m) {
-    return match m {
-    case DateTime.Month.January   { "Jan" }
-    case DateTime.Month.February  { "Feb" }
-    case DateTime.Month.March     { "Mar" }
-    case DateTime.Month.April     { "Apr" }
-    case DateTime.Month.May       { "May" }
-    case DateTime.Month.June      { "Jun" }
-    case DateTime.Month.July      { "Jul" }
-    case DateTime.Month.August    { "Aug" }
-    case DateTime.Month.September { "Sep" }
-    case DateTime.Month.October   { "Oct" }
-    case DateTime.Month.November  { "Nov" }
-    case DateTime.Month.December  { "Dec" }
+function string month_abbreviation(DateTime.Month month) {
+    return match month {
+        case DateTime.Month.January   { "Jan" }
+        case DateTime.Month.February  { "Feb" }
+        case DateTime.Month.March     { "Mar" }
+        case DateTime.Month.April     { "Apr" }
+        case DateTime.Month.May       { "May" }
+        case DateTime.Month.June      { "Jun" }
+        case DateTime.Month.July      { "Jul" }
+        case DateTime.Month.August    { "Aug" }
+        case DateTime.Month.September { "Sep" }
+        case DateTime.Month.October   { "Oct" }
+        case DateTime.Month.November  { "Nov" }
+        case DateTime.Month.December  { "Dec" }
     }
 }
 
@@ -682,37 +728,37 @@ function string month_abbrev(DateTime.Month m) {
 function void test_datetime_month_from_timestamp() {
     # 2024-03-15 is in March.
     number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
-    DateTime.Month m = Result.unwrap(DateTime.month_of(timestamp))
 
-    assert(m == DateTime.Month.March)
-    assert(month_abbrev(m) == "Mar")
-    assert(DateTime.month_name(m) == "March")
-    assert(DateTime.month_number(m) == 3)
+    DateTime.Month month = Result.unwrap(DateTime.month_of(timestamp))
 
-    # The typed accessor agrees with the existing integer month accessor.
-    assert(DateTime.month_number(m) == Result.unwrap(DateTime.month(timestamp)))
+    assert(month == DateTime.Month.March)
+    assert(month_abbreviation(month) == "Mar")
+    assert(DateTime.month_name(month) == "March")
+    assert(DateTime.month_number(month) == 3)
+    assert(DateTime.month_number(month) == Result.unwrap(DateTime.month(timestamp)),
+        "the typed accessor agrees with the integer month accessor")
 }
 
 @test
 function void test_datetime_month_is_exhaustive() {
-    # Each variant maps through the exhaustive match.
-    assert(month_abbrev(DateTime.Month.January) == "Jan")
-    assert(month_abbrev(DateTime.Month.February) == "Feb")
-    assert(month_abbrev(DateTime.Month.March) == "Mar")
-    assert(month_abbrev(DateTime.Month.April) == "Apr")
-    assert(month_abbrev(DateTime.Month.May) == "May")
-    assert(month_abbrev(DateTime.Month.June) == "Jun")
-    assert(month_abbrev(DateTime.Month.July) == "Jul")
-    assert(month_abbrev(DateTime.Month.August) == "Aug")
-    assert(month_abbrev(DateTime.Month.September) == "Sep")
-    assert(month_abbrev(DateTime.Month.October) == "Oct")
-    assert(month_abbrev(DateTime.Month.November) == "Nov")
-    assert(month_abbrev(DateTime.Month.December) == "Dec")
+    DateTime.Month january = DateTime.Month.January
+
+    assert(month_abbreviation(DateTime.Month.January) == "Jan")
+    assert(month_abbreviation(DateTime.Month.February) == "Feb")
+    assert(month_abbreviation(DateTime.Month.March) == "Mar")
+    assert(month_abbreviation(DateTime.Month.April) == "Apr")
+    assert(month_abbreviation(DateTime.Month.May) == "May")
+    assert(month_abbreviation(DateTime.Month.June) == "Jun")
+    assert(month_abbreviation(DateTime.Month.July) == "Jul")
+    assert(month_abbreviation(DateTime.Month.August) == "Aug")
+    assert(month_abbreviation(DateTime.Month.September) == "Sep")
+    assert(month_abbreviation(DateTime.Month.October) == "Oct")
+    assert(month_abbreviation(DateTime.Month.November) == "Nov")
+    assert(month_abbreviation(DateTime.Month.December) == "Dec")
 
     # Variants compare by identity, and the type annotates a local.
-    DateTime.Month m = DateTime.Month.January
-    assert(m == DateTime.Month.January)
-    assert(m != DateTime.Month.December)
+    assert(january == DateTime.Month.January)
+    assert(january != DateTime.Month.December)
 }
 
 @test
@@ -730,30 +776,27 @@ function void test_datetime_month_from_number() {
 @test
 function void test_datetime_month_number_roundtrip() {
     # month_number ∘ month_from_number is the identity on 1..12.
-    for n in 1 ..= 12 {
-        DateTime.Month m = Result.unwrap(DateTime.month_from_number(n))
+    for i in 1 ..= 12 {
+        DateTime.Month month = Result.unwrap(DateTime.month_from_number(i))
 
-        assert(DateTime.month_number(m) == n)
+        assert(DateTime.month_number(month) == i)
     }
 }
 
-# ───────────────────────────────────────────────────────────
-# DateTime.Interval — validating range record + helpers
-# ───────────────────────────────────────────────────────────
+# ─── DateTime.Interval ───────────────────────────────────
 
 @test
 function void test_datetime_interval_valid() {
     # A well-formed interval (end >= start) succeeds and carries start/end as
-    # plain number timestamps in a DateTime.Interval record — no hand-rolled
-    # pair of loose numbers.
+    # plain number timestamps in a DateTime.Interval record.
     result<DateTime.Interval> made = DateTime.interval(100.0, 200.0)
 
     match made {
-        success(iv) {
-            assert(Math.approximately_equal(iv.start, 100.0, 0.001), "start preserved")
-            assert(Math.approximately_equal(iv.end, 200.0, 0.001), "end preserved")
+        success(interval) {
+            assert(Math.approximately_equal(interval.start, 100.0, 0.001), "start preserved")
+            assert(Math.approximately_equal(interval.end, 200.0, 0.001), "end preserved")
         }
-        failure(_e) {
+        failure(_message) {
             assert(false, "valid interval should succeed")
         }
     }
@@ -762,88 +805,61 @@ function void test_datetime_interval_valid() {
 @test
 function void test_datetime_interval_empty_is_valid() {
     # A zero-length interval (start == end) is permitted.
-    DateTime.Interval iv = Result.unwrap(DateTime.interval(50.0, 50.0))
+    DateTime.Interval interval = Result.unwrap(DateTime.interval(50.0, 50.0))
 
-    assert(Math.approximately_equal(iv.start, 50.0, 0.001), "start")
-    assert(Math.approximately_equal(iv.end, 50.0, 0.001), "end")
+    assert(Math.approximately_equal(interval.start, 50.0, 0.001), "start")
+    assert(Math.approximately_equal(interval.end, 50.0, 0.001), "end")
 }
 
 @test
 function void test_datetime_interval_end_before_start_fails() {
     # end < start is a domain error surfaced as a result failure, not a throw.
-    assert(Result.is_failure(DateTime.interval(200.0, 100.0)),
-           "end before start should fail")
+    assert(Result.is_failure(DateTime.interval(200.0, 100.0)), "end before start should fail")
 }
 
 @test
 function void test_datetime_interval_duration() {
-    DateTime.Interval iv = Result.unwrap(DateTime.interval(100.0, 250.0))
+    DateTime.Interval interval = Result.unwrap(DateTime.interval(100.0, 250.0))
 
-    assert(Math.approximately_equal(DateTime.interval_duration(iv), 150.0, 0.001),
-           "duration is end - start")
+    assert(Math.approximately_equal(DateTime.interval_duration(interval), 150.0, 0.001),
+        "duration is end - start")
 }
 
 @test
 function void test_datetime_interval_contains_closed() {
     # Intervals are closed: both endpoints are contained.
-    DateTime.Interval iv = Result.unwrap(DateTime.interval(100.0, 200.0))
+    DateTime.Interval interval = Result.unwrap(DateTime.interval(100.0, 200.0))
 
-    assert(DateTime.interval_contains(iv, 100.0), "start endpoint contained")
-    assert(DateTime.interval_contains(iv, 200.0), "end endpoint contained")
-    assert(DateTime.interval_contains(iv, 150.0), "interior contained")
-    assert(!DateTime.interval_contains(iv, 99.0), "before start excluded")
-    assert(!DateTime.interval_contains(iv, 201.0), "after end excluded")
+    assert(DateTime.interval_contains(interval, 100.0), "start endpoint contained")
+    assert(DateTime.interval_contains(interval, 200.0), "end endpoint contained")
+    assert(DateTime.interval_contains(interval, 150.0), "interior contained")
+    assert(!DateTime.interval_contains(interval, 99.0), "before start excluded")
+    assert(!DateTime.interval_contains(interval, 201.0), "after end excluded")
 }
 
 @test
 function void test_datetime_intervals_overlap() {
     DateTime.Interval base = Result.unwrap(DateTime.interval(100.0, 200.0))
+    DateTime.Interval partial = Result.unwrap(DateTime.interval(150.0, 250.0))
+    DateTime.Interval contained = Result.unwrap(DateTime.interval(120.0, 180.0))
+    DateTime.Interval touching = Result.unwrap(DateTime.interval(200.0, 300.0))
+    DateTime.Interval disjoint = Result.unwrap(DateTime.interval(201.0, 300.0))
 
-    # Partial overlap.
-    assert(DateTime.intervals_overlap(base,
-        Result.unwrap(DateTime.interval(150.0, 250.0))), "partial overlap")
-    # Full containment.
-    assert(DateTime.intervals_overlap(base,
-        Result.unwrap(DateTime.interval(120.0, 180.0))), "containment")
-    # Touching at a shared closed endpoint counts as overlap.
-    assert(DateTime.intervals_overlap(base,
-        Result.unwrap(DateTime.interval(200.0, 300.0))), "touching counts")
-    # Fully disjoint.
-    assert(!DateTime.intervals_overlap(base,
-        Result.unwrap(DateTime.interval(201.0, 300.0))), "disjoint")
+    assert(DateTime.intervals_overlap(base, partial), "partial overlap")
+    assert(DateTime.intervals_overlap(base, contained), "containment")
+    assert(DateTime.intervals_overlap(base, touching), "touching at a closed endpoint counts")
+    assert(!DateTime.intervals_overlap(base, disjoint), "disjoint")
 }
 
-@test
-function void test_datetime_zoned() {
-    DateTime.Zoned z = Result.unwrap(DateTime.zoned(0.0, 60))
-
-    assert(z.offset_minutes == 60, "offset stored")
-    assert(Result.unwrap(DateTime.zoned_to_iso_string(z)) == "1970-01-01T01:00:00+01:00",
-        "renders with the offset")
-
-    DateTime.Zoned utc = Result.unwrap(DateTime.zoned(0.0, 0))
-    assert(Result.unwrap(DateTime.zoned_to_iso_string(utc)) == "1970-01-01T00:00:00Z",
-        "zero offset renders Z")
-
-    DateTime.TimeParts parts = Result.unwrap(DateTime.zoned_to_parts(z))
-    assert(parts.year == 1970, "year")
-    assert(parts.hour == 1, "hour reflects the offset")
-
-    assert(Result.is_failure(DateTime.zoned(0.0, 900)), "offset above +840 fails")
-    assert(Result.is_failure(DateTime.zoned(0.0, -800)), "offset below -720 fails")
-}
-
-# ═══════════════════════════════════════════════════════════
-# DateTime.Date / DateTime.Time (partial calendar / wall-clock)
-# ═══════════════════════════════════════════════════════════
+# ─── DateTime.Date / DateTime.Time ───────────────────────
 
 @test
 function void test_datetime_date_validates() {
+    DateTime.Date date = Result.unwrap(DateTime.date(2024, 6, 15))
+
     assert(Result.is_success(DateTime.date(2024, 2, 29)), "a leap-year Feb 29 is valid")
     assert(Result.is_failure(DateTime.date(2023, 2, 29)), "a non-leap Feb 29 is rejected")
-
-    DateTime.Date d = Result.unwrap(DateTime.date(2024, 6, 15))
-    assert(d.year == 2024 && d.month == 6 && d.day == 15, "the fields round-trip")
+    assert(date.year == 2024 && date.month == 6 && date.day == 15, "the fields round-trip")
 }
 
 @test
@@ -855,166 +871,148 @@ function void test_datetime_time_validates() {
 
 @test
 function void test_datetime_combine_and_extract_roundtrip() {
-    DateTime.Date d = Result.unwrap(DateTime.date(2024, 6, 15))
-    DateTime.Time t = Result.unwrap(DateTime.time(9, 30, 0))
+    DateTime.Date date = Result.unwrap(DateTime.date(2024, 6, 15))
+    DateTime.Time time = Result.unwrap(DateTime.time(9, 30, 0))
 
-    result<number> ts = DateTime.combine(d, t)
-    assert(Result.is_success(ts), "a valid date+time combines into an instant")
+    number timestamp = Result.unwrap(DateTime.combine(date, time))
+    DateTime.Date extracted_date = Result.unwrap(DateTime.date_of(timestamp))
+    DateTime.Time extracted_time = Result.unwrap(DateTime.time_of(timestamp))
 
-    DateTime.Date back_date = Result.unwrap(DateTime.date_of(Result.unwrap(ts)))
-    DateTime.Time back_time = Result.unwrap(DateTime.time_of(Result.unwrap(ts)))
-
-    assert(back_date.month == 6 && back_date.day == 15, "date_of recovers the calendar date")
-    assert(back_time.hour == 9 && back_time.minute == 30, "time_of recovers the wall-clock time")
+    assert(DateTime.to_iso_string(timestamp) == success("2024-06-15T09:30:00Z"),
+        "combine interprets the date and time as UTC")
+    assert(extracted_date.year == 2024 && extracted_date.month == 6 && extracted_date.day == 15,
+        "date_of recovers the calendar date")
+    assert(extracted_time.hour == 9 && extracted_time.minute == 30 && extracted_time.second == 0,
+        "time_of recovers the wall-clock time")
 }
 
-# ─── DateTime.Period (calendar-aware span) ───
+# ─── DateTime.Period (calendar-aware span) ───────────────
 
 @test
 function void test_datetime_period() {
-    DateTime.Period p = DateTime.period(1, 2, 3)
-    assert(p.years == 1 && p.months == 2 && p.days == 3, "period stores its components")
+    # 2024-03-15 13:30 UTC + 1y 2m 3d = 2025-05-18 13:30 UTC (no day clamping needed).
+    DateTime.Period period = DateTime.period(1, 2, 3)
+    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 13, 30, 0))
 
-    # 2024-03-15 13:30 UTC + 1y 2m 3d, day-clamp free.
-    number base = 1710509400.0
-    number shifted = Result.unwrap(DateTime.add_period(base, p))
-    assert(shifted > base, "add_period advances the instant")
-
+    number shifted = Result.unwrap(DateTime.add_period(base, period))
     DateTime.Period span = Result.unwrap(DateTime.between_dates(base, shifted))
+
+    assert(period.years == 1 && period.months == 2 && period.days == 3,
+        "period stores its components")
+    assert(DateTime.to_iso_string(shifted) == success("2025-05-18T13:30:00Z"),
+        "add_period applies years, months, then days")
     assert(span.years == 1 && span.months == 2 && span.days == 3,
         "between_dates recovers the applied period")
 }
 
 @test
 function void test_datetime_between_dates_negative() {
-    number base = 1710509400.0
+    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 13, 30, 0))
     number later = Result.unwrap(DateTime.add_period(base, DateTime.period(2, 0, 0)))
+
     DateTime.Period span = Result.unwrap(DateTime.between_dates(later, base))
+
     assert(span.years == -2, "a start after end yields a negative span")
+    assert(span.months == 0 && span.days == 0)
 }
 
-# ─── add_minutes / add_weeks / difference_minutes / difference_weeks ───
-
-@test
-function void test_datetime_add_minutes_weeks() {
-    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 0, 0))
-
-    number plus90 = DateTime.add_minutes(base, 90.0)
-    assert(Math.approximately_equal(DateTime.difference_minutes(base, plus90), 90.0, 0.001))
-
-    number plus2w = DateTime.add_weeks(base, 2.0)
-    assert(Math.approximately_equal(DateTime.difference_weeks(base, plus2w), 2.0, 0.001))
-    # Two weeks is 14 days
-    assert(Math.approximately_equal(DateTime.difference_days(base, plus2w), 14.0, 0.001))
-}
-
-# ─── start_of / end_of ───
+# ─── start_of / end_of ───────────────────────────────────
 
 @test
 function void test_datetime_start_of() {
-    number ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
 
-    number sod = Result.unwrap(DateTime.start_of_day(ts))
-    assert(Result.unwrap(DateTime.hour(sod)) == 0)
-    assert(Result.unwrap(DateTime.minute(sod)) == 0)
-    assert(Result.unwrap(DateTime.second(sod)) == 0)
+    number start_of_day = Result.unwrap(DateTime.start_of_day(timestamp))
+    number start_of_hour = Result.unwrap(DateTime.start_of_hour(timestamp))
+    number start_of_month = Result.unwrap(DateTime.start_of_month(timestamp))
+    number start_of_year = Result.unwrap(DateTime.start_of_year(timestamp))
 
-    number soh = Result.unwrap(DateTime.start_of_hour(ts))
-    assert(Result.unwrap(DateTime.hour(soh)) == 14)
-    assert(Result.unwrap(DateTime.minute(soh)) == 0)
-
-    number som = Result.unwrap(DateTime.start_of_month(ts))
-    assert(Result.unwrap(DateTime.day_of_month(som)) == 1)
-
-    number soy = Result.unwrap(DateTime.start_of_year(ts))
-    assert(Result.unwrap(DateTime.month(soy)) == 1)
-    assert(Result.unwrap(DateTime.day_of_month(soy)) == 1)
+    assert(DateTime.to_iso_string(start_of_day) == success("2024-03-15T00:00:00Z"))
+    assert(DateTime.to_iso_string(start_of_hour) == success("2024-03-15T14:00:00Z"))
+    assert(DateTime.to_iso_string(start_of_month) == success("2024-03-01T00:00:00Z"))
+    assert(DateTime.to_iso_string(start_of_year) == success("2024-01-01T00:00:00Z"))
 }
 
 @test
 function void test_datetime_end_of() {
-    number ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
 
-    number eod = Result.unwrap(DateTime.end_of_day(ts))
-    assert(Result.unwrap(DateTime.hour(eod)) == 23)
-    assert(Result.unwrap(DateTime.minute(eod)) == 59)
-    assert(Result.unwrap(DateTime.second(eod)) == 59)
+    number end_of_day = Result.unwrap(DateTime.end_of_day(timestamp))
+    number end_of_hour = Result.unwrap(DateTime.end_of_hour(timestamp))
+    number end_of_month = Result.unwrap(DateTime.end_of_month(timestamp))
+    number end_of_year = Result.unwrap(DateTime.end_of_year(timestamp))
 
-    number eoh = Result.unwrap(DateTime.end_of_hour(ts))
-    assert(Result.unwrap(DateTime.hour(eoh)) == 14, "hour is preserved")
-    assert(Result.unwrap(DateTime.minute(eoh)) == 59)
-    assert(Result.unwrap(DateTime.second(eoh)) == 59)
-
-    number eom = Result.unwrap(DateTime.end_of_month(ts))
-    assert(Result.unwrap(DateTime.day_of_month(eom)) == 31, "March has 31 days")
-
-    number eoy = Result.unwrap(DateTime.end_of_year(ts))
-    assert(Result.unwrap(DateTime.month(eoy)) == 12)
-    assert(Result.unwrap(DateTime.day_of_month(eoy)) == 31)
+    assert(DateTime.to_iso_string(end_of_day) == success("2024-03-15T23:59:59Z"))
+    assert(DateTime.to_iso_string(end_of_hour) == success("2024-03-15T14:59:59Z"),
+        "the hour is preserved")
+    assert(DateTime.to_iso_string(end_of_month) == success("2024-03-31T23:59:59Z"),
+        "March has 31 days")
+    assert(DateTime.to_iso_string(end_of_year) == success("2024-12-31T23:59:59Z"))
 }
 
-# ─── is_weekend / is_weekday ───
+# ─── is_weekend / is_weekday / week_of_year ──────────────
 
 @test
 function void test_datetime_is_weekend_weekday() {
-    # 2024-03-15 is a Friday
+    # 2024-03-15 is a Friday and 2024-03-16 a Saturday.
     number friday = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    number saturday = Result.unwrap(DateTime.from_parts(2024, 3, 16, 0, 0, 0))
+
     assert(DateTime.is_weekday(friday))
     assert(!DateTime.is_weekend(friday))
-
-    # 2024-03-16 is a Saturday
-    number saturday = Result.unwrap(DateTime.from_parts(2024, 3, 16, 0, 0, 0))
     assert(DateTime.is_weekend(saturday))
     assert(!DateTime.is_weekday(saturday))
 }
 
-# ─── week_of_year ───
-
 @test
 function void test_datetime_week_of_year() {
-    # 2024-01-01 is a Monday → ISO week 1
-    number jan1 = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
-    assert(DateTime.week_of_year(jan1) == 1)
+    # 2024-01-01 is a Monday, so it starts ISO week 1.
+    number january_first = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
+    number march_fifteenth = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    # By the first-Thursday rule, 2021-01-01 (a Friday) still belongs to week 53
+    # of 2020, and 2024-12-30 (a Monday) already belongs to week 1 of 2025.
+    number friday_before_week_one = Result.unwrap(DateTime.from_parts(2021, 1, 1, 0, 0, 0))
+    number monday_of_next_week_one = Result.unwrap(DateTime.from_parts(2024, 12, 30, 0, 0, 0))
 
-    # 2024-03-15 → ISO week 11
-    number mar15 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
-    assert(DateTime.week_of_year(mar15) == 11)
+    assert(DateTime.week_of_year(january_first) == 1)
+    assert(DateTime.week_of_year(march_fifteenth) == 11)
+    assert(DateTime.week_of_year(friday_before_week_one) == 53)
+    assert(DateTime.week_of_year(monday_of_next_week_one) == 1)
 }
 
-# ─── parse ───
+# ─── parse ───────────────────────────────────────────────
 
 @test
 function void test_datetime_parse() {
-    number ts = Result.unwrap(DateTime.parse("2024-03-15 10:30:45", "YYYY-MM-DD hh:mm:ss"))
+    number timestamp = Result.unwrap(DateTime.parse("2024-03-15 10:30:45", "YYYY-MM-DD hh:mm:ss"))
 
-    assert(Result.unwrap(DateTime.year(ts)) == 2024)
-    assert(Result.unwrap(DateTime.month(ts)) == 3)
-    assert(Result.unwrap(DateTime.day_of_month(ts)) == 15)
-    assert(Result.unwrap(DateTime.hour(ts)) == 10)
-    assert(Result.unwrap(DateTime.minute(ts)) == 30)
-    assert(Result.unwrap(DateTime.second(ts)) == 45)
+    assert(Result.unwrap(DateTime.year(timestamp)) == 2024)
+    assert(Result.unwrap(DateTime.month(timestamp)) == 3)
+    assert(Result.unwrap(DateTime.day_of_month(timestamp)) == 15)
+    assert(Result.unwrap(DateTime.hour(timestamp)) == 10)
+    assert(Result.unwrap(DateTime.minute(timestamp)) == 30)
+    assert(Result.unwrap(DateTime.second(timestamp)) == 45)
 }
 
 @test
 function void test_datetime_parse_roundtrip() {
     number original = Result.unwrap(DateTime.from_parts(2026, 12, 25, 14, 30, 0))
+
     string formatted = Result.unwrap(DateTime.format(original, "DD/MM/YYYY hh:mm:ss"))
     number reparsed = Result.unwrap(DateTime.parse(formatted, "DD/MM/YYYY hh:mm:ss"))
 
+    assert(formatted == "25/12/2026 14:30:00")
     assert(Math.approximately_equal(original, reparsed, 0.001))
 }
 
 @test
 function void test_datetime_parse_failures() {
-    # Mismatched literal
-    assert(Result.is_failure(DateTime.parse("2024/03/15", "YYYY-MM-DD")))
-    # Invalid field values
-    assert(Result.is_failure(DateTime.parse("2024-13-15", "YYYY-MM-DD")))
-    # Trailing input
-    assert(Result.is_failure(DateTime.parse("2024-03-15xx", "YYYY-MM-DD")))
+    assert(Result.is_failure(DateTime.parse("2024/03/15", "YYYY-MM-DD")), "mismatched literal")
+    assert(Result.is_failure(DateTime.parse("2024-13-15", "YYYY-MM-DD")), "invalid field value")
+    assert(Result.is_failure(DateTime.parse("2024-03-15xx", "YYYY-MM-DD")), "trailing input")
 }
 
-# ─── duration constants ───
+# ─── Duration constants ──────────────────────────────────
 
 @test
 function void test_datetime_constants() {

@@ -26,8 +26,12 @@
 #include "shared_eval.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
-using namespace luma::test;
+using luma::ArrayValue;
+using luma::NullValue;
+using luma::ReferenceLeakTracker;
+using luma::ReferenceValue;
+using luma::Value;
+using luma::test::eval;
 
 namespace {
 
@@ -39,7 +43,7 @@ void test_acyclic_reference_is_reclaimed() {
     const auto baseline = ReferenceLeakTracker::live_cells();
 
     {
-        auto cell = std::make_shared<ReferenceValue>(Value{std::int64_t{42}});
+        const auto cell = std::make_shared<ReferenceValue>(Value{std::int64_t{42}});
         ASSERT_EQ(ReferenceLeakTracker::live_cells(), baseline + 1);
     }
 
@@ -54,12 +58,12 @@ void test_reference_cycle_leaks_then_break_reclaims() {
     std::weak_ptr<ReferenceValue> observer;
 
     {
-        auto cell = std::make_shared<ReferenceValue>(Value{NullValue{}});
+        const auto cell = std::make_shared<ReferenceValue>(Value{NullValue{}});
         observer = cell;
 
         // Build a cycle: the cell's contents are an array that holds the cell.
         //   cell -> array -> Value(reference to cell) -> cell
-        auto array = std::make_shared<ArrayValue>();
+        const auto array = std::make_shared<ArrayValue>();
         array->elements->push_back(Value{cell});
         cell->set(Value{array});
 
@@ -73,7 +77,7 @@ void test_reference_cycle_leaks_then_break_reclaims() {
 
     // Apply the documented mitigation: reassign the cell so it no longer points
     // back into the structure that references it, breaking the cycle.
-    if (auto cell = observer.lock()) {
+    if (const auto cell = observer.lock()) {
         cell->set(Value{NullValue{}});
     }
 
@@ -87,14 +91,35 @@ void test_total_created_is_monotonic() {
     const auto before = ReferenceLeakTracker::total_created();
 
     {
-        auto cell = std::make_shared<ReferenceValue>(Value{std::int64_t{1}});
-        (void)cell;
+        const auto cell = std::make_shared<ReferenceValue>(Value{std::int64_t{1}});
+        ASSERT_EQ(ReferenceLeakTracker::total_created(), before + 1);
     }
 
-    ASSERT_GE(ReferenceLeakTracker::total_created(), before + 1);
+    // Destroying the cell lowers live_cells() but never the creation total.
+    ASSERT_EQ(ReferenceLeakTracker::total_created(), before + 1);
 }
 
+// Restores the process-wide reporting flag on scope exit, so toggling it in a
+// test cannot leak into later tests or the shutdown report.
+class ReportingFlagGuard {
+public:
+    ReportingFlagGuard() = default;
+    ReportingFlagGuard(const ReportingFlagGuard&) = delete;
+    ReportingFlagGuard& operator=(const ReportingFlagGuard&) = delete;
+    ReportingFlagGuard(ReportingFlagGuard&&) = delete;
+    ReportingFlagGuard& operator=(ReportingFlagGuard&&) = delete;
+
+    ~ReportingFlagGuard() {
+        ReferenceLeakTracker::enable_reporting(saved_);
+    }
+
+private:
+    bool saved_{ReferenceLeakTracker::reporting_enabled()};
+};
+
 void test_reporting_toggle() {
+    const ReportingFlagGuard guard;
+
     ReferenceLeakTracker::enable_reporting(true);
     ASSERT_TRUE(ReferenceLeakTracker::reporting_enabled());
 
@@ -122,7 +147,8 @@ void test_reference_workload_reaches_steady_state() {
                 Reference.update(counter, (number n) -> n + 1.0)
                 Reference.get(counter)
             )");
-            (void)result;
+            ASSERT_TRUE(result.is_number());
+            ASSERT_EQ(result.as_number(), 2.0);
         }
 
         // After each run's value is dropped, every reference the program made
@@ -145,7 +171,8 @@ void test_allocation_soak_is_stable() {
             array<integer> doubled = Array.map(xs, (integer x) -> x * 2) ?? []
             Array.length(doubled)
         )");
-        (void)result;
+        ASSERT_TRUE(result.is_integer());
+        ASSERT_EQ(result.as_integer(), 500);
     }
 
     ASSERT_EQ(ReferenceLeakTracker::live_cells(), baseline);

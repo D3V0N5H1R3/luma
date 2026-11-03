@@ -174,8 +174,8 @@ void register_datetime_arithmetic(const EnvPtr& env) {
     // operate on different units (milliseconds since program start vs. Unix
     // seconds), so collapsing them would conflate two separate APIs.
     enum class ScaleOp {
-        difference,
-        add
+        Difference,
+        Add
     };
 
     struct ScaleFunc {
@@ -185,22 +185,22 @@ void register_datetime_arithmetic(const EnvPtr& env) {
     };
 
     const ScaleFunc scale_funcs[] = {
-        {.name = "difference_milliseconds", .scale = 1.0, .op = ScaleOp::difference},
-        {.name = "difference_seconds", .scale = 1.0, .op = ScaleOp::difference},
-        {.name = "difference_minutes", .scale = 60.0, .op = ScaleOp::difference},
-        {.name = "difference_hours", .scale = 3600.0, .op = ScaleOp::difference},
-        {.name = "difference_days", .scale = 86400.0, .op = ScaleOp::difference},
-        {.name = "difference_weeks", .scale = 604800.0, .op = ScaleOp::difference},
-        {.name = "add_milliseconds", .scale = 1.0, .op = ScaleOp::add},
-        {.name = "add_seconds", .scale = 1.0, .op = ScaleOp::add},
-        {.name = "add_minutes", .scale = 60.0, .op = ScaleOp::add},
-        {.name = "add_hours", .scale = 3600.0, .op = ScaleOp::add},
-        {.name = "add_days", .scale = 86400.0, .op = ScaleOp::add},
-        {.name = "add_weeks", .scale = 604800.0, .op = ScaleOp::add},
+        {.name = "difference_milliseconds", .scale = 1.0, .op = ScaleOp::Difference},
+        {.name = "difference_seconds", .scale = 1.0, .op = ScaleOp::Difference},
+        {.name = "difference_minutes", .scale = 60.0, .op = ScaleOp::Difference},
+        {.name = "difference_hours", .scale = 3600.0, .op = ScaleOp::Difference},
+        {.name = "difference_days", .scale = 86400.0, .op = ScaleOp::Difference},
+        {.name = "difference_weeks", .scale = 604800.0, .op = ScaleOp::Difference},
+        {.name = "add_milliseconds", .scale = 1.0, .op = ScaleOp::Add},
+        {.name = "add_seconds", .scale = 1.0, .op = ScaleOp::Add},
+        {.name = "add_minutes", .scale = 60.0, .op = ScaleOp::Add},
+        {.name = "add_hours", .scale = 3600.0, .op = ScaleOp::Add},
+        {.name = "add_days", .scale = 86400.0, .op = ScaleOp::Add},
+        {.name = "add_weeks", .scale = 604800.0, .op = ScaleOp::Add},
     };
 
     for (const auto& f : scale_funcs) {
-        if (f.op == ScaleOp::difference) {
+        if (f.op == ScaleOp::Difference) {
             builder.func(f.name, 2).raw_body(scaled_difference_body(f.scale));
         } else {
             builder.func(f.name, 2).raw_body(scaled_add_body(f.scale));

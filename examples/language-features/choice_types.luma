@@ -19,7 +19,7 @@ choice Shape {
 
 function number area(Shape s) {
     return match s {
-    case Shape.Circle(r)       { 3.14159265 * r * r }
+    case Shape.Circle(r)       { Math.pi * r * r }
     case Shape.Rectangle(w, h) { w * h }
     case Shape.Triangle(b, h)  { 0.5 * b * h }
     case Shape.Point           { 0.0 }
@@ -173,5 +173,5 @@ function void main() {
     List<number> nums = List.Cons(1, List.Cons(2, List.Cons(3, List.Nil)))
 
     print("  list   = ${list_to_string(nums)}")
-    print("  length = ${length(nums)}")
+    print("  length = ${String.format_number(length(nums), 0)}")
 }

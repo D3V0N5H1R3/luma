@@ -9,6 +9,9 @@ use zed_extension_api::{self as zed, lsp, CodeLabel};
 
 struct LumaExtension {
     platform: (zed::Os, zed::Architecture),
+    /// Binaries downloaded in this session, by name, so later server or
+    /// debugger starts reuse them without another GitHub round-trip.
+    cached_binaries: std::collections::HashMap<String, String>,
 }
 
 /// Indicates how a binary was resolved.
@@ -48,13 +51,16 @@ impl LumaExtension {
         )
     }
 
-    /// Resolves a binary by checking PATH first, then downloading from GitHub.
+    /// Resolves a binary by checking PATH first, then a binary already
+    /// downloaded in this session, then the latest GitHub release. When the
+    /// release cannot be fetched or downloaded (offline, rate-limited), falls
+    /// back to the newest previously downloaded version.
     ///
     /// Returns a [`BinarySource`] indicating how the binary was found, so the
     /// caller can decide on environment variables (PATH-found binaries inherit
     /// the shell environment; downloaded binaries do not).
     fn resolve_binary(
-        &self,
+        &mut self,
         binary_name: &str,
         worktree: &zed::Worktree,
         reporter: &dyn download::StatusReporter,
@@ -67,6 +73,12 @@ impl LumaExtension {
             )));
         }
 
+        if let Some(path) = self.cached_binaries.get(binary_name) {
+            if std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
+                return Ok(BinarySource::Downloaded(path.clone()));
+            }
+        }
+
         if !generated::config::AUTO_DOWNLOAD_ENABLED {
             return Err(Self::no_binary_message(binary_name));
         }
@@ -75,9 +87,12 @@ impl LumaExtension {
         let asset_name = download::platform_asset_name_for(binary_name, platform, arch)
             .ok_or_else(|| Self::no_binary_message(binary_name))?;
 
-        let release = Self::fetch_latest_release()?;
+        let release = match Self::fetch_latest_release() {
+            Ok(release) => release,
+            Err(e) => return self.cached_or(binary_name, e),
+        };
 
-        let path = download::download_binary(
+        let path = match download::download_binary(
             &download::ZedDownloader,
             reporter,
             binary_name,
@@ -85,8 +100,31 @@ impl LumaExtension {
             &asset_name,
             &release,
             recovery_hint,
-        )?;
+        ) {
+            Ok(path) => path,
+            // A failed download (network drop, asset missing from a new
+            // release) must not hide a working older version. download_binary
+            // already reported the failure, so clear it when the fallback works.
+            Err(e) => {
+                let source = self.cached_or(binary_name, e)?;
+                reporter.report_success();
+                return Ok(source);
+            }
+        };
 
+        download::remove_stale_versions(binary_name, &path);
+        self.cached_binaries
+            .insert(binary_name.to_string(), path.clone());
+
+        Ok(BinarySource::Downloaded(path))
+    }
+
+    /// Falls back to the newest previously downloaded `binary_name`, or
+    /// returns `error` when none exists.
+    fn cached_or(&mut self, binary_name: &str, error: String) -> zed::Result<BinarySource> {
+        let path = download::find_cached_binary(binary_name, self.platform.0).ok_or(error)?;
+        self.cached_binaries
+            .insert(binary_name.to_string(), path.clone());
         Ok(BinarySource::Downloaded(path))
     }
 }
@@ -97,6 +135,7 @@ impl zed::Extension for LumaExtension {
     fn new() -> Self {
         Self {
             platform: zed::current_platform(),
+            cached_binaries: std::collections::HashMap::new(),
         }
     }
 
@@ -275,10 +314,12 @@ impl zed::Extension for LumaExtension {
             return None;
         }
 
+        // The task's arguments are the unexpanded template (`$ZED_FILE`), so
+        // a Zed task variable counts as the program as well as a literal path.
         let program_index = build_task
             .args
             .iter()
-            .position(|arg| arg.ends_with(".luma"))?;
+            .position(|arg| is_luma_program_arg(arg))?;
 
         Some(zed::DebugScenario {
             adapter: debug_adapter_name,
@@ -298,6 +339,24 @@ impl zed::Extension for LumaExtension {
 zed::register_extension!(LumaExtension);
 
 // ─── Helpers ──────────────────────────────────────────────────────
+
+/// Returns true if a run-task argument names the program to run: a `.luma`
+/// path, or a Zed task variable that expands to the current file
+/// (`$ZED_FILE`, `${ZED_RELATIVE_FILE}`, …), as the shipped
+/// languages/luma/tasks.json template uses.
+fn is_luma_program_arg(arg: &str) -> bool {
+    if arg.ends_with(".luma") {
+        return true;
+    }
+    let variable = arg
+        .strip_prefix("${")
+        .and_then(|rest| rest.strip_suffix('}'))
+        .or_else(|| arg.strip_prefix('$'));
+    matches!(
+        variable,
+        Some("ZED_FILE" | "ZED_RELATIVE_FILE" | "ZED_FILENAME")
+    )
+}
 
 /// Returns the environment variables a resolved binary should run with.
 ///

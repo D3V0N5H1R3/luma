@@ -72,6 +72,12 @@ Value VM::execute_function(const CompiledFunction& func,
     return execute_function(func);
 }
 
+const std::vector<CompiledFunction>&
+VM::retain_compiled_functions(std::vector<CompiledFunction> functions) {
+    return *retained_function_tables_.emplace_back(
+        std::make_unique<const std::vector<CompiledFunction>>(std::move(functions)));
+}
+
 // ─────────── Test execution ───────────
 
 bool VM::execute_tests(const std::vector<CompiledFunction>& functions,
@@ -111,10 +117,12 @@ bool VM::execute_tests(const std::vector<CompiledFunction>& functions,
             std::cout << term::out_red() << "  FAIL" << term::out_reset() << "  " << test->name
                       << ": " << error.what() << "\n";
 
-            // Reset VM state so the next test starts cleanly.
-            stack_.top = stack_.base;
+            // Reset VM state so the next test starts cleanly.  run() has
+            // already retired any task_scope the failing test left open.
+            stack_.truncate_to(stack_.base);
             stack_.frames.clear();
             exception_handler_.clear();
+            base_depth_ = 0;
         }
     }
 
@@ -140,16 +148,33 @@ void VM::init_call_fn() {
                                  const SourceLocation& /*loc*/) -> Value {
         auto saved_stack_size = stack_size();
 
+        // Built-ins invoke callbacks with a fixed argument list (e.g.
+        // Dictionary.map passes key and value, Array.reduce the accumulator
+        // and the element), and a closure may take fewer parameters than
+        // that: `Dictionary.each(d, (string k) -> print(k))`. Drop the
+        // trailing arguments it does not declare, so they never land in its
+        // local slots. Direct calls from bytecode still raise
+        // `too many arguments` in call_function().
+        auto arg_count = args.size();
+
+        if (callee.is_function()) {
+            const auto& compiled = callee.as_function()->compiled;
+
+            if (compiled != nullptr && std::cmp_greater(arg_count, compiled->arity)) {
+                arg_count = static_cast<std::size_t>(compiled->arity);
+            }
+        }
+
         push(callee);
-        for (auto& arg : args) {
-            push(std::move(arg));
+        for (std::size_t i = 0; i < arg_count; ++i) {
+            push(std::move(args[i]));
         }
 
         auto prev_base = base_depth_;
         base_depth_ = stack_.frames.size();
 
         try {
-            call_value(callee, static_cast<int>(args.size()));
+            call_value(callee, static_cast<int>(arg_count));
             auto result = run();
             base_depth_ = prev_base;
             return result;
@@ -157,11 +182,13 @@ void VM::init_call_fn() {
             // Clean up frames pushed by call_value / the callback and
             // any stack values pushed during execution so that the caller
             // (e.g. map_with_error_handling) sees a consistent VM state.
+            // run() has already retired any task_scope the callback opened.
             while (stack_.frames.size() > base_depth_) {
                 stack_.frames.pop_back();
             }
 
-            stack_.top = stack_.base + saved_stack_size;
+            exception_handler_.discard_frames_from(stack_.frames.size());
+            stack_.truncate_to(saved_stack_size);
             base_depth_ = prev_base;
             throw;
         }
@@ -177,7 +204,7 @@ ThreadPool& VM::pool() {
 // ─────────── Task VM constructor ───────────
 
 VM::VM(EnvPtr global_env, ThreadPool& pool, const std::vector<CompiledFunction>* compiled_fns)
-    : global_env_{std::move(global_env)}, compiled_functions_{compiled_fns} {
+    : global_env_{std::move(global_env)}, compiled_functions_{compiled_fns}, is_task_vm_{true} {
     task_manager_.shared_pool = &pool;
     stack_.frames.reserve(
         std::max(VMStack::k_frame_max, static_cast<std::size_t>(ResourceLimits::max_call_depth)));

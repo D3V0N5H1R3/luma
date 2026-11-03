@@ -3,7 +3,8 @@
 #
 # Builds complex values step by step through functions that
 # each accept a value, augment it, and return a new copy.
-# The caller chains these calls to express intent clearly.
+# The pipe operator `|>` chains these calls so they read
+# top to bottom like a sentence.
 #
 # Usage: luma examples/design-patterns/fluent_interface.luma
 # ═══════════════════════════════════════════════════════════
@@ -12,20 +13,14 @@
 
 record Query {
     string table,
-    array<string> columns,
-    string filter,
-    string order,
-    number limit
+    array<string> columns = [],
+    optional<string> filter = none,
+    optional<string> order = none,
+    optional<number> limit = none
 }
 
 function Query from(string table) {
-    return Query {
-        table = table,
-        columns = [],
-        filter = "",
-        order = "",
-        limit = 0
-    }
+    return Query { table = table }
 }
 
 function Query select(Query query, array<string> columns) {
@@ -33,41 +28,37 @@ function Query select(Query query, array<string> columns) {
 }
 
 function Query where(Query query, string condition) {
-    return query with { filter = condition }
+    return query with { filter = some(condition) }
 }
 
 function Query order_by(Query query, string column) {
-    return query with { order = column }
+    return query with { order = some(column) }
 }
 
 function Query take(Query query, number limit) {
-    return query with { limit = limit }
+    return query with { limit = some(limit) }
 }
 
 function string to_sql(Query query) {
-    integer col_count = Array.length(query.columns)
-
-    string cols = if col_count == 0 {
+    string columns = if Array.is_empty(query.columns) {
         "*"
     } else {
         Array.join(query.columns, ", ")
     }
 
-    mutable string sql = "SELECT ${cols} FROM ${query.table}"
+    string where_clause = query.filter
+        |> Optional.map((string condition) -> " WHERE ${condition}")
+        |> Optional.unwrap_or("")
 
-    if query.filter != "" {
-        sql = "${sql} WHERE ${query.filter}"
-    }
+    string order_clause = query.order
+        |> Optional.map((string column) -> " ORDER BY ${column}")
+        |> Optional.unwrap_or("")
 
-    if query.order != "" {
-        sql = "${sql} ORDER BY ${query.order}"
-    }
+    string limit_clause = query.limit
+        |> Optional.map((number limit) -> " LIMIT ${String.format_number(limit, 0)}")
+        |> Optional.unwrap_or("")
 
-    if query.limit > 0 {
-        sql = "${sql} LIMIT ${query.limit}"
-    }
-
-    return sql
+    return "SELECT ${columns} FROM ${query.table}${where_clause}${order_clause}${limit_clause}"
 }
 
 # ─── HTML builder ─────────────────────────────────────────

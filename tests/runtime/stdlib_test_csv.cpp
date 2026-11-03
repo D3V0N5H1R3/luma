@@ -8,6 +8,11 @@
 #include "runtime/stdlib/text/csv_codec.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
+using luma::test::LumaTempFile;
+
 static void test_csv_header() {
     const auto result =
         eval("Csv.header(\"name,age\\nAlice,30\") |> Result.unwrap() |> Array.length()");
@@ -39,9 +44,8 @@ static void test_csv_parse() {
 static void test_csv_serialize() {
     const auto result = eval("Csv.serialize([[\"a\", \"b\"], [\"1\", \"2\"]]) |> Result.unwrap()");
 
-    // CSV uses \r\n line endings per RFC 4180.
-    ASSERT_TRUE(result.as_string().find("a,b") != std::string::npos);
-    ASSERT_TRUE(result.as_string().find("1,2") != std::string::npos);
+    // Every row, including the last, is terminated by a bare "\n".
+    ASSERT_EQ(result.as_string(), "a,b\n1,2\n");
 }
 
 static void test_csv_count_rows() {
@@ -66,8 +70,8 @@ static void test_csv_deserialize_records() {
 static void test_csv_serialize_records() {
     const auto v = eval("Csv.serialize_records([{\"name\": \"Alice\", \"age\": \"30\"}])");
 
-    ASSERT_TRUE(v.as_string().find("name") != std::string::npos);
-    ASSERT_TRUE(v.as_string().find("Alice") != std::string::npos);
+    ASSERT_NE(v.as_string().find("name"), std::string::npos);
+    ASSERT_NE(v.as_string().find("Alice"), std::string::npos);
 }
 
 static void test_csv_quoted_fields() {
@@ -75,6 +79,12 @@ static void test_csv_quoted_fields() {
     const auto v = eval("Csv.deserialize(\"a,b\\n\\\"hello, world\\\",2\") |> Result.unwrap()");
 
     ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 2U);
+
+    const auto& row1 = *(*v.as_array()->elements)[1].as_array()->elements;
+    ASSERT_EQ(row1.size(), 2U);
+    ASSERT_EQ(row1[0].as_string(), "hello, world");
+    ASSERT_EQ(row1[1].as_string(), "2");
 }
 
 static void test_csv_serialize_roundtrip() {
@@ -114,7 +124,7 @@ static void test_csv_serialize_records_empty() {
 }
 
 static void test_csv_deserialize_non_string_throws() {
-    ASSERT_THROWS(eval("Csv.deserialize(42)"));
+    ASSERT_EVAL_THROWS("Csv.deserialize(42)", "Csv.deserialize: expected string, got 'integer'");
 }
 
 // ─── Options: deserialize_with / serialize_with ──────────────────────────────
@@ -135,8 +145,7 @@ static void test_csv_serialize_with_delimiter() {
     const auto v = eval("Csv.serialize_with([[\"a\", \"b\"], [\"1\", \"2\"]], "
                         "{\"delimiter\": \";\"}) |> Result.unwrap()");
 
-    ASSERT_TRUE(v.as_string().find("a;b") != std::string::npos);
-    ASSERT_TRUE(v.as_string().find("1;2") != std::string::npos);
+    ASSERT_EQ(v.as_string(), "a;b\n1;2\n");
 }
 
 static void test_csv_serialize_with_custom_quote() {
@@ -145,7 +154,7 @@ static void test_csv_serialize_with_custom_quote() {
     const auto v = eval(R"(Csv.serialize_with([["a;b", "c"]], )"
                         R"({"delimiter": ";", "quote": "'"}) |> Result.unwrap())");
 
-    ASSERT_TRUE(v.as_string().find("'a;b'") != std::string::npos);
+    ASSERT_EQ(v.as_string(), "'a;b';c\n");
 }
 
 // ─── Csv.Dialect typed options ───────────────────────────────────────────────
@@ -184,11 +193,10 @@ static void test_csv_deserialize_with_dialect() {
 }
 
 static void test_csv_serialize_with_dialect() {
-    const auto v = eval(
-        R"(Csv.serialize_with([["a", "b"], ["1", "2"]], Csv.dialect(";", "\"")) |> Result.unwrap())");
+    const auto v = eval(R"(Csv.serialize_with([["a", "b"], ["1", "2"]], )"
+                        R"(Csv.dialect(";", "\"")) |> Result.unwrap())");
 
-    ASSERT_TRUE(v.as_string().find("a;b") != std::string::npos);
-    ASSERT_TRUE(v.as_string().find("1;2") != std::string::npos);
+    ASSERT_EQ(v.as_string(), "a;b\n1;2\n");
 }
 
 // ─── RFC 4180 quoting / line endings ─────────────────────────────────────────
@@ -222,7 +230,7 @@ static void test_csv_serialize_quotes_special_fields() {
     // A field containing the delimiter must be quoted on output.
     const auto v = eval(R"(Csv.serialize([["a,b", "c"]]) |> Result.unwrap())");
 
-    ASSERT_TRUE(v.as_string().find("\"a,b\"") != std::string::npos);
+    ASSERT_EQ(v.as_string(), "\"a,b\",c\n");
 }
 
 static void test_csv_count_rows_quoted_newline() {
@@ -304,23 +312,28 @@ static void test_csv_read_file_rejects_oversized_file() {
 // ─── Negative: wrong argument types raise a runtime error ────────────────────
 
 static void test_csv_serialize_non_array_arg_throws() {
-    ASSERT_THROWS(eval("Csv.serialize(\"not an array\")"));
+    ASSERT_EVAL_THROWS("Csv.serialize(\"not an array\")",
+                       "Csv.serialize: expected array, got 'string'");
 }
 
 static void test_csv_serialize_row_not_array_throws() {
-    ASSERT_THROWS(eval("Csv.serialize([1, 2])"));
+    ASSERT_EVAL_THROWS("Csv.serialize([1, 2])", "Csv.serialize: each row must be an array");
 }
 
 static void test_csv_serialize_with_row_not_array_throws() {
-    ASSERT_THROWS(eval("Csv.serialize_with([1], {\"delimiter\": \",\"})"));
+    ASSERT_EVAL_THROWS("Csv.serialize_with([1], {\"delimiter\": \",\"})",
+                       "Csv.serialize_with: each row must be an array");
 }
 
 static void test_csv_serialize_records_non_dict_throws() {
-    ASSERT_THROWS(eval("Csv.serialize_records([1, 2])"));
+    ASSERT_EVAL_THROWS("Csv.serialize_records([1, 2])",
+                       "Csv.serialize_records: each record must be a dictionary");
 }
 
 static void test_csv_deserialize_with_non_dict_throws() {
-    ASSERT_THROWS(eval("Csv.deserialize_with(\"a,b\", 5)"));
+    ASSERT_EVAL_THROWS(
+        "Csv.deserialize_with(\"a,b\", 5)",
+        "Csv.deserialize_with: options must be a Csv.Dialect record or a dictionary");
 }
 
 static void test_csv_parse_rejects_too_many_fields() {
@@ -336,7 +349,7 @@ static void test_csv_parse_rejects_too_many_fields() {
     const auto result = luma::csv::parse_csv(input, luma::csv::CsvOptions{});
 
     ASSERT_FALSE(result.success);
-    ASSERT_TRUE(result.error.find("too many fields") != std::string::npos);
+    ASSERT_NE(result.error.find("too many fields"), std::string::npos);
 }
 
 // ─── Csv.deserialize_detailed / Csv.ParseError ───────────────────────────────
@@ -355,7 +368,7 @@ static void test_csv_deserialize_detailed_failure_message() {
 
     const auto& err = v.as_result()->owned_inner->as_record();
     ASSERT_EQ(err->type_name, std::string{"ParseError"});
-    ASSERT_TRUE(err->find_field("message")->as_string().find("unterminated") != std::string::npos);
+    ASSERT_NE(err->find_field("message")->as_string().find("unterminated"), std::string::npos);
 }
 
 static void test_csv_deserialize_detailed_failure_location() {
@@ -368,7 +381,7 @@ static void test_csv_deserialize_detailed_failure_location() {
     const auto& err = v.as_result()->owned_inner->as_record();
     ASSERT_EQ(err->type_name, std::string{"ParseError"});
     ASSERT_EQ(err->find_field("line")->as_integer(), static_cast<std::int64_t>(2));
-    ASSERT_TRUE(err->find_field("column")->as_integer() >= 1);
+    ASSERT_EQ(err->find_field("column")->as_integer(), static_cast<std::int64_t>(1));
 }
 
 static void test_csv_codec_reports_error_offset() {
@@ -417,8 +430,8 @@ static void test_csv_deserialize_table_failure() {
 }
 
 static void test_csv_column_extracts_by_name() {
-    const auto v = eval(
-        R"(Csv.deserialize_table("name,age\nAlice,30\nBob,25") |> Result.unwrap() |> Csv.column("age"))");
+    const auto v = eval(R"(Csv.deserialize_table("name,age\nAlice,30\nBob,25") |> Result.unwrap() )"
+                        R"(|> Csv.column("age"))");
     ASSERT_TRUE(v.as_result()->is_success);
 
     const auto& col = *v.as_result()->owned_inner->as_array()->elements;
@@ -428,19 +441,18 @@ static void test_csv_column_extracts_by_name() {
 }
 
 static void test_csv_column_unknown_fails() {
-    const auto v = eval(
-        R"(Csv.deserialize_table("name,age\nAlice,30") |> Result.unwrap() |> Csv.column("missing"))");
+    const auto v = eval(R"(Csv.deserialize_table("name,age\nAlice,30") |> Result.unwrap() )"
+                        R"(|> Csv.column("missing"))");
     ASSERT_FALSE(v.as_result()->is_success);
 }
 
 static void test_csv_serialize_table_roundtrips() {
-    const auto v = eval(
-        R"(Csv.deserialize_table("name,age\nAlice,30\nBob,25") |> Result.unwrap() |> Csv.serialize_table())");
+    const auto v = eval(R"(Csv.deserialize_table("name,age\nAlice,30\nBob,25") |> Result.unwrap() )"
+                        R"(|> Csv.serialize_table())");
     ASSERT_TRUE(v.as_result()->is_success);
 
     const auto& text = v.as_result()->owned_inner->as_string();
-    ASSERT_TRUE(text.find("name,age") != std::string::npos);
-    ASSERT_TRUE(text.find("Bob,25") != std::string::npos);
+    ASSERT_EQ(text, "name,age\nAlice,30\nBob,25\n");
 }
 
 int main() {

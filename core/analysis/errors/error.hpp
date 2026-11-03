@@ -12,9 +12,11 @@
 
 namespace luma {
 
-/// RuntimeError is the sole exception type for runtime errors thrown by the
-/// VM and standard library.  It carries a source location, an optional hint,
-/// and an optional typed error payload (for result<T, E> propagation).
+/// RuntimeError is the exception type for runtime errors thrown by the VM and
+/// standard library; a few specialised errors derive from it (VMError,
+/// ChannelError, XmlParseError, and InternalError below).  It carries a source
+/// location, an optional hint, and an optional typed error payload (for
+/// result<T, E> propagation).
 ///
 /// All analysis-phase errors are reported via the Diagnostic/DiagnosticEmitter
 /// system (see analysis/diagnostics/diagnostic.hpp).  Only runtime errors use
@@ -63,6 +65,16 @@ private:
     SourceLocation location_;
     std::optional<std::string> hint_;
     std::any error_payload_;
+};
+
+/// InternalError is a RuntimeError raised when a built-in function fails with an
+/// interpreter fault — an escaped std::logic_error, std::bad_variant_access, or
+/// other non-runtime_error exception — rather than a language-level failure.  A
+/// Luma program can still catch it like any RuntimeError, but tools that hunt
+/// for interpreter bugs (the fuzz harness) treat it as a defect.
+class InternalError : public RuntimeError {
+public:
+    using RuntimeError::RuntimeError;
 };
 
 } // namespace luma

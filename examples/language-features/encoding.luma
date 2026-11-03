@@ -37,10 +37,10 @@ function void main() {
     print("=== URL encoding ===")
 
     string query = "name=Luma Lang&version=1.0&tag=awesome!"
-    string pct_encoded = Result.unwrap(Encoder.encode_url(query))
-    string pct_decoded = Result.unwrap(Encoder.decode_url(pct_encoded))
+    string percent_encoded = Result.unwrap(Encoder.encode_url(query))
+    string percent_decoded = Result.unwrap(Encoder.decode_url(percent_encoded))
 
     print("original: ${query}")
-    print("encoded:  ${pct_encoded}")
-    print("decoded:  ${pct_decoded}")
+    print("encoded:  ${percent_encoded}")
+    print("decoded:  ${percent_decoded}")
 }

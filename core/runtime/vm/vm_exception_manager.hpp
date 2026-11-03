@@ -82,10 +82,61 @@ public:
     /// Remove all handlers (used for test-isolation resets).
     void clear() noexcept {
         handlers_.clear();
+        shields_.clear();
+    }
+
+    /// Drop every handler owned by a frame at index `frame_count` or above —
+    /// i.e. by frames that no longer exist once the frame stack holds
+    /// `frame_count` frames.  Handlers are LIFO, so these are on top.  The
+    /// cancellation shields of those frames go with them.
+    void discard_frames_from(std::size_t frame_count) noexcept {
+        while (!handlers_.empty() && handlers_.back().frame_index >= frame_count) {
+            handlers_.pop_back();
+        }
+
+        while (!shields_.empty() && shields_.back().frame_index >= frame_count) {
+            shields_.pop_back();
+        }
+    }
+
+    // ─── Cancellation shields ───
+    // A cleanup (`finally`) handler entered because its task is being
+    // cancelled runs shielded: the task does not observe the cancellation
+    // again at loop back-edges or calls until the handler's Rethrow re-raises
+    // it, so the cleanup code runs to completion.  A shield is identified by
+    // the handler's frame and the stack slot holding its error value; it ends
+    // when that value is re-raised, the frame returns, or an error unwinds to
+    // a handler outside it.
+
+    /// Shield the cleanup handler whose error value sits at `stack_depth` in
+    /// frame `frame_index`.
+    void push_cancel_shield(std::size_t frame_index, std::size_t stack_depth) {
+        shields_.push_back({.frame_index = frame_index, .stack_depth = stack_depth});
+    }
+
+    /// End every shield at or above (`frame_index`, `stack_depth`): shields of
+    /// deeper frames, and shields of that frame whose error value lies at or
+    /// above `stack_depth`.  Shields are LIFO, so these are on top.
+    void end_cancel_shields_from(std::size_t frame_index, std::size_t stack_depth) noexcept {
+        while (!shields_.empty() && (shields_.back().frame_index > frame_index ||
+                                     (shields_.back().frame_index == frame_index &&
+                                      shields_.back().stack_depth >= stack_depth))) {
+            shields_.pop_back();
+        }
+    }
+
+    [[nodiscard]] bool is_cancel_shielded() const noexcept {
+        return !shields_.empty();
     }
 
 private:
+    struct CancelShield {
+        std::size_t frame_index{0};
+        std::size_t stack_depth{0};
+    };
+
     std::vector<ExceptionHandler> handlers_;
+    std::vector<CancelShield> shields_;
 };
 
 } // namespace luma

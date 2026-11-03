@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace luma::lsp::lexical {
 
@@ -19,116 +20,12 @@ namespace luma::lsp::lexical {
 //   • CURSOR-RELATIVE backward primitives used by signature help, which
 //     walk the buffer right-to-left from the cursor.
 //
-// They scan in opposite directions and have intentionally different edge
-// handling (e.g. the forward scanner treats a single preceding backslash as
-// an escape, while the backward scanner counts backslashes for parity), so
-// they are not a single routine. They are co-located here so the
+// They scan in opposite directions, so they are not a single routine. Both
+// decide whether a quote is escaped by backslash parity
+// (count_preceding_backslashes). They are co-located here so the
 // string/comment/interpolation grammar lives in one place and any change to
 // that grammar is made for both directions together.
 // ═══════════════════════════════════════════════════════════════════
-
-// ───────────────────────────────────────────────────────────
-// Forward, single-line context tracking.
-// Determines whether the current position is inside a string
-// literal, interpolation expression, or comment — so that
-// operator normalization only applies to actual code.
-// ───────────────────────────────────────────────────────────
-
-struct LineContext {
-    bool in_string{false};
-    int interpolation_depth{0}; // > 0 means inside ${...}
-
-    // Returns true if the character at the current position was consumed
-    // (string, comment, or interpolation boundary). When `append_rest` is
-    // set on return, the caller should append the remainder of the line
-    // and stop processing further characters.
-    [[nodiscard]] bool update(const std::string& line, std::size_t i, std::string& out,
-                              bool& append_rest) {
-        const char c = line[i];
-        append_rest = false;
-
-        if (check_comment(c, i, line, out, append_rest)) {
-            return true;
-        }
-        if (check_string(c, i, line, out)) {
-            return true;
-        }
-        if (check_interpolation(c, i, line, out)) {
-            return true;
-        }
-        return false;
-    }
-
-    // True when the current position is plain code (not inside a string
-    // literal with interpolation_depth == 0).
-    [[nodiscard]] bool is_code() const {
-        return !in_string || interpolation_depth > 0;
-    }
-
-private:
-    // If `c` opens a line comment outside a string, appends the rest of the
-    // line to `out`, sets `append_rest`, and returns true.
-    [[nodiscard]] bool check_comment(char c, std::size_t i, const std::string& line,
-                                     std::string& out, bool& append_rest) const {
-        if (!in_string && c == '#') {
-            out.append(line, i, std::string::npos);
-            append_rest = true;
-            return true;
-        }
-        return false;
-    }
-
-    // If `c` is an unescaped string-delimiter outside an interpolation
-    // expression, toggles `in_string`, appends `c`, and returns true.
-    [[nodiscard]] bool check_string(char c, std::size_t i, const std::string& line,
-                                    std::string& out) {
-        if (c == '"' && (i == 0 || line[i - 1] != '\\') && interpolation_depth == 0) {
-            in_string = !in_string;
-            out += c;
-            return true;
-        }
-        return false;
-    }
-
-    // Manages interpolation depth inside string literals (`${...}`).
-    // Returns true if `c` was consumed as part of an interpolation boundary
-    // or as plain string content outside an active interpolation expression.
-    [[nodiscard]] bool check_interpolation(char c, std::size_t i, const std::string& line,
-                                           std::string& out) {
-        if (!in_string) {
-            return false;
-        }
-
-        if (c == '$' && i + 1 < line.size() && line[i + 1] == '{') {
-            ++interpolation_depth;
-            out += c;
-            return true;
-        }
-
-        if (interpolation_depth > 0) {
-            if (c == '{') {
-                ++interpolation_depth;
-            } else if (c == '}') {
-                --interpolation_depth;
-                if (interpolation_depth == 0) {
-                    out += c;
-                    return true;
-                }
-            }
-        }
-
-        if (interpolation_depth == 0) {
-            out += c;
-            return true;
-        }
-
-        return false;
-    }
-};
-
-// ───────────────────────────────────────────────────────────
-// Cursor-relative (backward) scanning primitives.
-// ───────────────────────────────────────────────────────────
 
 // Count consecutive backslashes immediately before `pos` (down to `limit`).
 // Used to determine whether a quote character is escaped.
@@ -144,6 +41,100 @@ private:
 
     return count;
 }
+
+// True when the character at `pos` is escaped by an odd run of backslashes.
+[[nodiscard]] inline bool is_escaped(const std::string& text, std::size_t pos) {
+    return count_preceding_backslashes(text, pos, 0) % 2 != 0;
+}
+
+// ───────────────────────────────────────────────────────────
+// Forward, single-line context tracking.
+// Determines whether the current position is inside a string
+// literal, interpolation expression, or comment — so that
+// operator normalization only applies to actual code.
+// ───────────────────────────────────────────────────────────
+
+struct LineContext {
+    // Feeds the character at `line[i]` to the scanner. Returns true when the
+    // character belongs to a string literal or a ${...} interpolation (or opens
+    // a comment) and has been appended to `out` verbatim; returns false for a
+    // plain code character, which the caller handles itself. When
+    // `append_rest` is set on return, a line comment started at `i`: the rest
+    // of the line has been appended and the caller should stop.
+    [[nodiscard]] bool update(const std::string& line, std::size_t i, std::string& out,
+                              bool& append_rest) {
+        const char c = line[i];
+        append_rest = false;
+
+        if (modes_.empty()) {
+            if (c == '#') {
+                out.append(line, i, std::string::npos);
+                append_rest = true;
+                return true;
+            }
+            if (c == '"') {
+                modes_.push_back(k_string_mode);
+                out += c;
+                return true;
+            }
+            return false;
+        }
+
+        out += c;
+
+        if (modes_.back() == k_string_mode) {
+            if (c == '"' && !is_escaped(line, i)) {
+                modes_.pop_back();
+            } else if (c == '$' && i + 1 < line.size() && line[i + 1] == '{' &&
+                       !is_escaped(line, i)) {
+                // The `{` of `${` is consumed by the next call, so it must not
+                // also count as a nested brace inside the interpolation.
+                modes_.push_back(k_interpolation_opening);
+            }
+            return true;
+        }
+
+        // Inside ${...}: track nested braces and nested string literals.
+        int& depth = modes_.back();
+        if (depth == k_interpolation_opening) {
+            depth = 0;
+        } else if (c == '"') {
+            modes_.push_back(k_string_mode);
+        } else if (c == '{') {
+            ++depth;
+        } else if (c == '}') {
+            if (depth == 0) {
+                modes_.pop_back();
+            } else {
+                --depth;
+            }
+        }
+        return true;
+    }
+
+    // True inside a string literal or a ${...} interpolation within one.
+    [[nodiscard]] bool in_string() const {
+        return !modes_.empty();
+    }
+
+    // True when the current position is code: outside any string literal, or
+    // inside a ${...} interpolation expression.
+    [[nodiscard]] bool is_code() const {
+        return modes_.empty() || modes_.back() != k_string_mode;
+    }
+
+private:
+    // Stack of open lexical modes: k_string_mode for a string literal, and a
+    // non-negative nested-brace depth (or k_interpolation_opening right after
+    // `$`) for a ${...} interpolation.
+    static constexpr int k_string_mode = -1;
+    static constexpr int k_interpolation_opening = -2;
+    std::vector<int> modes_;
+};
+
+// ───────────────────────────────────────────────────────────
+// Cursor-relative (backward) scanning primitives.
+// ───────────────────────────────────────────────────────────
 
 // Skip forward past a triple-quoted string ("""), starting with `pos` pointing
 // at the leftmost '"' of the opening triple-quote. Returns the index just past

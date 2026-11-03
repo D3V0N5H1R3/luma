@@ -36,19 +36,11 @@ struct BreakpointSnapshot {
     std::string log_message;
 };
 
-// Build a snapshot of a matched breakpoint.  When `record_hit` is true the
-// snapshot also records the hit by incrementing the breakpoint's saturating hit
-// counter; when false it reports the current count without advancing it (used
-// to read a conditional breakpoint's identity before its condition is known to
-// hold).  Used by the line breakpoint manager, whose info struct exposes a
-// times_hit field (a mutable counter accessed under ctx_->mutex).
+// Build a snapshot of a matched breakpoint's identity and hit-evaluation
+// fields, reporting its current hit count.  Used by the line breakpoint
+// manager, whose info struct exposes a times_hit field.
 template <typename BreakpointInfo>
-[[nodiscard]] BreakpointSnapshot make_breakpoint_snapshot(const BreakpointInfo& info,
-                                                          bool record_hit) {
-    if (record_hit && info.times_hit < std::numeric_limits<int>::max()) {
-        info.times_hit++;
-    }
-
+[[nodiscard]] BreakpointSnapshot make_breakpoint_snapshot(const BreakpointInfo& info) {
     return BreakpointSnapshot{.id = info.id,
                               .times_hit = info.times_hit,
                               .condition = info.condition,

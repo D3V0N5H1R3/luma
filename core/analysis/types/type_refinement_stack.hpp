@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_TYPES_TYPE_REFINEMENT_STACK_HPP
+#define LUMA_TYPES_TYPE_REFINEMENT_STACK_HPP
 
 #include <algorithm>
 #include <cstddef>
@@ -58,3 +59,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_TYPE_REFINEMENT_STACK_HPP

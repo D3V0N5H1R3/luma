@@ -22,6 +22,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <stop_token>
 #include <string>
 #include <thread>
 #include <vector>
@@ -36,6 +37,7 @@
 namespace luma {
 class VM;
 class SourceManager;
+class CancellationToken;
 struct CompiledFunction;
 } // namespace luma
 
@@ -132,22 +134,6 @@ public:
         return source_manager_.get();
     }
 
-    [[nodiscard]] VM* vm() const {
-        return vm_.get();
-    }
-
-    // Interface accessors for decoupled VM access.
-    [[nodiscard]] IVMControl* vm_control() const;
-    [[nodiscard]] IVMIntrospection* vm_introspection() const;
-
-    [[nodiscard]] std::shared_ptr<std::vector<CompiledFunction>> compiled_functions() const {
-        return compiled_functions_;
-    }
-
-    [[nodiscard]] std::shared_ptr<CompiledFunction> compiled_top_level() const {
-        return compiled_top_level_;
-    }
-
     // ─── Debug hook methods — called from install_debug_hooks ───
 
     [[nodiscard]] bool should_break(int file_id, int line, std::size_t frame_depth);
@@ -160,10 +146,9 @@ public:
     [[nodiscard]] OrderedUniqueLock<DapLockId> lock_config_unique() const;
     [[nodiscard]] OrderedLockGuard<DapLockId> lock_exception() const;
 
-    // NOTE: lock_config() returns a non-unique RAII guard (shared lock semantics:
-    // multiple readers can hold it simultaneously, though in practice config is
-    // single-threaded during startup).  lock_config_unique() is required when
-    // calling condition_variable::wait() which needs an underlying unique_lock.
+    // NOTE: both config helpers take the same exclusive std::mutex.
+    // lock_config_unique() exists only because condition_variable::wait() needs
+    // an underlying std::unique_lock.
 
 private:
     using StepSetupFn = std::function<void(ThreadState&, IVMControl&, IVMIntrospection&)>;
@@ -224,10 +209,22 @@ private:
                                     std::shared_ptr<ThreadState>& main_state);
     void handle_execution_result(int exit_code);
 
+    // Push any partial (newline-less) program output line out as an output
+    // event, so it is not delayed past a stopped/terminated event.
+    static void flush_program_output();
+
     // ─── Debug hook helpers ───
 
-    [[nodiscard]] bool evaluate_step_mode(ThreadState& state, int file_id, int line,
-                                          std::size_t frame_depth);
+    // What the line hook learned about the current line: whether the active
+    // step finished here, and whether this is a return to a caller's line.
+    struct LineHookState {
+        bool step_complete{false};
+        bool returned_to_caller_line{false};
+    };
+
+    // Record the line for the current frame depth and evaluate the step mode.
+    [[nodiscard]] LineHookState update_line_state(ThreadState& state, int file_id, int line,
+                                                  std::size_t frame_depth);
     [[nodiscard]] bool determine_stop_reason(ThreadState& state, int file_id, int line,
                                              std::size_t frame_depth);
     [[nodiscard]] bool evaluate_breakpoint_hit(ThreadState& state, int file_id, int line,
@@ -264,7 +261,19 @@ private:
 
     std::jthread execution_thread_;
     std::atomic<SessionState> state_{SessionState::Idle};
-    std::stop_token execution_stop_token_;
+
+    // Stop signal for the execution thread and every task thread.  A separate
+    // stop_source (rather than the jthread's own) lets the token be published
+    // before the thread starts; see start_execution_thread().
+    std::stop_source execution_stop_source_;
+    std::stop_token execution_stop_token_{execution_stop_source_.get_token()};
+
+    // Root cancellation token the program's VM (and through it every spawned
+    // task) runs under.  terminate() cancels it so a program blocked in an
+    // await, task_scope join, or channel wait stops instead of hanging the
+    // join.  Created before the execution thread starts, never reassigned
+    // while it runs.
+    std::shared_ptr<CancellationToken> program_cancel_token_;
 
     // Set by terminate(emit_exit_events=false) when the old run is torn down for a
     // restart. handle_execution_result then suppresses the
@@ -279,8 +288,9 @@ private:
 
     // Exception state (leaf lock — never held with any other session lock).
     mutable std::mutex exception_mutex_;
-    std::string last_exception_message_;   // GUARDED_BY(exception_mutex_)
-    bool last_exception_is_caught_{false}; // GUARDED_BY(exception_mutex_)
+    std::string last_exception_message_;      // GUARDED_BY(exception_mutex_)
+    bool last_exception_is_caught_{false};    // GUARDED_BY(exception_mutex_)
+    bool main_uncaught_stop_reported_{false}; // GUARDED_BY(exception_mutex_)
 
     // VM and compiled program.
     std::unique_ptr<VM> vm_;

@@ -11,20 +11,20 @@ function BenchResult run_control_flow_benchmarks(BenchResult state) {
     st = time_it(st, "match expression (4 arms)", 10000, () -> {
         integer x = 3
         string _result = match x {
-        case 1 { "one" }
-        case 2 { "two" }
-        case 3 { "three" }
-        else { "other" }
+            case 1 { "one" }
+            case 2 { "two" }
+            case 3 { "three" }
+            else   { "other" }
         }
     })
 
     st = time_it(st, "match with guards (when, fall-through)", 10000, () -> {
         integer x = 7
         string _result = match x {
-        case >= 0 when x == 0 { "zero" }
-        case >= 0 when x % 2 == 0 { "even" }
-        case >= 0 { "odd" }
-        else { "negative" }
+            case >= 0 when x == 0     { "zero" }
+            case >= 0 when x % 2 == 0 { "even" }
+            case >= 0                 { "odd" }
+            else                      { "negative" }
         }
     })
 
@@ -37,12 +37,12 @@ function BenchResult run_control_flow_benchmarks(BenchResult state) {
 
     st = time_it(st, "pipe chain (3 stages)", 5000, () -> {
         integer _result = [1, 2, 3, 4, 5]
-        |> Array.map((integer x) -> x * 2)
-        |> Result.unwrap_or([])
-        |> Array.filter((integer x) -> x > 4)
-        |> Result.unwrap_or([])
-        |> Array.reduce(0, (integer a, integer b) -> a + b)
-        |> Result.unwrap_or(0)
+            |> Array.map((integer x) -> x * 2)
+            |> Result.unwrap_or([])
+            |> Array.filter((integer x) -> x > 4)
+            |> Result.unwrap_or([])
+            |> Array.reduce(0, (integer a, integer b) -> a + b)
+            |> Result.unwrap_or(0)
     })
 
     st = time_it(st, "while loop (50 iterations)", 5000, () -> {
@@ -79,7 +79,7 @@ function BenchResult run_control_flow_benchmarks(BenchResult state) {
         } catch(_err) {
             handled = 1
         } finally {
-            handled = handled + 1
+            handled += 1
         }
     })
 
@@ -97,7 +97,7 @@ function BenchResult run_control_flow_benchmarks(BenchResult state) {
         try {
             value = 42
         } finally {
-            value = value + 1
+            value += 1
         }
     })
 
@@ -108,7 +108,7 @@ function BenchResult run_control_flow_benchmarks(BenchResult state) {
         } catch(_err) {
             value = -1
         } finally {
-            value = value + 1
+            value += 1
         }
     })
 

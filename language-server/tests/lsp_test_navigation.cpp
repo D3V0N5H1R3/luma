@@ -12,12 +12,12 @@ void test_document_symbol() {
     LspTestSession session;
 
     const std::string uri = "file:///test/symbol.luma";
-    session.open_document(uri, "function greet(name: string) -> string {\n"
+    session.open_document(uri, "function string greet(string name) {\n"
                                "    return \"Hello, ${name}\"\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    greet(\"world\")\n"
                                "}\n");
     const auto id = session.request("textDocument/documentSymbol", make_td_params(uri));
@@ -33,12 +33,12 @@ void test_definition() {
     LspTestSession session;
 
     const std::string uri = "file:///test/def.luma";
-    session.open_document(uri, "function greet(name: string) -> string {\n"
+    session.open_document(uri, "function string greet(string name) {\n"
                                "    return \"Hello\"\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    greet(\"world\")\n"
                                "}\n");
     const auto id = session.request("textDocument/definition", make_td_position(uri, 6, 4));
@@ -54,18 +54,18 @@ void test_references() {
     LspTestSession session;
 
     const std::string uri = "file:///test/refs.luma";
-    session.open_document(uri, "function greet(name: string) -> string {\n"
+    session.open_document(uri, "function string greet(string name) {\n"
                                "    return \"Hello\"\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    greet(\"a\")\n"
                                "    greet(\"b\")\n"
                                "}\n");
     const std::string params =
         R"({"textDocument":{"uri":")" + uri +
-        R"("},"position":{"line":0,"character":10},"context":{"includeDeclaration":true}})";
+        R"("},"position":{"line":0,"character":17},"context":{"includeDeclaration":true}})";
     const auto id = session.request("textDocument/references", params);
     (void)session.run();
 
@@ -80,15 +80,16 @@ void test_type_definition() {
 
     const std::string uri = "file:///test/typedef.luma";
     session.open_document(uri, "record Point {\n"
-                               "    x: integer\n"
-                               "    y: integer\n"
+                               "    integer x,\n"
+                               "    integer y\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    p = Point { x = 1, y = 2 }\n"
+                               "function void main() {\n"
+                               "    Point p = Point { x = 1, y = 2 }\n"
                                "}\n");
-    const auto id = session.request("textDocument/typeDefinition", make_td_position(uri, 7, 4));
+    // Position on the variable `p` at line 7.
+    const auto id = session.request("textDocument/typeDefinition", make_td_position(uri, 7, 10));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -101,20 +102,19 @@ void test_implementation() {
     LspTestSession session;
 
     const std::string uri = "file:///test/impl.luma";
+    // Interfaces are satisfied structurally: Circle implements Drawable because
+    // it has every field Drawable declares.
     session.open_document(uri, "interface Drawable {\n"
-                               "    draw: function(): string\n"
+                               "    string label\n"
                                "}\n"
                                "\n"
                                "record Circle {\n"
-                               "    radius: number\n"
-                               "} implements Drawable {\n"
-                               "    function draw(): string {\n"
-                               "        return \"circle\"\n"
-                               "    }\n"
+                               "    string label,\n"
+                               "    number radius\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "}\n");
     const auto id = session.request("textDocument/implementation", make_td_position(uri, 0, 10));
     (void)session.run();
@@ -130,19 +130,19 @@ void test_namespace_references() {
 
     const std::string uri = "file:///test/nsref.luma";
     session.open_document(uri, "namespace A {\n"
-                               "    function process(x: integer) -> integer {\n"
+                               "    function integer process(integer x) {\n"
                                "        return x + 1\n"
                                "    }\n"
                                "}\n"
                                "\n"
                                "namespace B {\n"
-                               "    function process(x: integer) -> integer {\n"
+                               "    function integer process(integer x) {\n"
                                "        return x * 2\n"
                                "    }\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    A.process(1)\n"
                                "    B.process(2)\n"
                                "}\n");
@@ -170,11 +170,11 @@ void test_definition_forward_ref() {
 
     const std::string uri = "file:///test/def_fwd.luma";
     session.open_document(uri, "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    helper()\n"
                                "}\n"
                                "\n"
-                               "function helper() -> integer {\n"
+                               "function integer helper() {\n"
                                "    return 42\n"
                                "}\n");
     const auto id = session.request("textDocument/definition", make_td_position(uri, 2, 4));
@@ -199,7 +199,7 @@ void test_definition_undefined() {
     LspTestSession session;
 
     const std::string uri = "file:///test/def_undef.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    nonexistent()\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    nonexistent()\n}\n");
     const auto id = session.request("textDocument/definition", make_td_position(uri, 2, 4));
     (void)session.run();
 
@@ -222,16 +222,16 @@ void test_definition_type_constructor() {
 
     const std::string uri = "file:///test/def_ctor.luma";
     session.open_document(uri, "record Point {\n"
-                               "    x: integer\n"
-                               "    y: integer\n"
+                               "    integer x,\n"
+                               "    integer y\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    p = Point { x = 1, y = 2 }\n"
+                               "function void main() {\n"
+                               "    Point p = Point { x = 1, y = 2 }\n"
                                "}\n");
-    // Position on "Point" usage at line 7.
-    const auto id = session.request("textDocument/definition", make_td_position(uri, 7, 8));
+    // Position on the "Point" constructor usage at line 7.
+    const auto id = session.request("textDocument/definition", make_td_position(uri, 7, 14));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -254,17 +254,17 @@ void test_references_type() {
 
     const std::string uri = "file:///test/refs_type.luma";
     session.open_document(uri, "record Point {\n"
-                               "    x: integer\n"
-                               "    y: integer\n"
+                               "    integer x,\n"
+                               "    integer y\n"
                                "}\n"
                                "\n"
-                               "function make_point() -> Point {\n"
+                               "function Point make_point() {\n"
                                "    return Point { x = 0, y = 0 }\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    p = Point { x = 1, y = 2 }\n"
+                               "function void main() {\n"
+                               "    Point p = Point { x = 1, y = 2 }\n"
                                "}\n");
     const std::string params =
         R"({"textDocument":{"uri":")" + uri +
@@ -275,7 +275,8 @@ void test_references_type() {
     const auto* resp = session.find_response(id);
     assert_result_is_array(resp);
 
-    // Point is used in: definition (0), return type (5), constructor (6), constructor (11).
+    // Point is used in: definition (0), return type (5), constructor (6), and the
+    // variable type and constructor (11).
     // Reference count depends on analysis timing.
     const auto& refs = (*resp)["result"].as_array();
     if (!refs.empty()) {
@@ -289,18 +290,18 @@ void test_references_exclude_declaration() {
     LspTestSession session;
 
     const std::string uri = "file:///test/refs_nodecl.luma";
-    session.open_document(uri, "function greet() -> string {\n"
+    session.open_document(uri, "function string greet() {\n"
                                "    return \"hello\"\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    greet()\n"
                                "    greet()\n"
                                "}\n");
     const std::string params =
         R"({"textDocument":{"uri":")" + uri +
-        R"("},"position":{"line":0,"character":10},"context":{"includeDeclaration":false}})";
+        R"("},"position":{"line":0,"character":17},"context":{"includeDeclaration":false}})";
     const auto id = session.request("textDocument/references", params);
     (void)session.run();
 
@@ -321,17 +322,17 @@ void test_document_symbol_nested() {
 
     const std::string uri = "file:///test/sym_nested.luma";
     session.open_document(uri, "namespace Utils {\n"
-                               "    function add(a: integer, b: integer) -> integer {\n"
+                               "    function integer add(integer a, integer b) {\n"
                                "        return a + b\n"
                                "    }\n"
                                "\n"
-                               "    function sub(a: integer, b: integer) -> integer {\n"
+                               "    function integer sub(integer a, integer b) {\n"
                                "        return a - b\n"
                                "    }\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "}\n");
     const auto id = session.request("textDocument/documentSymbol", make_td_params(uri));
     (void)session.run();
@@ -361,8 +362,8 @@ void test_document_symbol_types() {
 
     const std::string uri = "file:///test/sym_types.luma";
     session.open_document(uri, "record Point {\n"
-                               "    x: integer\n"
-                               "    y: integer\n"
+                               "    integer x,\n"
+                               "    integer y\n"
                                "}\n"
                                "\n"
                                "choice Direction {\n"
@@ -373,7 +374,7 @@ void test_document_symbol_types() {
                                "}\n"
                                "\n"
                                "interface Drawable {\n"
-                               "    draw: function(): string\n"
+                               "    string label\n"
                                "}\n");
     const auto id = session.request("textDocument/documentSymbol", make_td_params(uri));
     (void)session.run();
@@ -398,7 +399,7 @@ void test_definition_cross_file() {
 
     // Library document defines the symbol.
     const std::string lib_uri = "file:///test/xfile_lib.luma";
-    session.open_document(lib_uri, "function shared_helper() -> integer {\n"
+    session.open_document(lib_uri, "function integer shared_helper() {\n"
                                    "    return 7\n"
                                    "}\n");
 
@@ -406,7 +407,7 @@ void test_definition_cross_file() {
     // the cross-file fallback that the reverse symbol index accelerates.
     const std::string main_uri = "file:///test/xfile_main.luma";
     session.open_document(main_uri, "@main\n"
-                                    "function main() {\n"
+                                    "function void main() {\n"
                                     "    shared_helper()\n"
                                     "}\n");
 

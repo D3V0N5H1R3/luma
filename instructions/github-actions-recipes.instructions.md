@@ -5,17 +5,9 @@ priority: reference
 
 # GitHub Actions Recipes
 
-A companion to [github-actions.instructions.md](github-actions.instructions.md) holding the
-complete, copy-paste workflow files and debugging guidance that would otherwise bloat the
-conventions guide. This file has **no** `applyTo` pattern — it is referenced manually when you need
-a full example rather than a rule. The main guide states the conventions; apply them to everything
-you adapt from here.
+A companion to [github-actions.instructions.md](github-actions.instructions.md) holding the complete, copy-paste workflow files and debugging guidance that would otherwise bloat the conventions guide. This file has **no** `applyTo` pattern — it is referenced manually when you need a full example rather than a rule. The main guide states the conventions; apply them to everything you adapt from here.
 
-> **Note — examples are illustrative.** Some snippets use common ecosystem tooling (Docker, Node)
-> to demonstrate a pattern generically. Luma's own CI builds C++ with CMake and runs CTest across
-> an operating-system matrix — see §7.3 of the [main guide](github-actions.instructions.md#7--jobs)
-> for the matrix pattern and §1.1 below for a complete C++/CMake workflow that mirrors this
-> repository. Apply the *pattern*, not the specific tooling, when writing workflows for this project.
+> **Note — examples are illustrative.** Some snippets use common ecosystem tooling (Docker, Node) to demonstrate a pattern generically. Luma's own CI builds C++ with CMake and runs CTest across an operating-system matrix — see §7.3 of the [main guide](github-actions.instructions.md#7--jobs) for the matrix pattern and §1.1 below for a complete C++/CMake workflow that mirrors this repository. Apply the *pattern*, not the specific tooling, when writing workflows for this project.
 
 ---
 
@@ -79,7 +71,7 @@ name: Docker Publish
 
 on:
     push:
-        tags: ["v*.*.*"]
+        tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 permissions:
     contents: read
@@ -116,7 +108,7 @@ name: Release
 
 on:
     push:
-        tags: ["v*.*.*"]
+        tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 permissions:
     contents: write
@@ -177,9 +169,7 @@ jobs:
 
 ### 1.5 — CodeQL / Static Analysis (SAST)
 
-Scan source code for security vulnerabilities with CodeQL. For a compiled
-language the analysis must observe a real build, so use `build-mode: manual` and
-run the project's own build between the `init` and `analyze` steps:
+Scan source code for security vulnerabilities with CodeQL. For a compiled language the analysis must observe a real build, so use `build-mode: manual` and run the project's own build between the `init` and `analyze` steps:
 
 ```yaml
 name: CodeQL
@@ -226,9 +216,7 @@ jobs:
                   category: "/language:c-cpp"
 ```
 
-For interpreted languages (the language server's TypeScript, helper Python) use
-`build-mode: none` instead. Pair SAST with dependency review on pull requests for
-supply-chain coverage:
+For interpreted languages (the language server's TypeScript, helper Python) use `build-mode: none` instead. Pair SAST with dependency review on pull requests for supply-chain coverage:
 
 ```yaml
 - name: Dependency review

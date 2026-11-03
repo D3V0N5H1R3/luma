@@ -30,9 +30,9 @@ struct ParamInfo {
 
 // Information about a user-defined function extracted from the AST.
 struct UserFunctionInfo {
-    std::string signature;             // e.g., "function greet(name: string) -> string"
+    std::string signature;             // e.g., "function string greet(string name)"
     std::string return_type;           // e.g., "string" — empty if no return type declared
-    std::string params_signature;      // e.g., "(name: string)" — for signature help
+    std::string params_signature;      // e.g., "(string name)" — for signature help
     std::vector<ParamInfo> parameters; // structured parameter list
     SourceLocation location;           // declaration location (leading `function` keyword)
     // Range of the function NAME token — precomputed once in build_token_index
@@ -93,6 +93,25 @@ struct SymbolTable {
     StringMap<std::vector<std::string>> function_short_names;
     // Interface implementations: interface name → list of record names.
     StringMap<std::vector<std::string>> interface_implementations;
+
+    // Declaration names of the namespace members declared in the analysed
+    // document: the name token's 0-based start (line, codepoint column) and the
+    // member's qualified name ("Geo.area"). A member is declared with its bare
+    // name, but only that declaration binds to it — as in the type checker, an
+    // unqualified use inside the namespace refers to a top-level symbol.
+    struct NamespaceMemberName {
+        int line;
+        int character;
+        std::string qualified_name;
+    };
+
+    std::vector<NamespaceMemberName> namespace_member_names;
+
+    // Bare names that `use Ns` / `use Ns.member` declarations of the analysed
+    // document import, mapped to the qualified member name ("area" →
+    // "Geo.area"). A wildcard import skips names a top-level symbol already
+    // defines, mirroring TypeChecker::register_use_declaration.
+    StringMap<std::string> imported_names;
 };
 
 // Local variable declarations and scope information.
@@ -124,6 +143,20 @@ struct FunctionStructure {
     };
 
     std::vector<FunctionRange> sorted_function_ranges;
+
+    // A brace-delimited block of the current file: the source positions
+    // (1-based line, past-the-end column as stored on tokens) of its `{` and
+    // matching `}`. Sorted by the opening brace, so nested blocks follow their
+    // parent. Lets scope ends come from the real closing brace instead of a
+    // guess from statement start lines (statement locations carry no end).
+    struct BlockSpan {
+        int open_line;
+        int open_column;
+        int close_line;
+        int close_column;
+    };
+
+    std::vector<BlockSpan> block_spans;
 };
 
 // Include dependencies and symbol origin tracking.

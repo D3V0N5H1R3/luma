@@ -1,0 +1,12 @@
+# Standard input test — the debugger keeps the program's stdin apart from the
+# DAP message stream, so a read sees end of input instead of consuming the
+# editor's requests. The prompt and the final newline-less write must still
+# reach the Debug Console before the session ends.
+
+@main
+function void main() {
+    result<string> answer = Console.prompt("Your name? ")
+    string name = answer ?? "nobody"
+    print("Hello, ${name}")
+    _ = Console.write_to_stdout("done")
+}

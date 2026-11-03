@@ -5,68 +5,80 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Scope note ──────────────────────────────────────────
+# The stdin readers (prompt, prompt_integer, prompt_number, prompt_with_default,
+# confirm, read_line, read_lines, read_from_stdin) block on stdin, so they are
+# not exercised here: a feature suite must run non-interactively, and these
+# functions are covered by C++ tests that redirect std::cin.  is_tty and
+# is_interactive depend on how the suite is launched, so their values cannot be
+# asserted portably.  There are also no negative feature tests for Console:
+# write_to_stdout / write_to_stderr only fail on an underlying stream error (not
+# reachable from Luma), and passing a non-string argument is a compile-time type
+# error rather than a runtime failure result.
+
+# ─── Standard output ─────────────────────────────────────
+
 @test
 function void test_console_write_to_stdout_succeeds() {
-    # write_to_stdout returns result<boolean>; a string argument always succeeds.
     result<boolean> write_result = Console.write_to_stdout("feature test stdout")
 
-    assert(Result.is_success(write_result), "write_to_stdout should succeed for a string")
+    assert(write_result == success(true), "write_to_stdout should succeed for a string")
 }
 
 @test
 function void test_console_write_to_stdout_returns_true() {
-    boolean wrote = Result.unwrap(Console.write_to_stdout(" "))
+    boolean is_written = Result.unwrap(Console.write_to_stdout(" "))
 
-    assert(wrote, "write_to_stdout should unwrap to true on success")
+    assert(is_written, "write_to_stdout should unwrap to true on success")
 }
 
 @test
 function void test_console_write_to_stdout_empty_string() {
     # Writing an empty string is a no-op write that still succeeds.
-    boolean ok = Console.write_to_stdout("") |> Result.is_success()
+    result<boolean> write_result = Console.write_to_stdout("")
 
-    assert(ok, "writing an empty string should succeed")
+    assert(write_result == success(true), "writing an empty string should succeed")
 }
 
 @test
 function void test_console_write_to_stdout_unicode_and_interpolation() {
-    integer count = 3
-    string message = "unicode ✓ café — ${count} items"
+    number item_count = 3
+    string message = "unicode ✓ café — ${item_count} items"
 
-    boolean ok = Console.write_to_stdout(message) |> Result.is_success()
+    result<boolean> write_result = Console.write_to_stdout(message)
 
-    assert(ok, "writing interpolated unicode text should succeed")
+    assert(write_result == success(true), "writing interpolated unicode text should succeed")
 }
+
+@test
+function void test_console_flush_succeeds() {
+    # flush pushes a newline-less prompt out before a blocking read.
+    result<boolean> _written = Console.write_to_stdout("prompt without newline> ")
+
+    result<boolean> flush_result = Console.flush()
+
+    assert(flush_result == success(true), "flushing stdout should succeed")
+}
+
+# ─── Standard error ──────────────────────────────────────
 
 @test
 function void test_console_write_to_stderr_succeeds() {
     result<boolean> write_result = Console.write_to_stderr("feature test stderr")
 
-    assert(Result.is_success(write_result), "write_to_stderr should succeed for a string")
+    assert(write_result == success(true), "write_to_stderr should succeed for a string")
 }
 
 @test
 function void test_console_write_to_stderr_returns_true() {
-    boolean wrote = Result.unwrap(Console.write_to_stderr("x"))
+    boolean is_written = Result.unwrap(Console.write_to_stderr("x"))
 
-    assert(wrote, "write_to_stderr should unwrap to true on success")
+    assert(is_written, "write_to_stderr should unwrap to true on success")
 }
 
 @test
 function void test_console_write_to_stderr_multiline() {
-    boolean ok = Console.write_to_stderr("line one\nline two\n") |> Result.is_success()
+    result<boolean> write_result = Console.write_to_stderr("line one\nline two\n")
 
-    assert(ok, "writing a multi-line string should succeed")
+    assert(write_result == success(true), "writing a multi-line string should succeed")
 }
-
-# ───────────────────────────────────────────────────────────
-# Scope note
-#
-# Console.prompt and Console.read_from_stdin block on stdin, so they are not
-# exercised here: a feature suite must run non-interactively, and these
-# functions are covered by C++ tests that redirect std::cin. There are also no
-# negative feature tests for Console: write_to_stdout / write_to_stderr only
-# fail on an underlying stream error (not reachable from Luma), and passing a
-# non-string argument is a compile-time type error under --strict rather than a
-# runtime failure result.
-# ───────────────────────────────────────────────────────────

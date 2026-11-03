@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <format>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 #include "common/narrow_int.hpp"
@@ -164,7 +165,7 @@ int VariableInspector::alloc_ref(VariableRefEntry entry) const {
     return ref_registry_.allocate(std::move(entry));
 }
 
-void VariableInspector::invalidate_refs() const {
+void VariableInspector::invalidate_refs() {
     {
         const std::scoped_lock lock(ref_mutex_);
         ref_registry_.advance_generation();
@@ -187,7 +188,7 @@ void VariableInspector::invalidate_refs() const {
         areas.emplace_back(std::string("variables"));
         areas.emplace_back(std::string("stacks"));
         body["areas"] = JsonValue(std::move(areas));
-        event_callback_(std::string{kEventInvalidated}, JsonValue(std::move(body)));
+        event_callback_(std::string{k_event_invalidated}, JsonValue(std::move(body)));
     }
 }
 
@@ -270,13 +271,16 @@ VariableInspector::lock_frame_and_vm(int frame_id, const ThreadResolver& resolve
 // ─── Variable building ───
 
 Variable VariableInspector::make_variable(const std::string& name, const Value& val,
-                                          bool is_mutable, int depth) const {
+                                          bool is_mutable, int depth,
+                                          std::string evaluate_name) const {
     Variable var = make_base_variable(name, val);
     var.is_mutable = is_mutable;
+    var.evaluate_name = evaluate_name;
 
     if (is_structured(val) && depth < max_expansion_depth_) {
-        var.variables_reference =
-            alloc_ref(ValueRef{.value = std::make_shared<Value>(val), .depth = depth});
+        var.variables_reference = alloc_ref(ValueRef{.value = std::make_shared<Value>(val),
+                                                     .depth = depth,
+                                                     .evaluate_name = std::move(evaluate_name)});
 
         const auto counts = count_child_variables(val);
         var.named_variables = counts.named;
@@ -366,7 +370,7 @@ std::vector<Variable> VariableInspector::get_variables(int reference, int start,
     } else if (std::holds_alternative<ValueRef>(entry_copy)) {
         const auto& value_ref = std::get<ValueRef>(entry_copy);
         result = value_expander_.get_value_variables(*value_ref.value, value_ref.depth, start,
-                                                     count, filter);
+                                                     count, filter, value_ref.evaluate_name);
     }
 
     return result;
@@ -397,9 +401,7 @@ std::vector<Variable> VariableInspector::list_local_variables(const VMIntrospect
     auto locals = intro.locals(static_cast<std::size_t>(frame_index));
 
     for (const auto& local : locals) {
-        auto var = make_variable(local.name, local.value, local.is_mutable);
-        var.evaluate_name = local.name;
-        result.push_back(std::move(var));
+        result.push_back(make_variable(local.name, local.value, local.is_mutable, 0, local.name));
     }
 
     return result;
@@ -419,7 +421,7 @@ std::vector<Variable> VariableInspector::list_global_variables(const VMIntrospec
 
             const auto* binding = global_env->find_binding(name);
             const bool mutable_var = binding && binding->is_mutable;
-            result.push_back(make_variable(name, val, mutable_var));
+            result.push_back(make_variable(name, val, mutable_var, 0, name));
         });
     }
 
@@ -433,7 +435,7 @@ std::vector<Variable> VariableInspector::list_closure_variables(const VMIntrospe
     auto upvalues = intro.upvalues(static_cast<std::size_t>(frame_index));
 
     for (const auto& uv : upvalues) {
-        result.push_back(make_variable(uv.name, uv.value, uv.is_mutable));
+        result.push_back(make_variable(uv.name, uv.value, uv.is_mutable, 0, uv.name));
     }
 
     return result;
@@ -489,6 +491,7 @@ std::pair<int, int> VariableInspector::get_variable_counts(int reference,
 }
 
 // Parses str as a base-10 integer, requiring the whole string to be consumed.
+// Returns nullopt for text that is not an integer or is out of int64 range.
 [[nodiscard]] static std::optional<Value> try_parse_int(const std::string& str) {
     try {
         std::size_t pos = 0;
@@ -497,15 +500,17 @@ std::pair<int, int> VariableInspector::get_variable_counts(int reference,
         if (pos == str.size()) {
             return Value{static_cast<std::int64_t>(parsed)};
         }
-    } catch (...) {
-        // Not representable as an integer.
-        (void)0;
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
     }
 
     return std::nullopt;
 }
 
 // Parses str as a floating-point number, requiring the whole string consumed.
+// Returns nullopt for text that is not a number or is out of double range.
 [[nodiscard]] static std::optional<Value> try_parse_double(const std::string& str) {
     try {
         std::size_t pos = 0;
@@ -514,9 +519,10 @@ std::pair<int, int> VariableInspector::get_variable_counts(int reference,
         if (pos == str.size()) {
             return Value{parsed};
         }
-    } catch (...) {
-        // Not representable as a number.
-        (void)0;
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    } catch (const std::out_of_range&) {
+        return std::nullopt;
     }
 
     return std::nullopt;
@@ -604,6 +610,10 @@ Variable VariableInspector::set_variable(int variables_reference, const std::str
         auto frame = lock_frame_and_vm(scope_ref.frame_id, resolver);
 
         if (frame.vm == nullptr) {
+            // The frame's thread resumed or exited: nothing was written, so
+            // report an error instead of echoing the input back as a success.
+            result.value = std::string{messages::variable::frame_not_paused};
+            result.type = "error";
             return result;
         }
 
@@ -630,7 +640,9 @@ Variable VariableInspector::set_variable(int variables_reference, const std::str
                                                                    name, new_val);
     }
 
-    result.value = std::format(messages::variable::not_found_format, name);
+    // A ValueRef is a snapshot copy of an expanded value (record field, array
+    // element); editing it would not reach the program, so say so explicitly.
+    result.value = std::format(messages::variable::nested_not_supported, name);
     result.type = "error";
     return result;
 }

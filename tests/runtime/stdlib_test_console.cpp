@@ -1,10 +1,19 @@
 // Standard library tests: Console.
 
+#include <cstddef>
 #include <iostream>
 #include <sstream>
 #include <string>
 
+#include "common/resource_limits.hpp"
+#include "runtime/stdlib/io/console_module.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ResourceLimits;
+using luma::test::CapturedStream;
+using luma::test::eval;
+using luma::test::LimitGuard;
+using luma::test::StdinRedirect;
 
 static void test_console_prompt_eof_fails() {
     std::istringstream fake_stdin{""};
@@ -49,7 +58,7 @@ static void test_console_prompt_rejects_non_string() {
     std::istringstream fake_stdin{"\n"};
     const StdinRedirect guard{fake_stdin.rdbuf()};
 
-    ASSERT_THROWS(eval("Console.prompt(42)"));
+    ASSERT_EVAL_THROWS("Console.prompt(42)", "Console.prompt: expected string");
 }
 
 static void test_console_read_from_stdin() {
@@ -89,7 +98,8 @@ static void test_console_write_to_stderr() {
 static void test_console_write_to_stderr_rejects_non_string() {
     const CapturedStream captured{std::cerr};
 
-    ASSERT_THROWS(eval("Console.write_to_stderr(true)"));
+    ASSERT_EVAL_THROWS("Console.write_to_stderr(true)", "Console.write_to_stderr: expected string");
+    ASSERT_EQ(captured.str(), std::string{});
 }
 
 static void test_console_write_to_stdout() {
@@ -115,7 +125,8 @@ static void test_console_write_to_stdout_empty_string() {
 static void test_console_write_to_stdout_rejects_non_string() {
     const CapturedStream captured{std::cout};
 
-    ASSERT_THROWS(eval("Console.write_to_stdout(42)"));
+    ASSERT_EVAL_THROWS("Console.write_to_stdout(42)", "Console.write_to_stdout: expected string");
+    ASSERT_EQ(captured.str(), std::string{});
 }
 
 // ─── read_line / read_lines / typed prompts / confirm / defaults ───
@@ -229,6 +240,64 @@ static void test_console_prompt_with_default() {
     }
 }
 
+// ─── Bounded line reads (read_bounded_line) ───
+// std::getline used to buffer an entire newline-free line before any size
+// check, and prompt_integer / prompt_number / confirm had no check at all.
+
+static void test_read_bounded_line_stops_at_limit_and_resyncs() {
+    using luma::console_detail::LineStatus;
+    using luma::console_detail::read_bounded_line;
+
+    std::istringstream in{"0123456789ABCDEF\nok\n"};
+    std::string line{};
+
+    ASSERT_EQ(read_bounded_line(in, 8, line), LineStatus::TooLong);
+    ASSERT_LE(line.size(), 8U);
+
+    // The rest of the oversized line was discarded: the next read is "ok".
+    ASSERT_EQ(read_bounded_line(in, 8, line), LineStatus::Ok);
+    ASSERT_EQ(line, "ok");
+    ASSERT_EQ(read_bounded_line(in, 8, line), LineStatus::EndOfInput);
+}
+
+static void test_read_bounded_line_matches_getline_semantics() {
+    using luma::console_detail::LineStatus;
+    using luma::console_detail::read_bounded_line;
+
+    // A line exactly at the limit is accepted; a final unterminated line is
+    // still a line; an empty line is a line; end of input is reported once
+    // nothing is left.
+    std::istringstream in{"12345678\n\ntail"};
+    std::string line{};
+
+    ASSERT_EQ(read_bounded_line(in, 8, line), LineStatus::Ok);
+    ASSERT_EQ(line, "12345678");
+    ASSERT_EQ(read_bounded_line(in, 8, line), LineStatus::Ok);
+    ASSERT_EQ(line, "");
+    ASSERT_EQ(read_bounded_line(in, 8, line), LineStatus::Ok);
+    ASSERT_EQ(line, "tail");
+    ASSERT_EQ(read_bounded_line(in, 8, line), LineStatus::EndOfInput);
+}
+
+static void test_console_line_functions_enforce_max_string_size() {
+    const LimitGuard limit{ResourceLimits::max_string_size, static_cast<std::size_t>(16)};
+    const std::string oversized = std::string(64, '7') + "\n";
+
+    for (const char* const call :
+         {"Console.read_line()", "Console.prompt(\"> \")", "Console.prompt_integer(\"> \")",
+          "Console.prompt_number(\"> \")", "Console.confirm(\"> \")",
+          "Console.prompt_with_default(\"> \", \"d\")", "Console.read_lines()"}) {
+        std::istringstream fake_stdin{oversized};
+        const StdinRedirect guard{fake_stdin.rdbuf()};
+        const CapturedStream captured{std::cout};
+
+        const auto v = eval(call);
+
+        ASSERT_RESULT_FAILURE(v);
+        ASSERT_NE(v.as_result()->owned_inner->as_string().find("maximum"), std::string::npos);
+    }
+}
+
 static void test_console_new_functions_registered() {
     const auto env = luma::test::make_std_env();
 
@@ -264,6 +333,9 @@ int main() {
     RUN(test_console_confirm_yes_no);
     RUN(test_console_confirm_error_message_uses_trimmed_original_case);
     RUN(test_console_prompt_with_default);
+    RUN(test_read_bounded_line_stops_at_limit_and_resyncs);
+    RUN(test_read_bounded_line_matches_getline_semantics);
+    RUN(test_console_line_functions_enforce_max_string_size);
     RUN(test_console_new_functions_registered);
 
     return SUMMARY();

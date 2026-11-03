@@ -62,19 +62,19 @@ void DebugExecutionEngine::start_execution_thread(bool stop_on_entry,
     thread_mgr_.clear();
     thread_mgr_.add_thread(main_state);
 
+    // Publish the stop token *before* the execution thread exists.  Thread
+    // creation then orders this write before every read of the token on the
+    // execution thread and on task threads (should_break / wait_for_resume),
+    // so the token is never read while it is being assigned.
+    execution_stop_source_ = std::stop_source{};
+    execution_stop_token_ = execution_stop_source_.get_token();
+    program_cancel_token_ = std::make_shared<CancellationToken>();
+
     execution_thread_ =
         std::jthread([this, fns = compiled_functions_, top = compiled_top_level_, main_state,
                       program_args = args, working_dir = cwd, no_debug] {
             run_execution(fns, top, main_state, program_args, working_dir, no_debug);
         });
-
-    // Capture the stop token from the jthread object on the launching thread,
-    // immediately after construction, rather than assigning it from inside
-    // the lambda on the new thread.  This closes the race window where an
-    // early terminate() (e.g. a disconnect arriving before the new thread is
-    // scheduled) would have should_break()/wait_for_resume() read a
-    // default-constructed (never-stopped) execution_stop_token_.
-    execution_stop_token_ = execution_thread_.get_stop_token();
 }
 
 std::string DebugExecutionEngine::launch(const std::string& program_path, bool stop_on_entry,
@@ -94,7 +94,7 @@ std::string DebugExecutionEngine::launch(const std::string& program_path, bool s
 
         if (!compiled.has_value()) {
             for (const auto& err : detailed_errors) {
-                output_callback_(std::string{kOutputStderr}, err + "\n");
+                output_callback_(std::string{k_output_stderr}, err + "\n");
             }
 
             return compile_error + " (see output for details)";
@@ -113,6 +113,9 @@ std::string DebugExecutionEngine::launch(const std::string& program_path, bool s
         bp_mgr_.set_source_locator(source_locator_.get());
         bp_mgr_.set_compiled_program(compiled_functions_, compiled_top_level_);
         bp_mgr_.preload_canonical_paths();
+        bp_mgr_.set_diagnostic_callback([this](const std::string& message) {
+            output_callback_(std::string{k_output_console}, message + "\n");
+        });
         expr_eval_.set_compiled_program(compiled_functions_, compiled_top_level_);
 
         start_execution_thread(stop_on_entry, args, cwd, no_debug);
@@ -125,7 +128,15 @@ std::string DebugExecutionEngine::launch(const std::string& program_path, bool s
 
 void DebugExecutionEngine::terminate(bool emit_exit_events) {
     suppress_exit_events_.store(!emit_exit_events, std::memory_order_relaxed);
-    execution_thread_.request_stop();
+    execution_stop_source_.request_stop();
+
+    // Unblock a program waiting in an await, task_scope join, or channel wait
+    // (and cancel its tasks); the stop request alone is only seen on a line
+    // change, which such a program never reaches.  Natives that block on the
+    // OS without polling a token (sockets, processes, HTTP) are not covered.
+    if (program_cancel_token_) {
+        program_cancel_token_->cancel();
+    }
 
     {
         const auto lock = lock_config();
@@ -187,14 +198,6 @@ std::string DebugExecutionEngine::last_exception_message() const {
 bool DebugExecutionEngine::last_exception_is_caught() const {
     const auto lock = lock_exception();
     return last_exception_is_caught_;
-}
-
-IVMControl* DebugExecutionEngine::vm_control() const {
-    return vm_adapter_.get();
-}
-
-IVMIntrospection* DebugExecutionEngine::vm_introspection() const {
-    return vm_adapter_.get();
 }
 
 // ─── Lock helpers ───

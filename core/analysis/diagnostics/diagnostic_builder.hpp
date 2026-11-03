@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_DIAGNOSTICS_DIAGNOSTIC_BUILDER_HPP
+#define LUMA_DIAGNOSTICS_DIAGNOSTIC_BUILDER_HPP
 
 #include <string>
 
@@ -96,3 +97,5 @@ namespace diag {
 } // namespace diag
 
 } // namespace luma
+
+#endif // LUMA_DIAGNOSTICS_DIAGNOSTIC_BUILDER_HPP

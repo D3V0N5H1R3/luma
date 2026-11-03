@@ -17,9 +17,9 @@ Luma has two testing layers: **C++ tests** that exercise interpreter internals, 
 
 | Location | Layer | Covers |
 | --- | --- | --- |
-| `tests/analysis/` | C++ | Front-end: lexer, parser, type checker, resolver, linter, diagnostics. |
+| `tests/analysis/` | C++ | Front-end: lexer, parser, type checker, linter, diagnostics, include resolver, pipeline. |
 | `tests/runtime/` | C++ | Back-end: compiler, VM, stdlib modules, concurrency, CLI, REPL. |
-| `tests/integration/` | C++ | Full pipeline, from source to execution. |
+| `tests/integration/` | C++ | Full pipeline, from source to execution, and the structured fuzzer's generator contract (`fuzz_generator_test`). |
 | `tests/platform/` | C++ | Platform-specific behaviour (`safe_getenv`, Win32 UTF-8). |
 | `tests/features/language/` | Luma | Core language features (control flow, types, closures, generics). |
 | `tests/features/stdlib/` | Luma | Standard library modules (`*_functions.luma`). |
@@ -35,8 +35,8 @@ All of these are registered with CTest from `tests/CMakeLists.txt`.
 
 - **Purpose:** test individual C++ classes and functions (`analysis`, `runtime`, `platform`) and verify that the whole pipeline works together (`integration`).
 - **Framework:** a lightweight custom framework in `tests/test_framework.hpp` (no GTest or Catch2). Tests register functions with `RUN(...)` and return `SUMMARY()` from `main()`.
-- **Shared helpers:** each suite includes the specific helper header its layer needs. The core framework (`test_framework.hpp`) provides `RUN`, the `ASSERT_*` macros, and `SUMMARY`; the layer helpers add the rest — `shared_eval.hpp` for full-pipeline evaluators (`eval()`, `eval_checked()`, `ASSERT_EVAL_INT`, …), `lex_parse_util.hpp` for a front-end-only lex→parse, `analysis/test_parse_helper.hpp` for parser tests, `analysis/type_checker_test_helpers.hpp` for type-checker tests (`check()`, `check_warnings()`, `fails()`), `runtime/compiler_test_helpers.hpp` for compiler opcode inspection, and `runtime/stdlib_test_helpers.hpp` for end-to-end stdlib tests.
-- **Naming:** one executable per file, named `<component>_test.cpp`. Exceptions: stdlib tests use `stdlib_test_<module>.cpp`, type-checker tests use `type_checker_test_<aspect>.cpp`, and the LSP and DAP suites use `lsp_test_<area>.cpp` / `dap_test_<area>.cpp`.
+- **Shared helpers:** each suite includes the specific helper header its layer needs; every helper lives in namespace `luma::test`, and test files name what they use with using-declarations. The core framework (`test_framework.hpp`) provides `RUN`, the `ASSERT_*` macros, `SUMMARY`, and the RAII helpers (`TempFile`, `TempDir`, `ScopedPathCleanup`, `LimitGuard`, `ScopedEnv`, `CapturedStream`, …); the layer helpers add the rest — `shared_eval.hpp` for full-pipeline evaluators (`eval()`, `eval_checked()`, `ASSERT_EVAL_INT`, `ASSERT_EVAL_THROWS`, …), `lex_parse_util.hpp` for a front-end-only lex→parse (`lex_and_parse()`, `parse_errors()`), `analysis/test_parse_helper.hpp` for parser tests, `analysis/parser_test_helpers.hpp` for helpers shared by the `parser_test_*` files (`first_function()`), `analysis/ast_test_util.hpp` for kind-checked AST downcasts, `analysis/type_checker_test_helpers.hpp` for type-checker tests (`check()`, `check_warnings()`, `fails()`), `runtime/compiler_test_helpers.hpp` for compilation and instruction-decoding opcode inspection, `runtime/optimizer_test_helpers.hpp` for helpers shared by the `optimizer_test_*` files (`make_chunk()`), and `runtime/stdlib_test_helpers.hpp` for end-to-end stdlib tests (`LumaTempFile`).
+- **Naming:** one executable per file, named `<component>_test.cpp`. Exceptions: stdlib tests use `stdlib_test_<module>.cpp`, type-checker tests use `type_checker_test_<aspect>.cpp`, parser, optimizer, and VM tests use `parser_test_<area>.cpp`, `optimizer_test_<pass>.cpp`, and `vm_test_<area>.cpp`, and the LSP and DAP suites use `lsp_test_<area>.cpp` / `dap_test_<area>.cpp`.
 - **Running:** via CTest — see [§4](#4-running-tests).
 
 ## 3. Luma Feature Tests
@@ -73,7 +73,7 @@ ctest --preset default -L "lsp|dap"        # language server and debugger
 
 | Label | Scope |
 | --- | --- |
-| `analysis` | Front-end unit tests; sub-labels `lexer`, `parser`, `types`, `resolver`, `linter`. |
+| `analysis` | Front-end unit tests; sub-labels `lexer`, `parser`, `types`, `linter`. |
 | `runtime` | Back-end unit tests; sub-labels `stdlib`, `compiler`, `vm`, `concurrency`. |
 | `platform` | Platform-specific tests. |
 | `integration` | Full-pipeline and DAP end-to-end tests. |
@@ -86,10 +86,10 @@ You can also select tests by name with `-R`, for example `ctest --preset default
 ### Running a Single Feature Suite Directly
 
 ```bash
-build/Release/luma --strict --test tests/features/language/arrays.luma
+build/luma --strict --test tests/features/language/arrays.luma
 ```
 
-On Windows the executable is `build\Release\luma.exe`.
+On Windows the executable is `build\luma.exe`.
 
 ### Running All Feature Suites Without CMake
 

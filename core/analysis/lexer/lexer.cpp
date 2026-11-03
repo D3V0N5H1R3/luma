@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <iterator>
 #include <optional>
@@ -10,8 +11,10 @@
 #include <utility>
 #include <vector>
 
+#include "analysis/common/utf8_validation.hpp"
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/diagnostics/diagnostic_collector.hpp"
+#include "analysis/diagnostics/display_text.hpp"
 #include "analysis/lexer/token_type.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/utf8.hpp"
@@ -72,10 +75,20 @@ std::vector<Token> Lexer::tokenize() {
             break;
         }
 
+        token_start_ = current_location();
         scan_token();
     }
 
+    // A triple-quoted literal left open (unterminated inside an interpolation,
+    // or cut short by the error cap) still gets its pieces dedented.
+    while (!open_triple_quoted_.empty()) {
+        finish_triple_quoted_string();
+    }
+
+    token_start_ = current_location();
     add_token(TokenType::EndOfFile, "");
+
+    stamp_token_starts();
 
     // Flush accumulated diagnostics to the external collector.
     for (auto& diagnostic : take_diagnostics()) {
@@ -111,18 +124,35 @@ SourceLocation Lexer::current_location() const {
     return cursor_.location(file_id_);
 }
 
+// Copy each token's start into its end-position `location`, so every AST node,
+// source-map entry and diagnostic built from a token knows where the token
+// begins.  Done once after scanning, because the string scanners overwrite
+// `start_location` after add_token() for string segments.
+void Lexer::stamp_token_starts() {
+    for (auto& token : tokens_) {
+        if (token.start_location.line > 0) {
+            token.location.start_line = token.start_location.line;
+            token.location.start_column = token.start_location.column;
+        }
+    }
+}
+
 void Lexer::add_token(TokenType type, std::string_view lexeme) {
     tokens_.push_back({.type = type,
                        .lexeme = std::string{lexeme},
                        .literal = std::nullopt,
-                       .location = current_location()});
+                       .location = current_location(),
+                       .start_location = token_start_,
+                       .preceded_by_newline = std::exchange(newline_pending_, false)});
 }
 
 void Lexer::add_token(TokenType type, std::string_view lexeme, TokenLiteral literal) {
     tokens_.push_back({.type = type,
                        .lexeme = std::string{lexeme},
                        .literal = std::move(literal),
-                       .location = current_location()});
+                       .location = current_location(),
+                       .start_location = token_start_,
+                       .preceded_by_newline = std::exchange(newline_pending_, false)});
 }
 
 void Lexer::skip_whitespace_and_comments() {
@@ -131,7 +161,10 @@ void Lexer::skip_whitespace_and_comments() {
     while (!is_at_end()) {
         const char character = current();
 
-        if (character == ' ' || character == '\t' || character == '\r' || character == '\n') {
+        if (character == '\n') {
+            newline_pending_ = true;
+            advance();
+        } else if (character == ' ' || character == '\t' || character == '\r') {
             advance();
         } else if (character == ';') {
             if (!semicolon_warned) {
@@ -162,16 +195,29 @@ void Lexer::scan_token() {
     const char character = current();
     const auto location = current_location();
 
-    // Numbers
+    // Numbers.  After '.' / '?.' a number is a tuple member index.
     if (is_digit(character)) {
-        scan_number();
+        if (!tokens_.empty() && (tokens_.back().type == TokenType::Dot ||
+                                 tokens_.back().type == TokenType::QuestionDot)) {
+            scan_member_index();
+        } else {
+            scan_number();
+        }
 
         return;
     }
 
     // Identifiers and keywords
-    if (is_alpha(character) || character == '_') {
+    if (identifier_char_width(/*allow_digit=*/false) > 0) {
         scan_identifier();
+
+        return;
+    }
+
+    // A non-ASCII byte that cannot start an identifier: malformed UTF-8 or an
+    // invisible Unicode space/control character.
+    if (static_cast<unsigned char>(character) >= k_utf8_ascii_max) {
+        scan_invalid_non_ascii(location);
 
         return;
     }
@@ -242,12 +288,82 @@ bool Lexer::try_close_interpolation() {
 
 // ──────────── Identifiers and keywords ────────────
 
+std::size_t Lexer::identifier_char_width(bool allow_digit) const {
+    if (is_at_end()) {
+        return 0;
+    }
+
+    const char character = current();
+
+    if (is_ascii_alpha(character) || (allow_digit && is_digit(character))) {
+        return 1;
+    }
+
+    if (static_cast<unsigned char>(character) < k_utf8_ascii_max) {
+        return 0;
+    }
+
+    const std::string_view source{cursor_.source()};
+    const std::size_t position{cursor_.position()};
+    const std::size_t length = well_formed_utf8_length(source, position);
+
+    if (length == 0 ||
+        is_unicode_space_or_control(decode_well_formed_utf8(source, position, length))) {
+        return 0;
+    }
+
+    return length;
+}
+
+void Lexer::consume_identifier_chars() {
+    for (auto width = identifier_char_width(/*allow_digit=*/true); width > 0;
+         width = identifier_char_width(/*allow_digit=*/true)) {
+        for (std::size_t i{0}; i < width; ++i) {
+            advance();
+        }
+    }
+}
+
+void Lexer::scan_invalid_non_ascii(SourceLocation location) {
+    const std::string_view source{cursor_.source()};
+    const std::size_t start{cursor_.position()};
+    const std::size_t length = well_formed_utf8_length(source, start);
+
+    if (length > 0) {
+        // Well-formed, but whitespace or a control character (e.g. U+00A0).
+        const auto code_point =
+            static_cast<std::uint32_t>(decode_well_formed_utf8(source, start, length));
+
+        for (std::size_t i{0}; i < length; ++i) {
+            advance();
+        }
+
+        emit_syntax_error(std::format("unexpected character U+{:04X}", code_point), location,
+                          "invisible or non-breaking Unicode spaces are not allowed in code — "
+                          "replace it with an ordinary space",
+                          DiagnosticCode::UnexpectedToken);
+    } else {
+        // Malformed UTF-8: report the offending byte and any stray continuation
+        // bytes after it as one error rather than one per byte.
+        advance();
+
+        while (!is_at_end() && is_utf8_continuation(static_cast<unsigned char>(current()))) {
+            advance();
+        }
+
+        emit_syntax_error(
+            std::format("invalid UTF-8 byte sequence '{}'",
+                        sanitize_for_terminal(source.substr(start, cursor_.position() - start))),
+            location, "save the file as UTF-8", DiagnosticCode::UnexpectedToken);
+    }
+
+    add_token(TokenType::Error, source.substr(start, cursor_.position() - start));
+}
+
 void Lexer::scan_identifier() {
     const std::size_t start{cursor_.position()};
 
-    while (!is_at_end() && is_alnum(current())) {
-        advance();
-    }
+    consume_identifier_chars();
 
     const std::string_view word{cursor_.source().data() + start, cursor_.position() - start};
 
@@ -266,7 +382,7 @@ void Lexer::scan_identifier() {
     });
 
     if (has_confusable_marker) {
-        emit_warning(current_location(),
+        emit_warning(token_start_,
                      "identifier contains non-ASCII characters that may be confusable",
                      "check for zero-width or homoglyph characters");
     }
@@ -279,7 +395,7 @@ void Lexer::scan_identifier() {
         // Nudge users who reach for another language's variable-declaration
         // keywords toward Luma's own syntax.
         if (type == TokenType::Identifier && (word == "var" || word == "let")) {
-            emit_warning(current_location(), std::format("'{}' is not a Luma keyword", word),
+            emit_warning(token_start_, std::format("'{}' is not a Luma keyword", word),
                          "use 'type name = value' or "
                          "'mutable type name = value' to declare variables");
         }
@@ -310,15 +426,10 @@ void Lexer::scan_annotation() {
 
     const std::size_t start{cursor_.position()};
 
-    // First character must be a letter or underscore.
-    if (!is_at_end() && (is_alpha(current()) || current() == '_')) {
-        advance();
-
-        // Subsequent characters may also include digits, consistent
-        // with identifier rules.
-        while (!is_at_end() && is_alnum(current())) {
-            advance();
-        }
+    // First character must be a letter or underscore; subsequent characters
+    // may also include digits, consistent with identifier rules.
+    if (!is_at_end() && identifier_char_width(/*allow_digit=*/false) > 0) {
+        consume_identifier_chars();
     }
 
     if (cursor_.position() == start) {

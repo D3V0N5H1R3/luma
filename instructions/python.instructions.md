@@ -512,43 +512,40 @@ subprocess.run(f"git log --oneline -n {count}", shell=True)
 
 ## 18 — Testing
 
-- Use `pytest` as the test framework. Use `unittest` only when integrating with legacy code.
-- Name test files `test_*.py` and test functions `test_*`.
+- Use the standard library's `unittest`. This repository's Python tooling is standard-library only, and CI runs every suite with `python -m unittest discover` (see `.github/workflows/ci-python.yml`), so a test must not need `pytest` or another third-party package.
+- Name test files `test_*.py`, test classes `*Tests`, and test methods `test_*`.
 - Name tests descriptively: `test_rejects_empty_input`, `test_returns_default_on_missing_key`.
 - Keep tests independent — no shared mutable state between test cases.
-- Use fixtures (`@pytest.fixture`) for setup and teardown, not manual setUp/tearDown.
-- Use `pytest.raises` for exception assertions. Use `pytest.approx` for floating-point comparisons.
+- Do setup in `setUp` and register teardown with `self.addCleanup`, which runs even when `setUp` fails part-way. Use `tempfile.TemporaryDirectory` for scratch files and `mock.patch.dict(os.environ, …)` for environment changes, so nothing leaks into the next test.
+- Use `assertRaises` / `assertRaisesRegex` for exceptions and `assertAlmostEqual` for floating-point comparisons. Prefer the specific assertion (`assertIn`, `assertIs`, `assertEqual`) over `assertTrue(a == b)`, so a failure reports both values.
 - Test both success and failure paths. Test edge cases (empty input, None, boundaries).
-- Use `unittest.mock.patch` or `pytest-mock` for isolating dependencies.
+- Use `unittest.mock.patch` for isolating dependencies, and fake executables on `PATH` for code that runs external tools.
 - Keep test files next to the code they test, or in a parallel `tests/` directory.
 
 ```python
-# Good — descriptive test names, fixtures, edge cases.
-@pytest.fixture
-def sample_config(tmp_path: Path) -> Path:
-    config = tmp_path / "config.json"
-    config.write_text('{"key": "value"}')
-    return config
+# Good — descriptive test names, scratch files cleaned up, edge cases.
+class LoadConfigTests(unittest.TestCase):
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
 
+    def test_loads_valid_config(self) -> None:
+        config = self.root / "config.json"
+        config.write_text('{"key": "value"}', encoding="utf-8")
 
-def test_loads_valid_config(sample_config: Path) -> None:
-    result = load_config(sample_config)
-    assert result == {"key": "value"}
+        self.assertEqual(load_config(config), {"key": "value"})
 
+    def test_raises_on_missing_file(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            load_config(self.root / "nonexistent.json")
 
-def test_raises_on_missing_file(tmp_path: Path) -> None:
-    missing = tmp_path / "nonexistent.json"
+    def test_raises_on_invalid_json(self) -> None:
+        bad_config = self.root / "config.json"
+        bad_config.write_text("not json", encoding="utf-8")
 
-    with pytest.raises(FileNotFoundError):
-        load_config(missing)
-
-
-def test_raises_on_invalid_json(tmp_path: Path) -> None:
-    bad_config = tmp_path / "config.json"
-    bad_config.write_text("not json")
-
-    with pytest.raises(ConfigError):
-        load_config(bad_config)
+        with self.assertRaises(ConfigError):
+            load_config(bad_config)
 ```
 
 ---

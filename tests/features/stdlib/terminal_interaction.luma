@@ -1,6 +1,9 @@
 # ═══════════════════════════════════════════════════════════
 # Luma v1.0 — Feature Tests — Terminal Interaction Testing
 #
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+#
 # Exercises the headless interaction-testing API (Terminal.test_*), which
 # drives an imperative Terminal/TUI program without a real terminal so its
 # input loop and rendering can be verified by feeding scripted input and
@@ -24,16 +27,16 @@
 # input drains (read_key fails -> "" sentinel), like mouse_draw / editor.
 function string run_key_logger() {
     mutable string log = ""
-    mutable boolean running = true
+    mutable boolean is_running = true
 
-    while running {
+    while is_running {
         string key = Result.unwrap_or(Terminal.read_key(), "")
 
         if key == "" {
-            running = false
+            is_running = false
         } else {
             Terminal.write("<${key}>")
-            log = log + key + ","
+            log = "${log}${key},"
         }
     }
 
@@ -44,19 +47,19 @@ function string run_key_logger() {
 # unconsumed) or when input drains.
 function integer run_counter(integer start) {
     mutable integer count = start
-    mutable boolean running = true
+    mutable boolean is_running = true
 
-    while running {
+    while is_running {
         string key = Result.unwrap_or(Terminal.read_key(), "")
 
         if key == "" {
-            running = false
+            is_running = false
         } else if key == "+" {
             count = count + 1
         } else if key == "-" {
             count = count - 1
         } else if key == "q" {
-            running = false
+            is_running = false
         }
     }
 
@@ -94,7 +97,7 @@ function string describe_event() {
     return described
 }
 
-# ─── test_start / read_key ─────────────────────────────────
+# ─── test_start / read_key / read_key_timeout ──────────────
 
 @test
 function void test_scripted_keys_consumed_in_order() {
@@ -115,6 +118,17 @@ function void test_drained_input_reports_end() {
 
     assert(key == "")
     assert(output == "")
+}
+
+@test
+function void test_read_key_timeout_consumes_scripted_keys() {
+    Terminal.test_start(["a"])
+    result<string> first = Terminal.read_key_timeout(10)
+    result<string> drained = Terminal.read_key_timeout(10)
+    _ = Terminal.test_stop()
+
+    assert(first == success("a"))
+    assert(Result.is_failure(drained), "a drained queue reports end-of-input")
 }
 
 # ─── A realistic counter TUI ───────────────────────────────
@@ -178,12 +192,14 @@ function void test_feed_appends_more_input() {
     integer after_one = Terminal.test_remaining()
     Terminal.test_feed(["c"])
     integer after_feed = Terminal.test_remaining()
+    string rest = run_key_logger()
     string output = Terminal.test_stop()
 
     assert(first == "a")
     assert(after_one == 1)
     assert(after_feed == 2)
-    assert(output == "")
+    assert(rest == "b,c,", "fed keys are consumed after the original queue")
+    assert(output == "<b><c>")
 }
 
 # ─── output capture ────────────────────────────────────────
@@ -212,18 +228,51 @@ function void test_output_readable_mid_session() {
     assert(final == "ABCD")
 }
 
+@test
+function void test_overwrite_line_and_bell_are_captured() {
+    array<string> no_keys = []
+    Terminal.test_start(no_keys)
+    Terminal.overwrite_line("status")
+    string after_overwrite = Terminal.test_output()
+    Terminal.bell()
+    string final = Terminal.test_stop()
+
+    # overwrite_line emits a line-clearing escape before the text; the bell
+    # appends exactly one control byte.
+    assert(String.ends_with(after_overwrite, "status"))
+    assert(String.length(after_overwrite) > String.length("status"))
+    assert(String.starts_with(final, after_overwrite))
+    assert(String.length(final) == String.length(after_overwrite) + 1)
+}
+
 # ─── headless session state ────────────────────────────────
 
 @test
 function void test_session_reports_active_terminal() {
     Terminal.test_start(["x"])
-    boolean is_term = Terminal.is_terminal()
-    boolean is_raw = Terminal.is_in_raw_mode()
+    boolean is_terminal = Terminal.is_terminal()
+    boolean is_raw_during_session = Terminal.is_in_raw_mode()
     string output = Terminal.test_stop()
-    boolean raw_after = Terminal.is_in_raw_mode()
+    boolean is_raw_after_stop = Terminal.is_in_raw_mode()
 
-    assert(is_term)
-    assert(is_raw)
-    assert(!raw_after)
+    assert(is_terminal)
+    assert(is_raw_during_session)
+    assert(!is_raw_after_stop)
     assert(output == "")
+}
+
+@test
+function void test_session_fakes_terminal_setup_but_not_cursor_queries() {
+    # enable_raw_mode / enable_mouse succeed so the real loop can run, but a
+    # query that needs a live terminal reports a failure.
+    array<string> no_keys = []
+    Terminal.test_start(no_keys)
+    result<void> raw_mode_result = Terminal.enable_raw_mode()
+    result<void> mouse_result = Terminal.enable_mouse()
+    result<Terminal.CursorPosition> cursor_result = Terminal.get_cursor_position()
+    _ = Terminal.test_stop()
+
+    assert(Result.is_success(raw_mode_result))
+    assert(Result.is_success(mouse_result))
+    assert(Result.is_failure(cursor_result))
 }

@@ -1,19 +1,22 @@
 import * as vscode from "vscode";
 import {
+    DynamicFeature,
+    ExecuteCommandRequest,
     LanguageClient,
     LanguageClientOptions,
     RevealOutputChannelOn,
     ServerOptions,
     State,
+    StaticFeature,
 } from "vscode-languageclient/node";
 import { LSP_CONFIG, resolveBinaryCommand } from "../utils/binary-download";
 import { extractErrorMessage } from "../utils/util";
 import { reportError } from "../utils/report";
 import { ServerState, setStatus } from "./status";
+import { folderDocumentSelector } from "./selectors";
 import {
     CONFIG_SECTION,
     CONFIG_KEYS,
-    COMMANDS,
     GLOBAL_FOLDER_KEY,
     IDS,
     folderLspClientId,
@@ -30,18 +33,28 @@ export interface FolderClient {
     readonly folder: vscode.WorkspaceFolder;
 }
 
-// ─── Shared middleware for language clients ──────────────────────
-
-const luma_middleware: LanguageClientOptions["middleware"] = {
-    executeCommand: async (cmd: string, args: unknown[], next) => {
-        if (cmd === COMMANDS.showReferences && args.length >= 3) {
-            const [uri, position, locations] = args as [unknown, unknown, unknown];
-            await vscode.commands.executeCommand(COMMANDS.showReferences, uri, position, locations);
+/**
+ * Language client that leaves server commands (`workspace/executeCommand`)
+ * to the extension.
+ *
+ * The stock ExecuteCommandFeature registers every command the server
+ * advertises as a global VS Code command. A multi-root workspace runs one
+ * client per folder, so the second client's registration of the same command
+ * (`luma.showReferences`) throws "command already exists" and that client
+ * never starts. The extension registers the command once instead and routes
+ * each call to the client that owns the document (see lsp/commands.ts).
+ */
+class LumaLanguageClient extends LanguageClient {
+    public override registerFeature(feature: StaticFeature | DynamicFeature<unknown>): void {
+        if (
+            "registrationType" in feature &&
+            feature.registrationType.method === ExecuteCommandRequest.method
+        ) {
             return;
         }
-        return next(cmd, args);
-    },
-};
+        super.registerFeature(feature);
+    }
+}
 
 // ─── LSP config defaults ─────────────────────────────────────────
 // LSP config defaults (e.g. diagnostics.onSave) are defined per-editor:
@@ -99,6 +112,27 @@ export class ClientManager {
         return [...this.folder_clients.values()];
     }
 
+    /**
+     * Returns the client that serves `uri`: the per-folder client whose folder
+     * contains it, else the global client. VS Code resolves the folder, so a
+     * URI the server encodes differently (`file:///C:/…` vs `file:///c%3A/…`)
+     * still finds its client.
+     */
+    clientForUri(uri: string): LanguageClient | undefined {
+        const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.parse(uri));
+        const folder_client = folder ? this.folder_clients.get(folder.uri.toString()) : undefined;
+        return (folder_client ?? this.folder_clients.get(GLOBAL_FOLDER_KEY))?.client;
+    }
+
+    /** Sends a `workspace/executeCommand` request to the client that serves `uri`. */
+    async executeServerCommand(uri: string, command: string, args: unknown[]): Promise<unknown> {
+        const client = this.clientForUri(uri);
+        if (!client) {
+            return undefined;
+        }
+        return client.sendRequest(ExecuteCommandRequest.type, { command, arguments: args });
+    }
+
     // ─── Client lifecycle ─────────────────────────────────────────
 
     /** Starts LSP clients for all workspace folders. */
@@ -122,9 +156,7 @@ export class ClientManager {
         const { client, folder: resolved_folder } = await this.createAndStartClient(context, {
             id: folderLspClientId(folder.name),
             name: `Luma LSP (${folder.name})`,
-            document_selector: [
-                { scheme: "file", language: "luma", pattern: `${folder.uri.fsPath}/**` },
-            ],
+            document_selector: folderDocumentSelector(folder),
             folder,
             file_events: vscode.workspace.createFileSystemWatcher(file_pattern),
         });
@@ -183,14 +215,18 @@ export class ClientManager {
             workspaceFolder: options.folder,
             outputChannel: this.output_channel,
             revealOutputChannelOn: RevealOutputChannelOn.Never,
-            middleware: luma_middleware,
             synchronize: {
                 configurationSection: "luma",
                 fileEvents: options.file_events,
             },
         };
 
-        const client = new LanguageClient(options.id, options.name, server_options, client_options);
+        const client = new LumaLanguageClient(
+            options.id,
+            options.name,
+            server_options,
+            client_options,
+        );
 
         this.wireClientState(client, context, command);
 

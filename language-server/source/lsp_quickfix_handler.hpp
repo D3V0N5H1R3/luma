@@ -170,6 +170,16 @@ private:
         .build();
 }
 
+// Where the "Add 'mutable'" fix for an assignment to the immutable `var_name`
+// on `diag_line_1based` inserts `mutable `: the start of the type annotation of
+// the nearest `<type> var_name = …` declaration at or before that line in the
+// same function (codepoint columns, 0-based). Returns nullopt when no such
+// declaration exists or it is already mutable. Defined in
+// lsp_server_code_actions.cpp; declared here for direct unit testing.
+[[nodiscard]] std::optional<Position> mutable_insertion_position(const AnalysisResult& analysis,
+                                                                 std::string_view var_name,
+                                                                 int diag_line_1based);
+
 } // namespace luma::lsp
 
 #endif // LUMA_LSP_QUICKFIX_HANDLER_HPP

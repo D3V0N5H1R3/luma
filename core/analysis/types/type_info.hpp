@@ -10,7 +10,8 @@
 //   - SymbolTable: the full resolved symbol table exported to the LSP
 // ─────────────────────────────────────────────────────────────────────────────
 
-#pragma once
+#ifndef LUMA_TYPES_TYPE_INFO_HPP
+#define LUMA_TYPES_TYPE_INFO_HPP
 
 #include <memory>
 #include <optional>
@@ -25,6 +26,7 @@
 namespace luma {
 
 struct Statement;
+struct FunctionDeclaration;
 
 using StatementPtr = std::unique_ptr<Statement>;
 
@@ -183,6 +185,11 @@ struct SymbolInfo {
     bool is_written{false};   // variable was assigned after declaration
     bool is_parameter{false}; // function/lambda parameter (for distinct warnings)
     SourceLocation location;  // declaration location for diagnostic messages
+    // The declared function this name is bound to, when the symbol was
+    // defined for a function declaration; null for variables and parameters
+    // (even function-typed ones), so a local that shadows a function is not
+    // mistaken for it.
+    const FunctionDeclaration* function_declaration{nullptr};
 };
 
 // ─────────────────────── Variable Modifiers ───────────────────────
@@ -200,10 +207,10 @@ struct VariableModifiers {
 
 // Note: TypeScope uses a shared_ptr-linked parent chain and tracks ownership
 // state (unique/borrow/consumed) with flow-sensitive snapshot/restore.  It
-// shares a superficial push/pop/lookup shape with ResolveScope and
-// LinterTracker::ScopeData but has different semantics, so the three are not
-// unified into a single Scope<Symbol> template.  See common/scope_stack.hpp
-// §Component Usage for the full rationale.
+// shares a superficial push/pop/lookup shape with LinterTracker::ScopeData
+// but has different semantics, so the two are not unified into a single
+// Scope<Symbol> template.  See common/scope_stack.hpp §Component Usage for
+// the full rationale.
 
 class TypeScope {
 public:
@@ -230,23 +237,35 @@ public:
 
     // Ownership state snapshot/restore for flow-sensitive analysis.
     // Captures the is_consumed state of all unique variables visible
-    // from this scope up through parent scopes.
+    // from this scope up through parent scopes.  A name shadowed by an inner
+    // scope is captured once, for the visible (innermost) variable: the
+    // shadowed one cannot change while it is hidden, and restoring it by name
+    // would overwrite the visible variable's state.
     //
-    // Performance: Only unique variables are captured (filtered by
-    // is_unique), so the snapshot is typically very small — most
-    // programs have few unique variables in scope at any point.  The
-    // snapshot copies variable names (std::string) to decouple lifetime
-    // from the scope chain.  Using string_view or indices would avoid
-    // copies but create fragile lifetime dependencies on scope maps
-    // that may be modified between snapshot and restore.  Given the
-    // small number of unique variables, the current approach is both
-    // simple and fast enough.
-    using OwnershipSnapshot = std::vector<std::pair<std::string, bool>>;
+    // Performance: snapshots are taken several times per if/match, so they
+    // must not scale with the number of ordinary names in scope (a global
+    // scope can hold thousands of functions and stdlib namespaces).  Each
+    // scope keeps the names it ever defined as unique (unique_names_), and
+    // the walk visits only those: O(unique × depth), no allocation for
+    // ordinary names.  The snapshot copies variable names (std::string) to
+    // decouple lifetime from the scope chain; scope maps may be modified
+    // between snapshot and restore.
+    using OwnershipEntry = std::pair<std::string, bool>;
+    using OwnershipSnapshot = std::vector<OwnershipEntry>;
     [[nodiscard]] OwnershipSnapshot snapshot_ownership() const;
     void restore_ownership(const OwnershipSnapshot& snap);
 
+    // As above, but for this scope's own symbols only — unambiguous when an
+    // inner scope shadows a name, since the restore never consults a parent.
+    [[nodiscard]] OwnershipSnapshot snapshot_local_ownership() const;
+    void restore_local_ownership(const OwnershipSnapshot& snap);
+
 private:
     StringMap<SymbolInfo> symbols_;
+    // Every name ever defined here with the `unique` modifier, in definition
+    // order.  A later non-unique redefinition leaves the name behind, so
+    // readers re-check SymbolInfo::is_unique.
+    std::vector<std::string> unique_names_;
     std::shared_ptr<TypeScope> parent_;
 };
 
@@ -367,3 +386,5 @@ struct TypeMetadata {
 }
 
 } // namespace luma
+
+#endif // LUMA_TYPES_TYPE_INFO_HPP

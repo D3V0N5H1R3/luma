@@ -20,7 +20,7 @@ inputs:
     description: The "{os}-{arch}" suffix for archive names (e.g. linux-x86_64).
     required: true
   build-dir:
-    description: Build directory containing the binaries (Release/ subdir on Windows).
+    description: Build directory containing the binaries at its root.
     required: false
     default: build
 
@@ -45,7 +45,7 @@ runs:
         SUFFIX: ${{ inputs.suffix }}
         BUILD_DIR: ${{ inputs.build-dir }}
       run: |
-        $bin = "$env:BUILD_DIR/Release"
+        $bin = "$env:BUILD_DIR"
         Compress-Archive -Path "$bin/luma.exe", "$bin/luma_lsp.exe", "$bin/luma_dap.exe" -DestinationPath "luma-$env:SUFFIX.zip"
         Compress-Archive -Path "$bin/luma_lsp.exe" -DestinationPath "luma_lsp-$env:SUFFIX.zip"
         Compress-Archive -Path "$bin/luma_dap.exe" -DestinationPath "luma_dap-$env:SUFFIX.zip"

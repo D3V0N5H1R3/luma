@@ -8,12 +8,10 @@
 
 function array<string> extract_words(string text) {
     # Split on whitespace and punctuation using regex
-    array<string> raw = Result.unwrap(RegularExpression.split(text, "[\\s,.:;!?]+"))
-
-    return raw
-    !> Array.filter((string w) -> !String.is_empty(w))
-    !> Array.map((string w) -> String.lowercase(w))
-    |> Result.unwrap_or([])
+    return RegularExpression.split(text, "[\\s,.:;!?]+")
+        !> Array.filter((string w) -> !String.is_empty(w))
+        !> Array.map((string w) -> String.lowercase(w))
+        |> Result.unwrap_or([])
 }
 
 function string shift_letter(string letter, integer shift) {
@@ -25,7 +23,9 @@ function string shift_letter(string letter, integer shift) {
         integer shifted = (code - 65 + shift) % 26 + 65
 
         return Result.unwrap_or(String.from_codepoints([shifted]), letter)
-    } else if code >= 97 && code <= 122 {
+    }
+
+    if code >= 97 && code <= 122 {
         # Lowercase letter
         integer shifted = (code - 97 + shift) % 26 + 97
 
@@ -40,14 +40,15 @@ function string caesar_encode(string text, integer shift) {
     # with output += per character would reallocate the whole string on every
     # step — O(n²) over the length of the text.
     return String.characters(text)
-    |> Array.map((string letter) -> shift_letter(letter, shift))
-    |> Result.unwrap_or([])
-    |> String.join("")
+        |> Array.map((string letter) -> shift_letter(letter, shift))
+        |> Result.unwrap_or([])
+        |> String.join("")
 }
 
 # ── Multi-line strings ──
 
 function void demo_multiline_strings() {
+    print("")
     print("=== Multi-line string ===")
 
     string poem = """
@@ -63,6 +64,7 @@ function void demo_multiline_strings() {
 # ── String indexing and slicing ──
 
 function void demo_string_indexing() {
+    print("")
     print("=== String indexing ===")
 
     string text = "Hello, Luma!"
@@ -105,8 +107,8 @@ function void demo_regular_expressions() {
         success(found) {
             print("Found emails:")
 
-            result<none> _ = found
-            |> Array.each((RegularExpression.Match m) -> print("  ${m.text}"))
+            _ = found
+                |> Array.each((RegularExpression.Match m) -> print("  ${m.text}"))
         }
         failure(err) { print("Regex error: ${err}") }
     }
@@ -132,7 +134,7 @@ function void demo_capture_groups() {
     # Extract key=value pairs
     array<RegularExpression.Match> pairs =
     RegularExpression.find_all("width=100 height=200 depth=50", "([a-z]+)=([0-9]+)")
-    |> Result.unwrap()
+        |> Result.unwrap()
 
     print("")
     print("Key-value pairs:")
@@ -207,7 +209,7 @@ function void demo_set_operations() {
     print("Animals found: ${found_list}")
 }
 
-# ── Caesar cipher using for-over-string ──
+# ── Caesar cipher ──
 
 function void demo_caesar_cipher() {
     print("")
@@ -215,6 +217,8 @@ function void demo_caesar_cipher() {
 
     string message = "Hello World"
     string encoded = caesar_encode(message, 3)
+    # Decode with 26 - 3 = 23 rather than -3: % truncates toward zero, so a
+    # negative shift would turn 'a'–'c' (and 'A'–'C') into non-letters.
     string back = caesar_encode(encoded, 23)
 
     print("Original: ${message}")

@@ -14,13 +14,10 @@
 //   - Error-reporter rendering (formatted diagnostics with source spans).
 
 #include <cstdint>
-#include <exception>
 #include <string>
 
 #include "shared_eval.hpp"
 #include "test_framework.hpp"
-
-using namespace luma;
 
 // The checked pipeline (lex → parse → type check → lint → compile → VM). Named
 // explicitly to avoid confusion with luma::test::eval, which skips the analysis
@@ -156,7 +153,8 @@ static void test_pipe_operator() {
 }
 
 static void test_type_error_detected() {
-    ASSERT_THROWS(eval_checked("integer x = \"hello\"\n"));
+    ASSERT_THROWS_WITH_MESSAGE(eval_checked("integer x = \"hello\"\n"),
+                               "expected 'integer', got 'string'");
 }
 
 static void test_boolean_logic() {
@@ -580,39 +578,48 @@ static void test_whitespace_variations_preserve_semantics() {
 
 static void test_stack_overflow_reports_error() {
     // A deeply recursive non-tail-call function should raise a stack overflow
-    // or runtime error rather than crashing the process.
-    ASSERT_THROWS(eval_checked("function integer recurse(integer n) {\n"
-                               "    return recurse(n + 1) + 1\n"
-                               "}\n"
-                               "recurse(0)\n"));
+    // runtime error rather than crashing the process.
+    ASSERT_THROWS_WITH_MESSAGE(eval_checked("function integer recurse(integer n) {\n"
+                                            "    return recurse(n + 1) + 1\n"
+                                            "}\n"
+                                            "recurse(0)\n"),
+                               "call stack overflow");
 }
 
 static void test_syntax_error_reports_diagnostic() {
-    // A syntax error should be caught during parsing/type-checking,
-    // producing a meaningful exception.
-    bool caught = false;
+    // The parser reports the malformed parameter list with a precise diagnostic.
+    const std::string source = "function integer broken( {\n"
+                               "    return 42\n"
+                               "}\n";
+    const auto errors = luma::test::parse_errors(source);
+    ASSERT_FALSE(errors.empty());
+    ASSERT_EQ(errors[0].message, "expected type annotation, got '{'");
 
-    try {
-        (void)eval_checked("function integer broken( {\n"
-                           "    return 42\n"
-                           "}\n");
-    } catch (const std::exception& e) {
-        caught = true;
-        // The error message should not be empty.
-        ASSERT_TRUE(std::string{e.what()}.size() > 0);
-    }
-
-    ASSERT_TRUE(caught);
+    // The checked pipeline rejects the program before type checking, reporting
+    // the parser's diagnostic rather than a follow-on error from the recovered AST.
+    ASSERT_THROWS_WITH_MESSAGE(eval_checked(source),
+                               "Parse failed:\n  expected type annotation, got '{'");
 }
 
 static void test_division_by_zero_caught() {
-    // Division by zero at runtime should throw, not crash.
-    ASSERT_THROWS(eval_checked("1 / 0\n"));
+    // Division by a constant zero is rejected statically by the type checker,
+    // before the program ever runs.
+    ASSERT_THROWS_WITH_MESSAGE(eval_checked("1 / 0\n"), "Type check failed:\n  division by zero");
+}
+
+static void test_runtime_division_by_zero_caught() {
+    // A zero divisor only known at run time must raise a runtime error, not crash.
+    ASSERT_THROWS_WITH_MESSAGE(eval_checked("function integer divide(integer a, integer b) {\n"
+                                            "    return a // b\n"
+                                            "}\n"
+                                            "divide(1, 0)\n"),
+                               "Integer division: division by zero");
 }
 
 static void test_undefined_variable_error() {
     // Reference to an undefined variable should produce a type error.
-    ASSERT_THROWS(eval_checked("integer x = undefined_variable\n"));
+    ASSERT_THROWS_WITH_MESSAGE(eval_checked("integer x = undefined_variable\n"),
+                               "undefined variable 'undefined_variable'");
 }
 
 // ─── Main ───
@@ -691,6 +698,7 @@ int main() {
     RUN(test_stack_overflow_reports_error);
     RUN(test_syntax_error_reports_diagnostic);
     RUN(test_division_by_zero_caught);
+    RUN(test_runtime_division_by_zero_caught);
     RUN(test_undefined_variable_error);
 
     return SUMMARY();

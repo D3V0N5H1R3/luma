@@ -52,6 +52,9 @@ void validate_record_field_names(const RecordValue& record,
 void VM::handle_make_dict() {
     auto count = read_u16();
     validate_stack_space(1);
+    // As for array literals: the u16 operand caps the literal, but the
+    // configured LUMA_LIMIT_MAX_DICTIONARY_SIZE may be lower.
+    ensure_dictionary_capacity(0, count, "dictionary literal", current_location());
     auto dict = std::make_shared<DictionaryValue>();
 
     // Pop key-value pairs: each entry occupies two stack slots.
@@ -160,6 +163,9 @@ void VM::handle_record_with(const std::uint8_t* code_end) {
 void VM::handle_make_array() {
     auto count = read_u16();
     validate_stack_space(1);
+    // A literal is capped at 65,535 elements by its u16 operand, but
+    // LUMA_LIMIT_MAX_ARRAY_SIZE may be configured lower.
+    ensure_array_capacity(0, count, "array literal", current_location());
     auto arr = std::make_shared<ArrayValue>();
     arr->elements->resize(count);
 
