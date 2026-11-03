@@ -21,7 +21,7 @@ public:
     bool run(Program& program, PipelineResult& result) override {
         Linter linter;
 
-        merge_diagnostics(result.diagnostics, linter.lint(program));
+        merge_new_diagnostics(result.diagnostics, linter.lint(program));
 
         return true;
     }

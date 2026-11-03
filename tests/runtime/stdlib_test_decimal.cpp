@@ -5,26 +5,27 @@
 // to_string() form or via Decimal.equals / Decimal.compare, which are
 // scale-insensitive.
 
-#include <cmath>
 #include <string>
 
 #include "stdlib_test_helpers.hpp"
 
+using luma::test::eval;
+
 namespace {
 
 // A Luma expression that parses a decimal literal, unwrapping the result.
-std::string dec(const std::string& literal) {
+[[nodiscard]] std::string dec(const std::string& literal) {
     return "Result.unwrap(Decimal.from_string(\"" + literal + "\"))";
 }
 
 // Evaluate Decimal.to_string(expr) and return the resulting C++ string.
-std::string to_str(const std::string& expr) {
+[[nodiscard]] std::string to_str(const std::string& expr) {
     return eval("Decimal.to_string(" + expr + ")").as_string();
 }
 
 // A Luma expression that divides two decimal expressions at the given scale,
 // unwrapping the result.
-std::string divi(const std::string& a, const std::string& b, int scale) {
+[[nodiscard]] std::string divi(const std::string& a, const std::string& b, int scale) {
     return "Result.unwrap(Decimal.divide(" + a + ", " + b + ", " + std::to_string(scale) + "))";
 }
 
@@ -32,13 +33,14 @@ std::string divi(const std::string& a, const std::string& b, int scale) {
 // using an explicit rounding mode, unwrapping the result. `mode` is a raw Luma
 // expression — either a mode string ("half_up") or a Decimal.RoundingMode
 // variant (Decimal.RoundingMode.HalfUp).
-std::string divw(const std::string& a, const std::string& b, int scale, const std::string& mode) {
+[[nodiscard]] std::string divw(const std::string& a, const std::string& b, int scale,
+                               const std::string& mode) {
     return "Result.unwrap(Decimal.divide_with(" + a + ", " + b + ", " + std::to_string(scale) +
            ", " + mode + "))";
 }
 
 // Whether two decimal expressions are equal (scale-insensitive).
-bool dequals(const std::string& a, const std::string& b) {
+[[nodiscard]] bool dequals(const std::string& a, const std::string& b) {
     return eval("Decimal.equals(" + a + ", " + b + ")").as_bool();
 }
 
@@ -122,8 +124,8 @@ LUMA_TEST(decimal_from_number_exact_roundtrip) {
 
 LUMA_TEST(decimal_from_number_non_finite_throws) {
     // NaN and infinity have no decimal representation — a programmer error.
-    ASSERT_THROWS(eval("Decimal.from_number(Math.infinity)"));
-    ASSERT_THROWS(eval("Decimal.from_number(-Math.infinity)"));
+    ASSERT_EVAL_THROWS("Decimal.from_number(Math.infinity)", "cannot convert a non-finite number");
+    ASSERT_EVAL_THROWS("Decimal.from_number(-Math.infinity)", "cannot convert a non-finite number");
 }
 
 LUMA_TEST(decimal_from_integer) {
@@ -222,7 +224,8 @@ LUMA_TEST(decimal_divide_with_failures) {
 
 LUMA_TEST(decimal_divide_with_bad_mode_throws) {
     // An unknown mode string is a programmer error (mirrors Decimal.round).
-    ASSERT_THROWS(eval("Decimal.divide_with(" + dec("10") + ", " + dec("3") + ", 2, \"bogus\")"));
+    ASSERT_EVAL_THROWS("Decimal.divide_with(" + dec("10") + ", " + dec("3") + ", 2, \"bogus\")",
+                       "Decimal.divide_with: unknown rounding mode 'bogus'");
 }
 
 // ─── Rounding ───
@@ -259,7 +262,8 @@ LUMA_TEST(decimal_multiply_overflow_throws) {
     // double the scale past the cap, which historically overflowed the scale
     // field (undefined behaviour); it must now raise a runtime error instead of
     // silently corrupting the value.
-    ASSERT_THROWS(eval("Decimal.multiply(" + dec("1e-1000000") + ", " + dec("1e-1000000") + ")"));
+    ASSERT_EVAL_THROWS("Decimal.multiply(" + dec("1e-1000000") + ", " + dec("1e-1000000") + ")",
+                       "Decimal.multiply: result is too large to represent");
 }
 
 LUMA_TEST(decimal_round_edge_cases) {
@@ -268,7 +272,8 @@ LUMA_TEST(decimal_round_edge_cases) {
     // Negative places clamp to zero (round to an integer).
     ASSERT_TRUE(dequals("Decimal.round(" + dec("12.6") + ", -3, \"half_up\")", dec("13")));
     // An unknown rounding mode is a programmer error.
-    ASSERT_THROWS(eval("Decimal.round(" + dec("1.5") + ", 2, \"bogus\")"));
+    ASSERT_EVAL_THROWS("Decimal.round(" + dec("1.5") + ", 2, \"bogus\")",
+                       "Decimal.round: unknown rounding mode 'bogus'");
 }
 
 LUMA_TEST(decimal_round_accepts_choice_mode) {
@@ -361,7 +366,7 @@ LUMA_TEST(decimal_to_number) {
     // 0.1 + 0.2 converts back to the nearest double to 0.3.
     const auto n =
         eval("Decimal.to_number(Decimal.add(" + dec("0.1") + ", " + dec("0.2") + "))").as_number();
-    ASSERT_TRUE(std::fabs(n - 0.3) < 1e-12);
+    ASSERT_NEAR(n, 0.3, 1e-12);
 }
 
 int main() {

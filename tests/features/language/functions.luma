@@ -64,21 +64,16 @@ function void test_recursion() {
 function void test_named_arguments_all() {
     string user_info = create_user(name: "Alice", age: 30, is_active: true)
 
-    assert("Alice" in user_info)
-    assert("30" in user_info)
+    assert(user_info == "Alice (30, active=true)")
 }
 
 @test
 function void test_named_arguments_mixed() {
+    # Positional arguments first, then named ones in any order.
     string user_info = create_user("Alice", is_active: true, age: 30)
 
-    assert("Alice" in user_info)
-    assert("30" in user_info)
+    assert(user_info == "Alice (30, active=true)")
 }
-
-# ═══════════════════════════════════════════════════════════
-# Negative tests — runtime function error conditions
-# ═══════════════════════════════════════════════════════════
 
 # ─── Recursion depth limit ───
 
@@ -96,13 +91,13 @@ function void test_recursion_depth_limit_throws() {
         caught = err
     }
 
-    assert(String.length(caught) > 0, "recursion depth limit should throw")
+    assert(String.contains(caught, "call stack overflow"), "recursion depth limit should throw")
 }
 
-# ─── Function returning wrong result at runtime (via result type) ───
+# ─── Returning result<T> ───
 
-function result<integer> may_fail(boolean fail) {
-    if fail {
+function result<integer> may_fail(boolean should_fail) {
+    if should_fail {
         return failure("intentional failure")
     }
 
@@ -110,15 +105,12 @@ function result<integer> may_fail(boolean fail) {
 }
 
 @test
-function void test_function_result_failure_propagation() {
-    result<integer> r = may_fail(true)
+function void test_function_returns_result() {
+    result<integer> failed = may_fail(true)
+    result<integer> succeeded = may_fail(false)
 
-    assert(Result.is_failure(r), "function should return failure")
-
-    result<integer> s = may_fail(false)
-
-    assert(Result.is_success(s), "function should return success")
-    assert(Result.unwrap(s) == 42)
+    assert(failed == failure("intentional failure"), "function should return failure")
+    assert(succeeded == success(42), "function should return success")
 }
 
 # ─── Nested function calls ───
@@ -136,12 +128,11 @@ function void test_nested_function_call_chain() {
     assert(outer_func() == 11)
 }
 
-# ─── Additional function tests ───
-
 # ─── Mutable parameters ───
 
 function integer accumulate(mutable integer total, integer add_value) {
     total += add_value
+
     return total
 }
 
@@ -200,12 +191,13 @@ function void test_function_returns_tuple() {
     assert(doubled == 10)
 }
 
-# ─── Deep recursion (tail-call style) ───
+# ─── Deep recursion ───
 
 function integer count_down(integer n) {
     if n <= 0 {
         return 0
     }
+
     return count_down(n - 1)
 }
 
@@ -221,6 +213,7 @@ function integer tail_count_down(integer n) {
     if n <= 0 {
         return 0
     }
+
     return tail_count_down(n - 1)
 }
 
@@ -228,6 +221,7 @@ function integer tail_sum(integer n, integer acc) {
     if n <= 0 {
         return acc
     }
+
     return tail_sum(n - 1, acc + n)
 }
 
@@ -258,10 +252,12 @@ function void test_tail_call_with_accumulator() {
 
 function array<integer> build_grid_row(string text) {
     mutable array<integer> row = []
-    for ch in String.characters(text) {
-        integer digit = Result.unwrap_or(Converter.to_integer(ch), 0)
+
+    for character in String.characters(text) {
+        integer digit = Result.unwrap_or(Converter.to_integer(character), 0)
         row = Array.push(row, digit)
     }
+
     return row
 }
 
@@ -286,6 +282,7 @@ function void test_cross_function_tail_call_global_cache() {
 
 function integer add_hundred(mutable integer n) {
     n += 100
+
     return n
 }
 
@@ -298,4 +295,34 @@ function void test_mutable_parameter_value_semantics() {
     # though the function reassigned its own (mutable) parameter copy.
     assert(original == 5)
     assert(bumped == 105)
+}
+
+function array<integer> replace_first(mutable array<integer> values, integer replacement) {
+    values[0] = replacement
+
+    return values
+}
+
+@test
+function void test_mutable_array_parameter_is_a_copy() {
+    array<integer> original = [1, 2, 3]
+    array<integer> replaced = replace_first(original, 99)
+
+    assert(original == [1, 2, 3], "mutating a mutable parameter must not change the caller")
+    assert(replaced == [99, 2, 3])
+}
+
+@test
+function void test_mutable_lambda_parameter_is_a_copy() {
+    array<integer> original = [1, 2, 3]
+    function(array<integer>) -> array<integer> clear_first = (mutable array<integer> values) -> {
+        values[0] = 0
+
+        return values
+    }
+
+    array<integer> cleared = clear_first(original)
+
+    assert(original == [1, 2, 3], "a lambda's mutable parameter must be its own copy")
+    assert(cleared == [0, 2, 3])
 }

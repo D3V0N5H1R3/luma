@@ -13,7 +13,8 @@
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/diagnostics/diagnostic_builders.hpp"
 #include "analysis/diagnostics/diagnostic_stats.hpp"
-#include "runtime/cli/terminal.hpp"
+#include "analysis/diagnostics/display_text.hpp"
+#include "common/terminal.hpp"
 
 namespace luma {
 
@@ -79,7 +80,8 @@ std::string DiagnosticRenderer::render_header(const Diagnostic& diag) const {
 
     const auto loc = diag.primary_location();
     const auto* file = source_manager_.get_file(loc.file_id);
-    const auto filename = (file != nullptr) ? file->path : std::string{"<unknown>"};
+    const auto filename =
+        sanitize_for_terminal((file != nullptr) ? file->path : std::string{"<unknown>"});
 
     const auto category_label = category_name(diag.category);
     const auto code_str = diag.code_string();
@@ -103,7 +105,7 @@ std::string DiagnosticRenderer::render_span(const DiagnosticSpan& span) const {
     const auto* span_file = source_manager_.get_file(span_loc.file_id);
 
     if (span_file == nullptr) {
-        return std::format("[unable to retrieve source for file_id {}]", span_loc.file_id);
+        return std::format("[unable to retrieve source for file_id {}]\n", span_loc.file_id);
     }
 
     const auto line_text = source_manager_.get_line(span_loc.file_id, span_loc.line);
@@ -123,7 +125,7 @@ std::string DiagnosticRenderer::render_span(const DiagnosticSpan& span) const {
     }
 
     result += std::format("   {} |\n", padding);
-    result += std::format("   {} | {}\n", line_num, line_text);
+    result += std::format("   {} | {}\n", line_num, sanitize_for_terminal(line_text));
 
     // Caret / underline line (delegated so render_span stays a short orchestrator).
     result += render_caret_line(span, padding);
@@ -173,7 +175,7 @@ std::string DiagnosticRenderer::render_caret_line(const DiagnosticSpan& span,
 
     if (!span.label.empty()) {
         result.append(" ");
-        result.append(span.label);
+        result.append(sanitize_for_terminal(span.label));
     }
 
     result += "\n";
@@ -182,7 +184,7 @@ std::string DiagnosticRenderer::render_caret_line(const DiagnosticSpan& span,
 }
 
 std::string DiagnosticRenderer::format_hint_line(std::string_view text) {
-    auto result = colorize(term::cyan(), std::format("hint: {}", text));
+    auto result = colorize(term::cyan(), std::format("hint: {}", sanitize_for_terminal(text)));
     result += "\n";
 
     return result;
@@ -215,7 +217,7 @@ std::string DiagnosticRenderer::render_fixes(const Diagnostic& diag) {
             body += std::format("replace with '{}'", fix.replacement);
         }
 
-        result += colorize(term::green(), body);
+        result += colorize(term::green(), sanitize_for_terminal(body));
         result += "\n";
     }
 
@@ -234,8 +236,9 @@ std::string DiagnosticRenderer::format(const Diagnostic& diag) const {
         result += render_span(span);
     }
 
-    // Main message.
-    result.append(diag.message);
+    // Main message.  Messages quote user text (lexemes, names, string
+    // contents), so control bytes are escaped before reaching the terminal.
+    result.append(sanitize_for_terminal(diag.message));
     result.append("\n");
 
     // Hint (explicit or auto-generated from error code).
@@ -309,7 +312,8 @@ std::string DiagnosticRenderer::format_context_line(int line_num, std::string_vi
                                                     std::size_t gutter_width, bool dimmed) {
     std::string result;
 
-    const auto line = std::format("   {:>{}} | {}\n", line_num, gutter_width, text);
+    const auto line =
+        std::format("   {:>{}} | {}\n", line_num, gutter_width, sanitize_for_terminal(text));
 
     if (dimmed) {
         append_colored(result, term::dim(), line);

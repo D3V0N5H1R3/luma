@@ -63,6 +63,25 @@ fn symbol_kind_keyword(kind: &lsp::SymbolKind) -> Option<&'static str> {
 
 // ─── Standalone label helpers (testable without LanguageServerId) ─
 
+/// Extracts a type name from an LSP completion `detail`.
+///
+/// `luma_lsp` writes `-> T` for functions and constants, `: T` for variables,
+/// parameters, and record fields, and a parenthesised description such as
+/// `(local variable)` or `(user function)` when the type is unknown. A bare
+/// type (`string`) is accepted too. Returns `None` when no type is present.
+fn type_from_detail(detail: Option<&str>) -> Option<&str> {
+    let detail = detail?.trim();
+    if detail.starts_with('(') {
+        return None;
+    }
+    let type_name = detail
+        .strip_prefix("->")
+        .or_else(|| detail.strip_prefix(':'))
+        .unwrap_or(detail)
+        .trim();
+    (!type_name.is_empty()).then_some(type_name)
+}
+
 /// Builds a `CodeLabel` for an LSP completion item.
 ///
 /// Returns `None` for non-ASCII labels. All range calculations use byte offsets,
@@ -72,20 +91,20 @@ pub(crate) fn completion_label(completion: &lsp::Completion) -> Option<CodeLabel
     if !completion.label.is_ascii() {
         return None;
     }
+    let detail_type = type_from_detail(completion.detail.as_deref());
     match completion.kind.as_ref()? {
-        lsp::CompletionKind::Function | lsp::CompletionKind::Method => {
-            let detail = completion.detail.as_deref().unwrap_or("");
-            let return_type = if detail.is_empty() { "void" } else { detail };
-            Some(function_label(return_type, &completion.label))
-        }
+        lsp::CompletionKind::Function | lsp::CompletionKind::Method => Some(function_label(
+            detail_type.unwrap_or("void"),
+            &completion.label,
+        )),
         lsp::CompletionKind::Variable
         | lsp::CompletionKind::Constant
         | lsp::CompletionKind::Field
         | lsp::CompletionKind::Property => {
             let label = &completion.label;
-            match completion.detail.as_deref() {
-                Some(detail) if !detail.is_empty() => Some(keyword_label(detail, label)),
-                _ => Some(plain_label(label)),
+            match detail_type {
+                Some(type_name) => Some(keyword_label(type_name, label)),
+                None => Some(plain_label(label)),
             }
         }
         lsp::CompletionKind::Keyword => Some(plain_label(&completion.label)),

@@ -45,7 +45,7 @@
 //   1. Lock ordering violations are programmer errors, not runtime faults.
 //      They are deterministically reproducible in debug and CI builds.
 //
-//   2. The debug hook path (should_break → evaluate_step_mode) acquires
+//   2. The debug hook path (should_break → update_line_state) acquires
 //      ThreadState::mutex on every source line.  Adding a thread_local
 //      read + write per acquisition is measurable overhead at ~100k
 //      hook calls/sec in tight loops.
@@ -59,26 +59,34 @@
 //
 // ─── Leaf-level locks (independent) ─────────────────────────────────────────
 //
-// Each of the following mutexes protects a self-contained data structure and
-// is never held while acquiring any other mutex (nor is any other mutex
-// acquired while it is held).  They are therefore deadlock-free by
-// construction and do not require ordered guards.
+// Each of the following mutexes protects a self-contained data structure.
+// None of them is ever held while acquiring a session lock above, so they
+// cannot take part in a cycle and do not need ordered guards.  A leaf may be
+// acquired while a session lock is held (e.g. VariableInspector::ref_mutex_
+// inside ThreadState::mutex during stackTrace).
 //
-//   BreakpointManager::mutex_
-//       Guards all breakpoint collections (source, exception).
-//       std::mutex — plain lock_guard.
+//   BreakpointSharedContext::mutex
+//       Guards all line-breakpoint collections and caches (shared by
+//       BreakpointManager and LineBreakpointManager).  std::mutex.
 //
-//   CompiledBreakpoint::cache_mutex_
+//   CompiledBreakpointCache::cache_mutex_
 //       Guards compiled condition/log-message caches.
 //       std::shared_mutex — unique_lock for writes, shared_lock for reads.
 //
 //   DapProtocolHandler::send_mutex_
 //       Serialises DAP message sends to guarantee monotonic sequence numbers.
-//       std::mutex — plain lock_guard.
+//       Held while the transport writes, so it nests
+//       StdioTransport::write_mutex_ inside it.  std::mutex.
 //
-//   DebugOutputBuffer::mutex_   (debug_stream_utils.hpp)
-//       Guards the line-buffered output buffer and flush callback.
-//       std::mutex — plain lock_guard.
+//   StdioTransport::write_mutex_   (shared/protocol/stdio_transport.hpp)
+//       Serialises framed writes to stdout.  The innermost lock of the output
+//       chain: nothing is acquired while it is held.
+//
+//   LineBufferedStreamBuf::mutex_   (debug_stream_utils.hpp)
+//       Guards the line-buffered program-output buffer.  The flush callback
+//       (which sends an output event) runs while it is held, giving the chain
+//       LineBufferedStreamBuf::mutex_ → send_mutex_ → write_mutex_.  Safe
+//       because none of those locks is ever taken in the opposite order.
 //
 //   ExpressionEvaluator::cache_mutex_
 //       Guards the LRU expression compilation cache.

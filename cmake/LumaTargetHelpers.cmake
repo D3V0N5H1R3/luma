@@ -50,14 +50,18 @@ function(luma_add_tool_library name)
 endfunction()
 
 # luma_configure_vendored_c_target(<target>)
-# Applies the shared policy for vendored third-party C libraries: build to C99
-# and silence all warnings so the project's strict diagnostics never flag code we
-# do not maintain. Per-library SYSTEM include treatment and compile definitions
-# (MINIZ_NO_STDIO, etc.) stay at each call site, since those genuinely differ.
+# Applies the shared policy for vendored third-party C libraries: build to C99,
+# silence all warnings so the project's strict diagnostics never flag code we do
+# not maintain, and keep the code-generation hardening (stack protector, Control
+# Flow Guard) that the first-party targets get — Mbed TLS parses untrusted
+# network input. /sdl is omitted because it promotes warnings to errors.
+# Per-library SYSTEM include treatment and compile definitions (MINIZ_NO_STDIO,
+# etc.) stay at each call site, since those genuinely differ.
 function(luma_configure_vendored_c_target target)
     set_target_properties(${target} PROPERTIES C_STANDARD 99)
-    target_compile_options(${target} PRIVATE
-        $<$<C_COMPILER_ID:MSVC>:/W0>
-        $<$<NOT:$<C_COMPILER_ID:MSVC>>:-w>
-    )
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W0 /GS /guard:cf)
+    else()
+        target_compile_options(${target} PRIVATE -w ${LUMA_GCC_SECURITY_FLAGS})
+    endif()
 endfunction()

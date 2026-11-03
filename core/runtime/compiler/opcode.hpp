@@ -65,7 +65,7 @@ enum class Op : std::uint8_t {
     // ─── Collections ───
     MakeArray,    // Create array: MakeArray <u16 element_count>
     MakeDict,     // Create dict: MakeDict <u16 entry_count>
-    MakeTuple,    // Create tuple: MakeTuple <u8 element_count>
+    MakeTuple,    // Create tuple: MakeTuple <u16 element_count>
     MakeRange,    // Create range (exclusive): [start, end)
     MakeRangeInc, // Create range (inclusive): [start, end]
     IndexGet,     // a[b]
@@ -153,7 +153,17 @@ enum class Op : std::uint8_t {
 
     // ─── Conversions ───
     IntToNumber, // Convert integer on top of stack to number (double). No-op if already number.
+    WidenNumber, // Deep integer → number widening of TOS by type pattern: WidenNumber <u16 name>
     Clone,       // Deep-copy top of stack (value semantics for mutable bindings).
+
+    // ─── Copy-on-write for in-place mutation ───
+    // Emitted only for the container path of an assignment target, so a write
+    // never reaches storage shared with another value (an alias taken earlier).
+    UniqueLocal,    // Make a local's container exclusively owned: UniqueLocal <u16 slot>
+    UniqueUpvalue,  // Make an upvalue's container exclusive: UniqueUpvalue <u16 index>
+    UniqueGlobal,   // Make a global's container exclusive: UniqueGlobal <u16 name_index>
+    GetFieldUnique, // GetField, first making the field's container exclusive: <u16 name>
+    IndexGetUnique, // IndexGet, first making the element's container exclusive.
 
     // ─── Module ───
     EndModule // End of bytecode stream.
@@ -335,7 +345,13 @@ inline constexpr std::array<OpcodeInfo, opcode_count> opcode_table{{
     {Op::SetLocalPop, "SetLocalPop", 3, OperandCategory::Local, OperandLayout::U16, 0, true, -1},
     {Op::GetLocalReturn, "GetLocalReturn", 3, OperandCategory::Local, OperandLayout::U16, op_flag::k_terminator, true, 0},
     {Op::IntToNumber, "IntToNumber", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
+    {Op::WidenNumber, "WidenNumber", 3, OperandCategory::Name, OperandLayout::U16, 0, false, 0},
     {Op::Clone, "Clone", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
+    {Op::UniqueLocal, "UniqueLocal", 3, OperandCategory::Local, OperandLayout::U16, op_flag::k_load_store, true, 0},
+    {Op::UniqueUpvalue, "UniqueUpvalue", 3, OperandCategory::Upvalue, OperandLayout::U16, op_flag::k_load_store, true, 0},
+    {Op::UniqueGlobal, "UniqueGlobal", 3, OperandCategory::Name, OperandLayout::U16, op_flag::k_load_store, true, 0},
+    {Op::GetFieldUnique, "GetFieldUnique", 3, OperandCategory::Name, OperandLayout::U16, 0, false, 0},
+    {Op::IndexGetUnique, "IndexGetUnique", 1, OperandCategory::None, OperandLayout::Simple, 0, true, -1},
     {Op::EndModule, "EndModule", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
 }};
 // clang-format on
@@ -376,7 +392,13 @@ static_assert(opcode_table[static_cast<std::size_t>(Op::ForIterInit)].code    ==
 static_assert(opcode_table[static_cast<std::size_t>(Op::Print)].code          == Op::Print,          "opcode_table: Print position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::IncrementLocal)].code == Op::IncrementLocal, "opcode_table: IncrementLocal position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::IntToNumber)].code    == Op::IntToNumber,    "opcode_table: IntToNumber position mismatch");
+static_assert(opcode_table[static_cast<std::size_t>(Op::WidenNumber)].code    == Op::WidenNumber,    "opcode_table: WidenNumber position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::Clone)].code          == Op::Clone,          "opcode_table: Clone position mismatch");
+static_assert(opcode_table[static_cast<std::size_t>(Op::UniqueLocal)].code    == Op::UniqueLocal,    "opcode_table: UniqueLocal position mismatch");
+static_assert(opcode_table[static_cast<std::size_t>(Op::UniqueUpvalue)].code  == Op::UniqueUpvalue,  "opcode_table: UniqueUpvalue position mismatch");
+static_assert(opcode_table[static_cast<std::size_t>(Op::UniqueGlobal)].code   == Op::UniqueGlobal,   "opcode_table: UniqueGlobal position mismatch");
+static_assert(opcode_table[static_cast<std::size_t>(Op::GetFieldUnique)].code == Op::GetFieldUnique, "opcode_table: GetFieldUnique position mismatch");
+static_assert(opcode_table[static_cast<std::size_t>(Op::IndexGetUnique)].code == Op::IndexGetUnique, "opcode_table: IndexGetUnique position mismatch");
 // clang-format on
 
 // Shared lookup helper used by opcode_name() and opcode_base_size().

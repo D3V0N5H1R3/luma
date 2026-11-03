@@ -28,45 +28,39 @@
             "beforeText": "^((?!#).)*\\{\\s*(#.*)?$",
             "afterText": "^\\s*\\}",
             "action": {
-                "indent": "indentOutdent",
-                "appendText": "    "
+                "indent": "indentOutdent"
             }
         },
         {
             "beforeText": "^((?!#).)*\\{\\s*(#.*)?$",
             "action": {
-                "indent": "indent",
-                "appendText": "    "
+                "indent": "indent"
             }
         },
         {
             "beforeText": "^((?!#).)*\\[\\s*(#.*)?$",
             "afterText": "^\\s*\\]",
             "action": {
-                "indent": "indentOutdent",
-                "appendText": "    "
+                "indent": "indentOutdent"
             }
         },
         {
             "beforeText": "^((?!#).)*\\[\\s*(#.*)?$",
             "action": {
-                "indent": "indent",
-                "appendText": "    "
+                "indent": "indent"
             }
         },
         {
             "beforeText": "^((?!#).)*\\(\\s*(#.*)?$",
             "afterText": "^\\s*\\)",
             "action": {
-                "indent": "indentOutdent",
-                "appendText": "    "
+                "indent": "indentOutdent"
             }
         },
         {
             "beforeText": "^((?!#).)*\\(\\s*(#.*)?$",
             "action": {
-                "indent": "indent",
-                "appendText": "    "
+                "indent": "indent"
             }
         }
     ],

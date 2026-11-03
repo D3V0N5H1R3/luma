@@ -20,7 +20,7 @@ namespace {
     static const StringSet set = [] {
         StringSet namespace_names;
         for (const auto& [qualified_name, _] : stdlib::catalog()) {
-            if (const auto split = split_module(qualified_name)) {
+            if (const auto split = symbols::split_module(qualified_name)) {
                 namespace_names.insert(std::string{split->first});
             }
         }

@@ -4,18 +4,42 @@
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "analysis/errors/error.hpp"
+#include "common/resource_limits.hpp"
 #include "runtime/compiler/compiled_function.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/value.hpp"
+#include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_introspection.hpp"
 #include "runtime/vm/vm_types.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::Args;
+using luma::ArrayValue;
+using luma::CompiledFunction;
+using luma::define_native;
+using luma::InternalError;
+using luma::NullValue;
+using luma::NumericWidener;
+using luma::Op;
+using luma::RuntimeError;
+using luma::SourceLocation;
+using luma::TupleValue;
+using luma::TypeMatcher;
+using luma::Value;
+using luma::VM;
+using luma::VMIntrospector;
+using luma::test::compile_for_eval;
+using luma::test::lex_and_parse;
+using luma::test::make_std_env;
 
 // ─── Crafted-bytecode robustness (untrusted .lumc trust boundary) ───
 //
@@ -23,64 +47,46 @@
 // verifier does not fully constrain. The VM must turn such input into a
 // catchable error rather than reading out of bounds.
 
+namespace {
+
 // Build a self-contained, arity-0 top-level function from raw bytecode bytes.
-static CompiledFunction make_raw_function(std::initializer_list<std::uint8_t> code) {
+CompiledFunction make_raw_function(std::initializer_list<std::uint8_t> code) {
     CompiledFunction func;
     func.name = "<crafted>";
     func.mutable_chunk().code = std::vector<std::uint8_t>(code);
     return func;
 }
 
-// Run a crafted function through a fresh VM; report whether it raised a
-// catchable error instead of crashing or silently misbehaving.
-static bool crafted_function_throws(const CompiledFunction& func) {
-    const auto env = luma::test::make_std_env();
+// Run a crafted top-level function through a fresh VM.
+void run_crafted(const CompiledFunction& func) {
+    const auto env = make_std_env();
     VM vm{env};
-    try {
-        (void)vm.execute_function(func);
-        return false;
-    } catch (const std::exception&) {
-        return true;
-    }
+    (void)vm.execute_function(func);
 }
 
-// Like crafted_function_throws, but only reports success for a RuntimeError —
-// the VM's own error type. A std::bad_variant_access (the failure mode these
-// type guards remove) is treated as a miss, so the test actually pins the fix.
-static bool crafted_function_raises_runtime_error(const CompiledFunction& func) {
-    const auto env = luma::test::make_std_env();
+// Run a crafted top-level function, with its child functions, through a fresh VM.
+void run_crafted(const std::vector<CompiledFunction>& functions, const CompiledFunction& top) {
+    const auto env = make_std_env();
     VM vm{env};
+    vm.execute(functions, top);
+}
+
+// Run `action`, which must throw a RuntimeError — the VM's own, catchable error
+// type — and return its message.  Any other exception (such as the
+// std::bad_variant_access that the VM's type guards prevent) or no exception
+// fails the test, so a test using this pins the hardening rather than merely
+// "something threw".
+template <typename Action> [[nodiscard]] std::string runtime_error_message(Action&& action) {
     try {
-        (void)vm.execute_function(func);
-    } catch (const RuntimeError&) {
-        return true;
-    } catch (const std::exception&) {
-        return false;
+        std::forward<Action>(action)();
+    } catch (const RuntimeError& error) {
+        return error.what();
+    } catch (const std::exception& error) {
+        luma::test::throw_assertion_error(std::string{"expected a RuntimeError, got: "} +
+                                          error.what());
     }
-    return false;
-}
 
-LUMA_TEST(vm_invalid_opcode_is_rejected) {
-    // 0xFF is well beyond the highest defined opcode. The dispatch table must
-    // span the full uint8_t range so this maps to a catchable "invalid opcode"
-    // error rather than an out-of-bounds dispatch-table read.
-    ASSERT_TRUE(crafted_function_throws(make_raw_function({0xFFU})));
-}
-
-LUMA_TEST(vm_verified_out_of_bounds_local_is_rejected) {
-    // A crafted function can set its verified bit yet write to a local slot far
-    // beyond its frame. Because a frame's slot offset is a runtime quantity the
-    // verifier cannot bound, the VM must range-check local slots even on the
-    // verified fast path. read_u16 is big-endian, so 0xEA 0x60 == slot 60000.
-    auto func = make_raw_function({
-        static_cast<std::uint8_t>(Op::True),
-        static_cast<std::uint8_t>(Op::SetLocal),
-        0xEAU,
-        0x60U,
-        static_cast<std::uint8_t>(Op::Return),
-    });
-    func.set_is_verified(true);
-    ASSERT_TRUE(crafted_function_throws(func));
+    luma::test::throw_assertion_error("expected a RuntimeError, but nothing was thrown");
 }
 
 // A crafted .lumc can hand MakeClosure a child function whose upvalue descriptor
@@ -89,8 +95,8 @@ LUMA_TEST(vm_verified_out_of_bounds_local_is_rejected) {
 // the descriptor array — and the deserializer accepts any u16 index, so the VM
 // must range-check the descriptor when forwarding it rather than reading out of
 // bounds.  Builds a top-level MakeClosure over a single child function carrying
-// one bad descriptor and reports whether execution raised a catchable error.
-static bool crafted_closure_upvalue_throws(bool is_local) {
+// one bad descriptor and returns the RuntimeError message execution raised.
+std::string crafted_closure_upvalue_error(bool is_local) {
     // Slot 60000 is far beyond any real frame or upvalue array but still inside
     // the value stack's backing buffer, so an unchecked access reads live-but-
     // wrong memory instead of segfaulting.  The child is never executed —
@@ -107,7 +113,7 @@ static bool crafted_closure_upvalue_throws(bool is_local) {
 
     // Top-level: MakeClosure over function 0 (big-endian u16 index 0x0000, u8
     // upvalue_count 1), then return.
-    auto top = make_raw_function({
+    const auto top = make_raw_function({
         static_cast<std::uint8_t>(Op::MakeClosure),
         0x00U,
         0x00U,
@@ -115,20 +121,41 @@ static bool crafted_closure_upvalue_throws(bool is_local) {
         static_cast<std::uint8_t>(Op::Return),
     });
 
-    const auto env = luma::test::make_std_env();
-    VM vm{env};
-    try {
-        vm.execute(functions, top);
-        return false;
-    } catch (const std::exception&) {
-        return true;
-    }
+    return runtime_error_message([&] { run_crafted(functions, top); });
+}
+
+} // namespace
+
+LUMA_TEST(vm_invalid_opcode_is_rejected) {
+    // 0xFF is well beyond the highest defined opcode. The dispatch table must
+    // span the full uint8_t range so this maps to a catchable "invalid opcode"
+    // error rather than an out-of-bounds dispatch-table read.
+    const auto message = runtime_error_message([] { run_crafted(make_raw_function({0xFFU})); });
+    ASSERT_NE(message.find("unknown or reserved opcode"), std::string::npos);
+}
+
+LUMA_TEST(vm_verified_out_of_bounds_local_is_rejected) {
+    // A crafted function can set its verified bit yet write to a local slot far
+    // beyond its frame. Because a frame's slot offset is a runtime quantity the
+    // verifier cannot bound, the VM must range-check local slots even on the
+    // verified fast path. read_u16 is big-endian, so 0xEA 0x60 == slot 60000.
+    auto func = make_raw_function({
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::SetLocal),
+        0xEAU,
+        0x60U,
+        static_cast<std::uint8_t>(Op::Return),
+    });
+    func.set_is_verified(true);
+    const auto message = runtime_error_message([&] { run_crafted(func); });
+    ASSERT_NE(message.find("local variable index out of bounds"), std::string::npos);
 }
 
 LUMA_TEST(vm_crafted_closure_local_upvalue_index_is_rejected) {
     // is_local descriptor: forward_upvalue computes slot_offset + desc.index and
     // reads the value stack.  An out-of-range index must be caught, not read.
-    ASSERT_TRUE(crafted_closure_upvalue_throws(true));
+    const auto message = crafted_closure_upvalue_error(/*is_local=*/true);
+    ASSERT_NE(message.find("invalid upvalue index 60000"), std::string::npos);
 }
 
 LUMA_TEST(vm_crafted_closure_forwarded_upvalue_index_is_rejected) {
@@ -136,7 +163,8 @@ LUMA_TEST(vm_crafted_closure_forwarded_upvalue_index_is_rejected) {
     // parent closure's upvalues array (size 0 for a top-level frame).  An
     // out-of-range index must be caught, not copied out of bounds (a Value copy
     // through a garbage pointer corrupts a refcount).
-    ASSERT_TRUE(crafted_closure_upvalue_throws(false));
+    const auto message = crafted_closure_upvalue_error(/*is_local=*/false);
+    ASSERT_NE(message.find("invalid upvalue index 60000"), std::string::npos);
 }
 
 // A crafted .lumc can jump onto ForIterStep with an iterator-state tuple whose
@@ -158,7 +186,8 @@ LUMA_TEST(vm_crafted_iterator_state_non_integer_index_is_rejected) {
         static_cast<std::uint8_t>(Op::Return),
     };
 
-    ASSERT_TRUE(crafted_function_raises_runtime_error(func));
+    const auto message = runtime_error_message([&] { run_crafted(func); });
+    ASSERT_NE(message.find("invalid iterator state"), std::string::npos);
 }
 
 // A crafted .lumc can leave a non-string in a CallNamed argument-name slot. The
@@ -174,7 +203,7 @@ LUMA_TEST(vm_crafted_named_call_non_string_name_is_rejected) {
 
     // Top-level: close over function 0, push a non-string name operand (Op::True)
     // and a value operand (Op::True), then CallNamed with 0 positional / 1 named.
-    auto top = make_raw_function({
+    const auto top = make_raw_function({
         static_cast<std::uint8_t>(Op::MakeClosure),
         0x00U,
         0x00U,                               // function index 0 (big-endian u16)
@@ -187,17 +216,9 @@ LUMA_TEST(vm_crafted_named_call_non_string_name_is_rejected) {
         static_cast<std::uint8_t>(Op::Return),
     });
 
-    const auto env = luma::test::make_std_env();
-    VM vm{env};
-    bool raised_runtime_error = false;
-    try {
-        vm.execute(functions, top);
-    } catch (const RuntimeError&) {
-        raised_runtime_error = true;
-    } catch (const std::exception&) {
-        // e.g. std::bad_variant_access — the pre-hardening failure mode.
-    }
-    ASSERT_TRUE(raised_runtime_error);
+    // Pre-hardening this raised std::bad_variant_access, which fails here.
+    const auto message = runtime_error_message([&] { run_crafted(functions, top); });
+    ASSERT_NE(message.find("argument name is not a string"), std::string::npos);
 }
 
 // A crafted .lumc (or a REPL call, which skips the type checker) can invoke a
@@ -223,7 +244,7 @@ LUMA_TEST(vm_call_with_too_few_required_args_is_rejected) {
     // Top-level: MakeClosure over function 0, push a single positional
     // argument (Op::True), then Op::Call with arg_count 1 — one short of the
     // callee's required_arity of 2.
-    auto top = make_raw_function({
+    const auto top = make_raw_function({
         static_cast<std::uint8_t>(Op::MakeClosure),
         0x00U,
         0x00U, // function index 0 (big-endian u16)
@@ -234,17 +255,9 @@ LUMA_TEST(vm_call_with_too_few_required_args_is_rejected) {
         static_cast<std::uint8_t>(Op::Return),
     });
 
-    const auto env = luma::test::make_std_env();
-    VM vm{env};
-    bool raised_runtime_error = false;
-    try {
-        vm.execute(functions, top);
-    } catch (const RuntimeError&) {
-        raised_runtime_error = true;
-    } catch (const std::exception&) {
-        // Pre-fix, no error was raised at all — the function ran silently.
-    }
-    ASSERT_TRUE(raised_runtime_error);
+    // Pre-fix, no error was raised at all — the function ran silently.
+    const auto message = runtime_error_message([&] { run_crafted(functions, top); });
+    ASSERT_NE(message.find("too few arguments: function requires at least 2"), std::string::npos);
 }
 
 // The named-call path (Op::CallNamed) builds its argument vector padded to
@@ -283,17 +296,9 @@ LUMA_TEST(vm_named_call_missing_required_argument_is_rejected) {
         static_cast<std::uint8_t>(Op::Return),
     };
 
-    const auto env = luma::test::make_std_env();
-    VM vm{env};
-    bool raised_runtime_error = false;
-    try {
-        vm.execute(functions, top_fn);
-    } catch (const RuntimeError&) {
-        raised_runtime_error = true;
-    } catch (const std::exception&) {
-        // Pre-fix, no error was raised at all — "a" silently ran as `none`.
-    }
-    ASSERT_TRUE(raised_runtime_error);
+    // Pre-fix, no error was raised at all — "a" silently ran as `none`.
+    const auto message = runtime_error_message([&] { run_crafted(functions, top_fn); });
+    ASSERT_NE(message.find("missing required argument 'a'"), std::string::npos);
 }
 
 // ─── Debugger introspection ───
@@ -323,9 +328,9 @@ LUMA_TEST(vm_introspect_mutable_upvalue_round_trip) {
                                "}\n"
                                "make_and_run()\n";
 
-    const auto program = luma::test::lex_and_parse(source);
-    const auto compiled = luma::test::compile_for_eval(program);
-    const auto env = luma::test::make_std_env();
+    const auto program = lex_and_parse(source);
+    const auto compiled = compile_for_eval(program);
+    const auto env = make_std_env();
 
     VM vm{env};
 
@@ -396,6 +401,342 @@ LUMA_TEST(vm_typematcher_deeply_nested_pattern_is_bounded) {
     // An integer value is not `none`, so every layer takes the recursing branch
     // until the depth cap stops it and returns false.
     ASSERT_FALSE(TypeMatcher::matches(Value{static_cast<std::int64_t>(0)}, pattern));
+}
+
+// NumericWidener converts integers wherever a pattern says `number`, copying
+// only the containers it changes and leaving other components untouched.
+LUMA_TEST(vm_numeric_widener_converts_nested_integers) {
+    const auto array = std::make_shared<ArrayValue>();
+    array->elements->push_back(Value{static_cast<std::int64_t>(1)});
+    array->elements->push_back(Value{2.5});
+    const Value original{array};
+
+    const auto widened = NumericWidener::widen(original, "array<number>");
+
+    ASSERT_TRUE(widened.is_array());
+    ASSERT_TRUE((*widened.as_array()->elements)[0].is_number());
+    ASSERT_TRUE((*widened.as_array()->elements)[1].is_number());
+    // The source array is not mutated in place: other holders keep its value.
+    ASSERT_TRUE((*original.as_array()->elements)[0].is_integer());
+
+    const auto tuple = std::make_shared<TupleValue>();
+    tuple->elements = {Value{static_cast<std::int64_t>(3)}, Value{static_cast<std::int64_t>(4)}};
+    const auto widened_tuple = NumericWidener::widen(Value{tuple}, "(number,_)");
+
+    ASSERT_TRUE(widened_tuple.as_tuple()->elements[0].is_number());
+    ASSERT_TRUE(widened_tuple.as_tuple()->elements[1].is_integer());
+}
+
+LUMA_TEST(vm_numeric_widener_shares_unchanged_values) {
+    const auto array = std::make_shared<ArrayValue>();
+    array->elements->push_back(Value{1.5});
+    const Value original{array};
+
+    const auto widened = NumericWidener::widen(original, "array<number>");
+
+    // Nothing needed converting, so the storage is shared rather than copied.
+    ASSERT_EQ(widened.as_array().get(), original.as_array().get());
+    ASSERT_TRUE(NumericWidener::widen(Value{NullValue{}}, "optional<number>").is_null());
+    ASSERT_TRUE(NumericWidener::widen(Value{std::string{"7"}}, "number").is_string());
+}
+
+// Regression (review #16): Op::TailCall padded missing parameters with `none`
+// without checking required_arity, unlike the Op::Call path above.
+LUMA_TEST(vm_tail_call_with_too_few_required_args_is_rejected) {
+    CompiledFunction callee;
+    callee.name = "<callee>";
+    callee.arity = 2;
+    callee.required_arity = 2;
+    callee.param_names = {"a", "b"};
+    callee.build_param_name_index();
+    callee.mutable_chunk().code = {static_cast<std::uint8_t>(Op::None),
+                                   static_cast<std::uint8_t>(Op::Return)};
+
+    std::vector<CompiledFunction> functions;
+    functions.push_back(std::move(callee));
+
+    // Top-level: close over function 0, push one argument, tail-call it.
+    const auto top = make_raw_function({
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0x00U,
+        0x00U, // function index 0 (big-endian u16)
+        0x00U, // upvalue_count
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::TailCall),
+        0x01U, // arg_count — one short of required_arity
+        static_cast<std::uint8_t>(Op::Return),
+    });
+
+    // Pre-fix, no error was raised at all — the callee ran with b = none.
+    const auto message = runtime_error_message([&] { run_crafted(functions, top); });
+    ASSERT_NE(message.find("too few arguments"), std::string::npos);
+}
+
+// Regression (review #11): a function that executes Op::TryCatch and returns
+// without Op::TryEnd left a stale handler behind.  A later error in the caller
+// then "caught" it by installing the dead function's catch_ip into the
+// caller's frame — executing the callee's bytecode in the wrong frame (and,
+// with a hostile offset, reading outside the caller's chunk).  The handler
+// must die with its frame, so the caller's error propagates.
+LUMA_TEST(vm_stale_exception_handler_does_not_survive_return) {
+    CompiledFunction callee;
+    callee.name = "<leaky-try>";
+    // TryCatch with offset 0 (catch_ip = the None below), then return without
+    // the matching TryEnd.
+    callee.mutable_chunk().code = {
+        static_cast<std::uint8_t>(Op::TryCatch),
+        0x00U,
+        0x00U,
+        0x00U,
+        0x00U,
+        static_cast<std::uint8_t>(Op::None),
+        static_cast<std::uint8_t>(Op::Return),
+    };
+
+    std::vector<CompiledFunction> functions;
+    functions.push_back(std::move(callee));
+
+    // Top-level: call the leaky function, discard its result, then hit an
+    // invalid opcode (a runtime error with no live handler).
+    const auto top = make_raw_function({
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0x00U,
+        0x00U,
+        0x00U,
+        static_cast<std::uint8_t>(Op::Call),
+        0x00U,
+        static_cast<std::uint8_t>(Op::Pop),
+        0xFFU,
+        static_cast<std::uint8_t>(Op::None),
+        static_cast<std::uint8_t>(Op::Return),
+    });
+
+    // The invalid-opcode error itself must surface — not a secondary fault from
+    // running the dead frame's bytecode.  Pre-fix: the stale handler swallowed
+    // the error and the top-level frame resumed inside <leaky-try>'s bytecode.
+    const auto message = runtime_error_message([&] { run_crafted(functions, top); });
+    ASSERT_NE(message.find("unknown or reserved opcode"), std::string::npos);
+}
+
+// ─── Built-in fault classification ───
+//
+// call_native turns a non-runtime_error exception escaping a built-in into a
+// catchable error.  An interpreter fault must surface as InternalError (so the
+// fuzz harness can flag it as a defect), while allocation pressure stays an
+// ordinary RuntimeError.
+
+namespace {
+
+// How the VM surfaced an exception escaping a built-in.
+enum class SurfacedAs {
+    nothing,
+    internal_error,
+    runtime_error,
+    other
+};
+
+// Call a native that throws `fault` and classify the exception the VM raised.
+template <typename Fault> SurfacedAs raise_from_native(Fault fault) {
+    const auto compiled = compile_for_eval(lex_and_parse("explode()"));
+    const auto env = make_std_env();
+    define_native(env, "explode", [fault](Args, SourceLocation) -> Value { throw fault; });
+
+    VM vm{env};
+    try {
+        (void)vm.execute_function(compiled.top_level, compiled.functions);
+    } catch (const InternalError& error) {
+        // The original fault's message must survive the conversion.
+        return std::string{error.what()}.find("broken invariant") != std::string::npos
+                   ? SurfacedAs::internal_error
+                   : SurfacedAs::other;
+    } catch (const RuntimeError&) {
+        return SurfacedAs::runtime_error;
+    } catch (const std::exception&) {
+        return SurfacedAs::other;
+    }
+    return SurfacedAs::nothing;
+}
+
+} // namespace
+
+LUMA_TEST(vm_native_logic_error_becomes_internal_error) {
+    ASSERT_EQ(raise_from_native(std::logic_error{"broken invariant"}), SurfacedAs::internal_error);
+}
+
+LUMA_TEST(vm_native_bad_alloc_stays_plain_runtime_error) {
+    ASSERT_EQ(raise_from_native(std::bad_alloc{}), SurfacedAs::runtime_error);
+}
+
+// ─── Call arity (too many arguments) ───
+//
+// call_function rejected too few arguments but not too many: the extra
+// arguments landed in the callee's first local slots, so a zero-parameter
+// lambda's first local read the caller's argument.  Every bytecode call path
+// funnels through call_function (Call, pipes, spawn), and tail calls mirror
+// the check.  Built-ins calling a callback instead drop the arguments it does
+// not declare (VM::init_call_fn), because they pass a fixed argument list
+// (Dictionary.map passes key and value) to callbacks that may ignore the
+// trailing ones.  eval() skips the type checker, so these reach the VM.
+
+LUMA_TEST(vm_call_with_too_many_arguments_is_rejected) {
+    ASSERT_EVAL_THROWS("function integer f() {\n"
+                       "    integer base = 40\n"
+                       "    return base + 2\n"
+                       "}\n"
+                       "f(\"surprise\")",
+                       "too many arguments: function expects 0 but got 1");
+}
+
+LUMA_TEST(vm_lambda_call_with_too_many_arguments_is_rejected) {
+    ASSERT_EVAL_THROWS("function() -> integer g = () -> 1\n"
+                       "g(1, 2)",
+                       "too many arguments: function expects 0 but got 2");
+}
+
+LUMA_TEST(vm_pipe_call_with_too_many_arguments_is_rejected) {
+    ASSERT_EVAL_THROWS("function integer twice(integer x) { return x * 2 }\n"
+                       "3 |> twice(4)",
+                       "too many arguments: function expects 1 but got 2");
+}
+
+LUMA_TEST(vm_native_callback_drops_undeclared_arguments) {
+    // Array.map invokes the closure with one argument; a zero-parameter
+    // closure ignores it, and it must not land in the closure's first local.
+    const auto result = luma::test::eval("Array.map([1, 2], () -> {\n"
+                                         "    integer base = 40\n"
+                                         "    return base + 2\n"
+                                         "})");
+
+    ASSERT_TRUE(result.is_result());
+    ASSERT_TRUE(result.as_result()->is_success);
+    const auto& mapped = *result.as_result()->owned_inner->as_array()->elements;
+    ASSERT_EQ(mapped.size(), 2U);
+    ASSERT_EQ(mapped[0].as_integer(), 42);
+    ASSERT_EQ(mapped[1].as_integer(), 42);
+}
+
+LUMA_TEST(vm_native_callback_with_fewer_parameters_runs) {
+    // Dictionary.reduce passes (accumulator, key, value) and Array.reduce
+    // (accumulator, element); callbacks that ignore the trailing arguments ran
+    // before the arity check and must keep running.
+    const auto by_key = luma::test::eval(
+        "Dictionary.reduce({\"a\": 1, \"b\": 2}, 0, (integer acc, string _k) -> acc + 1)");
+
+    ASSERT_TRUE(by_key.is_result());
+    ASSERT_TRUE(by_key.as_result()->is_success);
+    ASSERT_EQ(by_key.as_result()->owned_inner->as_integer(), 2);
+
+    const auto counted = luma::test::eval("Array.reduce([1, 2, 3], 0, (integer acc) -> acc + 1)");
+
+    ASSERT_TRUE(counted.is_result());
+    ASSERT_TRUE(counted.as_result()->is_success);
+    ASSERT_EQ(counted.as_result()->owned_inner->as_integer(), 3);
+}
+
+LUMA_TEST(vm_tail_call_with_too_many_arguments_is_rejected) {
+    ASSERT_EVAL_THROWS("function integer zero() { return 0 }\n"
+                       "function integer f(integer n) { return zero(n) }\n"
+                       "f(1)",
+                       "too many arguments: function expects 0 but got 1");
+}
+
+LUMA_TEST(vm_call_with_optional_parameters_still_pads) {
+    const auto result = luma::test::eval("function integer f(integer a, integer b = 5) {\n"
+                                         "    return a + b\n"
+                                         "}\n"
+                                         "f(1)");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 6);
+}
+
+// ─── String repetition limits ───
+//
+// The `*` operator skipped ResourceLimits::max_string_repeat and looped
+// `count` times even for an empty string, so `"" * 9223372036854775807`
+// spun for centuries.
+
+LUMA_TEST(vm_string_repeat_of_empty_string_returns_immediately) {
+    // At the maximum allowed count the empty string must not iterate `count`
+    // times; past it the count limit applies, exactly as for String.repeat.
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_string_repeat,
+                                       std::int64_t{1'000'000'000}};
+
+    const auto result = luma::test::eval("\"\" * 1000000000");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_TRUE(result.as_string().empty());
+
+    ASSERT_EVAL_THROWS("\"\" * 9223372036854775807", "string repeat count exceeds maximum");
+}
+
+LUMA_TEST(vm_string_repeat_enforces_max_string_repeat) {
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_string_repeat,
+                                       std::int64_t{1'000}};
+
+    ASSERT_EVAL_THROWS("\"ab\" * 1001", "string repeat count exceeds maximum");
+    ASSERT_EVAL_THROWS("1001 * \"ab\"", "string repeat count exceeds maximum");
+}
+
+LUMA_TEST(vm_string_repeat_builds_expected_result) {
+    const auto result = luma::test::eval("\"abc\" * 5");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_EQ(result.as_string(), std::string{"abcabcabcabcabc"});
+
+    const auto odd = luma::test::eval("7 * \"xy\"");
+
+    ASSERT_EQ(odd.as_string(), std::string{"xyxyxyxyxyxyxy"});
+}
+
+LUMA_TEST(vm_string_repeat_enforces_max_string_size) {
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_string_size, std::size_t{1'000}};
+
+    ASSERT_EVAL_THROWS("\"abcd\" * 251", "string repetition exceeds maximum string size");
+}
+
+// ─── Dictionary index assignment limit ───
+//
+// `d[key] = value` inserted new keys without the max_dictionary_size check
+// that Dictionary.set performs.
+
+LUMA_TEST(vm_dictionary_index_assignment_enforces_max_dictionary_size) {
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_dictionary_size, std::size_t{2}};
+
+    ASSERT_EVAL_THROWS("function integer f() {\n"
+                       "    mutable dictionary<integer> d = {\"z\": 0}\n"
+                       "    d[\"a\"] = 1\n"
+                       "    d[\"b\"] = 2\n"
+                       "    d[\"c\"] = 3\n"
+                       "    return 0\n"
+                       "}\n"
+                       "f()",
+                       "Dictionary index assignment: result exceeds maximum dictionary size");
+}
+
+LUMA_TEST(vm_dictionary_index_assignment_overwrite_at_limit_is_allowed) {
+    const luma::test::LimitGuard guard{luma::ResourceLimits::max_dictionary_size, std::size_t{3}};
+
+    const auto result = luma::test::eval("function integer f() {\n"
+                                         "    mutable dictionary<integer> d = {\"z\": 0}\n"
+                                         "    d[\"a\"] = 1\n"
+                                         "    d[\"b\"] = 2\n"
+                                         "    d[\"b\"] = 5\n"
+                                         "    return d[\"b\"]\n"
+                                         "}\n"
+                                         "f()");
+
+    ASSERT_EQ(result.as_integer(), 5);
+}
+
+LUMA_TEST(vm_collection_literals_enforce_configured_limits) {
+    const luma::test::LimitGuard array_guard{luma::ResourceLimits::max_array_size, std::size_t{2}};
+    const luma::test::LimitGuard dict_guard{luma::ResourceLimits::max_dictionary_size,
+                                            std::size_t{1}};
+
+    ASSERT_EVAL_THROWS("[1, 2, 3]", "array literal: result exceeds maximum array size");
+    ASSERT_EVAL_THROWS("{\"a\": 1, \"b\": 2}",
+                       "dictionary literal: result exceeds maximum dictionary size");
 }
 
 // ─── Main ───

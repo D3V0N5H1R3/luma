@@ -17,6 +17,7 @@
 #include "lsp_optional_ref.hpp"
 #include "lsp_param_extraction.hpp"
 #include "lsp_params.hpp"
+#include "lsp_path_utils.hpp"
 #include "lsp_response_helpers.hpp"
 #include "lsp_server_state_lock.hpp"
 #include "lsp_string_utils.hpp"
@@ -119,18 +120,14 @@ JsonValue LspNavigationHandler::handle_references(const JsonValue& params) {
         params,
         [&](const TokenContext& ctx) -> JsonValue {
             const auto& [uri, result, idx, token_ptr, cache] = ctx;
-            const auto& tokens = result->semantic.tokens;
             const auto& target_token = *token_ptr;
             const std::string target_name = target_token.lexeme;
 
-            // Detect namespace prefix: if the cursor token is preceded by "Ns.",
-            // restrict references to occurrences with the same prefix.
-            std::string target_ns;
-            if (auto ns = extract_namespace_prefix(tokens, idx)) {
-                target_ns = std::move(*ns);
-            }
+            // Namespace of the target: the explicit `Ns.` receiver, or the
+            // enclosing namespace when the cursor is on one of its members.
+            const std::string target_ns = target_namespace_prefix(*result, idx);
 
-            const bool is_local = is_local_variable(*result, target_name);
+            const bool is_local = target_ns.empty() && is_local_variable(*result, target_name);
             const auto enclosing_fn =
                 is_local ? find_enclosing_function(*result, target_token.location.line)
                          : std::nullopt;
@@ -282,7 +279,7 @@ JsonValue LspNavigationHandler::handle_document_link(const JsonValue& params) {
         if (!file_path_opt.has_value()) {
             continue;
         }
-        const auto base_dir = std::filesystem::path(*file_path_opt).parent_path();
+        const auto base_dir = utf8_path(*file_path_opt).parent_path();
 
         // Strip quotes from the lexeme.
         std::string inc_path = str_tok.lexeme;
@@ -290,14 +287,14 @@ JsonValue LspNavigationHandler::handle_document_link(const JsonValue& params) {
             inc_path = inc_path.substr(1, inc_path.size() - 2);
         }
 
-        const auto resolved = base_dir / std::filesystem::path(inc_path);
+        const auto resolved = base_dir / utf8_path(inc_path);
 
         // Only create a link if the target file actually exists.
         if (!std::filesystem::exists(resolved)) {
             continue;
         }
 
-        const auto target_uri = path_to_uri(resolved.string());
+        const auto target_uri = path_to_uri(path_to_utf8(resolved));
 
         links.emplace_back(JsonValue::ObjectType{
             {"range", serialise_range(result->to_wire(token_range(str_tok)))},

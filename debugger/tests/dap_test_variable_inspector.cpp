@@ -12,7 +12,12 @@
 #include "test_framework.hpp"
 #include "variable_inspector.hpp"
 
-using namespace luma::dap;
+using luma::dap::GenerationalEntry;
+using luma::dap::ScopeRef;
+using luma::dap::ScopeType;
+using luma::dap::ThreadState;
+using luma::dap::ValueRef;
+using luma::dap::VariableInspector;
 using luma::json::JsonValue;
 
 namespace {
@@ -360,11 +365,74 @@ void test_parse_value_typed_string_strips_quotes() {
 void test_set_variable_stale_reference() {
     VariableInspector inspector;
     // Reference 999 doesn't exist.
-    auto resolver = [](int) -> std::shared_ptr<ThreadState> {
-        return nullptr;
-    };
+    auto resolver = [](int) -> std::shared_ptr<ThreadState> { return nullptr; };
     auto result = inspector.set_variable(999, "x", "42", resolver);
     ASSERT_EQ(result.type, "error");
+}
+
+// Regression: a scope whose frame no longer resolves (its thread resumed or
+// exited) used to return the input echoed back with type "unknown", which the
+// handler reported as a successful edit although nothing was written.
+void test_set_variable_unresolved_frame_is_error() {
+    VariableInspector inspector;
+    auto resolver = [](int) -> std::shared_ptr<ThreadState> { return nullptr; };
+
+    const int scope_ref =
+        inspector.alloc_ref(ScopeRef{.frame_id = 12345, .scope_type = ScopeType::Local});
+    auto result = inspector.set_variable(scope_ref, "x", "42", resolver);
+
+    ASSERT_EQ(result.type, "error");
+    ASSERT_NE(result.value, "42");
+}
+
+// An expanded child (record field, array element) is a snapshot copy, so it
+// cannot be edited; the error must say so rather than "not found".
+void test_set_variable_on_expanded_child_is_error() {
+    VariableInspector inspector;
+    const VariableInspector::ThreadResolver resolver{};
+
+    auto arr = std::make_shared<luma::ArrayValue>();
+    arr->elements->push_back(luma::Value{static_cast<std::int64_t>(1)});
+    auto var = inspector.make_variable("items", luma::Value{arr}, false, 0, "items");
+
+    auto result = inspector.set_variable(var.variables_reference, "[0]", "5", resolver);
+
+    ASSERT_EQ(result.type, "error");
+    ASSERT_TRUE(result.value.find("not found") == std::string::npos);
+}
+
+// ─── evaluateName of expanded children ───────────────────────────
+
+// Regression: children carried relative names ("[0]", ".0", a bare field name)
+// as evaluateName, so "Add to Watch" evaluated the wrong thing (a field name
+// could resolve to an unrelated local).  Children must get the full expression.
+void test_child_evaluate_names_are_full_expressions() {
+    VariableInspector inspector;
+    const VariableInspector::ThreadResolver resolver{};
+
+    auto arr = std::make_shared<luma::ArrayValue>();
+    arr->elements->push_back(luma::Value{static_cast<std::int64_t>(7)});
+    auto array_var = inspector.make_variable("items", luma::Value{arr}, false, 0, "items");
+    ASSERT_EQ(array_var.evaluate_name, "items");
+
+    auto elements = inspector.get_variables(array_var.variables_reference, 0, 0, "", resolver);
+    ASSERT_EQ(elements.size(), 1U);
+    ASSERT_EQ(elements[0].evaluate_name, "items[0]");
+
+    auto dict = std::make_shared<luma::DictionaryValue>();
+    dict->entries.emplace_back("say \"hi\" ${x}", luma::Value{static_cast<std::int64_t>(1)});
+    auto dict_var = inspector.make_variable("d", luma::Value{dict}, false, 0, "d");
+
+    auto entries = inspector.get_variables(dict_var.variables_reference, 0, 0, "", resolver);
+    ASSERT_EQ(entries.size(), 1U);
+    ASSERT_EQ(entries[0].evaluate_name, R"(d["say \"hi\" \${x}"])");
+
+    // A value with no known expression gives its children no evaluateName.
+    auto anonymous = inspector.make_variable("tmp", luma::Value{arr}, false, 0);
+    auto anonymous_children =
+        inspector.get_variables(anonymous.variables_reference, 0, 0, "", resolver);
+    ASSERT_EQ(anonymous_children.size(), 1U);
+    ASSERT_TRUE(anonymous_children[0].evaluate_name.empty());
 }
 
 // ─── Scope enumeration: names, ordering, hints, and reference mapping ──
@@ -373,9 +441,7 @@ void test_get_scopes_names_order_and_refs() {
     VariableInspector inspector;
     // No live VM: resolve_frame/resolve_vm yield null, so the optional Closure
     // scope is omitted and only the always-present Local + Global remain.
-    auto resolver = [](int) -> std::shared_ptr<ThreadState> {
-        return nullptr;
-    };
+    auto resolver = [](int) -> std::shared_ptr<ThreadState> { return nullptr; };
 
     auto scopes = inspector.get_scopes(42, resolver);
 
@@ -686,6 +752,9 @@ int main() {
 
     // set_variable.
     RUN(test_set_variable_stale_reference);
+    RUN(test_set_variable_unresolved_frame_is_error);
+    RUN(test_set_variable_on_expanded_child_is_error);
+    RUN(test_child_evaluate_names_are_full_expressions);
     RUN(test_get_scopes_names_order_and_refs);
 
     // Stress.

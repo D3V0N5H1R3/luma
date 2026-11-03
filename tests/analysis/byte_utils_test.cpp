@@ -1,99 +1,88 @@
 // Unit tests for core/common/byte_utils.hpp.
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
 #include "common/byte_utils.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::read_u16_be;
+using luma::read_u32_be;
+using luma::read_u8_checked;
+using luma::write_u16_be;
+
+namespace {
+
+struct ReadU16Case {
+    std::array<std::uint8_t, 2> bytes;
+    std::uint16_t expected;
+};
+
+struct ReadU32Case {
+    std::array<std::uint8_t, 4> bytes;
+    std::uint32_t expected;
+};
+
+struct WriteU16Case {
+    std::uint16_t value;
+    std::array<std::uint8_t, 2> expected_bytes;
+};
+
+// clang-format off
+const std::vector<ReadU16Case> read_u16_be_cases = {
+    {.bytes = {0x00, 0x00}, .expected = 0},
+    {.bytes = {0x00, 0x01}, .expected = 1},
+    {.bytes = {0x01, 0x00}, .expected = 256},    // high byte only
+    {.bytes = {0xFF, 0xFF}, .expected = 0xFFFF},
+    {.bytes = {0x12, 0x34}, .expected = 0x1234}, // 4660
+};
+
+const std::vector<ReadU32Case> read_u32_be_cases = {
+    {.bytes = {0x00, 0x00, 0x00, 0x00}, .expected = 0},
+    {.bytes = {0x00, 0x00, 0x00, 0x01}, .expected = 1},
+    {.bytes = {0xFF, 0xFF, 0xFF, 0xFF}, .expected = 0xFFFFFFFF},
+    {.bytes = {0xDE, 0xAD, 0xBE, 0xEF}, .expected = 0xDEADBEEF},
+    {.bytes = {0x80, 0x00, 0x00, 0x00}, .expected = 0x80000000}, // high byte only
+};
+
+const std::vector<WriteU16Case> write_u16_be_cases = {
+    {.value = 0,      .expected_bytes = {0x00, 0x00}},
+    {.value = 0xFFFF, .expected_bytes = {0xFF, 0xFF}},
+    {.value = 0xABCD, .expected_bytes = {0xAB, 0xCD}},
+};
+// clang-format on
+
+const std::vector<std::uint16_t> u16_round_trip_values = {0, 1, 255, 256, 0x1234, 0xFFFF};
+
+} // namespace
 
 // ═══════════════════════════════════════════════════════════
 // read_u16_be
 // ═══════════════════════════════════════════════════════════
 
-static void test_read_u16_be_zero() {
-    const std::uint8_t data[] = {0x00, 0x00};
-    ASSERT_EQ(read_u16_be(data), static_cast<std::uint16_t>(0));
-}
-
-static void test_read_u16_be_one() {
-    const std::uint8_t data[] = {0x00, 0x01};
-    ASSERT_EQ(read_u16_be(data), static_cast<std::uint16_t>(1));
-}
-
-static void test_read_u16_be_high_byte_only() {
-    const std::uint8_t data[] = {0x01, 0x00};
-    ASSERT_EQ(read_u16_be(data), static_cast<std::uint16_t>(256));
-}
-
-static void test_read_u16_be_max() {
-    const std::uint8_t data[] = {0xFF, 0xFF};
-    ASSERT_EQ(read_u16_be(data), static_cast<std::uint16_t>(0xFFFF));
-}
-
-static void test_read_u16_be_known_value() {
-    // 0x1234 = 4660
-    const std::uint8_t data[] = {0x12, 0x34};
-    ASSERT_EQ(read_u16_be(data), static_cast<std::uint16_t>(0x1234));
+static void test_read_u16_be(const ReadU16Case& test_case) {
+    ASSERT_EQ(read_u16_be(test_case.bytes.data()), test_case.expected);
 }
 
 // ═══════════════════════════════════════════════════════════
 // read_u32_be
 // ═══════════════════════════════════════════════════════════
 
-static void test_read_u32_be_zero() {
-    const std::uint8_t data[] = {0x00, 0x00, 0x00, 0x00};
-    ASSERT_EQ(read_u32_be(data), static_cast<std::uint32_t>(0));
-}
-
-static void test_read_u32_be_one() {
-    const std::uint8_t data[] = {0x00, 0x00, 0x00, 0x01};
-    ASSERT_EQ(read_u32_be(data), static_cast<std::uint32_t>(1));
-}
-
-static void test_read_u32_be_max() {
-    const std::uint8_t data[] = {0xFF, 0xFF, 0xFF, 0xFF};
-    ASSERT_EQ(read_u32_be(data), static_cast<std::uint32_t>(0xFFFFFFFF));
-}
-
-static void test_read_u32_be_known_value() {
-    // 0xDEADBEEF
-    const std::uint8_t data[] = {0xDE, 0xAD, 0xBE, 0xEF};
-    ASSERT_EQ(read_u32_be(data), static_cast<std::uint32_t>(0xDEADBEEF));
-}
-
-static void test_read_u32_be_high_byte_only() {
-    const std::uint8_t data[] = {0x80, 0x00, 0x00, 0x00};
-    ASSERT_EQ(read_u32_be(data), static_cast<std::uint32_t>(0x80000000));
+static void test_read_u32_be(const ReadU32Case& test_case) {
+    ASSERT_EQ(read_u32_be(test_case.bytes.data()), test_case.expected);
 }
 
 // ═══════════════════════════════════════════════════════════
 // write_u16_be
 // ═══════════════════════════════════════════════════════════
 
-static void test_write_u16_be_zero() {
+static void test_write_u16_be(const WriteU16Case& test_case) {
     std::vector<std::uint8_t> buf;
-    write_u16_be(buf, 0);
+    write_u16_be(buf, test_case.value);
     ASSERT_EQ(buf.size(), 2U);
-    ASSERT_EQ(buf[0], static_cast<std::uint8_t>(0x00));
-    ASSERT_EQ(buf[1], static_cast<std::uint8_t>(0x00));
-}
-
-static void test_write_u16_be_max() {
-    std::vector<std::uint8_t> buf;
-    write_u16_be(buf, 0xFFFF);
-    ASSERT_EQ(buf.size(), 2U);
-    ASSERT_EQ(buf[0], static_cast<std::uint8_t>(0xFF));
-    ASSERT_EQ(buf[1], static_cast<std::uint8_t>(0xFF));
-}
-
-static void test_write_u16_be_known_value() {
-    std::vector<std::uint8_t> buf;
-    write_u16_be(buf, 0xABCD);
-    ASSERT_EQ(buf.size(), 2U);
-    ASSERT_EQ(buf[0], static_cast<std::uint8_t>(0xAB));
-    ASSERT_EQ(buf[1], static_cast<std::uint8_t>(0xCD));
+    ASSERT_EQ(buf[0], test_case.expected_bytes[0]);
+    ASSERT_EQ(buf[1], test_case.expected_bytes[1]);
 }
 
 static void test_write_u16_be_appends() {
@@ -109,13 +98,10 @@ static void test_write_u16_be_appends() {
 // Round-trip: write_u16_be → read_u16_be
 // ═══════════════════════════════════════════════════════════
 
-static void test_u16_round_trip() {
-    const std::uint16_t values[] = {0, 1, 255, 256, 0x1234, 0xFFFF};
-    for (auto val : values) {
-        std::vector<std::uint8_t> buf;
-        write_u16_be(buf, val);
-        ASSERT_EQ(read_u16_be(buf.data()), val);
-    }
+static void test_u16_round_trip(std::uint16_t value) {
+    std::vector<std::uint8_t> buf;
+    write_u16_be(buf, value);
+    ASSERT_EQ(read_u16_be(buf.data()), value);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -123,25 +109,25 @@ static void test_u16_round_trip() {
 // ═══════════════════════════════════════════════════════════
 
 static void test_read_u8_checked_in_bounds() {
-    std::vector<std::uint8_t> code = {0x10, 0x20, 0x30};
+    const std::vector<std::uint8_t> code = {0x10, 0x20, 0x30};
     ASSERT_EQ(read_u8_checked(code, 0), static_cast<std::uint8_t>(0x10));
     ASSERT_EQ(read_u8_checked(code, 1), static_cast<std::uint8_t>(0x20));
     ASSERT_EQ(read_u8_checked(code, 2), static_cast<std::uint8_t>(0x30));
 }
 
 static void test_read_u8_checked_out_of_bounds_default() {
-    std::vector<std::uint8_t> code = {0x10};
+    const std::vector<std::uint8_t> code = {0x10};
     ASSERT_EQ(read_u8_checked(code, 1), static_cast<std::uint8_t>(0));
     ASSERT_EQ(read_u8_checked(code, 100), static_cast<std::uint8_t>(0));
 }
 
 static void test_read_u8_checked_out_of_bounds_custom_default() {
-    std::vector<std::uint8_t> code = {0x10};
+    const std::vector<std::uint8_t> code = {0x10};
     ASSERT_EQ(read_u8_checked(code, 5, 0xFF), static_cast<std::uint8_t>(0xFF));
 }
 
 static void test_read_u8_checked_empty_vector() {
-    std::vector<std::uint8_t> code;
+    const std::vector<std::uint8_t> code;
     ASSERT_EQ(read_u8_checked(code, 0), static_cast<std::uint8_t>(0));
     ASSERT_EQ(read_u8_checked(code, 0, 0x42), static_cast<std::uint8_t>(0x42));
 }
@@ -149,28 +135,15 @@ static void test_read_u8_checked_empty_vector() {
 // ─── main ───
 
 int main() {
-    // read_u16_be
-    RUN(test_read_u16_be_zero);
-    RUN(test_read_u16_be_one);
-    RUN(test_read_u16_be_high_byte_only);
-    RUN(test_read_u16_be_max);
-    RUN(test_read_u16_be_known_value);
-
-    // read_u32_be
-    RUN(test_read_u32_be_zero);
-    RUN(test_read_u32_be_one);
-    RUN(test_read_u32_be_max);
-    RUN(test_read_u32_be_known_value);
-    RUN(test_read_u32_be_high_byte_only);
+    RUN_PARAMETERIZED(test_read_u16_be, read_u16_be_cases);
+    RUN_PARAMETERIZED(test_read_u32_be, read_u32_be_cases);
 
     // write_u16_be
-    RUN(test_write_u16_be_zero);
-    RUN(test_write_u16_be_max);
-    RUN(test_write_u16_be_known_value);
+    RUN_PARAMETERIZED(test_write_u16_be, write_u16_be_cases);
     RUN(test_write_u16_be_appends);
 
     // Round-trip
-    RUN(test_u16_round_trip);
+    RUN_PARAMETERIZED(test_u16_round_trip, u16_round_trip_values);
 
     // read_u8_checked
     RUN(test_read_u8_checked_in_bounds);

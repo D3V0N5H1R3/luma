@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <span>
 #include <string>
 
 #include "fuzz_harness.hpp"
@@ -20,40 +21,50 @@
 // with live stdin, which no unit test can reach deterministically; this target
 // exercises the grammar directly over arbitrary bytes instead.
 //
-// The decoder is decoupled from blocking I/O via a byte_reader callback: the
-// first input byte seeds decode_key, and the remainder feed the callback, which
-// yields -1 once exhausted (mirroring an escape-sequence timeout). Each input is
-// decoded with mouse reporting both disabled and enabled so that the SGR mouse
-// branch is reached. A non-empty-result oracle runs on top of the never-crash
-// contract: every byte maps to a branch that returns a non-empty classification,
-// so an empty result signals a parser regression.
+// The decoder is decoupled from blocking I/O via a byte_reader callback. Like
+// the live backend, the target decodes the whole input as a stream of keys: each
+// key's first byte seeds decode_key and the following bytes feed the callback,
+// which yields -1 once the input is exhausted (mirroring an escape-sequence
+// timeout); decoding resumes at the first byte the previous key left unread, so
+// sequences that follow one another — and the boundaries between them — are
+// exercised, not just the first key. Each input is decoded with mouse reporting
+// both disabled and enabled so that the SGR mouse branch is reached. A
+// non-empty-result oracle runs on top of the never-crash contract: every byte
+// maps to a branch that returns a non-empty classification, so an empty result
+// signals a parser regression.
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    if (size == 0 || size > luma::fuzz::max_input_size) {
+    if (size == 0 || size > luma::fuzz::k_max_input_size) {
         return 0;
     }
 
     return luma::fuzz::run([&] {
-        const int first = data[0];
+        const std::span<const std::uint8_t> bytes{data, size};
 
         for (const bool mouse_mode : {false, true}) {
-            std::size_t pos{1};
+            std::size_t pos{0};
 
             auto read_more = [&]() -> int {
-                if (pos >= size) {
+                if (pos >= bytes.size()) {
                     return -1;
                 }
 
-                return data[pos++];
+                return bytes[pos++];
             };
 
-            const std::string key = luma::terminal_detail::decode_key(first, read_more, mouse_mode);
+            // Each iteration consumes at least the key's first byte, so the loop
+            // always terminates.
+            while (pos < bytes.size()) {
+                const int first = bytes[pos++];
+                const std::string key =
+                    luma::terminal_detail::decode_key(first, read_more, mouse_mode);
 
-            if (key.empty()) {
-                luma::fuzz::trap(); // every byte must classify to a non-empty key name.
+                if (key.empty()) {
+                    luma::fuzz::trap(); // every byte must classify to a non-empty key name.
+                }
+
+                luma::fuzz::do_not_optimize(key.size());
             }
-
-            luma::fuzz::do_not_optimize(key.size());
         }
     });
 }

@@ -21,6 +21,7 @@
 #include <optional>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -51,6 +52,20 @@ struct CompiledLogMessage {
     bool is_valid{false};
     std::string compile_error;
 };
+
+// One piece of a logpoint message template: literal text, or the source of a
+// `{expression}` to interpolate.
+struct LogTemplatePart {
+    bool is_expression{false};
+    std::string text;
+};
+
+// Split a logpoint message template into literal and `{expression}` parts.
+// `\{` produces a literal `{`; an unmatched `{` and everything after it are
+// literal.  The single parser used both to validate a logpoint when it is set
+// (CompiledBreakpointCache) and to interpolate it when it fires
+// (DebugExecutionEngine), so the two can never disagree about a template.
+[[nodiscard]] std::vector<LogTemplatePart> parse_log_template(std::string_view template_text);
 
 class CompiledBreakpointCache {
 public:

@@ -14,7 +14,7 @@ function integer compute_fibonacci_recursive(integer term_number) {
         compute_fibonacci_recursive(term_number - 1)
         + compute_fibonacci_recursive(term_number - 2)
     }
-}
+    }
 }
 
 # ─── Iterative Approach ───
@@ -40,10 +40,10 @@ function integer compute_fibonacci_iterative(integer term_number) {
 # ─── Generate a Sequence ───
 
 function array<integer> generate_fibonacci_sequence(integer count) {
-    array<integer> indices = Array.range(0, count) |> Result.unwrap()
-
-    return Array.map(indices, (integer term_number) -> compute_fibonacci_iterative(term_number))
-        ?? []
+    return Array.range(0, count)
+        |> Result.unwrap_or([])
+        |> Array.map(compute_fibonacci_iterative)
+        |> Result.unwrap_or([])
 }
 
 @main

@@ -1,162 +1,60 @@
 # CMake Presets
 
-This document describes the CMake presets defined in [`CMakePresets.json`](../CMakePresets.json). Presets bundle a generator, build type, and option choices into a single name so that common builds are a single command.
+[`CMakePresets.json`](../CMakePresets.json) bundles a generator, build type, and option choices into a single name, so a common build is three commands. This page is the one place the presets are described; to see the presets available on your machine, run `python scripts/configure.py` or `cmake --list-presets`.
 
-For the wider build workflow — manual commands, sanitizers, coverage, fuzz testing, and the full build-options reference — see [build.instructions.md](../instructions/build.instructions.md).
+For the wider build workflow — manual commands, sanitizers, coverage, fuzz testing, and the build-options reference — see [build.instructions.md](../instructions/build.instructions.md).
 
 > **Note:** The preset file uses schema version 3 and therefore requires CMake 3.21 or later.
 
-## Table of Contents
-
-1. [Configure Presets](#configure-presets)
-2. [Build Presets](#build-presets)
-3. [Test Presets](#test-presets)
-4. [Build Directories](#build-directories)
-5. [Usage Examples](#usage-examples)
-6. [When to Use Each Preset](#when-to-use-each-preset)
-7. [Related Documentation](#related-documentation)
-
-## Configure Presets
-
-A configure preset selects the generator, build type, and feature options. Platform-specific presets carry a `condition`, so they are hidden on incompatible hosts.
-
-| Preset             | Description                                                          | Platform    | Build Type     |
-| ------------------ | ------------------------------------------------------------------- | ----------- | -------------- |
-| `default`          | Standard release build for all platforms.                           | All         | Release        |
-| `debug`            | Debug build with full symbols.                                      | All         | Debug          |
-| `msvc`             | Visual Studio 17 2022 multi-config generator.                       | Windows     | Multi          |
-| `xcode`            | Xcode multi-config generator.                                       | macOS       | Multi          |
-| `sanitize`         | Debug build with AddressSanitizer and UndefinedBehaviorSanitizer.   | Linux/macOS | Debug          |
-| `relwithdebinfo`   | Optimised build that retains debug symbols for profiling.           | All         | RelWithDebInfo |
-| `coverage`         | Debug build with lcov code-coverage instrumentation.                | Linux/macOS | Debug          |
-| `lto`              | Release build with link-time optimisation.                          | All         | Release        |
-| `ninja`            | Ninja generator for fast parallel builds.                           | All         | Release        |
-| `arm64-cross`      | Cross-compile for ARM64 (`aarch64-linux-gnu`).                      | Linux       | Release        |
-| `release-no-tests` | Release build with `LUMA_BUILD_TESTS=OFF` for production deployment. | All         | Release        |
-| `windows-arm64`    | MSVC build targeting ARM64 on Windows.                              | Windows     | Release        |
-| `macos-universal`  | Xcode build producing a universal binary (x86_64 + arm64).          | macOS       | Release        |
-
-The `msvc` and `xcode` generators are multi-config: their build type is chosen at build time by the corresponding build preset (see below) rather than at configure time.
-
-### Prerequisites
-
-- `sanitize` and `coverage` require GCC or Clang and are unavailable on Windows (MSVC).
-- `arm64-cross` requires the `aarch64-linux-gnu` cross-compilation toolchain.
-- `windows-arm64` requires the MSVC ARM64 toolchain; `macos-universal` requires an Xcode toolchain able to target both `x86_64` and `arm64`.
-
-## Build Presets
-
-Each build preset references a configure preset and selects the configuration to build. Every build preset sets `jobs: 0`, which uses all available cores for parallel compilation.
-
-| Preset             | Configure Preset   | Configuration  |
-| ------------------ | ------------------ | -------------- |
-| `default`          | `default`          | Release        |
-| `debug`            | `debug`            | Debug          |
-| `msvc-release`     | `msvc`             | Release        |
-| `msvc-debug`       | `msvc`             | Debug          |
-| `xcode-release`    | `xcode`            | Release        |
-| `xcode-debug`      | `xcode`            | Debug          |
-| `sanitize`         | `sanitize`         | Debug          |
-| `relwithdebinfo`   | `relwithdebinfo`   | RelWithDebInfo |
-| `coverage`         | `coverage`         | Debug          |
-| `lto`              | `lto`              | Release        |
-| `ninja`            | `ninja`            | Release        |
-| `arm64-cross`      | `arm64-cross`      | Release        |
-| `release-no-tests` | `release-no-tests` | Release        |
-| `windows-arm64`    | `windows-arm64`    | Release        |
-| `macos-universal`  | `macos-universal`  | Release        |
-
-The multi-config configure presets (`msvc`, `xcode`) expose two build presets each — one for `Release` and one for `Debug` — because the configuration is selected here rather than at configure time.
-
-## Test Presets
-
-Each test preset runs the CTest suite for its configure preset. All test presets enable `outputOnFailure`, so output from failing tests is shown automatically.
-
-| Preset           | Configure Preset | Notes                                |
-| ---------------- | ---------------- | ------------------------------------ |
-| `default`        | `default`        | Standard release tests.              |
-| `debug`          | `debug`          | Debug tests.                         |
-| `msvc`           | `msvc`           | MSVC release tests.                  |
-| `xcode`          | `xcode`          | Xcode release tests.                 |
-| `sanitize`       | `sanitize`       | Tests under sanitizers.              |
-| `relwithdebinfo` | `relwithdebinfo` | RelWithDebInfo tests.                |
-| `coverage`       | `coverage`       | Tests with coverage instrumentation. |
-| `lto`            | `lto`            | Tests with LTO.                      |
-| `ninja`          | `ninja`          | Tests with the Ninja generator.      |
-
-The remaining presets are configure-and-build only and have no test preset: the cross-compilation and multi-architecture presets (`arm64-cross`, `windows-arm64`, `macos-universal`) produce binaries that may not run on the build host, and `release-no-tests` builds with tests disabled.
-
-## Build Directories
-
-Each preset writes to its own directory so that configurations never clash. For single-config generators the binary is placed directly in the directory; for the multi-config `msvc` and `xcode` generators it is placed in a per-configuration subdirectory (for example `build-msvc/Release/`).
-
-| Configure Preset   | Build Directory           |
-| ------------------ | ------------------------- |
-| `default`          | `build/`                  |
-| `debug`            | `build-debug/`            |
-| `msvc`             | `build-msvc/`             |
-| `xcode`            | `build-xcode/`            |
-| `sanitize`         | `build-sanitize/`         |
-| `relwithdebinfo`   | `build-relwithdebinfo/`   |
-| `coverage`         | `build-coverage/`         |
-| `lto`              | `build-lto/`              |
-| `ninja`            | `build-ninja/`            |
-| `arm64-cross`      | `build-arm64/`            |
-| `release-no-tests` | `build-release-no-tests/` |
-| `windows-arm64`    | `build-windows-arm64/`    |
-| `macos-universal`  | `build-macos-universal/`  |
-
-## Usage Examples
+## Usage
 
 ```bash
-# Configure and build with the default (Release) preset
-cmake --preset default
-cmake --build --preset default
-
-# Run tests
-ctest --preset default
-
-# Debug build with sanitizers (Linux/macOS only)
-cmake --preset sanitize
-cmake --build --preset sanitize
-ctest --preset sanitize
-
-# Release build with LTO
-cmake --preset lto
-cmake --build --preset lto
-ctest --preset lto
-
-# MSVC on Windows (multi-config: pick the configuration in the build/test step)
-cmake --preset msvc
-cmake --build --preset msvc-release
-ctest --preset msvc
-
-# Fast parallel builds with Ninja
-cmake --preset ninja
-cmake --build --preset ninja
-ctest --preset ninja
-
-# Coverage analysis (Linux/macOS only)
-cmake --preset coverage
-cmake --build --preset coverage
-ctest --preset coverage
+cmake --preset <name>           # configure
+cmake --build --preset <name>   # build
+ctest --preset <name>           # test
 ```
 
-## When to Use Each Preset
+`python scripts/configure.py <name> --build` configures and builds in one step and explains when a preset is unavailable on the current host. It runs the build preset of the same name; for `msvc` and `xcode`, which have one build preset per configuration, it runs `<name>-release` unless you pass `--config Debug` (which selects `<name>-debug`).
 
-- **`default`** — Everyday development and CI release builds.
-- **`debug`** — Step-through debugging with full symbols.
-- **`sanitize`** — Diagnosing memory errors or undefined behaviour.
-- **`coverage`** — Measuring test coverage with lcov/gcov.
-- **`lto`** — Production-quality builds with cross-module optimisation.
-- **`relwithdebinfo`** — Profiling optimised code while retaining symbols.
-- **`ninja`** — Faster incremental builds when Ninja is available.
-- **`release-no-tests`** — Minimal production build without test overhead.
-- **`msvc` / `xcode`** — IDE-native multi-config builds on Windows/macOS.
-- **`arm64-cross` / `windows-arm64` / `macos-universal`** — Cross-compilation and multi-architecture builds.
+## Presets
+
+| Preset           | Purpose                                                      | Platforms   | Build presets                  | Test preset |
+| ---------------- | ------------------------------------------------------------ | ----------- | ------------------------------ | ----------- |
+| `default`        | Release build; everyday development and CI.                  | All         | `default`                      | `default`   |
+| `debug`          | Debug build with full symbols, for step-through debugging.   | All         | `debug`                        | `debug`     |
+| `relwithdebinfo` | Optimised build that keeps debug symbols, for profiling.     | All         | `relwithdebinfo`               | Yes         |
+| `sanitize`       | Debug build with AddressSanitizer and UBSan.                 | Linux/macOS | `sanitize`                     | Yes         |
+| `coverage`       | Debug build with lcov/gcov coverage instrumentation.         | Linux/macOS | `coverage`                     | Yes         |
+| `lto`            | Release build with link-time optimisation.                   | All         | `lto`                          | Yes         |
+| `ninja`          | Release build with the Ninja generator (fast incremental).   | All         | `ninja`                        | Yes         |
+| `msvc`           | Visual Studio 17 2022 multi-config build, for the IDE.       | Windows     | `msvc-release`, `msvc-debug`   | `msvc`      |
+| `xcode`          | Xcode multi-config build, for the IDE.                       | macOS       | `xcode-release`, `xcode-debug` | `xcode`     |
+| `windows-arm64`  | Native ARM64 binaries for Windows on ARM (build only).       | Windows     | `windows-arm64`                | No          |
+
+"Yes" means the test preset has the same name as the configure preset. `windows-arm64` has no test preset because its binaries may not run on the build host.
+
+Platform-specific presets carry a `condition`, so CMake hides them on other hosts. `sanitize` and `coverage` need GCC or Clang; `windows-arm64` needs the MSVC ARM64 toolchain.
+
+There is deliberately no preset for a build without tests or for Linux ARM64: add `-DLUMA_BUILD_TESTS=OFF` to any configure command to skip the tests, and build ARM64 Linux binaries natively on an ARM64 host, as CI does (see [`build-raspberry-pi.yml`](../.github/workflows/build-raspberry-pi.yml)).
+
+## Build Directories and Binaries
+
+Each preset builds in its own directory, so configurations never clash: `default` uses `build/`, and every other preset uses `build-<name>/` (for example `build-debug/`, `build-sanitize/`, `build-msvc/`).
+
+The executables — `luma`, `luma_lsp`, `luma_dap`, and the test executables — are placed at the root of that directory on every platform and generator: `build/luma`, or `build\luma.exe` on Windows.
+
+In a multi-config tree (`msvc`, `xcode`, `windows-arm64`, any Visual Studio build, or a Ninja Multi-Config build) the root holds the tree's *primary configuration* and any other configuration built in the same tree goes to `<build>/<Config>/`. The primary configuration is the `LUMA_PRIMARY_CONFIG` cache variable. Left empty (the default), it is chosen on every configure as the first of `CMAKE_DEFAULT_BUILD_TYPE`, `CMAKE_BUILD_TYPE` (set by `default` and `debug`), and Release that the generator provides, else the first configuration it has; set it at configure time to choose another, e.g. `-DLUMA_PRIMARY_CONFIG=Debug`, or back to empty (`-DLUMA_PRIMARY_CONFIG=`) to choose automatically again.
+
+The build presets always name the configuration, so `cmake --build --preset <name>` refreshes the root. Without a preset:
+
+- **Visual Studio and Xcode** build Debug unless told otherwise, so always pass `--config`, e.g. `cmake --build build --config Release` (and `ctest -C Release`). A bare `cmake --build build` builds Debug into `<build>/Debug/` (unless Debug is the primary configuration) and leaves the binaries at the root untouched and possibly stale.
+- **Ninja Multi-Config** builds the primary configuration by default: the build sets `CMAKE_DEFAULT_BUILD_TYPE` to it unless you set that variable yourself.
+
+## Build Parallelism
+
+Every build preset sets `jobs: 0`, which is equivalent to a bare `cmake --build --parallel`: the native tool's default parallelism. That means `/m` (one project per core) for Visual Studio and Ninja's own default (about cores + 2), but an **unbounded** `make -j` for the Makefiles generator, which is the default on Linux and macOS. That can exhaust memory on large or instrumented builds. Cap it there by passing an explicit count, e.g. `cmake --build --preset default --parallel "$(nproc)"`. The preset's `jobs` value overrides `CMAKE_BUILD_PARALLEL_LEVEL`.
 
 ## Related Documentation
 
-- [build.instructions.md](../instructions/build.instructions.md) — User-facing build workflow, manual commands, and the full build-options reference.
+- [build.instructions.md](../instructions/build.instructions.md) — Build workflow, manual commands, and the full build-options reference.
 - [cmake.instructions.md](../instructions/cmake.instructions.md) — Conventions for writing `CMakeLists.txt` and preset files.
-- [`CMakePresets.json`](../CMakePresets.json) — The authoritative preset definitions described here.

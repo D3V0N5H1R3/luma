@@ -254,7 +254,7 @@ struct ResolvedSignature {
                                                   const AnalysisResult* cached) {
     ResolvedSignature sig;
 
-    if (is_qualified_name(call.qualified_name)) {
+    if (symbols::is_qualified_name(call.qualified_name)) {
         const auto func_ref = stdlib_registry.find_function(call.qualified_name);
         if (func_ref) {
             const auto& func = *func_ref;

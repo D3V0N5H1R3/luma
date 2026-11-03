@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_DIAGNOSTICS_DIAGNOSTIC_BUILDERS_HPP
+#define LUMA_DIAGNOSTICS_DIAGNOSTIC_BUILDERS_HPP
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Diagnostic Builders — Factory Functions for Common Error Patterns
@@ -168,3 +169,5 @@ namespace luma::diag_builders {
 [[nodiscard]] std::string_view auto_hint_for_code(DiagnosticCode code) noexcept;
 
 } // namespace luma::diag_builders
+
+#endif // LUMA_DIAGNOSTICS_DIAGNOSTIC_BUILDERS_HPP

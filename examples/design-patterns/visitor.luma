@@ -12,8 +12,10 @@
 
 # ─── AST for a small expression language ──────────────────
 
+# The language has integer arithmetic only, so its literals and results are
+# integers rather than numbers.
 choice Expr {
-    Literal(number value)
+    Literal(integer value)
     Add(Expr left, Expr right)
     Mul(Expr left, Expr right)
     Negate(Expr operand)
@@ -21,7 +23,7 @@ choice Expr {
 
 # ─── Visitor 1: evaluate ──────────────────────────────────
 
-function number evaluate(Expr expr) {
+function integer evaluate(Expr expr) {
     return match expr {
     case Expr.Literal(value) { value }
     case Expr.Add(left, right) { evaluate(left) + evaluate(right) }
@@ -65,7 +67,7 @@ function number depth(Expr expr) {
 
 # ─── Visitor 5: collect all literals ─────────────────────
 
-function array<number> literals(Expr expr) {
+function array<integer> literals(Expr expr) {
     return match expr {
     case Expr.Literal(value) { [value] }
     case Expr.Add(left, right) { Array.concat(literals(left), literals(right)) }
@@ -80,15 +82,9 @@ function void analyse(string label, Expr expr) {
     print("${label}")
     print("  Expression: ${pretty_print(expr)}")
     print("  Value:      ${evaluate(expr)}")
-    print("  Operations: ${count_ops(expr)}")
-    print("  Depth:      ${depth(expr)}")
-
-    array<number> lits = literals(expr)
-    array<string> lit_texts = lits
-        |> Array.map((number value) -> "${value}")
-        |> Result.unwrap_or([])
-
-    print("  Literals:   [${Array.join(lit_texts, ", ")}]")
+    print("  Operations: ${String.format_number(count_ops(expr), 0)}")
+    print("  Depth:      ${String.format_number(depth(expr), 0)}")
+    print("  Literals:   [${Array.join(literals(expr), ", ")}]")
     print("")
 }
 

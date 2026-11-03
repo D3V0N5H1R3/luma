@@ -11,6 +11,10 @@ constexpr std::string_view stale_reference = "<stale reference>";
 constexpr std::string_view immutable_variable = "<immutable variable>";
 constexpr std::string_view not_found_format = "Variable '{}' not found";
 constexpr std::string_view type_mismatch_format = "Cannot assign '{}' to variable of type '{}'";
+constexpr std::string_view frame_not_paused =
+    "Cannot set a variable: the frame is no longer paused";
+constexpr std::string_view nested_not_supported =
+    "Cannot set '{}': only variables in the Local, Closure, and Global scopes can be modified";
 } // namespace variable
 
 // Expression evaluator errors.
@@ -21,6 +25,14 @@ constexpr std::string_view invalid = "<invalid expression>";
 constexpr std::string_view error = "<evaluation error>";
 constexpr std::string_view timeout = "<timeout>";
 } // namespace expression
+
+// Breakpoint status messages shown next to a breakpoint in the editor.
+namespace breakpoint {
+constexpr std::string_view pending_launch = "Breakpoint will be verified when program launches";
+constexpr std::string_view moved_format = "Breakpoint moved to executable line {}";
+constexpr std::string_view unresolved_format =
+    "Breakpoint in '{}' could not be resolved: file not found in compiled program";
+} // namespace breakpoint
 
 // Session errors.
 namespace session {
@@ -35,6 +47,7 @@ constexpr std::string_view restart_missing_program = "Missing 'program' in resta
 constexpr std::string_view invalid_thread_id = "Invalid thread ID";
 constexpr std::string_view set_variable_missing_fields =
     "setVariable requires variablesReference, name, and value";
+constexpr std::string_view unsupported_command = "Unsupported command";
 } // namespace request
 
 } // namespace luma::dap::messages

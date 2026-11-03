@@ -118,6 +118,14 @@ ExecutionResult DebugExecutionEngine::resume_thread(int thread_id, StepMode mode
 
     {
         const auto lock = thread_mgr_.lock_state(*state);
+
+        // Only a stopped thread has a stable stack to take the step's reference
+        // depth/location from: a running VM mutates its frame vector
+        // concurrently (the same rule stackTrace and variables follow).
+        if (!state->is_paused) {
+            return ExecutionResult::error(error_messages::thread_not_paused(thread_id));
+        }
+
         state->step.mode = mode;
 
         if (state->vm != nullptr) {
@@ -128,12 +136,13 @@ ExecutionResult DebugExecutionEngine::resume_thread(int thread_id, StepMode mode
         }
 
         safe_request_pause_check(*state);
-
-        if (state->is_paused) {
-            thread_mgr_.decrement_paused_count();
-        }
-
+        thread_mgr_.decrement_paused_count();
         state->is_paused = false;
+
+        // The thread leaves its stop, so exceptionInfo must no longer report
+        // the exception it stopped on (mirrors unpause_thread_locked).
+        state->exception_message.clear();
+        state->exception_caught = false;
     }
 
     state->cv.notify_all();

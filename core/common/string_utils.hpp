@@ -1,10 +1,10 @@
 #ifndef LUMA_COMMON_STRING_UTILS_HPP
 #define LUMA_COMMON_STRING_UTILS_HPP
 
-// Prevent Windows min/max macros from interfering with std::min/std::max.
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
+// Portable header: no platform macros here.  Translation units that include
+// <windows.h> define NOMINMAX themselves (or get it from
+// common/platform_utils.hpp) so the Windows min/max macros stay out of
+// std::min/std::max.
 
 #include <algorithm>
 #include <cctype>
@@ -183,6 +183,30 @@ void strip_utf8_bom(std::string& text);
     }
 
     return pi == pattern.size();
+}
+
+// Concatenate `count` copies of `text`.  The caller validates the result size
+// against its limits first.  Builds by doubling, so the work is O(result size)
+// with O(log count) appends instead of `count` appends — and an empty `text`
+// returns immediately however large `count` is.
+[[nodiscard]] inline std::string repeat_string(std::string_view text, std::size_t count) {
+    if (text.empty() || count == 0) {
+        return {};
+    }
+
+    const std::size_t total = text.size() * count;
+    std::string result;
+    result.reserve(total);
+    result.append(text);
+
+    // Capacity is reserved up front, so appending a prefix of `result` to
+    // itself never reallocates while the source is being read.
+    while (result.size() < total) {
+        const std::size_t chunk = std::min(result.size(), total - result.size());
+        result.append(result.data(), chunk);
+    }
+
+    return result;
 }
 
 } // namespace luma

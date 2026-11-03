@@ -11,7 +11,7 @@ namespace luma::dap {
 
 FileId BreakpointSharedContext::find_file_id(std::string_view abs_path) const {
     if (source_locator == nullptr) {
-        return kFileIdNotFound;
+        return k_file_id_not_found;
     }
 
     // Tier 1: O(1) direct string match.
@@ -39,7 +39,7 @@ FileId BreakpointSharedContext::find_file_id(std::string_view abs_path) const {
         return it->second;
     }
 
-    return kFileIdNotFound;
+    return k_file_id_not_found;
 }
 
 void BreakpointSharedContext::scan_for_canonical_match(

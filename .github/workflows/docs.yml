@@ -16,10 +16,13 @@ on:
       - ".github/workflows/docs.yml"
       - ".github/prompts/**"
       - ".github/stale-path-denylist.txt"
+      - ".devcontainer/**"
+      - "**/DIRECTORY.md"
+      - "CONTRIBUTING.md"
       - "README.md"
+      - "cmake/**"
       - "documents/**"
       - "instructions/**"
-      - "language-server/DIRECTORY.md"
   pull_request:
     branches: [main]
     paths: *paths
@@ -43,17 +46,29 @@ jobs:
         with:
           persist-credentials: false
 
+      # Patterns of removed/renamed paths live in the denylist file, one per
+      # line; comment (#) and blank lines are stripped before matching. The
+      # scanned set is the tracked files under the paths: filter above (minus
+      # the workflow and the denylist themselves, which name the patterns), so
+      # the two lists must change together. A line carrying the literal marker
+      # "stale-path-ok" is exempt (see the denylist header). grep exits 1 when
+      # nothing matches; only a status above 1 is a real error.
       - name: Reject stale path references
         run: |
-          # Patterns of removed/renamed paths live in the denylist file, one
-          # per line; comment (#) and blank lines are stripped before matching.
-          if grep -vE '^[[:space:]]*(#|$)' .github/stale-path-denylist.txt \
-            | grep -R -n -E -f - \
-              README.md \
-              documents \
-              instructions \
-              language-server/DIRECTORY.md \
-              .github/prompts; then
+          patterns="${RUNNER_TEMP}/stale-path-patterns.txt"
+          hits="${RUNNER_TEMP}/stale-path-hits.txt"
+          grep -vE '^[[:space:]]*(#|$)' .github/stale-path-denylist.txt > "${patterns}"
+          mapfile -d '' files < <(git ls-files -z -- \
+            .github/prompts .devcontainer cmake documents instructions \
+            CONTRIBUTING.md README.md ':(glob)**/DIRECTORY.md' ':(exclude)external/**')
+          status=0
+          grep -n -E -f "${patterns}" -- "${files[@]}" > "${hits}" || status=$?
+          if [ "${status}" -gt 1 ]; then
+            echo "::error::grep failed with status ${status}"
+            exit "${status}"
+          fi
+          if grep -v -F 'stale-path-ok' "${hits}"; then
             echo "::error::Found stale documentation or prompt references"
             exit 1
           fi
+          echo "Scanned ${#files[@]} files; no stale path references."

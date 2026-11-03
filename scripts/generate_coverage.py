@@ -15,6 +15,7 @@ Requirements:
     - lcov and genhtml (preferred), or gcovr as a fallback.
 """
 
+import os
 import shutil
 import sys
 import webbrowser
@@ -52,8 +53,10 @@ def main() -> int:
     )
 
     # ── Build ──
+    # An explicit job count is required: a bare `--parallel` becomes unlimited
+    # `make -j` under the default Makefiles generator and can exhaust memory.
     print("\n=== Building ===\n")
-    run(["cmake", "--build", str(BUILD_DIR), "--parallel"])
+    run(["cmake", "--build", str(BUILD_DIR), "--parallel", str(os.cpu_count() or 1)])
 
     # ── Run tests ──
     print("\n=== Running tests ===\n")

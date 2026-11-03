@@ -66,6 +66,60 @@ struct SocketGuard {
     return true;
 }
 
+// Details of the LAST failed attempt of tcp_connect_any.
+struct TcpConnectFailure {
+    bool socket_failed{false}; // Creating the socket itself failed.
+    bool timed_out{false};     // The connect did not complete within the timeout.
+    int error_code{0};         // Platform-native error code (errno / WSAGetLastError()).
+};
+
+// Connect to the first reachable address in a getaddrinfo() result list, trying
+// each candidate in order (RFC 6724 ordering, as returned by the resolver) until
+// one connects.  Trying only the first entry made, e.g., "localhost" fail
+// against a server listening on 127.0.0.1 whenever the resolver listed ::1
+// first.  Each attempt gets the full `timeout_ms`.  Returns the connected,
+// blocking, non-inheritable socket (caller takes ownership), or
+// invalid_socket_handle with the last attempt's failure in `failure`.  Shared by
+// the Socket module and the HTTP connection layer.
+[[nodiscard]] inline SocketHandle tcp_connect_any(const struct addrinfo* addresses, int timeout_ms,
+                                                  TcpConnectFailure* failure = nullptr) {
+    TcpConnectFailure last{};
+
+    for (const auto* ai = addresses; ai != nullptr; ai = ai->ai_next) {
+        const SocketHandle sock =
+            platform_socket::create_socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+
+        if (sock == invalid_socket_handle) {
+            last = TcpConnectFailure{.socket_failed = true,
+                                     .timed_out = false,
+                                     .error_code = platform_socket::last_error_code()};
+
+            continue;
+        }
+
+        SocketGuard guard{sock};
+
+        bool timed_out{false};
+        int error_code{0};
+
+        if (tcp_connect_with_timeout(sock, ai->ai_addr, static_cast<int>(ai->ai_addrlen),
+                                     timeout_ms, &timed_out, &error_code)) {
+            guard.release();
+
+            return sock;
+        }
+
+        last = TcpConnectFailure{
+            .socket_failed = false, .timed_out = timed_out, .error_code = error_code};
+    }
+
+    if (failure != nullptr) {
+        *failure = last;
+    }
+
+    return invalid_socket_handle;
+}
+
 } // namespace luma
 
 #endif // LUMA_RUNTIME_STDLIB_SOCKET_IO_HPP

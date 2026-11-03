@@ -26,9 +26,9 @@ struct ExceptionBreakpointSettings {
         break_on_uncaught.store(false, std::memory_order_release);
 
         for (const auto& filter : filters) {
-            if (filter == kFilterCaught) {
+            if (filter == k_filter_caught) {
                 break_on_caught.store(true, std::memory_order_release);
-            } else if (filter == kFilterUncaught) {
+            } else if (filter == k_filter_uncaught) {
                 break_on_uncaught.store(true, std::memory_order_release);
             }
         }

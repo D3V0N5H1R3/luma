@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -276,6 +277,9 @@ struct MatchArm : MatchPattern {
     struct AlternativePattern : MatchPattern {};
 
     // ── Shared across all kinds ──
+    // First token of the arm (`case`, `success`, `failure`, `else`); absent for
+    // arms not produced by the parser.
+    std::optional<SourceLocation> location;
     std::vector<AlternativePattern> alternatives;
     ExpressionPtr guard;
     std::vector<StatementPtr> body;

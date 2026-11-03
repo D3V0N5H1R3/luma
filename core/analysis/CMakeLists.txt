@@ -1,5 +1,5 @@
 # core/analysis/CMakeLists.txt
-# Shared analysis pipeline: lexer → parser → type checker → linter → resolver.
+# Shared analysis pipeline: lexer → parser → type checker → linter.
 # Used by luma_lsp to avoid depending on the full luma_core library.
 
 set(luma_analysis_sources
@@ -39,7 +39,6 @@ set(luma_analysis_sources
     types/stdlib_type_arities.cpp
     types/generic_resolver.cpp
     source/source_manager.cpp
-    resolver/resolver.cpp
     linter/lint_rule.cpp
     linter/lint_plugin.cpp
     linter/builtin_plugins.cpp

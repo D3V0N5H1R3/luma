@@ -1,4 +1,4 @@
-# Standard library benchmarks: Math, Result, RegularExpression.
+# Standard library benchmarks: Math, Statistics, Result, RegularExpression.
 
 function BenchResult run_stdlib_benchmarks(BenchResult state) {
     mutable BenchResult st = state
@@ -21,7 +21,7 @@ function BenchResult run_stdlib_benchmarks(BenchResult state) {
     # functions, not construction of the 10-element array (10 exceeds the cheap
     # 3-5 element inline threshold the suite keeps in place elsewhere).
     array<number> stat_data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
-    st = time_it(st, "Math statistical (10 elem)", 1000, () -> {
+    st = time_it(st, "Statistics mean/median/stddev (10 elem)", 1000, () -> {
         result<number> _mean = Statistics.mean(stat_data)
         result<number> _med = Statistics.median(stat_data)
         result<number> _std = Statistics.standard_deviation(stat_data)
@@ -62,7 +62,7 @@ function BenchResult run_stdlib_benchmarks(BenchResult state) {
     # --- Result ---
 
     st = time_it(st, "Result chaining (map)", 10000, () -> {
-        result<integer> _result = Result.map_integer(success(10), (integer x) -> x * 2)
+        result<integer> _result = Result.map(success(10), (integer x) -> x * 2)
     })
 
     # --- RegularExpression ---

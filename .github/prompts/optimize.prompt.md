@@ -31,7 +31,7 @@ The cardinal rule: **an optimization preserves behaviour and is validated by mea
     python3 scripts/parse_benchmark_results.py baseline.txt -o baseline.json
     ```
 
-    On Windows the binary is `build\Release\luma.exe`. If the relevant path has no benchmark, add one first (step 4) so there is something to measure.
+    On Windows the binary is `build\luma.exe`. If the relevant path has no benchmark, add one first (step 4) so there is something to measure.
 4. **Add a benchmark if the path is unmeasured.** A hot path worth optimizing is a hot path worth guarding against regression. Follow [benchmarks/DIRECTORY.md](../../benchmarks/DIRECTORY.md): add a `bench_<topic>.luma` (or a case in an existing one), thread state through the `time_it` harness, and wire it into `suite.luma` in **both** the `include` list and `run_benchmarks()` — `scripts/check_benchmark_suite.py` fails CI if either is missing. Re-capture the baseline after adding it.
 5. **Implement the optimization incrementally.** Change as little as possible to realise the win:
     - Preserve observable behaviour exactly — same results, same errors, same exit codes.

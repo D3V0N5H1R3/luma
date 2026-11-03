@@ -40,13 +40,15 @@ Resolution order for both LSP and DAP:
 ### LSP resolution (`language_server_command`)
 
 1. **PATH lookup** — `worktree.which("luma_lsp")`.
-2. **Auto-download** — Fetch the latest GitHub release, download the platform archive via Zed API, extract to a version-prefixed directory, and verify the SHA-256 checksum against `SHA256SUMS` using the `sha2` crate.
+2. **Session cache** — a binary already downloaded in this Zed session, so later server starts make no GitHub request.
+3. **Auto-download** — Fetch the latest GitHub release, download the platform archive via Zed API, verify the SHA-256 checksum against `SHA256SUMS` using the `sha2` crate, and extract it to a version-prefixed directory (`luma_lsp-<version>/`). Older version directories are removed after a successful install.
+4. **Offline fallback** — when the latest release cannot be fetched or downloaded (no network, rate limit, asset missing from a new release), the newest previously downloaded `luma_lsp-<version>/` is used instead of failing.
 
 ### DAP resolution (`get_dap_binary`)
 
 1. **User-provided path** — `user_provided_debug_adapter_path` argument.
 2. **PATH lookup** — `worktree.which("luma_dap")`.
-3. **Auto-download** — Same as LSP.
+3. **Session cache, auto-download, offline fallback** — Same as LSP.
 
 **Key difference:** Zed checks PATH *first*, then falls back to auto-download. VS Code checks user config first. Zed does not support a settings-based path override for LSP (only DAP has `user_provided_debug_adapter_path`).
 
@@ -55,16 +57,18 @@ Resolution order for both LSP and DAP:
 | Step | VS Code | Zed LSP | Zed DAP |
 |------|---------|---------|---------|
 | 1 | User setting | PATH lookup | User-provided path |
-| 2 | Bundled binary | Auto-download | PATH lookup |
-| 3 | Auto-download | — | Auto-download |
-| 4 | PATH fallback | — | — |
+| 2 | Bundled binary | Session cache | PATH lookup |
+| 3 | Auto-download | Auto-download | Session cache |
+| 4 | PATH fallback | Newest cached download (offline) | Auto-download |
+| 5 | — | — | Newest cached download (offline) |
 
 ## Checksum Verification
 
 | Extension | SHA-256 Verification |
 |-----------|---------------------|
 | VS Code | ✅ Yes — `SHA256SUMS` from release, `crypto.createHash('sha256')` |
-| Zed | ✅ Yes — `SHA256SUMS` from release, `sha2` crate (pure Rust, runs in WASM). Hard-fails on mismatch; verification is skipped (non-fatal) only when `SHA256SUMS` is missing or unreadable. |
+| Zed | ✅ Yes — `SHA256SUMS` from release, `sha2` crate (pure Rust, runs in WASM). Hard-fails on a mismatch, a missing entry, or a manifest that cannot be downloaded or read; verification is skipped (non-fatal) only when the release publishes no `SHA256SUMS` asset at all. |
+| Zed fetch scripts (`scripts/download_binaries.sh`, `scripts/Download-Binaries.ps1`) | ✅ Yes — refuse to extract unless the archive matches its `SHA256SUMS` entry. |
 
 ## Related Files
 

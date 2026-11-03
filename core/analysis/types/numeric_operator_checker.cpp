@@ -45,6 +45,26 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
 
     // Postfix ? — error/none propagation on result and optional types.
     if (expr.op == TokenType::QuestionMark) {
+        // An expression-bodied lambda's type is inferred from its body, which
+        // the '?' unwraps — yet on failure (or none) the lambda returns that
+        // wrapper itself.  The inferred `function(...) -> T` would then lie
+        // about what callers receive, so reject the '?' outright.
+        if (tc_.context().in_inferred_expression_lambda) {
+            tc_.error("error propagation '?' cannot be used in an expression-bodied lambda: "
+                      "the lambda would return the failure (or none) itself, not a value of "
+                      "the type inferred from its body",
+                      expr.location,
+                      "handle the value inside the lambda with '??' or 'match', or use a block "
+                      "body with explicit returns, e.g. (string s) -> { return ... }");
+            if (!operand_type.inner_types.empty() &&
+                (operand_type.kind == TypeInfo::Kind::Result ||
+                 operand_type.kind == TypeInfo::Kind::Optional)) {
+                return operand_type.inner_types[0];
+            }
+
+            return TypeInfo::make(TypeInfo::Kind::StdlibAny);
+        }
+
         // '?' requires the enclosing function to return result<T> or optional<T>,
         // or to be inside @main (where a propagated failure prints the error and
         // exits). A StdlibAny return context is an unconstrained lambda whose
@@ -60,6 +80,9 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
                       "change the function return type to 'result<T>' or 'optional<T>' to use '?'");
             return TypeInfo::make(TypeInfo::Kind::StdlibAny);
         }
+
+        // A propagated failure/none is a value the enclosing body returns.
+        tc_.context().has_value_return = true;
 
         // The operand's wrapper kind must also match the enclosing function's
         // return wrapper: propagating a 'none' out of a result-returning
@@ -84,6 +107,25 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
         }
 
         if (operand_type.kind == TypeInfo::Kind::Result) {
+            // A propagated failure leaves through the enclosing function, so
+            // its error type must fit the declared one (Manual §14, typed
+            // errors): a 'string' error must not escape as a 'MathError'.
+            if (!ctx.is_in_main && ctx.current_return_type &&
+                ctx.current_return_type->kind == TypeInfo::Kind::Result &&
+                ctx.current_return_type->inner_types.size() >= 2 &&
+                operand_type.inner_types.size() >= 2 &&
+                !tc_.is_assignable(ctx.current_return_type->result_error_type(),
+                                   operand_type.result_error_type())) {
+                tc_.error(std::format("error propagation '?' cannot propagate an error of type "
+                                      "'{}' out of a function whose error type is '{}'",
+                                      operand_type.result_error_type().to_string(),
+                                      ctx.current_return_type->result_error_type().to_string()),
+                          expr.location,
+                          "convert the error first (e.g. with match), or change the function's "
+                          "error type",
+                          DiagnosticCode::TypeMismatch);
+            }
+
             if (!operand_type.inner_types.empty()) {
                 return operand_type.result_value_type();
             }

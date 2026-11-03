@@ -20,23 +20,6 @@ namespace luma {
 
 namespace {
 
-// Ensures a Dictionary operation will not exceed ResourceLimits::max_dictionary_size.
-// Call BEFORE the operation that grows the dictionary.  Centralises the size guard so
-// every Dictionary site emits the same "Module.function: result exceeds maximum
-// dictionary size" message and entry-count hint instead of drifting apart.
-void ensure_dictionary_capacity(std::size_t current_size, std::size_t adding,
-                                std::string_view function_name, const SourceLocation& loc) {
-    // Overflow-safe comparison (mirrors validate_container_size): rearranged so that
-    // current_size + adding cannot wrap past size_t max.
-    if (adding > ResourceLimits::max_dictionary_size ||
-        current_size > ResourceLimits::max_dictionary_size - adding) {
-        throw RuntimeError{std::format("{}: result exceeds maximum dictionary size", function_name),
-                           loc,
-                           std::format("the maximum dictionary size is {} entries",
-                                       ResourceLimits::max_dictionary_size)};
-    }
-}
-
 // Encapsulates the recursive state (visited-set, source location) for
 // deep-merging two dictionaries so that the recursive call signature
 // stays small and the caller does not need to manage transient state.

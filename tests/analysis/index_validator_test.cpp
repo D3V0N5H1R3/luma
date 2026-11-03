@@ -7,7 +7,11 @@
 #include "common/index_validator.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::compute_slice_range;
+using luma::is_index_out_of_bounds;
+using luma::normalize_index;
+using luma::RangeEnd;
+using luma::validate_index;
 
 // ═══════════════════════════════════════════════════════════
 // is_index_out_of_bounds / validate_index

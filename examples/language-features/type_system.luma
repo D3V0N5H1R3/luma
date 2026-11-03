@@ -100,13 +100,16 @@ function void main() {
     result<Pet> cast_fail = downcast<Pet>(named)
 
     match cast_ok {
-        success(v) { print("downcast<Person>(named) = success(${v.name}, age ${v.age})") }
+        success(v) {
+            string age = String.format_number(v.age, 0)
+            print("downcast<Person>(named) = success(${v.name}, age ${age})")
+        }
         failure(_msg) { print("downcast<Person>(named) = failure") }
     }
 
     match cast_fail {
         success(v) { print("downcast<Pet>(named) = success(${v.name})") }
-        failure(_msg) { print("downcast<Pet>(named) = fail") }
+        failure(_msg) { print("downcast<Pet>(named) = failure") }
     }
 
     # trusted_downcast — for when you're certain of the type

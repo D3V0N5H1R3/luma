@@ -4,10 +4,13 @@
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
 #
-# NOTE: These tests only cover URL utility functions.
-# Actual HTTP requests are not tested to avoid network
-# dependencies.
+# NOTE: No test needs network access. Request functions are only exercised
+# on failure paths that are decided locally — URL/CRLF validation or the
+# SSRF guard rejecting loopback and private addresses — before any
+# connection is attempted.
 # ═══════════════════════════════════════════════════════════
+
+# ─── URL and query-string utilities ───
 
 @test
 function void test_http_parse_url() {
@@ -48,8 +51,8 @@ function void test_http_parse_query() {
 function void test_http_build_parse_roundtrip() {
     dictionary<string> original = {"name": "alice", "age": "30"}
     dictionary<string> roundtripped = original
-    |> Http.build_query()
-    |> Http.parse_query()
+        |> Http.build_query()
+        |> Http.parse_query()
 
     assert(roundtripped["name"] == "alice")
     assert(roundtripped["age"] == "30")
@@ -64,101 +67,112 @@ function void test_http_build_parse_roundtrip() {
 
 @test
 function void test_http_https_loopback_blocked() {
-    result<Http.Response> r = Http.get("https://127.0.0.1/admin")
+    result<Http.Response> response = Http.get("https://127.0.0.1/admin")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_https_empty_host_fails() {
-    result<Http.Response> r = Http.get("https://")
+    result<Http.Response> response = Http.get("https://")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_https_crlf_injection_fails() {
-    result<Http.Response> r = Http.get("https://example.com/a\r\nX-Injected: 1")
+    result<Http.Response> response = Http.get("https://example.com/a\r\nX-Injected: 1")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 # ─── HTTP request methods (error cases only) ─────────────────────────────────
-# NOTE: No live network calls — all tests use unreachable/invalid URLs.
+# NOTE: No live network calls — localhost is rejected by the SSRF guard, so
+# every request below fails before a connection is attempted.
 
 @test
 function void test_http_post_fails() {
-    result<Http.Response> r = Http.post("http://localhost:1", "body")
+    result<Http.Response> response = Http.post("http://localhost:1", "body")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_put_fails() {
-    result<Http.Response> r = Http.put("http://localhost:1", "body")
+    result<Http.Response> response = Http.put("http://localhost:1", "body")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_delete_fails() {
-    result<Http.Response> r = Http.delete("http://localhost:1")
+    result<Http.Response> response = Http.delete("http://localhost:1")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_patch_fails() {
-    result<Http.Response> r = Http.patch("http://localhost:1", "body")
+    result<Http.Response> response = Http.patch("http://localhost:1", "body")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_head_fails() {
-    result<Http.Response> r = Http.head("http://localhost:1")
+    result<Http.Response> response = Http.head("http://localhost:1")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_get_with_fails() {
     dictionary<string> headers = {"Accept": "application/json"}
 
-    result<Http.Response> r = Http.get_with("http://localhost:1", headers)
+    result<Http.Response> response = Http.get_with("http://localhost:1", headers)
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_post_with_fails() {
     dictionary<string> headers = {"Content-Type": "text/plain"}
 
-    result<Http.Response> r = Http.post_with("http://localhost:1", "body", headers)
+    result<Http.Response> response = Http.post_with("http://localhost:1", "body", headers)
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
+}
+
+@test
+function void test_http_put_patch_delete_with_fail() {
+    dictionary<string> headers = {"X-Test": "1"}
+
+    assert(!Result.is_success(Http.put_with("http://localhost:1", "body", headers)))
+    assert(!Result.is_success(Http.patch_with("http://localhost:1", "body", headers)))
+    assert(!Result.is_success(Http.delete_with("http://localhost:1", headers)))
 }
 
 @test
 function void test_http_request_fails() {
     dictionary<string> headers = {}
 
-    result<Http.Response> r =
+    result<Http.Response> response =
         Http.request({"method": "GET", "url": "http://localhost:1", "body": ""}, headers)
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_download_fails() {
-    result<string> r = Http.download("http://localhost:1", "test_download.bin")
+    string path = "_http_test_download.bin"
 
-    assert(!Result.is_success(r))
+    result<string> downloaded = Http.download("http://localhost:1", path)
+
+    assert(!Result.is_success(downloaded))
+    assert(!Result.unwrap(FileSystem.exists(path)), "a failed download leaves no file behind")
 }
 
-# ───────────────────────────────────────────────────────────
-# basic_auth, bearer_auth (pure header builders)
-# ───────────────────────────────────────────────────────────
+# ─── basic_auth, bearer_auth (pure header builders) ───
 
 @test
 function void test_http_basic_auth() {
@@ -170,9 +184,7 @@ function void test_http_bearer_auth() {
     assert(Http.bearer_auth("tok") == "Bearer tok")
 }
 
-# ───────────────────────────────────────────────────────────
-# Additional URL parsing (positive)
-# ───────────────────────────────────────────────────────────
+# ─── Additional URL parsing (positive) ───
 
 @test
 function void test_http_parse_url_https_default_port() {
@@ -210,9 +222,7 @@ function void test_http_parse_url_no_path() {
     assert(parts.host == "example.com")
 }
 
-# ───────────────────────────────────────────────────────────
-# Additional query string (positive)
-# ───────────────────────────────────────────────────────────
+# ─── Additional query string (positive) ───
 
 @test
 function void test_http_build_query_encodes_reserved() {
@@ -235,81 +245,77 @@ function void test_http_parse_query_decodes_and_empty_value() {
     assert(params["x"] == "1")
 }
 
-# ───────────────────────────────────────────────────────────
-# Request validation (negative) — deterministic, no network.
+# ─── Request validation (negative) — deterministic, no network ───
 # These fail during validation/address resolution before any
 # connection is attempted, so they do not depend on network access.
-# ───────────────────────────────────────────────────────────
 
 @test
 function void test_http_unsupported_scheme_fails() {
-    result<Http.Response> r = Http.get("ftp://example.com/file")
+    result<Http.Response> response = Http.get("ftp://example.com/file")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_empty_host_fails() {
-    result<Http.Response> r = Http.get("http://")
+    result<Http.Response> response = Http.get("http://")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_crlf_path_injection_fails() {
-    result<Http.Response> r = Http.get("http://example.com/a\r\nX-Injected: 1")
+    result<Http.Response> response = Http.get("http://example.com/a\r\nX-Injected: 1")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_crlf_header_injection_fails() {
     dictionary<string> headers = {"X-Test": "v\r\nInjected: 1"}
 
-    result<Http.Response> r = Http.get_with("http://example.com", headers)
+    result<Http.Response> response = Http.get_with("http://example.com", headers)
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_ssrf_loopback_fails() {
-    result<Http.Response> r = Http.get("http://127.0.0.1/admin")
+    result<Http.Response> response = Http.get("http://127.0.0.1/admin")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_ssrf_private_range_fails() {
-    result<Http.Response> r1 = Http.get("http://10.0.0.1/")
-    result<Http.Response> r2 = Http.get("http://192.168.1.1/")
+    result<Http.Response> ten_net_response = Http.get("http://10.0.0.1/")
+    result<Http.Response> home_net_response = Http.get("http://192.168.1.1/")
 
-    assert(!Result.is_success(r1))
-    assert(!Result.is_success(r2))
+    assert(!Result.is_success(ten_net_response))
+    assert(!Result.is_success(home_net_response))
 }
 
 @test
 function void test_http_request_missing_url_fails() {
-    result<Http.Response> r = Http.request({"method": "GET"}, {})
+    result<Http.Response> response = Http.request({"method": "GET"}, {})
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
-# ═══════════════════════════════════════════════════════════
-# Method choice type (type-safe HTTP verbs)
-# ═══════════════════════════════════════════════════════════
+# ─── Method choice type (type-safe HTTP verbs) ───
 
 # An exhaustive match over every Http.Method variant. With no else branch it
 # only type-checks if the choice declares exactly these seven variants, so it
 # doubles as a check that Http.Method is fully registered and annotatable.
 function string method_label(Http.Method method) {
     return match method {
-    case Http.Method.Get     { "GET" }
-    case Http.Method.Post    { "POST" }
-    case Http.Method.Put     { "PUT" }
-    case Http.Method.Patch   { "PATCH" }
-    case Http.Method.Delete  { "DELETE" }
-    case Http.Method.Head    { "HEAD" }
-    case Http.Method.Options { "OPTIONS" }
+        case Http.Method.Get     { "GET" }
+        case Http.Method.Post    { "POST" }
+        case Http.Method.Put     { "PUT" }
+        case Http.Method.Patch   { "PATCH" }
+        case Http.Method.Delete  { "DELETE" }
+        case Http.Method.Head    { "HEAD" }
+        case Http.Method.Options { "OPTIONS" }
     }
 }
 
@@ -325,9 +331,9 @@ function void test_http_method_is_exhaustive() {
     assert(method_label(Http.Method.Options) == "OPTIONS")
 
     # Variants compare by identity, and the type annotates a local.
-    Http.Method m = Http.Method.Post
-    assert(m == Http.Method.Post)
-    assert(m != Http.Method.Get)
+    Http.Method method = Http.Method.Post
+    assert(method == Http.Method.Post)
+    assert(method != Http.Method.Get)
 }
 
 @test
@@ -347,8 +353,8 @@ function void test_http_method_to_string() {
 # a check that Http.Auth is fully registered, annotatable, and destructurable.
 function string auth_scheme(Http.Auth auth) {
     return match auth {
-    case Http.Auth.Basic(_user, _pass) { "basic" }
-    case Http.Auth.Bearer(_token)      { "bearer" }
+        case Http.Auth.Basic(_user, _pass) { "basic" }
+        case Http.Auth.Bearer(_token)      { "bearer" }
     }
 }
 
@@ -359,11 +365,12 @@ function void test_http_auth_is_exhaustive() {
     assert(auth_scheme(Http.Auth.Bearer("tok")) == "bearer")
 
     # The type annotates a local and carries its payload.
-    Http.Auth a = Http.Auth.Bearer("secret")
-    string scheme = match a {
-    case Http.Auth.Basic(_u, _p) { "basic" }
-    case Http.Auth.Bearer(token) { token }
+    Http.Auth credentials = Http.Auth.Bearer("secret")
+    string scheme = match credentials {
+        case Http.Auth.Basic(_user, _password) { "basic" }
+        case Http.Auth.Bearer(token)           { token }
     }
+
     assert(scheme == "secret")
 }
 
@@ -383,8 +390,9 @@ function void test_http_authorization_header() {
 function void test_http_request_with_method_choice() {
     # Http.method_to_string lets a program pick the verb type-safely and feed it
     # to the generic Http.request path. The options dictionary stays all-string,
-    # so it type-checks; the request fails deterministically (unreachable host).
-    result<Http.Response> r = Http.request(
+    # so it type-checks; the request fails deterministically (localhost is
+    # SSRF-blocked).
+    result<Http.Response> response = Http.request(
         {
             "method": Http.method_to_string(Http.Method.Post),
             "url": "http://localhost:1",
@@ -392,51 +400,49 @@ function void test_http_request_with_method_choice() {
         },
         {})
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
-# ═══════════════════════════════════════════════════════════
-# Http.Request record + Http.send (typed request)
-# ═══════════════════════════════════════════════════════════
+# ─── Http.Request record + Http.send (typed request) ───
 
 @test
 function void test_http_request_of_builds_typed_record() {
     # Http.request_of carries the Http.Method choice natively (no stringifying),
     # with default headers, empty body, and the default timeout.
-    Http.Request req = Http.request_of(Http.Method.Get, "http://example.com/api")
+    Http.Request request = Http.request_of(Http.Method.Get, "http://example.com/api")
 
-    assert(req.method == Http.Method.Get)
-    assert(req.url == "http://example.com/api")
-    assert(req.body == "")
-    assert(req.timeout_ms == 30000)
+    assert(request.method == Http.Method.Get)
+    assert(request.url == "http://example.com/api")
+    assert(request.body == "")
+    assert(request.timeout_ms == 30000)
 }
 
 @test
 function void test_http_request_with_builds_full_record() {
     # Http.request_with captures every field of the request.
     dictionary<string> headers = {"X-Test": "1"}
-    Http.Request req =
+    Http.Request request =
         Http.request_with(Http.Method.Post, "http://example.com", headers, "payload", 5000)
 
-    assert(req.method == Http.Method.Post)
-    assert(req.url == "http://example.com")
-    assert(req.headers["X-Test"] == "1")
-    assert(req.body == "payload")
-    assert(req.timeout_ms == 5000)
+    assert(request.method == Http.Method.Post)
+    assert(request.url == "http://example.com")
+    assert(request.headers["X-Test"] == "1")
+    assert(request.body == "payload")
+    assert(request.timeout_ms == 5000)
 }
 
 # The request's method field is a real Http.Method choice, so an exhaustive match
 # over it type-checks only if every variant is covered — proving the choice is
 # carried natively rather than stringified.
-function string request_verb(Http.Request req) {
-    return match req.method {
-    case Http.Method.Get     { "GET" }
-    case Http.Method.Post    { "POST" }
-    case Http.Method.Put     { "PUT" }
-    case Http.Method.Patch   { "PATCH" }
-    case Http.Method.Delete  { "DELETE" }
-    case Http.Method.Head    { "HEAD" }
-    case Http.Method.Options { "OPTIONS" }
+function string request_verb(Http.Request request) {
+    return match request.method {
+        case Http.Method.Get     { "GET" }
+        case Http.Method.Post    { "POST" }
+        case Http.Method.Put     { "PUT" }
+        case Http.Method.Patch   { "PATCH" }
+        case Http.Method.Delete  { "DELETE" }
+        case Http.Method.Head    { "HEAD" }
+        case Http.Method.Options { "OPTIONS" }
     }
 }
 
@@ -450,40 +456,41 @@ function void test_http_request_method_is_matchable() {
 function void test_http_send_reaches_pipeline() {
     # Http.send reads the method choice back to a verb and drives the request
     # pipeline; the SSRF guard blocks loopback deterministically (no network).
-    Http.Request req = Http.request_of(Http.Method.Get, "http://127.0.0.1/admin")
-    result<Http.Response> r = Http.send(req)
+    Http.Request request = Http.request_of(Http.Method.Get, "http://127.0.0.1/admin")
+    result<Http.Response> response = Http.send(request)
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 @test
 function void test_http_send_empty_url_fails() {
-    Http.Request req = Http.request_of(Http.Method.Get, "")
-    result<Http.Response> r = Http.send(req)
+    Http.Request request = Http.request_of(Http.Method.Get, "")
+    result<Http.Response> response = Http.send(request)
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(response))
 }
 
 # ─── Http.StatusClass (Http.status_class / Http.is_success) ───
 
 # Exhaustive match over every StatusClass variant, doubling as a registration
 # and exhaustiveness check for the choice.
-function string status_class_label(Http.StatusClass c) {
-    return match c {
-    case Http.StatusClass.Informational { "informational" }
-    case Http.StatusClass.Success       { "success" }
-    case Http.StatusClass.Redirection   { "redirection" }
-    case Http.StatusClass.ClientError   { "client_error" }
-    case Http.StatusClass.ServerError   { "server_error" }
+function string status_class_label(Http.StatusClass family) {
+    return match family {
+        case Http.StatusClass.Informational { "informational" }
+        case Http.StatusClass.Success       { "success" }
+        case Http.StatusClass.Redirection   { "redirection" }
+        case Http.StatusClass.ClientError   { "client_error" }
+        case Http.StatusClass.ServerError   { "server_error" }
     }
 }
 
 @test
 function void test_http_status_class_families() {
-    # Each family boundary classifies into its RFC 9110 StatusClass.
-    result<Http.StatusClass> info = Http.status_class(100)
-    assert(Result.is_success(info))
-    assert(Result.unwrap(info) == Http.StatusClass.Informational)
+    # A code from each family classifies into its RFC 9110 StatusClass.
+    result<Http.StatusClass> informational = Http.status_class(100)
+
+    assert(Result.is_success(informational))
+    assert(Result.unwrap(informational) == Http.StatusClass.Informational)
 
     assert(Result.unwrap(Http.status_class(200)) == Http.StatusClass.Success)
     assert(Result.unwrap(Http.status_class(301)) == Http.StatusClass.Redirection)
@@ -523,38 +530,36 @@ function void test_http_is_success() {
 
 @test
 function void test_http_parse_cookie() {
-    result<Http.Cookie> r =
+    result<Http.Cookie> parsed =
         Http.parse_cookie("session=abc123; Domain=example.com; Path=/; Secure; HttpOnly")
-    Http.Cookie c = Result.unwrap(r)
+    Http.Cookie cookie = Result.unwrap(parsed)
 
-    assert(c.name == "session", "cookie name is parsed")
-    assert(c.value == "abc123", "cookie value is parsed")
-    assert(c.domain == "example.com", "domain attribute is parsed")
-    assert(c.path == "/", "path attribute is parsed")
-    assert(c.secure, "Secure flag is set")
-    assert(c.http_only, "HttpOnly flag is set")
+    assert(cookie.name == "session", "cookie name is parsed")
+    assert(cookie.value == "abc123", "cookie value is parsed")
+    assert(cookie.domain == "example.com", "domain attribute is parsed")
+    assert(cookie.path == "/", "path attribute is parsed")
+    assert(cookie.secure, "Secure flag is set")
+    assert(cookie.http_only, "HttpOnly flag is set")
 }
 
 @test
 function void test_http_parse_cookie_empty_name_fails() {
-    result<Http.Cookie> r = Http.parse_cookie("=value")
+    result<Http.Cookie> parsed = Http.parse_cookie("=value")
 
-    assert(Result.is_failure(r), "an empty cookie name is rejected")
+    assert(Result.is_failure(parsed), "an empty cookie name is rejected")
 }
 
 @test
 function void test_http_cookie_header_roundtrip() {
-    Http.Cookie c = Result.unwrap(Http.parse_cookie("id=42; Domain=example.com; Secure"))
-    string header = Http.cookie_header(c)
+    Http.Cookie cookie = Result.unwrap(Http.parse_cookie("id=42; Domain=example.com; Secure"))
+    string header = Http.cookie_header(cookie)
 
     assert(String.contains(header, "id=42"), "name/value round-trips")
     assert(String.contains(header, "Domain=example.com"), "domain round-trips")
     assert(String.contains(header, "Secure"), "Secure flag round-trips")
 }
 
-# ═══════════════════════════════════════════════════════════
-# Http.Error (opt-in typed transport errors via get_typed)
-# ═══════════════════════════════════════════════════════════
+# ─── Http.Error (opt-in typed transport errors via get_typed) ───
 
 # Exhaustive match over every Http.Error variant. Beyond labelling a category,
 # this doubles as a check that Http.Error is fully registered, exhaustively
@@ -574,8 +579,8 @@ function string http_error_label(Http.Error e) {
 # Classify a get_typed result into a label, so the tests can assert the exact
 # transport-error category without touching the network (every case below fails
 # during validation or the SSRF guard, before any socket I/O).
-function string get_typed_label(result<Http.Response, Http.Error> r) {
-    return match r {
+function string get_typed_label(result<Http.Response, Http.Error> outcome) {
+    return match outcome {
         success(_resp) { "unexpected_success" }
         failure(e)     { http_error_label(e) }
     }
@@ -583,83 +588,85 @@ function string get_typed_label(result<Http.Response, Http.Error> r) {
 
 @test
 function void test_http_get_typed_unsupported_scheme_is_invalid_url() {
-    result<Http.Response, Http.Error> r = Http.get_typed("ftp://example.com/file")
+    result<Http.Response, Http.Error> response = Http.get_typed("ftp://example.com/file")
 
-    assert(Result.is_failure(r), "an unsupported scheme fails")
-    assert(get_typed_label(r) == "invalid_url", "ftp:// classifies as InvalidUrl")
+    assert(Result.is_failure(response), "an unsupported scheme fails")
+    assert(get_typed_label(response) == "invalid_url", "ftp:// classifies as InvalidUrl")
 }
 
 @test
 function void test_http_get_typed_empty_host_is_invalid_url() {
-    result<Http.Response, Http.Error> r = Http.get_typed("http://")
+    result<Http.Response, Http.Error> response = Http.get_typed("http://")
 
-    assert(Result.is_failure(r), "an empty host fails")
-    assert(get_typed_label(r) == "invalid_url", "an empty host classifies as InvalidUrl")
+    assert(Result.is_failure(response), "an empty host fails")
+    assert(get_typed_label(response) == "invalid_url", "an empty host classifies as InvalidUrl")
 }
 
 @test
 function void test_http_get_typed_crlf_injection_is_blocked() {
-    result<Http.Response, Http.Error> r = Http.get_typed("http://example.com/a\r\nX-Injected: 1")
+    result<Http.Response, Http.Error> response =
+        Http.get_typed("http://example.com/a\r\nX-Injected: 1")
 
-    assert(Result.is_failure(r), "a CRLF-injected target fails")
-    assert(get_typed_label(r) == "blocked", "CRLF injection classifies as Blocked")
+    assert(Result.is_failure(response), "a CRLF-injected target fails")
+    assert(get_typed_label(response) == "blocked", "CRLF injection classifies as Blocked")
 }
 
 @test
 function void test_http_get_typed_ssrf_loopback_is_blocked() {
-    result<Http.Response, Http.Error> r = Http.get_typed("http://127.0.0.1/admin")
+    result<Http.Response, Http.Error> response = Http.get_typed("http://127.0.0.1/admin")
 
-    assert(Result.is_failure(r), "an SSRF loopback target fails")
-    assert(get_typed_label(r) == "blocked", "a loopback address classifies as Blocked")
+    assert(Result.is_failure(response), "an SSRF loopback target fails")
+    assert(get_typed_label(response) == "blocked", "a loopback address classifies as Blocked")
 }
 
 @test
 function void test_http_get_typed_ssrf_private_range_is_blocked() {
-    result<Http.Response, Http.Error> r1 = Http.get_typed("http://10.0.0.1/")
-    result<Http.Response, Http.Error> r2 = Http.get_typed("http://192.168.1.1/")
+    result<Http.Response, Http.Error> ten_net_response = Http.get_typed("http://10.0.0.1/")
+    result<Http.Response, Http.Error> home_net_response = Http.get_typed("http://192.168.1.1/")
 
-    assert(get_typed_label(r1) == "blocked", "a 10.0.0.0/8 address classifies as Blocked")
-    assert(get_typed_label(r2) == "blocked", "a 192.168.0.0/16 address classifies as Blocked")
+    assert(get_typed_label(ten_net_response) == "blocked",
+        "a 10.0.0.0/8 address classifies as Blocked")
+    assert(get_typed_label(home_net_response) == "blocked",
+        "a 192.168.0.0/16 address classifies as Blocked")
 }
 
-# ═══════════════════════════════════════════════════════════
-# Http.MediaType (parsed Content-Type via Http.parse_media_type)
-# ═══════════════════════════════════════════════════════════
+# ─── Http.MediaType (parsed Content-Type via Http.parse_media_type) ───
 
 @test
 function void test_http_parse_media_type_basic() {
-    Http.MediaType mt = Result.unwrap(Http.parse_media_type("text/html; charset=utf-8"))
+    Http.MediaType media_type = Result.unwrap(Http.parse_media_type("text/html; charset=utf-8"))
 
-    assert(mt.type == "text", "the type half is parsed")
-    assert(mt.subtype == "html", "the subtype half is parsed")
-    assert(Dictionary.get_or(mt.parameters, "charset", "?") == "utf-8",
+    assert(media_type.type == "text", "the type half is parsed")
+    assert(media_type.subtype == "html", "the subtype half is parsed")
+    assert(Dictionary.get_or(media_type.parameters, "charset", "?") == "utf-8",
         "the charset parameter is read")
 }
 
 @test
 function void test_http_parse_media_type_lowercases_essence() {
-    Http.MediaType mt = Result.unwrap(Http.parse_media_type("Application/JSON; Charset=UTF-8"))
+    Http.MediaType media_type =
+        Result.unwrap(Http.parse_media_type("Application/JSON; Charset=UTF-8"))
 
-    assert(mt.type == "application", "the type is lower-cased (RFC 9110 case-insensitive)")
-    assert(mt.subtype == "json", "the subtype is lower-cased")
-    assert(Dictionary.get_or(mt.parameters, "charset", "?") == "UTF-8",
-           "the parameter key is lower-cased but the value keeps its case")
+    assert(media_type.type == "application", "the type is lower-cased (RFC 9110 case-insensitive)")
+    assert(media_type.subtype == "json", "the subtype is lower-cased")
+    assert(Dictionary.get_or(media_type.parameters, "charset", "?") == "UTF-8",
+        "the parameter key is lower-cased but the value keeps its case")
 }
 
 @test
 function void test_http_parse_media_type_no_parameters() {
-    Http.MediaType mt = Result.unwrap(Http.parse_media_type("image/png"))
+    Http.MediaType media_type = Result.unwrap(Http.parse_media_type("image/png"))
 
-    assert(mt.type == "image", "the type is parsed")
-    assert(mt.subtype == "png", "the subtype is parsed")
-    assert(Dictionary.is_empty(mt.parameters), "there are no parameters")
+    assert(media_type.type == "image", "the type is parsed")
+    assert(media_type.subtype == "png", "the subtype is parsed")
+    assert(Dictionary.is_empty(media_type.parameters), "there are no parameters")
 }
 
 @test
 function void test_http_parse_media_type_malformed_fails() {
-    result<Http.MediaType> r = Http.parse_media_type("not-a-media-type")
+    result<Http.MediaType> parsed = Http.parse_media_type("not-a-media-type")
 
-    assert(Result.is_failure(r), "a value without a type/subtype slash fails")
+    assert(Result.is_failure(parsed), "a value without a type/subtype slash fails")
 }
 
 # ─── Http.status_text, status constants, and build_url ───────────────────
@@ -678,10 +685,34 @@ function void test_http_status_text_and_constants() {
 }
 
 @test
-function void test_http_build_url_roundtrip() {
-    Http.UrlParts p = Http.parse_url("https://example.com:8443/a/b?q=1")
-    assert(Http.build_url(p) == "https://example.com:8443/a/b?q=1", "round-trips a full URL")
+function void test_http_status_constants_cover_common_codes() {
+    assert(Http.status_created == 201)
+    assert(Http.status_accepted == 202)
+    assert(Http.status_no_content == 204)
+    assert(Http.status_moved_permanently == 301)
+    assert(Http.status_found == 302)
+    assert(Http.status_not_modified == 304)
+    assert(Http.status_bad_request == 400)
+    assert(Http.status_unauthorized == 401)
+    assert(Http.status_forbidden == 403)
+    assert(Http.status_method_not_allowed == 405)
+    assert(Http.status_conflict == 409)
+    assert(Http.status_server_error == 500)
+    assert(Http.status_not_implemented == 501)
+    assert(Http.status_bad_gateway == 502)
+    assert(Http.status_service_unavailable == 503)
+    assert(Http.status_gateway_timeout == 504)
+}
 
-    Http.UrlParts d = Http.parse_url("http://example.com/path")
-    assert(Http.build_url(d) == "http://example.com/path", "default port is omitted")
+@test
+function void test_http_build_url_roundtrip() {
+    Http.UrlParts full_parts = Http.parse_url("https://example.com:8443/a/b?q=1")
+
+    assert(Http.build_url(full_parts) == "https://example.com:8443/a/b?q=1",
+        "round-trips a full URL")
+
+    Http.UrlParts default_port_parts = Http.parse_url("http://example.com/path")
+
+    assert(Http.build_url(default_port_parts) == "http://example.com/path",
+        "default port is omitted")
 }

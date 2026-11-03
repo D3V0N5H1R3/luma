@@ -1,12 +1,18 @@
 // Standard library tests: Random.
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <vector>
+#include <string_view>
+#include <utility>
 
 #include "runtime/stdlib/system/random_bounded.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::test::eval;
 
 namespace {
 
@@ -22,6 +28,14 @@ constexpr std::uint64_t u64_max = std::numeric_limits<std::uint64_t>::max();
     const auto v = eval("Random.secure_boolean()");
 
     return luma::test::is_success_result(v);
+}
+
+// Whether every character of `text` is an ASCII letter or digit — the alphabet
+// of Random.generate_string and Random.secure_string.
+[[nodiscard]] bool is_ascii_alphanumeric(std::string_view text) {
+    return std::ranges::all_of(text, [](char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+    });
 }
 
 } // namespace
@@ -122,14 +136,14 @@ static void test_bounded_uniform_generator_failure() {
 static void test_bounded_uniform_rejection() {
     // range = 2 (span 3) → threshold 1, so a raw of 0 is rejected and the next
     // draw is taken.
-    std::vector<std::uint64_t> seq{0, 7};
+    const std::array<std::uint64_t, 2> seq{0, 7};
     std::size_t idx{0};
     std::int64_t out{0};
 
     const bool ok = luma::bounded_uniform(
         0, 2,
         [&seq, &idx](std::uint64_t& r) {
-            r = seq[idx++];
+            r = seq.at(idx++);
 
             return true;
         },
@@ -165,12 +179,19 @@ static void test_bounded_uniform_full_range() {
 }
 
 static void test_bounded_uniform_in_range_property() {
-    const std::int64_t ranges[][2] = {{-5, 5},      {0, 1},      {-100, -100}, {i64_min, i64_max},
-                                      {i64_min, 0}, {0, i64_max}};
+    constexpr std::array<std::pair<std::int64_t, std::int64_t>, 6> ranges{{
+        {-5, 5},
+        {0, 1},
+        {-100, -100},
+        {i64_min, i64_max},
+        {i64_min, 0},
+        {0, i64_max},
+    }};
 
-    const std::uint64_t raw_probes[] = {0, 1, 7, 12345, u64_max / 2U, u64_max - 1U, u64_max};
+    constexpr std::array<std::uint64_t, 7> raw_probes{
+        0, 1, 7, 12345, u64_max / 2U, u64_max - 1U, u64_max};
 
-    for (const auto& range : ranges) {
+    for (const auto& [lo, hi] : ranges) {
         for (const std::uint64_t raw : raw_probes) {
             std::int64_t out{0};
             std::size_t calls{0};
@@ -178,7 +199,7 @@ static void test_bounded_uniform_in_range_property() {
             // Return the probe value first; if it is rejected, fall back to
             // UINT64_MAX (always accepted) so the loop is guaranteed to halt.
             const bool ok = luma::bounded_uniform(
-                range[0], range[1],
+                lo, hi,
                 [raw, &calls](std::uint64_t& r) {
                     r = (calls++ == 0) ? raw : u64_max;
 
@@ -187,8 +208,8 @@ static void test_bounded_uniform_in_range_property() {
                 out);
 
             ASSERT_TRUE(ok);
-            ASSERT_GE(out, range[0]);
-            ASSERT_LE(out, range[1]);
+            ASSERT_GE(out, lo);
+            ASSERT_LE(out, hi);
         }
     }
 }
@@ -229,8 +250,8 @@ static void test_random_generate_integer() {
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->is_integer());
-    ASSERT_TRUE(v.as_result()->owned_inner->as_integer() >= 1 &&
-                v.as_result()->owned_inner->as_integer() <= 10);
+    ASSERT_GE(v.as_result()->owned_inner->as_integer(), 1);
+    ASSERT_LE(v.as_result()->owned_inner->as_integer(), 10);
 }
 
 static void test_random_generate_integer_singleton() {
@@ -261,12 +282,7 @@ static void test_random_generate_string() {
 
     const auto& s = v.as_result()->owned_inner->as_string();
     ASSERT_EQ(s.size(), 12U);
-
-    for (const char c : s) {
-        const bool alnum =
-            (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-        ASSERT_TRUE(alnum);
-    }
+    ASSERT_TRUE(is_ascii_alphanumeric(s));
 }
 
 static void test_random_generate_string_empty() {
@@ -512,7 +528,7 @@ static void test_random_uuid_unique() {
     const auto a = eval("Random.generate_uuid()");
     const auto b = eval("Random.generate_uuid()");
 
-    ASSERT_TRUE(a.as_string() != b.as_string());
+    ASSERT_NE(a.as_string(), b.as_string());
 }
 
 // ── secure variants (adapt to TLS availability) ───────────────────────
@@ -540,7 +556,8 @@ static void test_random_secure_integer() {
         ASSERT_TRUE(v.as_result()->owned_inner->is_integer());
 
         const auto n = v.as_result()->owned_inner->as_integer();
-        ASSERT_TRUE(n >= 1 && n <= 6);
+        ASSERT_GE(n, 1);
+        ASSERT_LE(n, 6);
     } else {
         ASSERT_RESULT_FAILURE(v);
     }
@@ -607,12 +624,7 @@ static void test_random_secure_string() {
 
         const auto& s = v.as_result()->owned_inner->as_string();
         ASSERT_EQ(s.size(), 24U);
-
-        for (const char c : s) {
-            const bool alnum =
-                (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-            ASSERT_TRUE(alnum);
-        }
+        ASSERT_TRUE(is_ascii_alphanumeric(s));
     } else {
         ASSERT_RESULT_FAILURE(v);
     }
@@ -686,7 +698,8 @@ static void test_random_uuid_typed_wraps_canonical_string() {
     ASSERT_EQ(v.as_record()->type_name, "Uuid");
 
     const auto* value = v.as_record()->find_field("value");
-    ASSERT_TRUE(value != nullptr && value->is_string());
+    ASSERT_NE(value, nullptr);
+    ASSERT_TRUE(value->is_string());
     ASSERT_EQ(value->as_string().size(), 36U);
 }
 
@@ -708,15 +721,16 @@ static void test_random_parse_uuid_rejects_malformed() {
 }
 
 static void test_random_uuid_to_string_roundtrips() {
-    const auto s = eval(
-        R"(Random.uuid_to_string(Result.unwrap(Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000"))))");
+    const auto s = eval(R"(Random.uuid_to_string(Result.unwrap()"
+                        R"(Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000"))))");
 
     ASSERT_TRUE(s.is_string());
     ASSERT_EQ(s.as_string(), "550e8400-e29b-41d4-a716-446655440000");
 }
 
 static void test_random_uuid_to_string_rejects_non_uuid() {
-    ASSERT_TRUE(luma::test::eval_throws("Random.uuid_to_string(42)"));
+    ASSERT_EVAL_THROWS("Random.uuid_to_string(42)",
+                       "Random.uuid_to_string: expected a Random.Uuid record");
 }
 
 int main() {

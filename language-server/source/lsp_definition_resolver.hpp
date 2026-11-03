@@ -10,6 +10,7 @@
 #include "lsp_analysis_cache.hpp"
 #include "lsp_analysis_result.hpp"
 #include "lsp_optional_ref.hpp"
+#include "lsp_scope_stack.hpp"
 #include "lsp_symbol_lookup.hpp"
 #include "lsp_symbol_resolver.hpp"
 #include "lsp_token_utils.hpp"
@@ -23,7 +24,9 @@ namespace luma::lsp {
 //
 // Takes a symbol name (plain or qualified) and resolves it to the Location
 // of its definition, handling:
-//   • Variable / constant definitions (top-level and local)
+//   • Local variables and parameters in scope at the cursor (these shadow
+//     top-level symbols of the same name)
+//   • Top-level definitions (functions, types, namespaces)
 //   • User-defined functions
 //   • Record types and record fields (via variable type → record → field)
 //   • Symbols originating from included files (cross-file navigation)
@@ -95,12 +98,19 @@ public:
             return field_loc;
         }
 
-        // Step 2: local file definition / function lookup.
+        // Step 2: a local variable or parameter in scope at the cursor. It
+        // shadows every top-level symbol of the same name, so it must be
+        // resolved before the file-wide and cross-file lookups.
+        if (auto scoped_loc = try_resolve_scoped_local(token, token_index)) {
+            return scoped_loc;
+        }
+
+        // Step 3: local file definition / function lookup.
         if (auto local_loc = try_resolve_local(qualified_name, token)) {
             return local_loc;
         }
 
-        // Step 3: cross-file fallback search.
+        // Step 4: cross-file fallback search.
         return try_resolve_cross_file(qualified_name, token);
     }
 
@@ -108,6 +118,55 @@ public:
     //
     // Exposed individually so callers can invoke a specific resolution
     // strategy when the symbol kind is already known.
+
+    // Resolve an unqualified identifier that names a local variable or
+    // parameter visible at the cursor. Locals carry no stored declaration
+    // location, so the declaration is the last binding occurrence of the name
+    // (see is_binding_occurrence) between the start of the enclosing function
+    // and the cursor whose block is still open at the cursor. When no binding
+    // precedes the cursor — e.g. a call to a top-level function before a local
+    // of the same name is declared — the name is left to the global lookup.
+    [[nodiscard]] std::optional<Location> try_resolve_scoped_local(const Token& token,
+                                                                   std::size_t token_index) const {
+        if (token.type != TokenType::Identifier ||
+            extract_namespace_prefix(tokens_, token_index).has_value()) {
+            return std::nullopt;
+        }
+
+        const ScopeStack scopes{result_, token.location.line};
+        const auto sym = scopes.find_symbol(token.lexeme);
+        if (!sym.has_value() || sym->origin == ScopeKind::Module ||
+            !scopes.enclosing_function().has_value()) {
+            return std::nullopt;
+        }
+
+        int function_start = 0;
+        const auto& body_ranges = result_.semantic.functions.function_body_ranges;
+        if (const auto range_it = body_ranges.find(*scopes.enclosing_function());
+            range_it != body_ranges.end()) {
+            function_start = range_it->second.first;
+        }
+
+        // Walk back from the cursor; `depth` counts the blocks closed between
+        // a candidate and the cursor, so a binding inside a block that has
+        // already ended (a sibling `{ integer t = 1 }`) is skipped.
+        int depth = 0;
+        for (std::size_t i = token_index + 1; i > 0; --i) {
+            const auto& candidate = tokens_[i - 1];
+            if (candidate.location.line < function_start) {
+                break;
+            }
+            if (candidate.type == TokenType::RightBrace) {
+                ++depth;
+            } else if (candidate.type == TokenType::LeftBrace && depth > 0) {
+                --depth;
+            } else if (depth == 0 && candidate.lexeme == token.lexeme &&
+                       is_binding_occurrence(tokens_, i - 1)) {
+                return Location{uri_, token_range(candidate)};
+            }
+        }
+        return std::nullopt;
+    }
 
     // Resolve a record field definition (cursor on `field` in `obj.field`).
     [[nodiscard]] std::optional<Location> try_resolve_field(const Token& token,

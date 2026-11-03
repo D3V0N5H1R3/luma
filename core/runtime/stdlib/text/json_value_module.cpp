@@ -12,6 +12,8 @@
 // the reverse and reuses JsonValue's tested serialisation and escaping.
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -105,11 +107,127 @@ constexpr std::string_view k_json_value_type = "Value";
     return make_json_variant("JsonObject", {Value{std::move(dict)}});
 }
 
+// Runtime-configurable nesting bound (LUMA_LIMIT_MAX_JSON_NESTING_DEPTH,
+// tightened to 32 under --box), clamped to the compile-time cap that keeps
+// json::JsonValue::parse's recursive descent within the native stack. Mirrors
+// the clamp applied by json_module_parser.cpp's Json.deserialize so Json.parse
+// and Json.parse_detailed cannot bypass the sandbox-configured limit.  Also
+// bounds the Json.to_string direction (LumaToJsonConverter below).
+[[nodiscard]] std::size_t json_depth_limit() {
+    return std::min<std::size_t>(ResourceLimits::max_json_nesting_depth,
+                                 static_cast<std::size_t>(CompileTimeLimits::max_json_depth));
+}
+
 // Convert a Luma Json.Value choice tree back into a shared/json JsonValue for
 // serialisation.  Throws RuntimeError when the value is not a well-formed
-// Json.Value (e.g. a bare payload-less variant constant).
-[[nodiscard]] json::JsonValue luma_to_jsonvalue(const Value& value, std::string_view func_name,
-                                                const SourceLocation& loc) {
+// Json.Value (e.g. a bare payload-less variant constant) or exceeds the JSON
+// resource limits.
+//
+// Unlike the parse direction (bounded by json::parse's max_depth), a Json.Value
+// can be built at runtime — `v = Json.Value.JsonArray([v])` in a loop — so this
+// walk enforces its own limits: nesting depth against json_depth_limit() (an
+// unbounded native recursion would overflow the stack, which nothing can
+// catch), and the total number of array elements / object members against
+// ResourceLimits::max_json_elements (sharing one node twice per level,
+// `JsonArray([v, v])` x 40, otherwise expands to 2^40 nodes), and the size of
+// the serialised text against ResourceLimits::max_string_size.
+class LumaToJsonConverter {
+public:
+    LumaToJsonConverter(std::string_view func_name, const SourceLocation& loc)
+        : func_name_{func_name}, loc_{loc} {}
+
+    [[nodiscard]] json::JsonValue convert(const Value& value) {
+        return convert(value, 0);
+    }
+
+    // Defence in depth: the serialised text must never exceed the budget
+    // charged during convert().
+    void check_serialised_size(const std::string& serialised) const {
+        if (serialised.size() > ResourceLimits::max_string_size) {
+            throw_output_too_large();
+        }
+    }
+
+private:
+    [[nodiscard]] json::JsonValue convert(const Value& value, std::size_t depth);
+
+    void count_child() {
+        if (++element_count_ > ResourceLimits::max_json_elements) {
+            throw RuntimeError{std::format("{}: Json.Value exceeds the maximum of {} elements",
+                                           func_name_, ResourceLimits::max_json_elements),
+                               loc_, "build a smaller Json.Value"};
+        }
+    }
+
+    // Charge `bytes` of serialised output against max_string_size.  Every node
+    // charges exactly what JsonValue::serialise will emit for it — escaped
+    // string text, quotes, separators, brackets, and number/literal text — so
+    // the serialised string is bounded before it is built (a shared large
+    // string, or one full of characters that escape to 2 or 6 bytes, would
+    // otherwise expand past the limit).
+    void charge_output(std::size_t bytes) {
+        if (bytes > ResourceLimits::max_string_size - output_bytes_) {
+            throw_output_too_large();
+        }
+
+        output_bytes_ += bytes;
+    }
+
+    // Charge a quoted, JSON-escaped string (a string value or an object key).
+    void charge_string(std::string_view text) {
+        std::size_t escaped{2}; // surrounding quotes
+
+        for (const char c : text) {
+            escaped += escaped_char_size(c);
+        }
+
+        charge_output(escaped);
+    }
+
+    // Charge the shortest round-trip text of a number exactly as
+    // JsonValue::serialise renders it.
+    template <typename Number> void charge_number(Number number) {
+        std::array<char, 32> buf{};
+        const auto chars = std::to_chars(buf.data(), buf.data() + buf.size(), number);
+
+        charge_output(static_cast<std::size_t>(chars.ptr - buf.data()));
+    }
+
+    [[noreturn]] void throw_output_too_large() const {
+        throw RuntimeError{std::format("{}: result exceeds maximum string size", func_name_), loc_,
+                           "build a smaller Json.Value"};
+    }
+
+    // Bytes one input byte occupies after JSON escaping (see JsonEscapePolicy:
+    // short escapes for quote/backslash/\n/\r/\t/\b/\f, \u00XX for the other
+    // C0 controls, everything else verbatim).
+    [[nodiscard]] static std::size_t escaped_char_size(char c) {
+        constexpr unsigned char k_last_control = 0x1F;
+
+        switch (c) {
+            case '"':
+            case '\\':
+            case '\n':
+            case '\r':
+            case '\t':
+            case '\b':
+            case '\f':
+                return 2;
+            default:
+                return static_cast<unsigned char>(c) <= k_last_control ? 6 : 1;
+        }
+    }
+
+    std::string_view func_name_;
+    const SourceLocation& loc_;
+    std::size_t element_count_{0};
+    std::size_t output_bytes_{0};
+};
+
+[[nodiscard]] json::JsonValue LumaToJsonConverter::convert(const Value& value, std::size_t depth) {
+    const auto& func_name = func_name_;
+    const auto& loc = loc_;
+
     if (!value.is_choice()) {
         throw RuntimeError{std::format("{}: expected a Json.Value", func_name), loc,
                            "pass a Json.Value, e.g. the result of Json.parse"};
@@ -128,16 +246,29 @@ constexpr std::string_view k_json_value_type = "Value";
         return choice->fields.front();
     };
 
+    const auto check_depth = [&]() {
+        if (depth >= json_depth_limit()) {
+            throw RuntimeError{std::format("{}: Json.Value nesting exceeds the maximum depth of {}",
+                                           func_name, json_depth_limit()),
+                               loc, "flatten the Json.Value structure"};
+        }
+    };
+
     if (variant == "JsonNull") {
+        charge_output(std::string_view{"null"}.size());
+
         return json::JsonValue{};
     }
 
     if (variant == "JsonBool") {
-        return json::JsonValue{payload().as_bool()};
+        const bool flag = expect_boolean(payload(), func_name, loc);
+        charge_output(flag ? std::string_view{"true"}.size() : std::string_view{"false"}.size());
+
+        return json::JsonValue{flag};
     }
 
     if (variant == "JsonNumber") {
-        const double number = payload().to_numeric();
+        const double number = expect_numeric(payload(), func_name, loc);
 
         // Emit integral values without a decimal point for clean JSON output
         // (3 rather than 3.0), matching how most JSON producers render whole
@@ -147,33 +278,64 @@ constexpr std::string_view k_json_value_type = "Value";
 
         if (std::isfinite(number) && std::floor(number) == number &&
             std::abs(number) < k_int64_limit) {
-            return json::JsonValue{static_cast<std::int64_t>(number)};
+            const auto integral = static_cast<std::int64_t>(number);
+            charge_number(integral);
+
+            return json::JsonValue{integral};
+        }
+
+        // Non-finite numbers are rejected by the serialiser itself; only a
+        // finite one produces output to charge.
+        if (std::isfinite(number)) {
+            charge_number(number);
         }
 
         return json::JsonValue{number};
     }
 
     if (variant == "JsonString") {
-        return json::JsonValue{payload().as_string()};
+        const auto& text = expect_string(payload(), func_name, loc);
+        charge_string(text);
+
+        return json::JsonValue{text};
     }
 
     if (variant == "JsonArray") {
+        check_depth();
+
         json::JsonValue::ArrayType array;
-        const auto& elements = *payload().as_array()->elements;
-        array.reserve(elements.size());
+        const auto& elements = *expect_array(payload(), func_name, loc)->elements;
+        array.reserve(std::min(elements.size(), ResourceLimits::max_json_elements));
+
+        charge_output(2); // '[' and ']'
 
         for (const auto& element : elements) {
-            array.push_back(luma_to_jsonvalue(element, func_name, loc));
+            count_child();
+
+            if (!array.empty()) {
+                charge_output(1); // ','
+            }
+
+            array.push_back(convert(element, depth + 1));
         }
 
         return json::JsonValue{std::move(array)};
     }
 
     if (variant == "JsonObject") {
-        json::JsonValue::ObjectType object;
+        check_depth();
 
-        for (const auto& [key, member] : payload().as_dictionary()->entries) {
-            object.emplace(key, luma_to_jsonvalue(member, func_name, loc));
+        json::JsonValue::ObjectType object;
+        bool first_member{true};
+
+        charge_output(2); // '{' and '}'
+
+        for (const auto& [key, member] : expect_dict(payload(), func_name, loc)->entries) {
+            count_child();
+            charge_output(first_member ? 1 : 2); // ':' and, after the first member, ','
+            first_member = false;
+            charge_string(key);
+            object.emplace(key, convert(member, depth + 1));
         }
 
         return json::JsonValue{std::move(object)};
@@ -229,16 +391,6 @@ struct LineColumn {
     std::int64_t line;
     std::int64_t column;
 };
-
-// Runtime-configurable nesting bound (LUMA_LIMIT_MAX_JSON_NESTING_DEPTH,
-// tightened to 32 under --box), clamped to the compile-time cap that keeps
-// json::JsonValue::parse's recursive descent within the native stack. Mirrors
-// the clamp applied by json_module_parser.cpp's Json.deserialize so Json.parse
-// and Json.parse_detailed cannot bypass the sandbox-configured limit.
-[[nodiscard]] std::size_t json_depth_limit() {
-    return std::min<std::size_t>(ResourceLimits::max_json_nesting_depth,
-                                 static_cast<std::size_t>(CompileTimeLimits::max_json_depth));
-}
 
 [[nodiscard]] LineColumn offset_to_line_column(std::string_view text, std::size_t offset) {
     offset = std::min(offset, text.size());
@@ -300,16 +452,20 @@ void register_json_value(const EnvPtr& env) {
                 return Value{
                     ResultValue::failure(make_parse_error_record(e.what(), pos.line, pos.column))};
             } catch (const std::exception& e) {
-                // Non-positional failure (e.g. nesting too deep): report line 1,
-                // column 1 rather than guessing an offset.
+                // Every parse failure — nesting depth included — is a positioned
+                // JsonParseError; this defensive arm covers anything else (such
+                // as an allocation failure) without guessing an offset.
                 return Value{ResultValue::failure(make_parse_error_record(e.what(), 1, 1))};
             }
         })
         .func("to_string", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const json::JsonValue converted = luma_to_jsonvalue(args[0], "Json.to_string", loc);
+            LumaToJsonConverter converter{"Json.to_string", loc};
+            const json::JsonValue converted = converter.convert(args[0]);
+            std::string serialised = converted.to_string();
+            converter.check_serialised_size(serialised);
 
-            return Value{converted.to_string()};
+            return Value{std::move(serialised)};
         })
         .func("as_string", 1)
         .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {

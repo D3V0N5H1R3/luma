@@ -1,5 +1,8 @@
 #include "runtime/concurrency/channel.hpp"
 
+#include <algorithm>
+#include <cstdint>
+#include <limits>
 #include <string_view>
 
 #include "runtime/interpreter/runtime_exceptions.hpp"
@@ -57,18 +60,74 @@ void Channel::notify_senders_if_needed() {
     }
 }
 
+template <typename Predicate>
+void Channel::wait_cancellable(std::unique_lock<std::mutex>& lock, std::condition_variable& cv,
+                               const CancellationToken* cancel, Predicate predicate) {
+    if (cancel == nullptr) {
+        cv.wait(lock, predicate);
+        return;
+    }
+
+    // Nothing notifies the condition variable when the token is cancelled, so
+    // wake periodically to re-check it.
+    while (!cv.wait_for(lock, k_cancel_poll_interval, predicate)) {
+        if (cancel->is_cancelled()) {
+            throw CancelledException{"task cancelled"};
+        }
+    }
+}
+
+template <typename Predicate>
+bool Channel::wait_until_cancellable(std::unique_lock<std::mutex>& lock,
+                                     std::condition_variable& cv,
+                                     std::chrono::steady_clock::time_point deadline,
+                                     const CancellationToken* cancel, Predicate predicate) {
+    while (!predicate()) {
+        if (cancel != nullptr && cancel->is_cancelled()) {
+            throw CancelledException{"task cancelled"};
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+
+        if (now >= deadline) {
+            return false;
+        }
+
+        // Wait at most one poll interval at a time when cancellable, since
+        // nothing notifies the condition variable on cancellation.
+        auto step = deadline - now;
+
+        if (cancel != nullptr && step > k_cancel_poll_interval) {
+            step = k_cancel_poll_interval;
+        }
+
+        cv.wait_for(lock, step);
+    }
+
+    return true;
+}
+
+std::chrono::steady_clock::time_point Channel::deadline_after(std::chrono::milliseconds timeout) {
+    // Callers clamp user timeouts to [0, INT_MAX] ms, so this cannot overflow
+    // steady_clock; clamp defensively anyway for direct C++ callers.
+    constexpr std::chrono::milliseconds k_max_timeout{std::numeric_limits<std::int32_t>::max()};
+    const auto bounded = std::clamp(timeout, std::chrono::milliseconds{0}, k_max_timeout);
+
+    return std::chrono::steady_clock::now() + bounded;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-void Channel::send(Value value) {
+void Channel::send(Value value, const CancellationToken* cancel) {
     {
         std::unique_lock lock{mutex_};
 
         throw_if_closed();
 
         if (buffer_->is_bounded()) {
-            not_full_cv_.wait(lock, [this] { return has_room_or_closed(); });
+            wait_cancellable(lock, not_full_cv_, cancel, [this] { return has_room_or_closed(); });
 
             throw_if_closed();
         } else {
@@ -85,10 +144,10 @@ void Channel::send(Value value) {
     not_empty_cv_.notify_one();
 }
 
-Value Channel::receive() {
+Value Channel::receive(const CancellationToken* cancel) {
     std::unique_lock lock{mutex_};
 
-    not_empty_cv_.wait(lock, [this] { return has_value_or_closed(); });
+    wait_cancellable(lock, not_empty_cv_, cancel, [this] { return has_value_or_closed(); });
 
     if (buffer_->is_empty()) {
         throw ChannelClosedError{channel_drained_message};
@@ -112,11 +171,12 @@ Value Channel::receive() {
 // the abstraction would need to parameterise the CV, predicate, and
 // post-wait action, adding complexity without reducing duplication.
 
-Channel::ReceiveTimeoutResult Channel::receive_timeout(std::chrono::milliseconds timeout_ms) {
+Channel::ReceiveTimeoutResult Channel::receive_timeout(std::chrono::milliseconds timeout_ms,
+                                                       const CancellationToken* cancel) {
     std::unique_lock lock{mutex_};
 
-    const bool signalled =
-        not_empty_cv_.wait_for(lock, timeout_ms, [this] { return has_value_or_closed(); });
+    const bool signalled = wait_until_cancellable(lock, not_empty_cv_, deadline_after(timeout_ms),
+                                                  cancel, [this] { return has_value_or_closed(); });
 
     if (!signalled) {
         return {.value = std::nullopt, .timed_out = true}; // timed out
@@ -136,8 +196,8 @@ Channel::ReceiveTimeoutResult Channel::receive_timeout(std::chrono::milliseconds
     return {.value = std::move(value), .timed_out = false};
 }
 
-Channel::SendTimeoutResult Channel::send_timeout(Value value,
-                                                 std::chrono::milliseconds timeout_ms) {
+Channel::SendTimeoutResult Channel::send_timeout(Value value, std::chrono::milliseconds timeout_ms,
+                                                 const CancellationToken* cancel) {
     {
         std::unique_lock lock{mutex_};
 
@@ -145,7 +205,8 @@ Channel::SendTimeoutResult Channel::send_timeout(Value value,
 
         if (buffer_->is_bounded()) {
             const bool signalled =
-                not_full_cv_.wait_for(lock, timeout_ms, [this] { return has_room_or_closed(); });
+                wait_until_cancellable(lock, not_full_cv_, deadline_after(timeout_ms), cancel,
+                                       [this] { return has_room_or_closed(); });
 
             if (!signalled) {
                 return {.timed_out = true}; // timed out

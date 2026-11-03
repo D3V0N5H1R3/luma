@@ -4,7 +4,9 @@
 // Unified path utilities — security checks, extension validation, and
 // combined path validation in a single header.
 
+#include <exception>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -18,6 +20,41 @@ inline constexpr std::string_view luma_extension{".luma"};
 // Check whether a file path ends with the Luma source extension.
 [[nodiscard]] inline constexpr bool has_luma_extension(std::string_view path) {
     return path.ends_with(luma_extension);
+}
+
+// ─── UTF-8 path conversion ──────────────────────────────────────────────────
+//
+// Luma source text — and so every path written in it, such as an include
+// path — is UTF-8.  On MSVC, std::filesystem::path{std::string} decodes the
+// bytes in the active ANSI code page instead, so a non-ASCII include such as
+// "café.luma" turns into mojibake.  Build paths from UTF-8 text with these
+// helpers; on POSIX they are equivalent to the plain std::string conversions.
+
+// Construct a filesystem path from UTF-8 encoded text.  On MSVC this throws
+// std::system_error when `utf8` is not well-formed UTF-8 (see
+// try_path_from_utf8); on POSIX the bytes are used as-is.
+[[nodiscard]] inline std::filesystem::path path_from_utf8(std::string_view utf8) {
+    return std::filesystem::path{std::u8string{utf8.begin(), utf8.end()}};
+}
+
+// Non-throwing path_from_utf8: std::nullopt when the text cannot be decoded as
+// UTF-8 (MSVC only — a POSIX path is any byte string).  Use it at boundaries
+// where the text comes from users (REPL input, program strings) rather than
+// from the filesystem.
+[[nodiscard]] inline std::optional<std::filesystem::path>
+try_path_from_utf8(std::string_view utf8) noexcept {
+    try {
+        return path_from_utf8(utf8);
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+// Render a filesystem path as UTF-8 text.  Unlike path::string() on MSVC this
+// never throws for characters the ANSI code page cannot represent.
+[[nodiscard]] inline std::string path_to_utf8(const std::filesystem::path& path) {
+    const auto utf8 = path.u8string();
+    return std::string{utf8.begin(), utf8.end()};
 }
 
 // ─── Security checks ────────────────────────────────────────────────────────
@@ -150,9 +187,15 @@ struct PathValidationResult {
 
     result.is_valid = true;
 
-    const std::filesystem::path fs_path{path};
+    // `path` is UTF-8 (REPL input / program text), not the ANSI code page.
+    const auto fs_path = try_path_from_utf8(path);
 
-    if (!check_traversal(fs_path, root, result)) {
+    if (!fs_path) {
+        result.error_message = "path is not valid UTF-8";
+        return result;
+    }
+
+    if (!check_traversal(*fs_path, root, result)) {
         return result;
     }
 

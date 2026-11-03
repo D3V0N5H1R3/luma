@@ -1,17 +1,32 @@
 // Lexer unit tests.
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "analysis/diagnostics/diagnostic_collector.hpp"
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/lexer/token_type.hpp"
+#include "analysis/source/source_location.hpp"
 #include "common/resource_limits.hpp"
 #include "common/utf8.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::Diagnostic;
+using luma::DiagnosticCollector;
+using luma::is_builtin_type_token_type;
+using luma::is_keyword_token_type;
+using luma::is_type_keyword;
+using luma::Lexer;
+using luma::ResourceLimits;
+using luma::SourceLocation;
+using luma::Token;
+using luma::TokenType;
+using luma::utf8_codepoint_len;
+using luma::test::TestFixture;
 
 // ─── Fixture ───
 
@@ -24,10 +39,23 @@ struct LexerTestFixture : TestFixture {
         return lexer.tokenize();
     }
 
-    bool had_error() const {
+    [[nodiscard]] bool had_error() const {
         return collector.has_errors();
     }
+
+    // True when any diagnostic's message (or hint) contains `text`.
+    [[nodiscard]] bool has_diagnostic_containing(std::string_view text) const {
+        return std::ranges::any_of(collector.diagnostics(), [text](const Diagnostic& d) {
+            return d.message.find(text) != std::string::npos ||
+                   (d.hint && d.hint->find(text) != std::string::npos);
+        });
+    }
 };
+
+// Number of tokens of the given type.
+[[nodiscard]] static std::ptrdiff_t count_tokens(const std::vector<Token>& tokens, TokenType type) {
+    return std::ranges::count(tokens, type, &Token::type);
+}
 
 // ─── Tests ───
 
@@ -55,7 +83,7 @@ TEST_F(LexerTestFixture, test_number_literal) {
     ASSERT_EQ(tokens[0].type, TokenType::NumberLiteral);
     ASSERT_EQ(tokens[0].lexeme, "3.14");
 
-    auto val = std::get<double>(REQUIRE_VALUE(tokens[0].literal));
+    const auto val = std::get<double>(REQUIRE_VALUE(tokens[0].literal));
 
     ASSERT_NEAR(val, 3.14, 1e-10);
 }
@@ -156,15 +184,7 @@ TEST_F(LexerTestFixture, test_removed_bitwise_operators_report_bits) {
 
         ASSERT_TRUE(fixture.had_error());
         ASSERT_EQ(tokens[0].type, TokenType::Error);
-
-        bool mentions_bits = false;
-        for (const auto& d : fixture.collector.diagnostics()) {
-            if (d.message.find("Bits") != std::string::npos ||
-                (d.hint && d.hint->find("Bits") != std::string::npos)) {
-                mentions_bits = true;
-            }
-        }
-        ASSERT_TRUE(mentions_bits);
+        ASSERT_TRUE(fixture.has_diagnostic_containing("Bits"));
     }
 
     // `&&` remains logical AND — the single-`&` diagnostic must not fire for it.
@@ -260,10 +280,12 @@ TEST_F(LexerTestFixture, test_semicolons_only) {
     ASSERT_EQ(tokens[0].type, TokenType::EndOfFile);
 }
 
-TEST_F(LexerTestFixture, test_invalid_character_throws) {
-    fixture.lex("`");
+TEST_F(LexerTestFixture, test_invalid_character_reports_error) {
+    const auto tokens = fixture.lex("`");
 
     ASSERT_TRUE(fixture.had_error());
+    ASSERT_EQ(tokens[0].type, TokenType::Error);
+    ASSERT_TRUE(fixture.has_diagnostic_containing("unexpected character '`'"));
 }
 
 TEST_F(LexerTestFixture, test_additional_keywords) {
@@ -343,7 +365,7 @@ TEST_F(LexerTestFixture, test_question_dot_token) {
     ASSERT_EQ(tokens[2].type, TokenType::Identifier);
 
     // ? followed by a non-dot stays a plain QuestionMark.
-    auto tokens2 = fixture.lex("?");
+    const auto tokens2 = fixture.lex("?");
 
     ASSERT_EQ(tokens2[0].type, TokenType::QuestionMark);
 }
@@ -358,7 +380,7 @@ TEST_F(LexerTestFixture, test_question_bracket_token) {
     ASSERT_EQ(tokens[3].type, TokenType::RightBracket);
 
     // ?[ is distinct from ?. and ?.
-    auto tokens2 = fixture.lex("?[");
+    const auto tokens2 = fixture.lex("?[");
 
     ASSERT_EQ(tokens2[0].type, TokenType::QuestionBracket);
 }
@@ -442,26 +464,26 @@ TEST_F(LexerTestFixture, test_binary_literal_all_zeros) {
     ASSERT_EQ(std::get<std::int64_t>(REQUIRE_VALUE(tokens[0].literal)), 0);
 }
 
-TEST_F(LexerTestFixture, test_hex_literal_no_digits_throws) {
+TEST_F(LexerTestFixture, test_hex_literal_no_digits_reports_error) {
     fixture.lex("0x");
 
     ASSERT_TRUE(fixture.had_error());
 }
 
-TEST_F(LexerTestFixture, test_binary_literal_no_digits_throws) {
+TEST_F(LexerTestFixture, test_binary_literal_no_digits_reports_error) {
     fixture.lex("0b");
 
     ASSERT_TRUE(fixture.had_error());
 }
 
-TEST_F(LexerTestFixture, test_integer_literal_out_of_range_throws) {
+TEST_F(LexerTestFixture, test_integer_literal_out_of_range_reports_error) {
     // 9223372036854775808 is one past the signed 64-bit maximum.
     fixture.lex("9223372036854775808");
 
     ASSERT_TRUE(fixture.had_error());
 }
 
-TEST_F(LexerTestFixture, test_number_literal_out_of_range_throws) {
+TEST_F(LexerTestFixture, test_number_literal_out_of_range_reports_error) {
     // 1e400 exceeds the maximum representable double.
     fixture.lex("1e400");
 
@@ -496,36 +518,52 @@ TEST_F(LexerTestFixture, test_internal_in_sequence) {
 
 // ─── Lexer error detection tests ───
 
-TEST_F(LexerTestFixture, test_unterminated_string_throws) {
+TEST_F(LexerTestFixture, test_unterminated_string_reports_error) {
     fixture.lex("\"hello");
 
     ASSERT_TRUE(fixture.had_error());
 }
 
-TEST_F(LexerTestFixture, test_unterminated_string_with_newline_throws) {
+TEST_F(LexerTestFixture, test_unterminated_string_with_newline_reports_error) {
     fixture.lex("\"hello\n");
 
     ASSERT_TRUE(fixture.had_error());
 }
 
-TEST_F(LexerTestFixture, test_invalid_escape_sequence_throws) {
+TEST_F(LexerTestFixture, test_invalid_escape_sequence_reports_error) {
     fixture.lex(R"("hello\z")");
 
     ASSERT_TRUE(fixture.had_error());
 }
 
-TEST_F(LexerTestFixture, test_unterminated_interpolation_throws) {
+TEST_F(LexerTestFixture, test_unterminated_interpolation_reports_error) {
     fixture.lex("\"hello ${name\"");
 
     ASSERT_TRUE(fixture.had_error());
 }
 
-TEST_F(LexerTestFixture, test_multiple_invalid_characters_throw) {
-    // @ is an annotation, but `~` alone and garbage should emit errors.
-    // Just verify no crash and that at least one diagnostic is emitted.
-    fixture.lex("@#~");
+TEST_F(LexerTestFixture, test_invalid_annotation_and_removed_tilde_each_report_error) {
+    // A bare '@' and the removed bitwise '~' are each rejected with their own
+    // diagnostic and recovery Error token.
+    const auto tokens = fixture.lex("@ ~");
 
-    (void)fixture.had_error(); // Either no error (@ alone is valid) or one — just no crash.
+    ASSERT_EQ(fixture.collector.diagnostics().size(), 2U);
+    ASSERT_TRUE(fixture.has_diagnostic_containing("expected annotation name after '@'"));
+    ASSERT_TRUE(fixture.has_diagnostic_containing("bitwise '~' is not an operator"));
+    ASSERT_EQ(tokens.size(), 3U); // two Error tokens + EOF
+    ASSERT_EQ(tokens[0].type, TokenType::Error);
+    ASSERT_EQ(tokens[0].lexeme, "@");
+    ASSERT_EQ(tokens[1].type, TokenType::Error);
+    ASSERT_EQ(tokens[1].lexeme, "~");
+
+    // '#' starts a comment, so in "@#~" the '~' is commented out and only the
+    // bare '@' is reported.
+    const auto commented = fixture.lex("@#~");
+
+    ASSERT_EQ(fixture.collector.diagnostics().size(), 1U);
+    ASSERT_TRUE(fixture.has_diagnostic_containing("expected annotation name after '@'"));
+    ASSERT_EQ(commented.size(), 2U); // Error token + EOF
+    ASSERT_EQ(commented[0].type, TokenType::Error);
 }
 
 TEST_F(LexerTestFixture, test_error_flood_is_capped) {
@@ -537,18 +575,13 @@ TEST_F(LexerTestFixture, test_error_flood_is_capped) {
     const std::string flood(500, '`');
     const auto tokens = fixture.lex(flood);
 
-    std::size_t error_tokens{0};
-    for (const auto& token : tokens) {
-        if (token.type == TokenType::Error) {
-            ++error_tokens;
-        }
-    }
+    const auto error_tokens = count_tokens(tokens, TokenType::Error);
 
     ASSERT_TRUE(fixture.had_error());
     // Far below the 500 error bytes in the input: the scan gave up at the cap
     // rather than emitting a diagnostic and Error token for every byte.
-    ASSERT_TRUE(error_tokens <= 101);
-    ASSERT_TRUE(tokens.size() <= 102);
+    ASSERT_LE(error_tokens, 101);
+    ASSERT_LE(tokens.size(), 102U);
 
     // A single token can also emit many errors before control returns to the scan
     // loop.  A string literal full of invalid escape sequences drives one
@@ -561,10 +594,10 @@ TEST_F(LexerTestFixture, test_error_flood_is_capped) {
     fixture.lex("\"" + escape_body + "\"");
 
     ASSERT_TRUE(fixture.had_error());
-    ASSERT_TRUE(fixture.collector.diagnostics().size() <= 101);
+    ASSERT_LE(fixture.collector.diagnostics().size(), 101U);
 }
 
-TEST_F(LexerTestFixture, test_newline_inside_single_line_string_throws) {
+TEST_F(LexerTestFixture, test_newline_inside_single_line_string_reports_error) {
     // A raw newline inside a regular string must be rejected.
     // Only triple-quoted strings may span multiple lines.
     fixture.lex("\"hello\nworld\"");
@@ -572,7 +605,7 @@ TEST_F(LexerTestFixture, test_newline_inside_single_line_string_throws) {
     ASSERT_TRUE(fixture.had_error());
 }
 
-TEST_F(LexerTestFixture, test_newline_inside_interpolated_string_throws) {
+TEST_F(LexerTestFixture, test_newline_inside_interpolated_string_reports_error) {
     fixture.lex("\"hello ${x}\nworld\"");
 
     ASSERT_TRUE(fixture.had_error());
@@ -605,20 +638,16 @@ TEST_F(LexerTestFixture, test_error_pipe_distinct_from_bang) {
     ASSERT_EQ(tokens[2].type, TokenType::BangEquals);
 }
 
-TEST_F(LexerTestFixture, test_invalid_number_format_throws) {
+TEST_F(LexerTestFixture, test_leading_dot_is_not_number_literal) {
     // Leading dot is not a valid number in Luma.
     // It should produce a Dot token + integer, not a number literal.
     const auto tokens = fixture.lex(".42");
 
-    bool found_number = false;
-
-    for (const auto& t : tokens) {
-        if (t.type == TokenType::NumberLiteral && t.lexeme == ".42") {
-            found_number = true;
-        }
-    }
-
-    ASSERT_FALSE(found_number);
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens.size(), 3U); // Dot + IntegerLiteral + EOF
+    ASSERT_EQ(tokens[0].type, TokenType::Dot);
+    ASSERT_EQ(tokens[1].type, TokenType::IntegerLiteral);
+    ASSERT_EQ(tokens[1].lexeme, "42");
 }
 
 // ─── Unicode handling tests ───
@@ -638,9 +667,7 @@ TEST_F(LexerTestFixture, test_utf8_column_tracking) {
     // should advance by 4 characters (not 5 bytes).
     // Token locations are captured after the token, so "café" gets
     // column 5 and "x" gets column 7.
-    fixture.collector = DiagnosticCollector{};
-    Lexer lexer{std::string{"caf\xC3\xA9 x"}, fixture.collector};
-    auto tokens = lexer.tokenize();
+    const auto tokens = fixture.lex("caf\xC3\xA9 x");
 
     // First token is "café" — location is one past end, column 5.
     ASSERT_EQ(tokens[0].type, TokenType::Identifier);
@@ -662,22 +689,10 @@ TEST_F(LexerTestFixture, test_confusable_character_warning) {
     source += '\x80';
     source += '\x8B';
     source += 'c';
-    fixture.collector = DiagnosticCollector{};
-    Lexer lexer{source, fixture.collector};
-    auto tokens = lexer.tokenize();
-    const auto& warnings = fixture.collector.diagnostics();
+    fixture.lex(source);
 
-    ASSERT_FALSE(warnings.empty());
-
-    bool found = false;
-
-    for (const auto& w : warnings) {
-        if (w.message.find("confusable") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    ASSERT_FALSE(fixture.collector.diagnostics().empty());
+    ASSERT_TRUE(fixture.has_diagnostic_containing("confusable"));
 }
 
 TEST_F(LexerTestFixture, test_utf8_codepoint_len) {
@@ -713,40 +728,16 @@ TEST_F(LexerTestFixture, test_nested_interpolation) {
 
     // Should have: StringLiteral("outer "), InterpolationStart, Identifier(x),
     // InterpolationEnd, StringLiteral(" end"), EOF
-    bool found_interp_start = false;
-    bool found_interp_end = false;
-
-    for (const auto& t : tokens) {
-        if (t.type == TokenType::InterpolationStart) {
-            found_interp_start = true;
-        }
-        if (t.type == TokenType::InterpolationEnd) {
-            found_interp_end = true;
-        }
-    }
-
-    ASSERT_TRUE(found_interp_start);
-    ASSERT_TRUE(found_interp_end);
+    ASSERT_EQ(count_tokens(tokens, TokenType::InterpolationStart), 1);
+    ASSERT_EQ(count_tokens(tokens, TokenType::InterpolationEnd), 1);
 }
 
 TEST_F(LexerTestFixture, test_adjacent_string_interpolations) {
     // Two interpolations back to back: "${a}${b}"
     const auto tokens = fixture.lex(R"("${a}${b}")");
 
-    int interp_starts = 0;
-    int interp_ends = 0;
-
-    for (const auto& t : tokens) {
-        if (t.type == TokenType::InterpolationStart) {
-            ++interp_starts;
-        }
-        if (t.type == TokenType::InterpolationEnd) {
-            ++interp_ends;
-        }
-    }
-
-    ASSERT_EQ(interp_starts, 2);
-    ASSERT_EQ(interp_ends, 2);
+    ASSERT_EQ(count_tokens(tokens, TokenType::InterpolationStart), 2);
+    ASSERT_EQ(count_tokens(tokens, TokenType::InterpolationEnd), 2);
 }
 
 // Regression: interpolation nested beyond max_interpolation_depth must report
@@ -771,16 +762,8 @@ TEST_F(LexerTestFixture, test_interpolation_depth_limit_reported) {
 
     const auto tokens = fixture.lex(source); // must terminate (no infinite loop)
 
-    int interp_starts = 0;
-    int interp_ends = 0;
-    for (const auto& t : tokens) {
-        if (t.type == TokenType::InterpolationStart) {
-            ++interp_starts;
-        }
-        if (t.type == TokenType::InterpolationEnd) {
-            ++interp_ends;
-        }
-    }
+    const auto interp_starts = count_tokens(tokens, TokenType::InterpolationStart);
+    const auto interp_ends = count_tokens(tokens, TokenType::InterpolationEnd);
 
     // The depth limit is reported.
     ASSERT_TRUE(fixture.had_error());
@@ -788,10 +771,10 @@ TEST_F(LexerTestFixture, test_interpolation_depth_limit_reported) {
     // level contributes neither a start token nor a pushed state, so the start
     // count never exceeds the configured maximum. Before the fix the check ran
     // after the token was added, so this was max + 1.
-    ASSERT_TRUE(interp_starts <= ResourceLimits::max_interpolation_depth);
+    ASSERT_LE(interp_starts, ResourceLimits::max_interpolation_depth);
     // Error recovery must not synthesise a close for a level that was never
     // opened: there can be no more ends than starts.
-    ASSERT_TRUE(interp_ends <= interp_starts);
+    ASSERT_LE(interp_ends, interp_starts);
 }
 
 TEST_F(LexerTestFixture, test_empty_string) {
@@ -830,16 +813,7 @@ TEST_F(LexerTestFixture, test_annotation_empty_name_error) {
     ASSERT_TRUE(fixture.had_error());
     ASSERT_EQ(tokens[0].type, TokenType::Error);
     ASSERT_EQ(tokens[0].lexeme, "@");
-
-    bool found = false;
-
-    for (const auto& d : fixture.collector.diagnostics()) {
-        if (d.message.find("expected annotation name after '@'") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(fixture.has_diagnostic_containing("expected annotation name after '@'"));
 }
 
 // ─── Triple-quoted strings ───
@@ -879,6 +853,198 @@ TEST_F(LexerTestFixture, test_triple_quoted_string_unterminated_recovers) {
     ASSERT_TRUE(fixture.had_error());
     ASSERT_EQ(tokens[0].type, TokenType::StringLiteral);
     ASSERT_EQ(std::get<std::string>(REQUIRE_VALUE(tokens[0].literal)), "hello");
+}
+
+// ─── Triple-quoted dedent, escapes, numbers, identifiers, token positions ───
+
+TEST_F(LexerTestFixture, test_triple_quoted_dedent_across_interpolations) {
+    // Regression: the indent was computed per piece, so the piece after
+    // `${name}` kept its 4-space indent ("Dear Alice,\n    Thank you.").
+    const auto tokens = fixture.lex("\"\"\"\n    Dear ${name},\n    Thank you.\n    \"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens[0].type, TokenType::StringStart);
+    ASSERT_EQ(tokens[0].lexeme, std::string{"Dear "});
+    ASSERT_EQ(tokens[4].type, TokenType::StringEnd);
+    ASSERT_EQ(tokens[4].lexeme, std::string{",\nThank you."});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_whitespace_between_interpolations_kept) {
+    // Regression: whitespace-only pieces were deleted (`"""${a} ${b}"""` gave "ab").
+    const auto same_line = fixture.lex("\"\"\"${a} ${b}\"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(same_line[0].lexeme, std::string{""});
+    ASSERT_EQ(same_line[4].type, TokenType::StringMiddle);
+    ASSERT_EQ(same_line[4].lexeme, std::string{" "});
+    ASSERT_EQ(same_line[8].type, TokenType::StringEnd);
+    ASSERT_EQ(same_line[8].lexeme, std::string{""});
+
+    const auto separate_lines = fixture.lex("\"\"\"\n    ${a}\n    ${b}\n    \"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(separate_lines[0].lexeme, std::string{""});
+    ASSERT_EQ(separate_lines[4].lexeme, std::string{"\n"});
+    ASSERT_EQ(separate_lines[8].lexeme, std::string{""});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_relative_indent_before_interpolation) {
+    // Extra indentation in front of an interpolation is kept relative to the
+    // common indent; only the first and last blank lines are dropped.
+    const auto tokens = fixture.lex("\"\"\"\n    a\n      ${x} b\n    \"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens[0].lexeme, std::string{"a\n  "});
+    ASSERT_EQ(tokens[4].lexeme, std::string{" b"});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_escaped_dollar_suppresses_interpolation) {
+    // Regression: triple-quoted bodies were copied raw, so `\${x}` still
+    // interpolated.
+    const auto tokens = fixture.lex("\"\"\"cost: \\${x} \\\"q\\\"\"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens.size(), 2U); // StringLiteral + EOF
+    ASSERT_EQ(tokens[0].type, TokenType::StringLiteral);
+    ASSERT_EQ(std::get<std::string>(REQUIRE_VALUE(tokens[0].literal)),
+              std::string{"cost: ${x} \"q\""});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_escapes_resolved_after_dedent) {
+    // An escaped tab at the start of a line is content, not indentation.
+    const auto tokens = fixture.lex("\"\"\"\n    \\tx\n    y\\n\n    \"\"\"");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(std::get<std::string>(REQUIRE_VALUE(tokens[0].literal)), std::string{"\tx\ny\n"});
+}
+
+TEST_F(LexerTestFixture, test_triple_quoted_unknown_escape_reported) {
+    (void)fixture.lex("\"\"\"C:\\Users\"\"\"");
+
+    ASSERT_TRUE(fixture.had_error());
+}
+
+TEST_F(LexerTestFixture, test_tuple_member_after_dot_lexes_digits_only) {
+    // Regression: `t.0.1` lexed `0.1` as a decimal number.
+    const auto tokens = fixture.lex("t.0.1 ?.2");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(tokens.size(), 8U);
+    ASSERT_EQ(tokens[2].type, TokenType::IntegerLiteral);
+    ASSERT_EQ(tokens[2].lexeme, std::string{"0"});
+    ASSERT_EQ(tokens[3].type, TokenType::Dot);
+    ASSERT_EQ(tokens[4].type, TokenType::IntegerLiteral);
+    ASSERT_EQ(tokens[4].lexeme, std::string{"1"});
+    ASSERT_EQ(tokens[5].type, TokenType::QuestionDot);
+    ASSERT_EQ(tokens[6].type, TokenType::IntegerLiteral);
+}
+
+TEST_F(LexerTestFixture, test_decimal_point_requires_fraction_digit) {
+    // `1.` is not a number literal: the '.' must be followed by a digit.
+    const auto tokens = fixture.lex("1.");
+
+    ASSERT_EQ(tokens[0].type, TokenType::IntegerLiteral);
+    ASSERT_EQ(tokens[1].type, TokenType::Dot);
+}
+
+TEST_F(LexerTestFixture, test_number_glued_to_identifier_chars_is_error) {
+    const auto decimal = fixture.lex("123abc");
+
+    ASSERT_TRUE(fixture.had_error());
+    ASSERT_EQ(decimal.size(), 2U); // one (recovered) literal + EOF
+    ASSERT_EQ(decimal[0].type, TokenType::IntegerLiteral);
+
+    const auto binary = fixture.lex("0b102");
+
+    ASSERT_TRUE(fixture.had_error());
+    ASSERT_EQ(binary.size(), 2U);
+    ASSERT_EQ(std::get<std::int64_t>(REQUIRE_VALUE(binary[0].literal)), 2);
+}
+
+TEST_F(LexerTestFixture, test_octal_literal) {
+    const auto tokens = fixture.lex("0o17 0O755");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(std::get<std::int64_t>(REQUIRE_VALUE(tokens[0].literal)), 15);
+    ASSERT_EQ(std::get<std::int64_t>(REQUIRE_VALUE(tokens[1].literal)), 0755);
+
+    (void)fixture.lex("0o8");
+
+    ASSERT_TRUE(fixture.had_error());
+}
+
+TEST_F(LexerTestFixture, test_identifier_rejects_malformed_utf8_and_unicode_spaces) {
+    // Valid UTF-8 letters remain identifier characters.
+    const auto letters = fixture.lex("caf\xC3\xA9");
+
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(letters[0].type, TokenType::Identifier);
+
+    // A lone continuation/invalid byte is not a letter.
+    (void)fixture.lex("a\xFF");
+
+    ASSERT_TRUE(fixture.had_error());
+
+    // U+00A0 NO-BREAK SPACE is whitespace, not part of an identifier.
+    const auto nbsp = fixture.lex("a\xC2\xA0"
+                                  "b");
+
+    ASSERT_TRUE(fixture.had_error());
+    ASSERT_EQ(nbsp[0].type, TokenType::Identifier);
+    ASSERT_EQ(nbsp[0].lexeme, std::string{"a"});
+}
+
+TEST_F(LexerTestFixture, test_unexpected_control_character_is_escaped_in_message) {
+    // A raw ESC byte must not reach the terminal through the diagnostic text.
+    (void)fixture.lex("\x1B[31m");
+
+    ASSERT_TRUE(fixture.had_error());
+
+    const auto& message = fixture.collector.diagnostics().front().message;
+
+    ASSERT_NE(message.find("\\x1B"), std::string::npos);
+    ASSERT_EQ(message.find('\x1B'), std::string::npos);
+}
+
+TEST_F(LexerTestFixture, test_token_start_location_and_newline_flag) {
+    const auto tokens = fixture.lex("  foo +\nbar(\"s\")");
+
+    // `location` is one past the token; `start_location` is its first char.
+    ASSERT_EQ(tokens[0].start_location.column, 3);
+    ASSERT_EQ(tokens[0].location.column, 6);
+    ASSERT_EQ(tokens[1].start_location.column, 7);
+    ASSERT_EQ(tokens[4].start_location.column, 5); // the string's opening quote
+
+    ASSERT_FALSE(tokens[0].preceded_by_newline);
+    ASSERT_FALSE(tokens[1].preceded_by_newline);
+    ASSERT_TRUE(tokens[2].preceded_by_newline);
+    ASSERT_FALSE(tokens[3].preceded_by_newline);
+}
+
+TEST_F(LexerTestFixture, test_token_location_carries_token_start) {
+    // Regression: AST nodes copy a token's `location`, which points one past the
+    // token, so type-checker and runtime carets landed after the offending
+    // token.  The location itself now records where the token starts.
+    const auto tokens = fixture.lex("integer value = \"\"\"\n  ab\n  \"\"\"");
+
+    ASSERT_EQ(tokens[1].lexeme, "value");
+    ASSERT_EQ(tokens[1].location.column, 14);
+    ASSERT_TRUE(tokens[1].location.has_start());
+    ASSERT_EQ(tokens[1].location.start_line, 1);
+    ASSERT_EQ(tokens[1].location.start_column, 9);
+    ASSERT_EQ(tokens[1].location.start().column, 9);
+
+    // A multi-line string token starts on an earlier line than it ends.
+    const auto& text = tokens[3];
+    ASSERT_EQ(text.location.line, 3);
+    ASSERT_EQ(text.location.start_line, 1);
+    ASSERT_EQ(text.location.start_column, 17);
+
+    // The start is display metadata: equality still compares (file, line, column).
+    const SourceLocation bare{.file_id = text.location.file_id,
+                              .line = text.location.line,
+                              .column = text.location.column};
+    ASSERT_TRUE(bare == text.location);
 }
 
 // ─── Keyword classification predicates ───
@@ -934,7 +1100,7 @@ int main() {
     RUN(test_type_keywords);
     RUN(test_semicolons_are_skipped);
     RUN(test_semicolons_only);
-    RUN(test_invalid_character_throws);
+    RUN(test_invalid_character_reports_error);
     RUN(test_additional_keywords);
     RUN(test_additional_type_keywords);
     RUN(test_increment_decrement_operators);
@@ -954,10 +1120,10 @@ int main() {
     RUN(test_binary_literal);
     RUN(test_binary_literal_uppercase_prefix);
     RUN(test_binary_literal_all_zeros);
-    RUN(test_hex_literal_no_digits_throws);
-    RUN(test_binary_literal_no_digits_throws);
-    RUN(test_integer_literal_out_of_range_throws);
-    RUN(test_number_literal_out_of_range_throws);
+    RUN(test_hex_literal_no_digits_reports_error);
+    RUN(test_binary_literal_no_digits_reports_error);
+    RUN(test_integer_literal_out_of_range_reports_error);
+    RUN(test_number_literal_out_of_range_reports_error);
     RUN(test_hex_and_decimal_in_sequence);
 
     // internal keyword.
@@ -965,15 +1131,15 @@ int main() {
     RUN(test_internal_in_sequence);
 
     // Lexer error detection.
-    RUN(test_unterminated_string_throws);
-    RUN(test_unterminated_string_with_newline_throws);
-    RUN(test_invalid_escape_sequence_throws);
-    RUN(test_unterminated_interpolation_throws);
-    RUN(test_multiple_invalid_characters_throw);
+    RUN(test_unterminated_string_reports_error);
+    RUN(test_unterminated_string_with_newline_reports_error);
+    RUN(test_invalid_escape_sequence_reports_error);
+    RUN(test_unterminated_interpolation_reports_error);
+    RUN(test_invalid_annotation_and_removed_tilde_each_report_error);
     RUN(test_error_flood_is_capped);
-    RUN(test_newline_inside_single_line_string_throws);
-    RUN(test_newline_inside_interpolated_string_throws);
-    RUN(test_invalid_number_format_throws);
+    RUN(test_newline_inside_single_line_string_reports_error);
+    RUN(test_newline_inside_interpolated_string_reports_error);
+    RUN(test_leading_dot_is_not_number_literal);
 
     // Error pipe and null coalescing operators.
     RUN(test_error_pipe_operator);
@@ -1001,6 +1167,22 @@ int main() {
     RUN(test_triple_quoted_string_interpolation);
     RUN(test_triple_quoted_string_unterminated_recovers);
     RUN(test_keyword_classification_predicates);
+
+    // Triple-quoted dedent/escapes, number forms, identifiers, token positions.
+    RUN(test_triple_quoted_dedent_across_interpolations);
+    RUN(test_triple_quoted_whitespace_between_interpolations_kept);
+    RUN(test_triple_quoted_relative_indent_before_interpolation);
+    RUN(test_triple_quoted_escaped_dollar_suppresses_interpolation);
+    RUN(test_triple_quoted_escapes_resolved_after_dedent);
+    RUN(test_triple_quoted_unknown_escape_reported);
+    RUN(test_tuple_member_after_dot_lexes_digits_only);
+    RUN(test_decimal_point_requires_fraction_digit);
+    RUN(test_number_glued_to_identifier_chars_is_error);
+    RUN(test_octal_literal);
+    RUN(test_identifier_rejects_malformed_utf8_and_unicode_spaces);
+    RUN(test_unexpected_control_character_is_escaped_in_message);
+    RUN(test_token_start_location_and_newline_flag);
+    RUN(test_token_location_carries_token_start);
 
     return SUMMARY();
 }

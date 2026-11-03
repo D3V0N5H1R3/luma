@@ -7,7 +7,8 @@
 #include "json/json.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::dap;
+using luma::dap::Breakpoint;
+using luma::dap::HandlerResult;
 using luma::json::JsonValue;
 
 namespace {

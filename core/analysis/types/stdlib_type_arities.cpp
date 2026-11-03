@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -125,19 +126,38 @@ struct StdlibTypeStorage { // NOLINT(bugprone-exception-escape)
 
 // ─── Helper: register a synthetic record ───
 //
-// Derives the short record name from the qualified key (the substring after the
-// final '.'), moves each RecordField into the declaration, and wires up the
-// owning vector and lookup map — reducing every record definition to a single
-// declarative call.
+// A record's type identity is its declaration name.  Most stdlib records use
+// the short name (the substring after the final '.'), matching the runtime
+// type_name their module stamps on values.  Records whose short name collides
+// with another stdlib record of a different shape (Math.Interval and
+// DateTime.Interval) must keep the fully-qualified name instead, or the type
+// checker would treat the two as the same type.
+enum class RecordIdentity : std::uint8_t {
+    ShortName,
+    FullName
+};
+
+// Moves each RecordField into the declaration and wires up the owning vector
+// and lookup map — reducing every record definition to a single declarative
+// call.
 template <typename... Fields>
-void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields&&... fields) {
-    auto rec = std::make_unique<RecordDeclaration>(SourceLocation{},
-                                                   std::string{qualified_member(qualified_name)});
+void add_record_with_identity(StdlibTypeStorage& st, RecordIdentity identity,
+                              const std::string& qualified_name, Fields&&... fields) {
+    auto declared_name = identity == RecordIdentity::FullName
+                             ? qualified_name
+                             : std::string{symbols::qualified_member(qualified_name)};
+    auto rec = std::make_unique<RecordDeclaration>(SourceLocation{}, std::move(declared_name));
 
     (rec->fields.push_back(std::forward<Fields>(fields)), ...);
 
     st.record_map[qualified_name] = rec.get();
     st.records.push_back(std::move(rec));
+}
+
+template <typename... Fields>
+void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields&&... fields) {
+    add_record_with_identity(st, RecordIdentity::ShortName, qualified_name,
+                             std::forward<Fields>(fields)...);
 }
 
 [[nodiscard]] StdlibTypeStorage& storage() {
@@ -177,11 +197,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "DateTime.Period", field("integer", "years"), field("integer", "months"),
                    field("integer", "days"));
 
-        // DateTime.interval() constructs these range records (type_name "Interval").
-        // Timestamps stay plain `number` seconds — the record only pairs a start and
-        // end so contains/overlap/duration take one typed range instead of two loose
+        // DateTime.interval() constructs these range records (type_name
+        // "DateTime.Interval" — qualified, see RecordIdentity).  Timestamps stay
+        // plain `number` seconds — the record only pairs a start and end so
+        // contains/overlap/duration take one typed range instead of two loose
         // numbers.  The validating constructor guarantees end >= start.
-        add_record(st, "DateTime.Interval", field("number", "start"), field("number", "end"));
+        add_record_with_identity(st, RecordIdentity::FullName, "DateTime.Interval",
+                                 field("number", "start"), field("number", "end"));
 
         // DateTime.zoned() constructs these offset-aware timestamp records (type_name
         // "Zoned").  It bundles an instant (plain `number` Unix seconds, so every
@@ -220,11 +242,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("number", "y"), field("number", "z"));
 
         // Math.interval() constructs these closed numeric-range records (type_name
-        // "Interval").  min/max are plain measurements (`number`); the validating
-        // constructor guarantees max >= min so contains/clamp/length/overlap take one
-        // well-formed range.  Mirrors DateTime.Interval (which shares the short
-        // "Interval" type_name — harmless, like the shared "ParseError" records).
-        add_record(st, "Math.Interval", field("number", "minimum"), field("number", "maximum"));
+        // "Math.Interval").  min/max are plain measurements (`number`); the
+        // validating constructor guarantees max >= min so contains/clamp/length/
+        // overlap take one well-formed range.  It shares the short name with
+        // DateTime.Interval but not its fields, so both use the qualified name as
+        // their identity (see RecordIdentity) and cannot be mixed up.
+        add_record_with_identity(st, RecordIdentity::FullName, "Math.Interval",
+                                 field("number", "minimum"), field("number", "maximum"));
 
         // Math.rectangle() constructs these axis-aligned 2D rectangle records
         // (type_name "Rectangle").  x/y are the top-left corner and width/height the
@@ -997,7 +1021,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // The single, mutually-exclusive answer to "what kind of thing is this
         // path?", complementing the FileSystem.FileInfo is_directory / is_file /
         // is_symlink booleans with an exhaustive, match-able choice.  Classified
-        // symlink-first (like lstat): a symbolic link is reported as Symlink even
+        // symlink-first (like lstat): a symbolic link is reported as SymbolicLink even
         // when its target is a directory or file.
         {
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "FileKind");

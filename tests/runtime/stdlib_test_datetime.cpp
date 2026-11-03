@@ -1,11 +1,16 @@
 // Standard library tests: DateTime.
 
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 
 #include "runtime/stdlib/system/datetime_codec.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::test::eval;
 
 static void test_datetime_add_days() {
     const auto v = eval("DateTime.add_days(1710497400.0, 1.0)");
@@ -26,8 +31,8 @@ static void test_datetime_add_months() {
     const auto v = eval("DateTime.add_months(1710497400.0, 1)");
 
     ASSERT_RESULT_SUCCESS(v);
-    // Verify the resulting timestamp is larger.
-    ASSERT_TRUE(v.as_result()->owned_inner->as_number() > 1710497400.0);
+    // March has 31 days, so the instant moves forward by exactly 31 days.
+    ASSERT_EQ(v.as_result()->owned_inner->as_number(), 1710497400.0 + (31.0 * 86400.0));
 }
 
 static void test_datetime_add_seconds() {
@@ -42,7 +47,8 @@ static void test_datetime_add_years() {
     const auto v = eval("DateTime.add_years(1710497400.0, 1)");
 
     ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_number() > 1710497400.0);
+    // 2024-03-15 → 2025-03-15 spans 365 days (Feb 29 2024 is already behind).
+    ASSERT_EQ(v.as_result()->owned_inner->as_number(), 1710497400.0 + (365.0 * 86400.0));
 }
 
 // --- DateTime.Period (N03) ---
@@ -58,11 +64,12 @@ static void test_datetime_period_constructs() {
 }
 
 static void test_datetime_add_period_advances() {
-    // 2024-03-15 + 1 year 2 months 3 days (no day clamping) advances the instant.
+    // 2024-03-15 + 1 year 2 months 3 days (no day clamping) = 2025-05-18, which is
+    // 365 + 31 + 30 + 3 = 429 days later.
     const auto v = eval("DateTime.add_period(1710497400.0, DateTime.period(1, 2, 3))");
 
     ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_number() > 1710497400.0);
+    ASSERT_EQ(v.as_result()->owned_inner->as_number(), 1710497400.0 + (429.0 * 86400.0));
 }
 
 static void test_datetime_between_dates_roundtrips() {
@@ -146,10 +153,8 @@ static void test_datetime_from_iso_string_positive_offset() {
 }
 
 static void test_datetime_from_iso_string_utc() {
-    // Plain date-only (existing behaviour).
-    const auto v1 = eval(R"(DateTime.from_iso_string("2024-03-15"))");
-
-    ASSERT_RESULT_SUCCESS(v1);
+    // Plain date-only (existing behaviour): midnight UTC.
+    ASSERT_EVAL_NUM(R"(DateTime.from_iso_string("2024-03-15"))", 1710460800.0);
 
     // Date + time + Z suffix.
     ASSERT_EVAL_NUM(R"(DateTime.from_iso_string("2024-03-15T14:30:00Z"))", 1710513000.0);
@@ -200,14 +205,14 @@ static void test_datetime_now_iso_string() {
 
     ASSERT_RESULT_SUCCESS(v);
     // Should contain a 'T' separator.
-    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find('T') != std::string::npos);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find('T'), std::string::npos);
 }
 
 static void test_datetime_now_ms() {
     const auto v = eval("DateTime.milliseconds_since_start()");
 
     ASSERT_TRUE(v.is_number());
-    ASSERT_TRUE(v.as_number() > 0);
+    ASSERT_GT(v.as_number(), 0.0);
 }
 
 static void test_datetime_offset_hours() {
@@ -236,10 +241,7 @@ static void test_datetime_to_iso_string_offset_zero() {
 }
 
 static void test_datetime_to_iso_string_valid() {
-    const auto v = eval("DateTime.to_iso_string(1710497400.0)");
-
-    ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("2024") != std::string::npos);
+    ASSERT_EVAL_STR("DateTime.to_iso_string(1710497400.0)", "2024-03-15T10:10:00Z");
 }
 
 static void test_datetime_to_offset() {
@@ -262,12 +264,12 @@ static void test_datetime_to_parts_valid() {
 
     ASSERT_TRUE(inner.is_record());
     ASSERT_EQ(inner.as_record()->type_name, "TimeParts");
-    ASSERT_TRUE(inner.as_record()->find_field("year") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("month") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("day") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("hour") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("minute") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("second") != nullptr);
+    ASSERT_NE(inner.as_record()->find_field("year"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("month"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("day"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("hour"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("minute"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("second"), nullptr);
 }
 
 static void test_datetime_year_out_of_range() {
@@ -372,9 +374,17 @@ static void test_datetime_weekday_roundtrip() {
 
 static void test_datetime_weekday_accessors_reject_non_weekday() {
     // The choice-consuming accessors reject a non-choice and a foreign choice.
-    ASSERT_TRUE(luma::test::eval_throws("DateTime.weekday_number(5)"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(DateTime.weekday_name("Monday"))"));
-    ASSERT_TRUE(luma::test::eval_throws("DateTime.weekday_number(Log.Level.Information)"));
+    ASSERT_EVAL_THROWS("DateTime.weekday_number(5)",
+                       "DateTime.weekday_number: expected a DateTime.Weekday choice");
+    ASSERT_EVAL_THROWS(R"(DateTime.weekday_name("Monday"))",
+                       "DateTime.weekday_name: expected a DateTime.Weekday choice");
+    ASSERT_EVAL_THROWS("DateTime.weekday_number(Log.Level.Information)",
+                       "DateTime.weekday_number: expected a DateTime.Weekday, got "
+                       "'Level.Information'");
+    // A foreign choice whose variant shares a Weekday name is still rejected:
+    // the choice type is checked, not only the variant name.
+    ASSERT_EVAL_THROWS("choice Fake { Monday }\nDateTime.weekday_number(Fake.Monday)",
+                       "DateTime.weekday_number: expected a DateTime.Weekday, got 'Fake.Monday'");
 }
 
 static void test_datetime_month_of_returns_choice() {
@@ -431,9 +441,15 @@ static void test_datetime_month_roundtrip() {
 
 static void test_datetime_month_accessors_reject_non_month() {
     // The choice-consuming accessors reject a non-choice and a foreign choice.
-    ASSERT_TRUE(luma::test::eval_throws("DateTime.month_number(3)"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(DateTime.month_name("March"))"));
-    ASSERT_TRUE(luma::test::eval_throws("DateTime.month_number(DateTime.Weekday.Monday)"));
+    ASSERT_EVAL_THROWS("DateTime.month_number(3)",
+                       "DateTime.month_number: expected a DateTime.Month choice");
+    ASSERT_EVAL_THROWS(R"(DateTime.month_name("March"))",
+                       "DateTime.month_name: expected a DateTime.Month choice");
+    ASSERT_EVAL_THROWS("DateTime.month_number(DateTime.Weekday.Monday)",
+                       "DateTime.month_number: expected a DateTime.Month, got 'Weekday.Monday'");
+    // A foreign choice whose variant shares a Month name is still rejected.
+    ASSERT_EVAL_THROWS("choice Fake { March }\nDateTime.month_number(Fake.March)",
+                       "DateTime.month_number: expected a DateTime.Month, got 'Fake.March'");
 }
 
 static void test_datetime_components_out_of_range() {
@@ -576,7 +592,7 @@ static void test_datetime_now_unix() {
 
     ASSERT_TRUE(v.is_number());
     // Any moment after 2020-01-01 (1577836800) confirms a real clock reading.
-    ASSERT_TRUE(v.as_number() > 1577836800.0);
+    ASSERT_GT(v.as_number(), 1577836800.0);
 }
 
 static void test_datetime_format_valid() {
@@ -776,44 +792,44 @@ static void test_iso_codec_round_trip() {
 // round-trip must reproduce the exact instant.  format_iso8601 is also swept
 // with hostile doubles so the range / NaN / infinity guards stay enforced.
 static void test_iso_codec_oracle_corpus() {
-    constexpr std::string_view inputs[] = {"",
-                                           " ",
-                                           "Z",
-                                           "T",
-                                           "+",
-                                           "-",
-                                           "::",
-                                           "---",
-                                           "not-a-date",
-                                           "2024",
-                                           "2024-",
-                                           "2024-03",
-                                           "2024-03-15T",
-                                           "2024-03-15T14",
-                                           "2024-03-15T14:30",
-                                           "2024-03-15",
-                                           "2024-03-15T14:30:00",
-                                           "2024-03-15T14:30:00Z",
-                                           "2024-03-15t14:30:00z",
-                                           "2024-03-15T20:00:00+05:30",
-                                           "2024-03-15T09:30:00-05:00",
-                                           "2024-03-15T14:30:00+99:99",
-                                           "0001-01-01T00:00:00Z",
-                                           "9999-12-31T23:59:59Z",
-                                           "0000-01-01",
-                                           "10000-01-01",
-                                           "2024-13-01",
-                                           "2024-00-01",
-                                           "2024-02-30",
-                                           "2024-01-99T99:99:99Z",
-                                           "  2024-03-15  ",
-                                           "2024-03-15Tgarbage",
-                                           "99999999999999999999-01-01",
-                                           "+-+-+-",
-                                           "2024-03-15T14:30:00+",
-                                           "2024-03-15T14:30:00+05",
-                                           "\x01\x02\xff\xfe",
-                                           "\xc2\xb2\xc2\xb3"};
+    constexpr auto inputs = std::to_array<std::string_view>({"",
+                                                             " ",
+                                                             "Z",
+                                                             "T",
+                                                             "+",
+                                                             "-",
+                                                             "::",
+                                                             "---",
+                                                             "not-a-date",
+                                                             "2024",
+                                                             "2024-",
+                                                             "2024-03",
+                                                             "2024-03-15T",
+                                                             "2024-03-15T14",
+                                                             "2024-03-15T14:30",
+                                                             "2024-03-15",
+                                                             "2024-03-15T14:30:00",
+                                                             "2024-03-15T14:30:00Z",
+                                                             "2024-03-15t14:30:00z",
+                                                             "2024-03-15T20:00:00+05:30",
+                                                             "2024-03-15T09:30:00-05:00",
+                                                             "2024-03-15T14:30:00+99:99",
+                                                             "0001-01-01T00:00:00Z",
+                                                             "9999-12-31T23:59:59Z",
+                                                             "0000-01-01",
+                                                             "10000-01-01",
+                                                             "2024-13-01",
+                                                             "2024-00-01",
+                                                             "2024-02-30",
+                                                             "2024-01-99T99:99:99Z",
+                                                             "  2024-03-15  ",
+                                                             "2024-03-15Tgarbage",
+                                                             "99999999999999999999-01-01",
+                                                             "+-+-+-",
+                                                             "2024-03-15T14:30:00+",
+                                                             "2024-03-15T14:30:00+05",
+                                                             "\x01\x02\xff\xfe",
+                                                             "\xc2\xb2\xc2\xb3"});
 
     for (const std::string_view in : inputs) {
         const auto parsed = luma::datetime::parse_iso8601(in);
@@ -838,19 +854,10 @@ static void test_iso_codec_oracle_corpus() {
     // finite, in-range instants — which must then round-trip.
     const double k_min = -62135596800.0;
     const double k_max = 253402300799.0;
-    const double doubles[] = {0.0,
-                              -0.0,
-                              1.0e-300,
-                              1.0e300,
-                              -1.0e300,
-                              std::numeric_limits<double>::quiet_NaN(),
-                              std::numeric_limits<double>::infinity(),
-                              -std::numeric_limits<double>::infinity(),
-                              k_min,
-                              k_max,
-                              k_min - 1.0,
-                              k_max + 1.0,
-                              1710513000.0};
+    const auto doubles = std::to_array<double>(
+        {0.0, -0.0, 1.0e-300, 1.0e300, -1.0e300, std::numeric_limits<double>::quiet_NaN(),
+         std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(), k_min,
+         k_max, k_min - 1.0, k_max + 1.0, 1710513000.0});
 
     for (const double d : doubles) {
         const auto text = luma::datetime::format_iso8601(d);
@@ -879,7 +886,7 @@ static void test_datetime_interval_valid() {
 
     const auto& inner = *v.as_result()->owned_inner;
     ASSERT_TRUE(inner.is_record());
-    ASSERT_EQ(inner.as_record()->type_name, "Interval");
+    ASSERT_EQ(inner.as_record()->type_name, "DateTime.Interval");
     ASSERT_EQ(inner.as_record()->find_field("start")->as_number(), 100.0);
     ASSERT_EQ(inner.as_record()->find_field("end")->as_number(), 200.0);
 }
@@ -958,6 +965,7 @@ static void test_datetime_zoned_valid_and_iso() {
 
     // Zero offset renders a trailing Z.
     const auto utc = eval("DateTime.zoned_to_iso_string(Result.unwrap(DateTime.zoned(0.0, 0)))");
+    ASSERT_RESULT_SUCCESS(utc);
     ASSERT_EQ(utc.as_result()->owned_inner->as_string(), "1970-01-01T00:00:00Z");
 }
 
@@ -1032,13 +1040,17 @@ static void test_datetime_date_of_time_of_extract() {
 }
 
 static void test_datetime_combine_roundtrips_with_date_of() {
-    // combine(date_of(t), time_of(t)) == t for an in-range instant.
+    // combine(2024-06-15, 09:30:00) is that UTC instant, and date_of recovers the date.
     const auto v = eval("DateTime.combine(Result.unwrap(DateTime.date(2024, 6, 15)), "
                         "Result.unwrap(DateTime.time(9, 30, 0)))");
     ASSERT_RESULT_SUCCESS(v);
 
     const auto ts = v.as_result()->owned_inner->to_numeric();
+    // 2024-06-15T09:30:00Z.
+    ASSERT_EQ(ts, 1718443800.0);
+
     const auto day = eval("DateTime.date_of(" + std::to_string(ts) + ")");
+    ASSERT_RESULT_SUCCESS(day);
     ASSERT_EQ(day.as_result()->owned_inner->as_record()->find_field("month")->as_integer(),
               static_cast<std::int64_t>(6));
     ASSERT_EQ(day.as_result()->owned_inner->as_record()->find_field("day")->as_integer(),
@@ -1047,8 +1059,9 @@ static void test_datetime_combine_roundtrips_with_date_of() {
 
 static void test_datetime_combine_rejects_foreign_records() {
     // combine requires a Date then a Time, in that order.
-    ASSERT_TRUE(luma::test::eval_throws("DateTime.combine(Result.unwrap(DateTime.time(1, 2, 3)), "
-                                        "Result.unwrap(DateTime.date(2024, 1, 1)))"));
+    ASSERT_EVAL_THROWS("DateTime.combine(Result.unwrap(DateTime.time(1, 2, 3)), "
+                       "Result.unwrap(DateTime.date(2024, 1, 1)))",
+                       "DateTime.combine: expected a DateTime.Date as the first argument");
 }
 
 int main() {

@@ -5,6 +5,8 @@
 # Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── If / Else ───
+
 @test
 function void test_if_else() {
     integer score = 85
@@ -34,6 +36,18 @@ function void test_if_expression() {
 
     assert(excellence_label == "ok")
 }
+
+@test
+function void test_if_expression_uses_earlier_binding() {
+    integer score = 5
+
+    string inner = if score > 3 { "medium" } else { "small" }
+    string label = if score > 10 { "big" } else { inner }
+
+    assert(label == "medium")
+}
+
+# ─── For Loops ───
 
 @test
 function void test_for_in_range() {
@@ -128,8 +142,8 @@ function void test_for_discard_variable() {
 function void test_for_over_string() {
     mutable string built = ""
 
-    for ch in "hello" {
-        built = built + ch
+    for character in "hello" {
+        built = "${built}${character}"
     }
 
     assert(built == "hello")
@@ -145,6 +159,8 @@ function void test_for_over_string_count() {
 
     assert(count == 3)
 }
+
+# ─── Break and Continue ───
 
 @test
 function void test_break() {
@@ -228,16 +244,6 @@ function void test_break_in_nested_while() {
     assert(total == 9)
 }
 
-@test
-function void test_nested_if_expression() {
-    integer score = 5
-
-    string inner = if score > 3 { "medium" } else { "small" }
-    string label = if score > 10 { "big" } else { inner }
-
-    assert(label == "medium")
-}
-
 # ─── While Loops ───
 
 @test
@@ -296,24 +302,24 @@ function void test_while_never_runs() {
     assert(counter == 42)
 }
 
-# While iteration limit is tested in the C++ unit test suite
-# (interpreter_test.cpp — test_while_iteration_limit) because
-# the 1-billion-iteration guard is too slow for the interpreted
-# Luma test runner.
+# The while iteration limit is tested in the C++ unit test suite
+# (resource_limits_test.cpp — test_while_loop_limit_enforced) because
+# the default 10-million-iteration guard is too slow for the
+# interpreted Luma test runner.
 
 # ─── Try / Catch / Finally ────────────────────────────────
 
 @test
 function void test_try_no_error() {
-    mutable integer val = 0
+    mutable integer value = 0
 
     try {
-        val = 42
+        value = 42
     } catch(_err) {
-        val = -1
+        value = -1
     }
 
-    assert(val == 42)
+    assert(value == 42)
 }
 
 @test
@@ -408,8 +414,8 @@ function void test_try_recovers_and_continues() {
     mutable integer value = 0
 
     try {
-        array<integer> arr = [1, 2, 3]
-        integer _ = arr[99]
+        array<integer> values = [1, 2, 3]
+        integer _ = values[99]
     } catch(_err) {
         value = 1
     }
@@ -491,11 +497,11 @@ function string catch_returns(reference<string> log) {
     try {
         integer _ = 1 // zero
     } catch(_err) {
-        Reference.set(log, Reference.get(log) + "C")
+        Reference.set(log, "${Reference.get(log)}C")
 
         return "ret"
     } finally {
-        Reference.set(log, Reference.get(log) + "F")
+        Reference.set(log, "${Reference.get(log)}F")
     }
 
     return "end"
@@ -528,10 +534,123 @@ function void test_finally_return_overrides_try_return() {
     assert(try_return_overridden_by_finally_return() == 2)
 }
 
+# Regression: `return <value>` ran the finally body while the return value sat
+# untracked on the stack, so a local declared in the finally body was given
+# the return value's slot and read 42 instead of its own value.
+function integer return_through_finally_with_local(reference<string> log) {
+    try {
+        return 42
+    } finally {
+        string message = "done"
+        Reference.set(log, message)
+    }
+}
+
+@test
+function void test_return_through_finally_keeps_finally_locals_apart() {
+    reference<string> log = Reference.new("")
+
+    integer returned = return_through_finally_with_local(log)
+
+    assert(returned == 42)
+    assert(Reference.get(log) == "done")
+}
+
+# Same invariant for the failure path of the `?` operator.
+function result<integer> failing_parse() {
+    return failure("bad input")
+}
+
+function result<integer> propagate_through_finally(reference<string> log) {
+    try {
+        integer parsed = failing_parse()?
+        Reference.set(log, "unreached ${parsed}")
+    } finally {
+        string message = "cleanup"
+        Reference.set(log, message)
+    }
+
+    return success(0)
+}
+
+@test
+function void test_question_mark_through_finally_keeps_finally_locals_apart() {
+    reference<string> log = Reference.new("")
+
+    result<integer> outcome = propagate_through_finally(log)
+
+    assert(Result.is_failure(outcome))
+    assert(Reference.get(log) == "cleanup")
+}
+
+# Regression: `break`/`continue` popped the loop body's locals before running
+# the enclosing finally body, which still read them by slot.
+@test
+function void test_break_through_finally_reads_loop_body_locals() {
+    mutable string seen = ""
+    mutable integer i = 0
+
+    while i < 3 {
+        string label = "x${i}"
+
+        try {
+            if i == 1 {
+                break
+            }
+        } finally {
+            string suffix = "!"
+            seen = "${seen}${label}${suffix}"
+        }
+
+        i += 1
+    }
+
+    assert(seen == "x0!x1!")
+}
+
+@test
+function void test_continue_through_finally_reads_loop_body_locals() {
+    mutable string seen = ""
+
+    for i in 0 .. 3 {
+        string label = "c${i}"
+
+        try {
+            if i < 2 {
+                continue
+            }
+        } finally {
+            seen = "${seen}${label};"
+        }
+    }
+
+    assert(seen == "c0;c1;c2;")
+}
+
+# Regression: when the last statement of a parameterless function was an
+# if/else whose else-branch ended in `return`, the implicit trailing return was
+# dropped and the then-branch ran off the end of the bytecode.
+function boolean always_ready() {
+    return true
+}
+
+@test
+function void test_if_else_ending_in_return_reaches_implicit_return() {
+    if always_ready() {
+        assert(always_ready())
+    } else {
+        return
+    }
+}
+
 # ─── Scope and Shadowing ──────────────────────────────────
+
+# Shadowing is linted (W0012) and --strict promotes it to an error; the `_`
+# prefix marks the shadowing below as intentional, which suppresses the lint.
+
 @test
 function void test_inner_block_shadows_outer() {
-    integer x = 1
+    integer _x = 1
     boolean condition = true
 
     if condition {
@@ -540,12 +659,12 @@ function void test_inner_block_shadows_outer() {
         assert(_x == 2)
     }
 
-    assert(x == 1)
+    assert(_x == 1)
 }
 
 @test
 function void test_nested_scopes_shadow_correctly() {
-    string label = "outer"
+    string _label = "outer"
     boolean condition = true
 
     if condition {
@@ -554,15 +673,15 @@ function void test_nested_scopes_shadow_correctly() {
         assert(_label == "middle")
 
         if condition {
-            string _inner_label = "inner"
+            string _label = "inner"
 
-            assert(_inner_label == "inner")
+            assert(_label == "inner")
         }
 
         assert(_label == "middle")
     }
 
-    assert(label == "outer")
+    assert(_label == "outer")
 }
 
 @test
@@ -580,16 +699,13 @@ function void test_for_loop_creates_scope() {
 
 @test
 function void test_for_over_string_collects_characters() {
-    mutable array<string> chars = []
+    mutable array<string> characters = []
 
-    for ch in "abc" {
-        chars = Array.push(chars, ch)
+    for character in "abc" {
+        characters = Array.push(characters, character)
     }
 
-    assert(Array.length(chars) == 3)
-    assert(chars[0] == "a")
-    assert(chars[1] == "b")
-    assert(chars[2] == "c")
+    assert(characters == ["a", "b", "c"])
 }
 
 @test
@@ -603,7 +719,7 @@ function void test_for_over_empty_string() {
     assert(count == 0)
 }
 
-# ─── Empty and Reverse Ranges ─────────────────────────────
+# ─── Empty Collections and Ranges ─────────────────────────
 
 @test
 function void test_for_over_empty_array() {
@@ -668,25 +784,25 @@ function void test_for_over_negative_range() {
     assert(sum == -6)
 }
 
-# ─── Match as Expression (additional) ────────────────────
+# ─── Match and If as Expressions ─────────────────────────
 
 @test
 function void test_match_expression_result_binding() {
-    result<integer> r = success(42)
+    result<integer> outcome = success(42)
 
-    integer val = match r {
+    integer doubled = match outcome {
         success(v) { v * 2 }
         failure(_) { 0 }
     }
 
-    assert(val == 84)
+    assert(doubled == 84)
 }
 
 @test
 function void test_if_expression_nested() {
-    integer x = 5
+    integer size = 5
 
-    string label = if x > 10 { "big" } else { if x > 3 { "medium" } else { "small" } }
+    string label = if size > 10 { "big" } else { if size > 3 { "medium" } else { "small" } }
 
     assert(label == "medium")
 }
@@ -695,11 +811,11 @@ function void test_if_expression_nested() {
 
 @test
 function void test_for_over_dictionary() {
-    dictionary<integer> d = {"a": 1, "b": 2}
+    dictionary<integer> quantities = {"apples": 1, "pears": 2}
     mutable integer total = 0
 
-    for _key, val in d {
-        total += val
+    for _name, quantity in quantities {
+        total += quantity
     }
 
     assert(total == 3)

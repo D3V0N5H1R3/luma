@@ -5,9 +5,14 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
-# ───────────────────────────────────────────────────────────
-# Parsing (deserialize)
-# ───────────────────────────────────────────────────────────
+function boolean reject_every_row(dictionary<string> row) {
+    string name = Dictionary.get_or(row, "name", "")
+    boolean _never = Result.expect(failure("rejected"), "predicate rejected ${name}")
+
+    return true
+}
+
+# ─── Parsing (deserialize) ───────────────────────────────
 
 @test
 function void test_csv_parse_basic() {
@@ -56,16 +61,23 @@ function void test_csv_parse_with_custom_delimiter() {
     assert(rows[1][1] == "2")
 }
 
-# ───────────────────────────────────────────────────────────
-# Serialization
-# ───────────────────────────────────────────────────────────
+@test
+function void test_csv_parse_with_custom_quote() {
+    # With "'" as the quote character, a quoted field may contain the delimiter.
+    result<array<array<string>>> rows =
+        Csv.deserialize_with("'a;b';c", {"delimiter": ";", "quote": "'"})
+
+    assert(rows == success([["a;b", "c"]]))
+}
+
+# ─── Serialization ───────────────────────────────────────
 
 @test
 function void test_csv_serialize() {
-    string csv = Csv.serialize([["name", "age"], ["Alice", "30"]]) |> Result.unwrap()
+    # Every row, including the last, is terminated by a newline.
+    result<string> csv = Csv.serialize([["name", "age"], ["Alice", "30"]])
 
-    assert(String.contains(csv, "name,age"))
-    assert(String.contains(csv, "Alice,30"))
+    assert(csv == success("name,age\nAlice,30\n"))
 }
 
 @test
@@ -81,17 +93,12 @@ function void test_csv_serialize_roundtrip() {
     array<array<string>> original = [["x", "y"], ["1", "2"], ["3", "4"]]
 
     string csv = Csv.serialize(original) |> Result.unwrap()
-
     array<array<string>> parsed = Csv.deserialize(csv) |> Result.unwrap()
 
-    assert(Array.length(parsed) == 3)
-    assert(parsed[0][0] == "x")
-    assert(parsed[2][1] == "4")
+    assert(parsed == original)
 }
 
-# ───────────────────────────────────────────────────────────
-# Records (named columns)
-# ───────────────────────────────────────────────────────────
+# ─── Records (named columns) ─────────────────────────────
 
 @test
 function void test_csv_deserialize_records() {
@@ -106,6 +113,7 @@ function void test_csv_deserialize_records() {
 
 @test
 function void test_csv_serialize_records() {
+    # The header row comes from the first record's keys, in insertion order.
     array<dictionary<string>> records = [
         {"name": "Alice", "age": "30"},
         {"name": "Bob", "age": "25"}
@@ -113,70 +121,105 @@ function void test_csv_serialize_records() {
 
     string csv = Csv.serialize_records(records)
 
-    assert(String.contains(csv, "Alice"))
-    assert(String.contains(csv, "Bob"))
+    assert(csv == "name,age\nAlice,30\nBob,25\n")
 }
 
-# ───────────────────────────────────────────────────────────
-# Utility functions
-# ───────────────────────────────────────────────────────────
+@test
+function void test_csv_deserialize_records_ragged() {
+    # A data row shorter than the header is padded with empty fields.
+    array<dictionary<string>> records = Csv.deserialize_records("a,b,c\n1,2")
+    |> Result.unwrap()
+
+    assert(Array.length(records) == 1)
+    assert(records[0]["a"] == "1")
+    assert(records[0]["b"] == "2")
+    assert(records[0]["c"] == "")
+}
+
+@test
+function void test_csv_serialize_records_roundtrip() {
+    array<dictionary<string>> records = [
+        {"name": "Alice", "city": "Berlin"},
+        {"name": "Bob", "city": "Paris"}
+    ]
+
+    string csv = Csv.serialize_records(records)
+    array<dictionary<string>> parsed = Csv.deserialize_records(csv)
+    |> Result.unwrap()
+
+    assert(Array.length(parsed) == 2)
+    assert(parsed[0]["name"] == "Alice")
+    assert(parsed[1]["city"] == "Paris")
+}
+
+# ─── Header and row counts ───────────────────────────────
 
 @test
 function void test_csv_header() {
-    array<string> h = Csv.header("name,age\nAlice,30") |> Result.unwrap()
+    array<string> headers = Csv.header("name,age\nAlice,30") |> Result.unwrap()
 
-    assert(Array.length(h) == 2)
-    assert(h[0] == "name")
-    assert(h[1] == "age")
+    assert(headers == ["name", "age"])
 }
 
 @test
 function void test_csv_count_rows() {
-    integer n = Csv.count_rows("a,b\n1,2\n3,4") |> Result.unwrap()
+    # The header row is not counted.
+    result<integer> row_count = Csv.count_rows("a,b\n1,2\n3,4")
 
-    assert(n == 2)
+    assert(row_count == success(2))
 }
 
 @test
 function void test_csv_count_rows_empty_body() {
-    integer n = Csv.count_rows("a,b") |> Result.unwrap()
+    result<integer> row_count = Csv.count_rows("a,b")
 
-    assert(n == 0)
+    assert(row_count == success(0))
 }
 
-# ─── File I/O ─────────────────────────────────────────────
+@test
+function void test_csv_count_rows_quoted_newline() {
+    # The newline lives inside a quoted field, so this is one data row.
+    result<integer> row_count = Csv.count_rows("a,b\n\"x\ny\",2")
+
+    assert(row_count == success(1))
+}
+
+# ─── File I/O ────────────────────────────────────────────
+# ctest runs suites in parallel from the repository root, so file names carry
+# this suite's and test's name to stay unique.
 
 @test
 function void test_csv_write_file_then_read_file() {
+    string path = "_test_csv_write_file_then_read_file.csv"
     array<dictionary<string>> data = [
         {"name": "Alice", "score": "95"},
         {"name": "Bob", "score": "87"}
     ]
 
-    result<boolean> _w = Csv.write_file("test_csv_luma.csv", data)
+    result<boolean> written = Csv.write_file(path, data)
+    result<array<dictionary<string>>> loaded = Csv.read_file(path)
+    # Delete before asserting so a failed assertion cannot leave the file behind.
+    boolean _deleted = Result.unwrap_or(FileSystem.delete(path), false)
 
-    array<dictionary<string>> loaded = Csv.read_file("test_csv_luma.csv")
-    |> Result.unwrap()
+    assert(written == success(true))
+    assert(Result.is_success(loaded))
 
-    assert(Array.length(loaded) == 2)
-    assert(loaded[0]["name"] == "Alice")
-    assert(loaded[0]["score"] == "95")
-    assert(loaded[1]["score"] == "87")
+    array<dictionary<string>> records = Result.unwrap(loaded)
 
-    # Clean up
-    result<boolean> _d = FileSystem.delete("test_csv_luma.csv")
+    assert(Array.length(records) == 2)
+    assert(records[0]["name"] == "Alice")
+    assert(records[0]["score"] == "95")
+    assert(records[1]["score"] == "87")
 }
 
 @test
 function void test_csv_read_file_missing() {
-    result<array<dictionary<string>>> r = Csv.read_file("nonexistent_file.csv")
+    result<array<dictionary<string>>> loaded = Csv.read_file("_test_csv_no_such_file.csv")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(loaded))
 }
 
-# ───────────────────────────────────────────────────────────
-# RFC 4180 quoting and line endings
-# ───────────────────────────────────────────────────────────
+# ─── RFC 4180 quoting and line endings ───────────────────
 
 @test
 function void test_csv_parse_crlf() {
@@ -211,17 +254,16 @@ function void test_csv_parse_multiline_field() {
 @test
 function void test_csv_serialize_quotes_special() {
     # A field containing the delimiter must be quoted on output.
-    string csv = Csv.serialize([["a,b", "c"]]) |> Result.unwrap()
+    result<string> csv = Csv.serialize([["a,b", "c"]])
 
-    assert(String.contains(csv, "\"a,b\""))
+    assert(csv == success("\"a,b\",c\n"))
 }
 
 @test
 function void test_csv_serialize_with_custom_quote() {
-    string csv = Csv.serialize_with([["a;b", "c"]], {"delimiter": ";", "quote": "'"})
-    |> Result.unwrap()
+    result<string> csv = Csv.serialize_with([["a;b", "c"]], {"delimiter": ";", "quote": "'"})
 
-    assert(String.contains(csv, "'a;b'"))
+    assert(csv == success("'a;b';c\n"))
 }
 
 @test
@@ -230,102 +272,57 @@ function void test_csv_roundtrip_embedded() {
     array<array<string>> original = [["a\nb", "c,d"], ["e\"f", "g"]]
 
     string csv = Csv.serialize(original) |> Result.unwrap()
-
     array<array<string>> parsed = Csv.deserialize(csv) |> Result.unwrap()
 
-    assert(Array.length(parsed) == 2)
-    assert(parsed[0][0] == "a\nb")
-    assert(parsed[0][1] == "c,d")
-    assert(parsed[1][0] == "e\"f")
+    assert(parsed == original)
 }
 
-@test
-function void test_csv_count_rows_quoted_newline() {
-    # The newline lives inside a quoted field, so this is one data row.
-    integer n = Csv.count_rows("a,b\n\"x\ny\",2") |> Result.unwrap()
-
-    assert(n == 1)
-}
-
-@test
-function void test_csv_deserialize_records_ragged() {
-    # A data row shorter than the header is padded with empty fields.
-    array<dictionary<string>> recs = Csv.deserialize_records("a,b,c\n1,2")
-    |> Result.unwrap()
-
-    assert(Array.length(recs) == 1)
-    assert(recs[0]["a"] == "1")
-    assert(recs[0]["b"] == "2")
-    assert(recs[0]["c"] == "")
-}
-
-@test
-function void test_csv_serialize_records_roundtrip() {
-    array<dictionary<string>> records = [
-        {"name": "Alice", "city": "Berlin"},
-        {"name": "Bob", "city": "Paris"}
-    ]
-
-    string csv = Csv.serialize_records(records)
-
-    array<dictionary<string>> parsed = Csv.deserialize_records(csv)
-    |> Result.unwrap()
-
-    assert(Array.length(parsed) == 2)
-    assert(parsed[0]["name"] == "Alice")
-    assert(parsed[1]["city"] == "Paris")
-}
-
-# ───────────────────────────────────────────────────────────
-# Negative: malformed input yields a failure result
-# ───────────────────────────────────────────────────────────
+# ─── Malformed input yields a failure result ─────────────
 
 @test
 function void test_csv_deserialize_unterminated_fails() {
-    result<array<array<string>>> r = Csv.deserialize("\"unterminated")
+    result<array<array<string>>> rows = Csv.deserialize("\"unterminated")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(rows))
 }
 
 @test
 function void test_csv_deserialize_records_unterminated_fails() {
-    result<array<dictionary<string>>> r = Csv.deserialize_records("\"oops")
+    result<array<dictionary<string>>> records = Csv.deserialize_records("\"oops")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(records))
 }
 
 @test
 function void test_csv_header_unterminated_fails() {
-    result<array<string>> r = Csv.header("\"oops")
+    result<array<string>> headers = Csv.header("\"oops")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(headers))
 }
 
 @test
 function void test_csv_count_rows_unterminated_fails() {
-    result<integer> r = Csv.count_rows("\"oops")
+    result<integer> row_count = Csv.count_rows("\"oops")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(row_count))
 }
 
-# ───────────────────────────────────────────────────────────
-# Csv.Dialect — typed parse/format options
-# ───────────────────────────────────────────────────────────
+# ─── Csv.Dialect (typed parse/format options) ────────────
 
 @test
 function void test_csv_default_dialect() {
-    Csv.Dialect d = Csv.default_dialect()
+    Csv.Dialect dialect = Csv.default_dialect()
 
-    assert(d.delimiter == ",")
-    assert(d.quote == "\"")
+    assert(dialect.delimiter == ",")
+    assert(dialect.quote == "\"")
 }
 
 @test
 function void test_csv_dialect_custom() {
-    Csv.Dialect d = Csv.dialect(";", "'")
+    Csv.Dialect dialect = Csv.dialect(";", "'")
 
-    assert(d.delimiter == ";")
-    assert(d.quote == "'")
+    assert(dialect.delimiter == ";")
+    assert(dialect.quote == "'")
 }
 
 @test
@@ -333,61 +330,58 @@ function void test_csv_deserialize_with_dialect() {
     array<array<string>> rows = Csv.deserialize_with("a;b\n1;2", Csv.dialect(";", "\""))
     |> Result.unwrap()
 
-    assert(Array.length(rows) == 2)
-    assert(rows[0][0] == "a")
-    assert(rows[1][1] == "2")
+    assert(rows == [["a", "b"], ["1", "2"]])
 }
 
 @test
 function void test_csv_serialize_with_dialect() {
-    string csv = Csv.serialize_with([["a", "b"], ["1", "2"]], Csv.dialect(";", "\""))
-    |> Result.unwrap()
+    result<string> csv = Csv.serialize_with([["a", "b"], ["1", "2"]], Csv.dialect(";", "\""))
 
-    assert(String.contains(csv, "a;b"))
-    assert(String.contains(csv, "1;2"))
+    assert(csv == success("a;b\n1;2\n"))
 }
 
-# ─── Located parse errors (Csv.deserialize_detailed / Csv.ParseError) ───
+# ─── Located parse errors (deserialize_detailed) ─────────
 
 @test
 function void test_csv_deserialize_detailed_success() {
-    result<array<array<string>>, Csv.ParseError> r = Csv.deserialize_detailed("a,b\n1,2")
+    result<array<array<string>>, Csv.ParseError> parsed = Csv.deserialize_detailed("a,b\n1,2")
 
-    assert(Result.is_success(r), "well-formed CSV should parse")
+    assert(Result.is_success(parsed), "well-formed CSV should parse")
 
-    array<array<string>> rows = Result.unwrap(r)
+    array<array<string>> rows = Result.unwrap(parsed)
+
     assert(Array.length(rows) == 2, "two rows are decoded")
     assert(rows[1][0] == "1", "the first data field is preserved")
 }
 
 @test
 function void test_csv_deserialize_detailed_failure_location() {
-    # The unterminated quoted field opens on the second line.
-    result<array<array<string>>, Csv.ParseError> r = Csv.deserialize_detailed("a,b\n\"oops")
+    # The unterminated quoted field opens at the start of the second line.
+    result<array<array<string>>, Csv.ParseError> parsed =
+        Csv.deserialize_detailed("a,b\n\"oops")
 
-    match r {
+    match parsed {
         success(_rows) { assert(false, "an unterminated quote should not parse") }
-        failure(e) {
-            assert(e.line == 2, "the error is reported on line 2")
-            assert(e.column >= 1, "the column is 1-based")
-            assert(String.length(e.message) > 0, "the message is populated")
+        failure(error) {
+            assert(error.line == 2, "the error is reported on line 2")
+            assert(error.column == 1, "the column is 1-based")
+            assert(String.contains(error.message, "unterminated"), "the message names the problem")
         }
     }
 }
 
-# ─── Csv.Table (headers + positional rows) ───
+# ─── Csv.Table (headers + positional rows) ───────────────
 
 @test
 function void test_csv_table() {
-    Csv.Table t = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25"))
-    assert(Array.length(t.headers) == 2, "two headers")
-    assert(t.headers[0] == "name", "column order preserved")
-    assert(Array.length(t.rows) == 2, "two data rows")
+    Csv.Table table = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25"))
 
-    array<string> names = Result.unwrap(Csv.column(t, "name"))
-    assert(names[0] == "Alice" && names[1] == "Bob", "column extracts by name")
+    assert(table.headers == ["name", "age"], "column order preserved")
+    assert(Array.length(table.rows) == 2, "two data rows")
+    assert(Csv.column(table, "name") == success(["Alice", "Bob"]), "column extracts by name")
 
-    string text = Result.unwrap(Csv.serialize_table(t))
+    string text = Result.unwrap(Csv.serialize_table(table))
+
     assert(String.contains(text, "name,age"), "serialize emits the header row")
     assert(String.contains(text, "Bob,25"), "serialize emits every data row")
 }
@@ -396,52 +390,69 @@ function void test_csv_table() {
 function void test_csv_table_empty_and_missing_column() {
     # A header-only table keeps the header with zero rows.
     Csv.Table header_only = Result.unwrap(Csv.deserialize_table("a,b,c"))
+
     assert(Array.length(header_only.headers) == 3, "header retained with no data rows")
     assert(Array.length(header_only.rows) == 0, "no data rows")
-
-    result<array<string>> missing = Csv.column(header_only, "nope")
-    assert(Result.is_failure(missing), "an unknown column fails")
+    assert(Result.is_failure(Csv.column(header_only, "nope")), "an unknown column fails")
 }
 
 @test
 function void test_csv_row() {
-    Csv.Table t = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25"))
+    Csv.Table table = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25"))
 
-    dictionary<string> first = Result.unwrap(Csv.row(t, 0))
+    dictionary<string> first = Result.unwrap(Csv.row(table, 0))
+    dictionary<string> second = Result.unwrap(Csv.row(table, 1))
+
     assert(Dictionary.get_or(first, "name", "") == "Alice", "row keyed by header")
     assert(Dictionary.get_or(first, "age", "") == "30", "row value by header")
-
-    dictionary<string> second = Result.unwrap(Csv.row(t, 1))
     assert(Dictionary.get_or(second, "name", "") == "Bob")
+    assert(Result.is_failure(Csv.row(table, 5)), "out-of-bounds row index fails")
+}
 
-    # Out-of-bounds fails
-    assert(Result.is_failure(Csv.row(t, 5)), "out-of-bounds row index fails")
+@test
+function void test_csv_row_and_column_pad_short_rows() {
+    # A data row shorter than the header reads as "" for the missing fields.
+    Csv.Table table = Result.unwrap(Csv.deserialize_table("name,age\nAlice"))
+
+    dictionary<string> first = Result.unwrap(Csv.row(table, 0))
+
+    assert(Dictionary.get_or(first, "name", "?") == "Alice")
+    assert(Dictionary.get_or(first, "age", "?") == "", "missing field is padded with \"\"")
+    assert(Csv.column(table, "age") == success([""]), "column pads the short row too")
 }
 
 @test
 function void test_csv_select() {
-    Csv.Table t = Result.unwrap(Csv.deserialize_table("name,age,city\nAlice,30,NYC\nBob,25,LA"))
+    Csv.Table table = Result.unwrap(Csv.deserialize_table("name,age,city\nAlice,30,NYC\nBob,25,LA"))
 
-    Csv.Table projected = Result.unwrap(Csv.select(t, ["city", "name"]))
-    assert(Array.length(projected.headers) == 2, "two projected columns")
-    assert(projected.headers[0] == "city", "columns in requested order")
-    assert(projected.headers[1] == "name")
-    assert(Result.unwrap(Csv.column(projected, "city"))[0] == "NYC")
-    assert(Result.unwrap(Csv.column(projected, "name"))[1] == "Bob")
+    Csv.Table projected = Result.unwrap(Csv.select(table, ["city", "name"]))
 
-    # An unknown column fails
-    assert(Result.is_failure(Csv.select(t, ["name", "nope"])), "unknown column fails")
+    assert(projected.headers == ["city", "name"], "columns in requested order")
+    assert(Csv.column(projected, "city") == success(["NYC", "LA"]))
+    assert(Csv.column(projected, "name") == success(["Alice", "Bob"]))
+    assert(Result.is_failure(Csv.select(table, ["name", "nope"])), "unknown column fails")
 }
 
 @test
 function void test_csv_filter_rows() {
-    Csv.Table t = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25\nCarol,30"))
+    Csv.Table table = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25\nCarol,30"))
 
-    Csv.Table thirties = Result.unwrap(
-        Csv.filter_rows(t, (dictionary<string> r) -> Dictionary.get_or(r, "age", "") == "30"))
+    Csv.Table thirties = Result.unwrap(Csv.filter_rows(table,
+        (dictionary<string> row) -> Dictionary.get_or(row, "age", "") == "30"))
 
     assert(Array.length(thirties.rows) == 2, "two rows match age 30")
-    assert(Array.length(thirties.headers) == 2, "headers preserved")
-    assert(Result.unwrap(Csv.column(thirties, "name"))[0] == "Alice")
-    assert(Result.unwrap(Csv.column(thirties, "name"))[1] == "Carol")
+    assert(thirties.headers == ["name", "age"], "headers preserved")
+    assert(Csv.column(thirties, "name") == success(["Alice", "Carol"]))
+}
+
+@test
+function void test_csv_filter_rows_fails_when_predicate_throws() {
+    Csv.Table table = Result.unwrap(Csv.deserialize_table("name\nAlice"))
+
+    result<Csv.Table> filtered =
+        Csv.filter_rows(table, (dictionary<string> row) -> reject_every_row(row))
+
+    assert(Result.is_failure(filtered), "a throwing predicate turns filter_rows into a failure")
+    assert(String.contains(Result.error(filtered), "predicate rejected Alice"),
+        "the failure carries the predicate's error")
 }

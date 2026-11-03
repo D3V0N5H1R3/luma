@@ -1,7 +1,17 @@
 // Standard library tests: Hash.
 
+#include <cstddef>
+#include <cstdint>
+#include <string>
+
 #include "common/resource_limits.hpp"
 #include "stdlib_test_helpers.hpp"
+
+using luma::ResourceLimits;
+using luma::test::eval;
+using luma::test::LimitGuard;
+using luma::test::LumaTempFile;
+using luma::test::make_std_env;
 
 static void test_hash_algorithms() {
     const auto v = eval(R"(Hash.algorithms())");
@@ -21,19 +31,19 @@ static void test_hash_crc32() {
     const auto v = eval(R"(Hash.crc32("hello"))");
 
     ASSERT_TRUE(v.is_integer());
-    ASSERT_EQ(v.as_integer(), int64_t{907060870});
+    ASSERT_EQ(v.as_integer(), std::int64_t{907060870});
 }
 
 static void test_hash_crc32_known_vectors() {
     // CRC-32/ISO-HDLC check value: crc32("123456789") == 0xCBF43926.
-    ASSERT_EQ(eval(R"(Hash.crc32("123456789"))").as_integer(), int64_t{3421780262});
+    ASSERT_EQ(eval(R"(Hash.crc32("123456789"))").as_integer(), std::int64_t{3421780262});
 
     // The empty input maps to the algorithm's zeroed final register.
-    ASSERT_EQ(eval(R"(Hash.crc32(""))").as_integer(), int64_t{0});
+    ASSERT_EQ(eval(R"(Hash.crc32(""))").as_integer(), std::int64_t{0});
 
     // A second well-known vector (0x414FA339).
     ASSERT_EQ(eval(R"(Hash.crc32("The quick brown fox jumps over the lazy dog"))").as_integer(),
-              int64_t{1095738169});
+              std::int64_t{1095738169});
 }
 
 static void test_hash_hmac_sha256() {
@@ -94,7 +104,7 @@ static void test_hash_md5_abc() {
 }
 
 static void test_hash_module() {
-    const auto env = luma::test::make_std_env();
+    const auto env = make_std_env();
 
     ASSERT_TRUE(env->has("Hash.md5"));
     ASSERT_TRUE(env->has("Hash.sha1"));
@@ -241,9 +251,13 @@ static void test_hash_digest_crc32_hex() {
 
 static void test_hash_digest_rejects_unknown_and_non_string() {
     // An unknown algorithm name throws; a non-choice, non-string algorithm throws.
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.digest("sha999", "input"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.digest(42, "input"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.digest("sha256", 42))"));
+    ASSERT_EVAL_THROWS(R"(Hash.digest("sha999", "input"))",
+                       "Hash.digest: unknown algorithm 'sha999'");
+    ASSERT_EVAL_THROWS(R"(Hash.digest(42, "input"))",
+                       "Hash.digest: algorithm must be a Hash.Algorithm or an algorithm-name "
+                       "string");
+    ASSERT_EVAL_THROWS(R"(Hash.digest("sha256", 42))",
+                       "Hash.digest: expected string, got 'integer'");
 }
 
 static void test_hash_verify_false() {
@@ -317,37 +331,46 @@ static void test_hash_file_rejects_oversized_file() {
 // runtime argument guards in hash_digest.cpp directly.
 
 static void test_hash_digest_rejects_non_string() {
-    ASSERT_TRUE(luma::test::eval_throws("Hash.md5(42)"));
-    ASSERT_TRUE(luma::test::eval_throws("Hash.sha1(true)"));
-    ASSERT_TRUE(luma::test::eval_throws("Hash.sha256(3.14)"));
-    ASSERT_TRUE(luma::test::eval_throws("Hash.sha512([1, 2, 3])"));
-    ASSERT_TRUE(luma::test::eval_throws("Hash.crc32(42)"));
+    ASSERT_EVAL_THROWS("Hash.md5(42)", "Hash.md5: expected string, got 'integer'");
+    ASSERT_EVAL_THROWS("Hash.sha1(true)", "Hash.sha1: expected string, got 'boolean'");
+    ASSERT_EVAL_THROWS("Hash.sha256(3.14)", "Hash.sha256: expected string, got 'number'");
+    ASSERT_EVAL_THROWS("Hash.sha512([1, 2, 3])", "Hash.sha512: expected string, got 'array'");
+    ASSERT_EVAL_THROWS("Hash.crc32(42)", "Hash.crc32: expected string, got 'integer'");
 }
 
 static void test_hash_hmac_rejects_non_string() {
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.hmac_sha256(42, "message"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.hmac_sha256("key", 42))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.hmac_sha512(42, "message"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.hmac_sha512("key", true))"));
+    ASSERT_EVAL_THROWS(R"(Hash.hmac_sha256(42, "message"))",
+                       "Hash.hmac_sha256: expected string for argument 1, got 'integer'");
+    ASSERT_EVAL_THROWS(R"(Hash.hmac_sha256("key", 42))",
+                       "Hash.hmac_sha256: expected string for argument 2, got 'integer'");
+    ASSERT_EVAL_THROWS(R"(Hash.hmac_sha512(42, "message"))",
+                       "Hash.hmac_sha512: expected string for argument 1, got 'integer'");
+    ASSERT_EVAL_THROWS(R"(Hash.hmac_sha512("key", true))",
+                       "Hash.hmac_sha512: expected string for argument 2, got 'boolean'");
 }
 
 static void test_hash_verify_rejects_non_string() {
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.verify(42, "input", "expected"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.verify("sha256", 42, "expected"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.verify("sha256", "input", 42))"));
+    ASSERT_EVAL_THROWS(R"(Hash.verify(42, "input", "expected"))",
+                       "Hash.verify: algorithm must be a Hash.Algorithm or an algorithm-name "
+                       "string");
+    ASSERT_EVAL_THROWS(R"(Hash.verify("sha256", 42, "expected"))",
+                       "Hash.verify: expected string, got 'integer'");
+    ASSERT_EVAL_THROWS(R"(Hash.verify("sha256", "input", 42))",
+                       "Hash.verify: expected string, got 'integer'");
 }
 
 static void test_hash_verify_unknown_algorithm_throws() {
     // An unrecognised algorithm name is a runtime error (compute_named_digest →
     // nullopt).  crc32 is NOT here — it is a supported algorithm for verify/digest.
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.verify("sha999", "input", "expected"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.verify("", "input", "expected"))"));
+    ASSERT_EVAL_THROWS(R"(Hash.verify("sha999", "input", "expected"))",
+                       "Hash.verify: unknown algorithm 'sha999'");
+    ASSERT_EVAL_THROWS(R"(Hash.verify("", "input", "expected"))",
+                       "Hash.verify: unknown algorithm ''");
 }
 
 static void test_hash_verify_unknown_algorithm_message() {
     // The error names the offending algorithm and lists the supported set.
-    ASSERT_THROWS_WITH_MESSAGE(eval(R"(Hash.verify("bogus", "input", "expected"))"),
-                               "unknown algorithm");
+    ASSERT_EVAL_THROWS(R"(Hash.verify("bogus", "input", "expected"))", "unknown algorithm 'bogus'");
 }
 
 // ─── Hash.Digest (algorithm-tagged typed digests) ─────────────────────────────
@@ -361,12 +384,14 @@ static void test_hash_sha256_typed_tags_algorithm_and_hex() {
     ASSERT_EQ(v.as_record()->type_name, "Digest");
 
     const auto* algorithm = v.as_record()->find_field("algorithm");
-    ASSERT_TRUE(algorithm != nullptr && algorithm->is_choice());
+    ASSERT_NE(algorithm, nullptr);
+    ASSERT_TRUE(algorithm->is_choice());
     ASSERT_EQ(algorithm->as_choice()->type_name, "Algorithm");
     ASSERT_EQ(algorithm->as_choice()->variant, "Sha256");
 
     const auto* hex = v.as_record()->find_field("hexadecimal");
-    ASSERT_TRUE(hex != nullptr && hex->is_string());
+    ASSERT_NE(hex, nullptr);
+    ASSERT_TRUE(hex->is_string());
     ASSERT_EQ(hex->as_string(), eval(R"(Hash.sha256("abc"))").as_string());
 }
 
@@ -386,7 +411,7 @@ static void test_hash_typed_variants_tag_each_algorithm() {
 }
 
 static void test_hash_typed_registered() {
-    const auto env = luma::test::make_std_env();
+    const auto env = make_std_env();
 
     ASSERT_TRUE(env->has("Hash.md5_typed"));
     ASSERT_TRUE(env->has("Hash.sha1_typed"));

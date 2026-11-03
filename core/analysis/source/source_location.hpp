@@ -10,10 +10,35 @@ namespace luma {
 using FileId = int;
 
 /// Represents a position in a source file (file, line, column).
+///
+/// A location copied from a token points ONE PAST the token's last character
+/// (`line`/`column`), and also records where that token begins
+/// (`start_line`/`start_column`).  AST nodes, the compiler's source maps and the
+/// language server all copy token locations, so the start travels with them and
+/// diagnostics can put the caret on the token itself (see start()).  A
+/// `start_line` of 0 means "start unknown" — locations built by hand rather
+/// than copied from a token.
 struct SourceLocation {
     FileId file_id{0};
     int line{1};
     int column{1};
+    int start_line{0};
+    int start_column{0};
+
+    /// Returns true if this location records where its token begins.
+    [[nodiscard]] constexpr bool has_start() const noexcept {
+        return start_line > 0 && start_column > 0;
+    }
+
+    /// The position of the token's first character, or this location itself
+    /// when the start is unknown.  The result carries no start of its own.
+    [[nodiscard]] constexpr SourceLocation start() const noexcept {
+        if (!has_start()) {
+            return {.file_id = file_id, .line = line, .column = column};
+        }
+
+        return {.file_id = file_id, .line = start_line, .column = start_column};
+    }
 
     /// Returns true if this location carries a usable position.
     ///
@@ -39,7 +64,25 @@ struct SourceLocation {
         return is_valid();
     }
 
-    [[nodiscard]] auto operator<=>(const SourceLocation&) const = default;
+    // The start is display metadata derived from the same token, so identity and
+    // ordering are by (file, line, column) alone: a hand-built location equals
+    // the token location it names.
+    [[nodiscard]] constexpr bool operator==(const SourceLocation& other) const noexcept {
+        return file_id == other.file_id && line == other.line && column == other.column;
+    }
+
+    [[nodiscard]] constexpr std::strong_ordering
+    operator<=>(const SourceLocation& other) const noexcept {
+        if (const auto order = file_id <=> other.file_id; order != 0) {
+            return order;
+        }
+
+        if (const auto order = line <=> other.line; order != 0) {
+            return order;
+        }
+
+        return column <=> other.column;
+    }
 };
 
 } // namespace luma

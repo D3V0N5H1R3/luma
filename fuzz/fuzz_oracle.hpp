@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_FUZZ_FUZZ_ORACLE_HPP
+#define LUMA_FUZZ_FUZZ_ORACLE_HPP
 
 #include <string>
 
@@ -48,3 +49,5 @@ void check_decoder_stable(const std::string& input, Encode&& encode, Decode&& de
 }
 
 } // namespace luma::fuzz
+
+#endif // LUMA_FUZZ_FUZZ_ORACLE_HPP

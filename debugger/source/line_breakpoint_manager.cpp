@@ -6,6 +6,7 @@
 #include <limits>
 
 #include "dap_breakpoint_validator.hpp"
+#include "debugger_messages.hpp"
 
 namespace luma::dap {
 
@@ -36,9 +37,9 @@ Breakpoint LineBreakpointManager::build_breakpoint_response(int bp_id, bool veri
     breakpoint.log_message = req.log_message;
 
     if (verified && line != requested_line) {
-        breakpoint.message = std::format("Breakpoint moved to executable line {}", line);
+        breakpoint.message = std::format(messages::breakpoint::moved_format, line);
     } else if (!verified) {
-        breakpoint.message = "Breakpoint will be verified when program launches";
+        breakpoint.message = std::string{messages::breakpoint::pending_launch};
     }
 
     return breakpoint;
@@ -67,7 +68,7 @@ void LineBreakpointManager::preserve_hit_counts(
         }
     }
 
-    info.id = ctx_->next_breakpoint_id++;
+    info.id = id_for_request(req);
     info.times_hit = 0;
 }
 
@@ -82,6 +83,10 @@ LineBreakpointManager::create_line_breakpoint_info(const BreakpointRequest& req,
     return info;
 }
 
+int LineBreakpointManager::id_for_request(const BreakpointRequest& req) const {
+    return req.id != 0 ? req.id : ctx_->next_breakpoint_id++;
+}
+
 // ─── Line breakpoints ───
 
 std::vector<Breakpoint>
@@ -90,8 +95,6 @@ LineBreakpointManager::set_breakpoints(const std::string& path,
     const auto abs_path = std::filesystem::absolute(path).string();
 
     const std::scoped_lock lock(ctx_->mutex);
-
-    path_breakpoints_[abs_path] = requests;
 
     const int file_id = ctx_->find_file_id(abs_path);
 
@@ -105,11 +108,19 @@ LineBreakpointManager::set_breakpoints(const std::string& path,
         std::vector<Breakpoint> responses;
         responses.reserve(requests.size());
 
+        auto& pending = path_breakpoints_[abs_path];
+        pending.clear();
+
         for (const auto& req : requests) {
             const int snapped = executable.empty() ? req.line : snap_line(req.line, executable);
 
             auto info = create_line_breakpoint_info(req, snapped);
             preserve_hit_counts(old_breakpoints, info, req);
+
+            // Remember the bound ID so a later resolve_pending_breakpoints()
+            // recognises this request as already bound.
+            auto& stored = pending.emplace_back(req);
+            stored.id = info.id;
 
             // Build the response from the just-assigned id so two requests that
             // snap to the same line each report their own breakpoint, then store
@@ -122,12 +133,20 @@ LineBreakpointManager::set_breakpoints(const std::string& path,
         return responses;
     }
 
-    std::vector<Breakpoint> result;
+    // Not compiled yet (or not part of the program): keep the requests, with
+    // their IDs, so resolution after compilation binds the same breakpoints the
+    // client already knows about.
+    auto& pending = path_breakpoints_[abs_path];
+    pending.clear();
 
+    std::vector<Breakpoint> result;
     result.reserve(requests.size());
+
     for (const auto& req : requests) {
-        result.push_back(build_breakpoint_response(ctx_->next_breakpoint_id++, false, req.line,
-                                                   req.line, abs_path, req));
+        auto& stored = pending.emplace_back(req);
+        stored.id = id_for_request(req);
+        result.push_back(
+            build_breakpoint_response(stored.id, false, req.line, req.line, abs_path, req));
     }
 
     return result;
@@ -135,43 +154,46 @@ LineBreakpointManager::set_breakpoints(const std::string& path,
 
 // ─── Resolution ───
 
-void LineBreakpointManager::resolve_pending_breakpoints() {
+std::vector<Breakpoint> LineBreakpointManager::resolve_pending_breakpoints() {
     const std::scoped_lock lock(ctx_->mutex);
+    std::vector<Breakpoint> newly_bound;
 
     for (const auto& [path, reqs] : path_breakpoints_) {
         const auto abs_path = std::filesystem::absolute(path).string();
         const int file_id = ctx_->find_file_id(abs_path);
 
-        if (file_id >= 0) {
-            const auto& executable = ctx_->collect_executable_lines(file_id);
-            auto& existing = line_breakpoints_[file_id];
+        if (file_id < 0) {
+            continue;
+        }
 
-            for (const auto& req : reqs) {
-                const int snapped = executable.empty() ? req.line : snap_line(req.line, executable);
+        const auto& executable = ctx_->collect_executable_lines(file_id);
+        auto& existing = line_breakpoints_[file_id];
 
-                auto& bucket = existing[snapped];
+        for (const auto& req : reqs) {
+            // Skip a request already bound (by a post-compilation setBreakpoints
+            // or an earlier resolve); it keeps its ID and hit count.
+            const bool already_bound = std::ranges::any_of(existing, [&](const auto& entry) {
+                return std::ranges::any_of(
+                    entry.second, [&](const LineBreakpointInfo& bp) { return bp.id == req.id; });
+            });
 
-                // Skip only if an identical breakpoint is already bound at this
-                // line (e.g. a prior resolve or a post-launch setBreakpoints);
-                // distinct breakpoints that snap to the same line coexist.
-                const bool already_bound =
-                    std::ranges::any_of(bucket, [&](const LineBreakpointInfo& bp) {
-                        return bp.condition == req.condition &&
-                               bp.hit_condition == req.hit_condition &&
-                               bp.log_message == req.log_message;
-                    });
-
-                if (already_bound) {
-                    continue;
-                }
-
-                auto info = create_line_breakpoint_info(req, snapped);
-                info.id = ctx_->next_breakpoint_id++;
-                info.times_hit = 0;
-                bucket.push_back(std::move(info));
+            if (already_bound) {
+                continue;
             }
+
+            const int snapped = executable.empty() ? req.line : snap_line(req.line, executable);
+
+            auto info = create_line_breakpoint_info(req, snapped);
+            info.id = id_for_request(req);
+            info.times_hit = 0;
+
+            newly_bound.push_back(
+                build_breakpoint_response(info.id, true, snapped, req.line, abs_path, req));
+            existing[snapped].push_back(std::move(info));
         }
     }
+
+    return newly_bound;
 }
 
 std::vector<std::string> LineBreakpointManager::get_unresolved_paths() const {
@@ -208,7 +230,7 @@ std::vector<BreakpointSnapshot> LineBreakpointManager::find_matching_breakpoints
             matches.reserve(line_it->second.size());
 
             for (const auto& info : line_it->second) {
-                matches.push_back(make_breakpoint_snapshot(info, /*record_hit=*/false));
+                matches.push_back(make_breakpoint_snapshot(info));
             }
         }
     }
@@ -216,8 +238,7 @@ std::vector<BreakpointSnapshot> LineBreakpointManager::find_matching_breakpoints
     return matches;
 }
 
-std::optional<int> LineBreakpointManager::record_breakpoint_hit(int file_id, int line,
-                                                                int bp_id) const {
+std::optional<int> LineBreakpointManager::record_breakpoint_hit(int file_id, int line, int bp_id) {
     auto breakpoint_it = line_breakpoints_.find(file_id);
 
     if (breakpoint_it == line_breakpoints_.end()) {
@@ -230,21 +251,21 @@ std::optional<int> LineBreakpointManager::record_breakpoint_hit(int file_id, int
         return std::nullopt;
     }
 
-    for (const auto& info : line_it->second) {
-        if (info.id == bp_id) {
-            return make_breakpoint_snapshot(info, /*record_hit=*/true).times_hit;
-        }
+    const auto info = std::ranges::find(line_it->second, bp_id, &LineBreakpointInfo::id);
+
+    if (info == line_it->second.end()) {
+        return std::nullopt;
     }
 
-    return std::nullopt;
+    // Saturating: a long-running loop must not overflow the counter.
+    if (info->times_hit < std::numeric_limits<int>::max()) {
+        ++info->times_hit;
+    }
+
+    return info->times_hit;
 }
 
 // ─── Queries ───
-
-bool LineBreakpointManager::has_breakpoints_for_file_id(int file_id) const {
-    auto it = line_breakpoints_.find(file_id);
-    return it != line_breakpoints_.end() && !it->second.empty();
-}
 
 bool LineBreakpointManager::has_any_breakpoints() const {
     for (const auto& [file_id, line_map] : line_breakpoints_) {

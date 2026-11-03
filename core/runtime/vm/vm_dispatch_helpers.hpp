@@ -46,6 +46,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <vector>
 
 #include "common/resource_limits.hpp"
@@ -165,30 +166,34 @@ bool dispatch_collection(const Value& val, ArrayFn&& on_array, DictFn&& on_dict,
 #pragma warning(pop)
 #endif
 
-// ─────────── Overflow-safe unary integer operations ───────────
+// ─────────── Overflow-checked unary integer operations ───────────
+//
+// Each returns std::nullopt when the result does not fit in an int64; the VM
+// then raises "integer overflow in <operation>" rather than widening the value
+// to `number` (which would let an `integer` variable hold a `number`).
 
-/// Negate an integer, promoting to double on INT64_MIN overflow.
-[[nodiscard]] inline Value safe_negate(std::int64_t n) {
+/// Negate an integer; std::nullopt for INT64_MIN.
+[[nodiscard]] constexpr std::optional<std::int64_t> checked_negate(std::int64_t n) noexcept {
     if (n == std::numeric_limits<std::int64_t>::min()) [[unlikely]] {
-        return Value{static_cast<double>(n) * -1.0};
+        return std::nullopt;
     }
-    return Value{-n};
+    return -n;
 }
 
-/// Increment an integer, promoting to double on INT64_MAX overflow.
-[[nodiscard]] inline Value safe_increment(std::int64_t n) {
+/// Increment an integer; std::nullopt for INT64_MAX.
+[[nodiscard]] constexpr std::optional<std::int64_t> checked_increment(std::int64_t n) noexcept {
     if (n == std::numeric_limits<std::int64_t>::max()) [[unlikely]] {
-        return Value{static_cast<double>(n) + 1.0};
+        return std::nullopt;
     }
-    return Value{n + 1};
+    return n + 1;
 }
 
-/// Decrement an integer, promoting to double on INT64_MIN overflow.
-[[nodiscard]] inline Value safe_decrement(std::int64_t n) {
+/// Decrement an integer; std::nullopt for INT64_MIN.
+[[nodiscard]] constexpr std::optional<std::int64_t> checked_decrement(std::int64_t n) noexcept {
     if (n == std::numeric_limits<std::int64_t>::min()) [[unlikely]] {
-        return Value{static_cast<double>(n) - 1.0};
+        return std::nullopt;
     }
-    return Value{n - 1};
+    return n - 1;
 }
 
 // ─────────── String size validation ───────────

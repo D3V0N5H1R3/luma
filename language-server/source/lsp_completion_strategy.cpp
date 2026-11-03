@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <format>
 #include <ranges>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -81,15 +82,16 @@ constexpr auto k_match_arm_templates = std::array{
                      .sort_text = "1false"},
 };
 
-// Collects completion items for files/directories matching a partial include path.
-[[nodiscard]] JsonValue::ArrayType
-collect_include_completions(const std::filesystem::path& base_dir, const std::string& partial_path,
-                            bool /* snippet_support */) {
+} // anonymous namespace
+
+JsonValue::ArrayType collect_include_completions(const std::filesystem::path& base_dir,
+                                                 const std::string& partial_path) {
     std::filesystem::path search_dir = base_dir;
     std::string prefix_filter;
-    const auto last_slash = partial_path.rfind('/');
+    // Accept either separator so `include "sub\fi` completes like `"sub/fi`.
+    const auto last_slash = partial_path.find_last_of("/\\");
     if (last_slash != std::string::npos) {
-        search_dir = base_dir / partial_path.substr(0, last_slash);
+        search_dir = base_dir / utf8_path(partial_path.substr(0, last_slash));
         prefix_filter = partial_path.substr(last_slash + 1);
     } else {
         prefix_filter = partial_path;
@@ -115,7 +117,7 @@ collect_include_completions(const std::filesystem::path& base_dir, const std::st
     try {
         if (std::filesystem::exists(search_dir) && std::filesystem::is_directory(search_dir)) {
             for (const auto& entry : std::filesystem::directory_iterator(search_dir)) {
-                const auto name = entry.path().filename().string();
+                const auto name = path_to_utf8(entry.path().filename());
                 if (name.starts_with(".")) {
                     continue;
                 }
@@ -148,38 +150,80 @@ collect_include_completions(const std::filesystem::path& base_dir, const std::st
     return items;
 }
 
-// Returns true if the cursor position is in a valid type annotation context
-// (i.e., after a colon that is a type annotation, not a ternary).
-[[nodiscard]] bool is_valid_type_annotation_context(const std::string& line,
-                                                    std::size_t cursor_col) {
-    const std::string_view line_prefix{line.data(), std::min(cursor_col, line.size())};
-    if (line_prefix.empty()) {
+namespace {
+
+// True when `prefix` ends inside the parameter list of a function declaration
+// (`function <type> <name>(`) at a parameter's type: right after the `(` or a
+// top-level `,`, with at most a partial word typed. Once a space follows the
+// word, the cursor is at the parameter's name instead.
+[[nodiscard]] bool is_at_parameter_type(std::string_view prefix) {
+    static const std::regex function_keyword{R"((?:^|\s)function\s)"};
+    std::size_t decl_start = std::string_view::npos;
+    for (std::cregex_iterator it{prefix.data(), prefix.data() + prefix.size(), function_keyword},
+         end;
+         it != end; ++it) {
+        decl_start =
+            static_cast<std::size_t>(it->position()) + static_cast<std::size_t>(it->length());
+    }
+    if (decl_start == std::string_view::npos) {
         return false;
     }
-    const auto colon_pos = line_prefix.rfind(':');
-    if (colon_pos == std::string_view::npos || colon_pos == 0) {
+    const auto open = prefix.find('(', decl_start);
+    if (open == std::string_view::npos) {
         return false;
     }
-    const auto after_colon = line_prefix.substr(colon_pos + 1);
-    bool saw_alpha = false;
-    for (const char c : after_colon) {
-        if (c == ' ' || c == '\t') {
-            if (saw_alpha) {
-                return false;
+
+    int paren_depth = 0;
+    int angle_depth = 0;
+    std::size_t segment_start = open + 1;
+    for (std::size_t i = open; i < prefix.size(); ++i) {
+        const char c = prefix[i];
+        if (c == '(') {
+            ++paren_depth;
+        } else if (c == ')') {
+            if (--paren_depth == 0) {
+                return false; // parameter list already closed
             }
-        } else if ((std::isalnum(static_cast<unsigned char>(c)) != 0) || c == '_') {
-            saw_alpha = true;
-        } else {
-            return false;
+        } else if (c == '<') {
+            ++angle_depth;
+        } else if (c == '>' && angle_depth > 0) {
+            --angle_depth;
+        } else if (c == ',' && paren_depth == 1 && angle_depth == 0) {
+            segment_start = i + 1;
         }
     }
-    const auto before_colon = line_prefix.substr(0, colon_pos);
-    const auto last_char_pos = before_colon.find_last_not_of(" \t");
-    if (last_char_pos == std::string_view::npos) {
+    if (paren_depth != 1 || angle_depth != 0) {
         return false;
     }
-    const char lc = before_colon[last_char_pos];
-    return (std::isalnum(static_cast<unsigned char>(lc)) != 0) || lc == '_' || lc == ')';
+    static const std::regex partial_word{R"(\s*\w*)"};
+    const auto segment = prefix.substr(segment_start);
+    return std::regex_match(segment.begin(), segment.end(), partial_word);
+}
+
+// Returns true if the cursor is at a position where only a type can be
+// written. Luma annotations are type-first, so these are: a function's return
+// type (`function |`), a parameter's type (`function integer f(|`,
+// `…, |`), the type after `mutable` (`mutable |`), a generic argument
+// (`array<|`, `dictionary<array<|`), and a generic bound (`<T: |`). A
+// statement start is not one of them — it may begin a declaration or an
+// expression — and neither is `name: |`, which is a named argument's value.
+[[nodiscard]] bool is_valid_type_annotation_context(const std::string& line,
+                                                    std::size_t cursor_col) {
+    const std::string_view prefix{line.data(), std::min(cursor_col, line.size())};
+    static const std::regex return_type{R"((?:^|\s)function\s+\w*$)"};
+    static const std::regex mutable_type{R"((?:^|\s)mutable\s+\w*$)"};
+    // The head of a generic must be a type — a built-in generic type, a cast,
+    // or a PascalCase user type — so a comparison typed without spaces
+    // (`if i<n`) is not mistaken for one. Type parameters are PascalCase too.
+    static const std::regex generic_argument{
+        R"(\b(?:array|dictionary|set|queue|stack|optional|result|reference|channel|)"
+        R"(task|key_value_store|downcast|trusted_downcast|[A-Z]\w*)<(?:[\w<>\s]*,)?\s*\w*$)"};
+    static const std::regex generic_bound{R"(<\s*[A-Z]\w*\s*:\s*\w*$)"};
+    const auto matches = [&](const std::regex& pattern) {
+        return std::regex_search(prefix.begin(), prefix.end(), pattern);
+    };
+    return matches(return_type) || matches(mutable_type) || matches(generic_argument) ||
+           matches(generic_bound) || is_at_parameter_type(prefix);
 }
 
 } // anonymous namespace
@@ -209,7 +253,7 @@ CompletionStrategyChain::try_provide(const LspCompletionHandler::CompletionConte
 
 std::optional<JsonValue>
 IncludePathCompletionStrategy::try_provide(const LspCompletionHandler::CompletionContext& ctx,
-                                           LspHandlerContext& handler_ctx) const {
+                                           LspHandlerContext& /*handler_ctx*/) const {
     static constexpr std::string_view k_include_keyword = "include \"";
     const auto include_pos = ctx.line_prefix.find(k_include_keyword);
     if (include_pos == std::string::npos) {
@@ -227,10 +271,9 @@ IncludePathCompletionStrategy::try_provide(const LspCompletionHandler::Completio
     if (!file_path_opt.has_value()) {
         return JsonValue(JsonValue::ArrayType{});
     }
-    const auto base_dir = std::filesystem::path(*file_path_opt).parent_path();
+    const auto base_dir = utf8_path(*file_path_opt).parent_path();
 
-    const bool snippets = handler_ctx.configuration.snippet_support();
-    auto items = collect_include_completions(base_dir, partial_path, snippets);
+    auto items = collect_include_completions(base_dir, partial_path);
 
     if (!items.empty()) {
         return JsonValue(std::move(items));

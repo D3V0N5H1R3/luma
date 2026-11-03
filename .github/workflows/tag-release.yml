@@ -4,8 +4,10 @@
 # Manually dispatched. Reads the single-source-of-truth VERSION
 # file, validates it as a strict MAJOR.MINOR.PATCH version, and
 # creates + pushes the matching `v<VERSION>` tag. That tag is what
-# release.yml (on: push: tags: ["v*.*.*"]) consumes to build and
-# publish the GitHub Release.
+# release.yml (on: push: tags: ["v[0-9]+.[0-9]+.[0-9]+"]) consumes to build and
+# publish the GitHub Release. The workflow refuses to run from any
+# branch other than main, so a release is never cut from a feature
+# branch.
 #
 # Because a tag pushed by the default GITHUB_TOKEN does NOT trigger
 # another workflow (GitHub blocks recursive workflow runs), the tag
@@ -52,6 +54,17 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # workflow_dispatch lets the caller pick any branch; the tag is created on
+      # the dispatched commit, so only main may be released.
+      - name: Verify dispatched from main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Tag Release must be dispatched from main (got '${REF}')."
+            exit 1
+          fi
+
       - name: Verify release token is configured
         env:
           RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
@@ -90,11 +103,10 @@ jobs:
           echo "VERSION file contains: '${version}'"
 
           # Strict MAJOR.MINOR.PATCH — kept in lockstep with release.yml's
-          # `v*.*.*` tag filter, which only matches three dot-separated
-          # segments (no pre-release or build metadata).
+          # `v[0-9]+.[0-9]+.[0-9]+` tag filter (no pre-release or build metadata).
           if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::VERSION '${version}' is not a valid MAJOR.MINOR.PATCH" \
-                 "version. release.yml only builds tags matching 'v*.*.*'."
+                 "version. release.yml only builds vMAJOR.MINOR.PATCH tags."
             exit 1
           fi
 

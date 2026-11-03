@@ -1,0 +1,9 @@
+# Blocked program test — the main thread waits on a channel nobody sends to.
+# Disconnecting the debugger must still end the program instead of hanging.
+
+@main
+function void main() {
+    channel<integer> inbox = Channel.new()
+    integer value = Channel.receive(inbox) ?? 0
+    print("Received ${value}")
+}

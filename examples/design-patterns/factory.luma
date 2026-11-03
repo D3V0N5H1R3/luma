@@ -9,7 +9,7 @@
 # Usage: luma examples/design-patterns/factory.luma
 # ═══════════════════════════════════════════════════════════
 
-# ─── Product types ────────────────────────────────────────
+# ─── Product type ─────────────────────────────────────────
 
 record Notification {
     string transport,
@@ -27,14 +27,14 @@ choice NotificationChannel {
 
 # ─── Factory function ─────────────────────────────────────
 
-function Notification create_notification(NotificationChannel kind) {
-    return match kind {
-    case NotificationChannel.Email(addr) {
+function Notification create_notification(NotificationChannel channel) {
+    return match channel {
+    case NotificationChannel.Email(address) {
         Notification {
             transport = "email",
-            sender = addr,
+            sender = address,
             send = (string to, string body) -> {
-                print("  Email from ${addr} to ${to}: ${body}")
+                print("  Email from ${address} to ${to}: ${body}")
             }
         }
     }
@@ -47,12 +47,12 @@ function Notification create_notification(NotificationChannel kind) {
             }
         }
     }
-    case NotificationChannel.Slack(hook) {
+    case NotificationChannel.Slack(webhook) {
         Notification {
             transport = "slack",
-            sender = hook,
+            sender = webhook,
             send = (string to, string body) -> {
-                print("  Slack [${hook}] #${to}: ${body}")
+                print("  Slack [${webhook}] #${to}: ${body}")
             }
         }
     }

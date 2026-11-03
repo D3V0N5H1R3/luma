@@ -50,6 +50,10 @@ function string bench_named_label(BenchNamed n) {
     return n.shape_name
 }
 
+function (integer, string) bench_make_pair() {
+    return (42, "answer")
+}
+
 # --- Benchmarks ---
 
 function BenchResult run_tuple_interface_benchmarks(BenchResult state) {
@@ -135,8 +139,4 @@ function BenchResult run_tuple_interface_benchmarks(BenchResult state) {
     })
 
     return st
-}
-
-function (integer, string) bench_make_pair() {
-    return (42, "answer")
 }

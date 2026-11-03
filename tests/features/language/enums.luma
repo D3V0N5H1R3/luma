@@ -5,9 +5,24 @@
 # Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
-choice Direction { North  South  East  West }
+choice Direction { North South East West }
 
-choice Status { Active  Paused  Archived }
+choice Status { Active Paused Archived }
+
+function string get_direction_name(Direction direction) {
+    return match direction {
+        case Direction.North { "north" }
+        case Direction.South { "south" }
+        case Direction.East  { "east" }
+        case Direction.West  { "west" }
+    }
+}
+
+function Direction get_initial_heading() {
+    return Direction.North
+}
+
+# ─── Creation and Comparison ───
 
 @test
 function void test_enum_creation() {
@@ -27,14 +42,41 @@ function void test_enum_comparison() {
 }
 
 @test
+function void test_enum_equality_same_variant() {
+    Direction heading = Direction.North
+    Direction same_heading = Direction.North
+
+    assert(heading == same_heading)
+}
+
+@test
+function void test_enum_inequality_different_variant() {
+    Status current = Status.Active
+    Status archived = Status.Archived
+
+    assert(current != archived)
+}
+
+@test
+function void test_enum_reassignment() {
+    mutable Direction heading = Direction.North
+
+    heading = Direction.West
+
+    assert(heading == Direction.West)
+}
+
+# ─── Matching ───
+
+@test
 function void test_enum_match() {
     Direction heading = Direction.East
 
     string label = match heading {
-    case Direction.North { "N" }
-    case Direction.South { "S" }
-    case Direction.East  { "E" }
-    case Direction.West  { "W" }
+        case Direction.North { "N" }
+        case Direction.South { "S" }
+        case Direction.East  { "E" }
+        case Direction.West  { "W" }
     }
 
     assert(label == "E")
@@ -45,22 +87,65 @@ function void test_enum_match_as_expression() {
     Status status = Status.Paused
 
     string label = match status {
-    case Status.Active   { "running" }
-    case Status.Paused   { "on hold" }
-    case Status.Archived { "done" }
+        case Status.Active   { "running" }
+        case Status.Paused   { "on hold" }
+        case Status.Archived { "done" }
     }
 
     assert(label == "on hold")
 }
 
-function string get_direction_name(Direction direction) {
-    return match direction {
-    case Direction.North { "north" }
-    case Direction.South { "south" }
-    case Direction.East  { "east" }
-    case Direction.West  { "west" }
+@test
+function void test_enum_match_with_default_arm() {
+    Direction heading = Direction.South
+
+    string label = match heading {
+        case Direction.North { "north" }
+        else                 { "other" }
     }
+
+    assert(label == "other")
 }
+
+@test
+function void test_enum_all_variants_reachable() {
+    # Every variant of Direction reaches its own match arm.
+    array<Direction> all_directions = [
+        Direction.North,
+        Direction.South,
+        Direction.East,
+        Direction.West
+    ]
+
+    mutable string names = ""
+
+    for direction in all_directions {
+        names += "${get_direction_name(direction)} "
+    }
+
+    assert(names == "north south east west ")
+}
+
+@test
+function void test_enum_match_all_status_variants() {
+    array<Status> statuses = [Status.Active, Status.Paused, Status.Archived]
+
+    mutable string result_label = ""
+
+    for status in statuses {
+        string label = match status {
+            case Status.Active   { "A" }
+            case Status.Paused   { "P" }
+            case Status.Archived { "X" }
+        }
+
+        result_label += label
+    }
+
+    assert(result_label == "APX")
+}
+
+# ─── Enums in Functions and Collections ───
 
 @test
 function void test_enum_in_function() {
@@ -71,38 +156,11 @@ function void test_enum_in_function() {
     assert(name == "west")
 }
 
-# ───────────────────────────────────────────────────────────
-# Additional enum tests
-# ───────────────────────────────────────────────────────────
-
 @test
-function void test_enum_all_variants_reachable() {
-    # Test that every variant of Direction can be matched.
-    mutable integer count = 0
-    array<Direction> all = [Direction.North, Direction.South, Direction.East, Direction.West]
+function void test_enum_as_function_return() {
+    Direction heading = get_initial_heading()
 
-    for d in all {
-        string _name = get_direction_name(d)
-        count++
-    }
-
-    assert(count == 4)
-}
-
-@test
-function void test_enum_equality_same_variant() {
-    Direction a = Direction.North
-    Direction b = Direction.North
-
-    assert(a == b)
-}
-
-@test
-function void test_enum_inequality_different_variant() {
-    Status a = Status.Active
-    Status b = Status.Archived
-
-    assert(a != b)
+    assert(heading == Direction.North)
 }
 
 @test
@@ -111,55 +169,4 @@ function void test_enum_in_array() {
 
     assert(Array.length(directions) == 3)
     assert(directions[1] == Direction.East)
-}
-
-@test
-function void test_enum_as_function_return() {
-    Direction d = get_initial_heading()
-
-    assert(d == Direction.North)
-}
-
-function Direction get_initial_heading() {
-    return Direction.North
-}
-
-@test
-function void test_enum_match_all_status_variants() {
-    mutable string result_label = ""
-
-    array<Status> statuses = [Status.Active, Status.Paused, Status.Archived]
-
-    for s in statuses {
-        string label = match s {
-        case Status.Active   { "A" }
-        case Status.Paused   { "P" }
-        case Status.Archived { "X" }
-        }
-
-        result_label = result_label + label
-    }
-
-    assert(result_label == "APX")
-}
-
-@test
-function void test_enum_match_with_default_arm() {
-    Direction d = Direction.South
-
-    string label = match d {
-    case Direction.North { "north" }
-    else { "other" }
-    }
-
-    assert(label == "other")
-}
-
-@test
-function void test_enum_reassignment() {
-    mutable Direction heading = Direction.North
-
-    heading = Direction.West
-
-    assert(heading == Direction.West)
 }

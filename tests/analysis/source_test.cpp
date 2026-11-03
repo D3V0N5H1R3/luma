@@ -1,13 +1,21 @@
 // Unit tests for SourceLocation and SourceManager.
 
+#include <filesystem>
 #include <string>
+#include <string_view>
 
 #include "analysis/source/source_location.hpp"
 #include "analysis/source/source_manager.hpp"
+#include "common/path_utils.hpp"
 #include "common/string_utils.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::contains_identifier_token;
+using luma::path_from_utf8;
+using luma::path_to_utf8;
+using luma::SourceLocation;
+using luma::SourceManager;
+using luma::test::TempFile;
 
 // ─── SourceLocation ───
 
@@ -59,7 +67,7 @@ static void test_source_manager_not_loaded() {
 
 static void test_source_manager_get_file_null() {
     const SourceManager sm;
-    ASSERT_TRUE(sm.get_file(999) == nullptr);
+    ASSERT_EQ(sm.get_file(999), nullptr);
 }
 
 static void test_source_manager_get_line_empty() {
@@ -74,7 +82,7 @@ static void test_source_manager_load_file() {
 
     // Load an existing file from the project.
     const auto& file = sm.load("examples/language-features/hello.luma");
-    ASSERT_TRUE(file.file_id > 0);
+    ASSERT_GT(file.file_id, 0);
     ASSERT_FALSE(file.text.empty());
     ASSERT_FALSE(file.line_offsets.empty());
     ASSERT_TRUE(sm.is_loaded("examples/language-features/hello.luma"));
@@ -95,7 +103,7 @@ static void test_source_manager_get_file() {
     const auto& file = sm.load("examples/language-features/hello.luma");
 
     const auto* retrieved = sm.get_file(file.file_id);
-    ASSERT_TRUE(retrieved != nullptr);
+    ASSERT_NE(retrieved, nullptr);
     ASSERT_EQ(retrieved->file_id, file.file_id);
 }
 
@@ -175,13 +183,14 @@ static void test_source_manager_find_file_id() {
 
 static void test_source_manager_load_nonexistent() {
     SourceManager sm;
-    ASSERT_THROWS(sm.load("this_file_does_not_exist.luma"));
+    ASSERT_THROWS_WITH_MESSAGE(sm.load("this_file_does_not_exist.luma"),
+                               "cannot open file 'this_file_does_not_exist.luma'");
 }
 
 static void test_source_manager_get_file_negative_id() {
     const SourceManager sm;
-    ASSERT_TRUE(sm.get_file(-1) == nullptr);
-    ASSERT_TRUE(sm.get_file(0) == nullptr);
+    ASSERT_EQ(sm.get_file(-1), nullptr);
+    ASSERT_EQ(sm.get_file(0), nullptr);
 }
 
 // ─── Identifier-token matching (string_utils) ───
@@ -239,6 +248,25 @@ static void test_source_manager_any_source_contains_word_rejects_embedded() {
     ASSERT_TRUE(sm.any_source_contains("Marker"));
 }
 
+static void test_source_manager_load_file_with_non_ascii_name() {
+    // Regression: on MSVC a narrow std::string path was decoded with the ANSI
+    // code page, so a UTF-8 file name outside it (CJK + Cyrillic here) could
+    // not be opened.  SourceManager paths are UTF-8 and must round-trip.
+    const std::string utf8_name = "source_test_\xE6\x97\xA5\xD0\xB6.luma";
+    const TempFile tmp{std::filesystem::temp_directory_path() / path_from_utf8(utf8_name),
+                       "integer x = 1\n"};
+
+    const std::string utf8_path = path_to_utf8(tmp.path());
+
+    SourceManager sm;
+    const auto result = sm.try_load(utf8_path);
+
+    ASSERT_NE(result.file, nullptr);
+    ASSERT_EQ(sm.get_line(result.file->file_id, 1), std::string_view{"integer x = 1"});
+    ASSERT_NE(result.file->path.find("\xE6\x97\xA5\xD0\xB6"), std::string::npos);
+    ASSERT_TRUE(sm.find_file_id(utf8_path).has_value());
+}
+
 int main() {
     RUN(test_source_location_defaults);
     RUN(test_source_location_values);
@@ -263,6 +291,7 @@ int main() {
     RUN(test_source_manager_any_source_contains);
     RUN(test_source_manager_any_source_contains_word);
     RUN(test_source_manager_any_source_contains_word_rejects_embedded);
+    RUN(test_source_manager_load_file_with_non_ascii_name);
 
     return SUMMARY();
 }

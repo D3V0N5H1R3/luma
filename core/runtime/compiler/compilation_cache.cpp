@@ -1,6 +1,7 @@
 #include "runtime/compiler/compilation_cache.hpp"
 
 #include <mutex>
+#include <utility>
 #include <vector>
 
 #include "common/hash.hpp"
@@ -9,39 +10,55 @@ namespace luma {
 
 std::optional<CompileArtifact>
 CompilationCache::get(const std::string& path, const std::string& content, const Options& options) {
-    const std::scoped_lock lock(mutex_);
+    CompileArtifact artifact;
+    std::vector<SourceDependency> dependencies;
 
-    // LruCache::get promotes the entry to most-recently-used on any key match,
-    // including the stale-content case below where we then return a miss. This
-    // is intentional and unobservable in practice: a stale hit is always
-    // followed by a put() of the same key (the caller recompiles), which
-    // re-promotes the entry regardless. The only divergence from a
-    // promote-after-freshness-check would be the LRU eviction order after a
-    // terminal stale lookup, which never affects the correctness of a returned
-    // artifact — only the cache hit rate.
-    auto* entry = cache_.get(CacheKey{.path = path, .options = options});
+    {
+        const std::scoped_lock lock(mutex_);
 
-    if (entry == nullptr) {
+        // LruCache::get promotes the entry to most-recently-used on any key
+        // match, including the stale cases below where we then return a miss.
+        // This is intentional and unobservable in practice: a stale hit is
+        // always followed by a put() of the same key (the caller recompiles),
+        // which re-promotes the entry regardless. The only divergence from a
+        // promote-after-freshness-check would be the LRU eviction order after
+        // a terminal stale lookup, which never affects the correctness of a
+        // returned artifact — only the cache hit rate.
+        auto* entry = cache_.get(CacheKey{.path = path, .options = options});
+
+        if (entry == nullptr) {
+            return std::nullopt;
+        }
+
+        if (entry->content_hash != hash_content(content)) {
+            return std::nullopt;
+        }
+
+        artifact = entry->artifact;
+        dependencies = entry->dependencies;
+    }
+
+    // Checked outside the lock because it re-reads every included file from
+    // disk; concurrent lookups need not wait on that I/O.
+    if (!are_source_dependencies_current(dependencies)) {
         return std::nullopt;
     }
 
-    if (entry->content_hash != hash_content(content)) {
-        return std::nullopt;
-    }
-
-    return entry->artifact;
+    return artifact;
 }
 
 void CompilationCache::put(const std::string& path, const std::string& content,
-                           const CompileArtifact& artifact, const Options& options) {
+                           const CompileArtifact& artifact, const Options& options,
+                           std::vector<SourceDependency> dependencies) {
     const std::scoped_lock lock(mutex_);
 
     // LruCache::put refreshes an existing key in place (promoting it to most
     // recently used) or inserts a new entry, evicting the least recently used
     // entry when at capacity.
-    static_cast<void>(
-        cache_.put(CacheKey{.path = path, .options = options},
-                   CacheEntry{.content_hash = hash_content(content), .artifact = artifact}));
+    static_cast<void>(cache_.put(CacheKey{.path = path, .options = options},
+                                 CacheEntry{.content_hash = hash_content(content),
+                                            .artifact = artifact,
+                                            .dependencies = std::move(dependencies)}));
 }
 
 void CompilationCache::invalidate(const std::string& path) {

@@ -103,10 +103,10 @@ function void main() {
     # Markdown adapter
     print("--- Markdown output ---")
 
-    MarkdownWriter md = MarkdownWriter { prefix = "-" }
-    RendererAdapter md_adapter = adapt_markdown(md)
+    MarkdownWriter markdown = MarkdownWriter { prefix = "-" }
+    RendererAdapter markdown_adapter = adapt_markdown(markdown)
 
-    render_report(md_adapter, data)
+    render_report(markdown_adapter, data)
 
     print("")
 

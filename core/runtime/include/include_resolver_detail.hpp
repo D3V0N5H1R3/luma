@@ -16,9 +16,10 @@ namespace luma {
 //
 // This is deliberately just a counter, not a set of active paths: circular
 // and self includes cannot produce infinite recursion because the resolver
-// consults SourceManager's include-once registry (is_loaded) before entering
-// any file, so no path can be entered — and therefore pushed here — twice.
-// A membership set would never report a positive, so none is kept.
+// applies its include-once rule (SourceManager registration, or the session
+// set in session mode) before entering any file, so no path can be entered —
+// and therefore pushed here — twice.  A membership set would never report a
+// positive, so none is kept.
 
 class InclusionStack {
 public:

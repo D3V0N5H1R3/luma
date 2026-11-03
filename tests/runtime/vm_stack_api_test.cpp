@@ -7,6 +7,8 @@
 // take once migrated onto the seam (see TODO(refactor/V1) in vm.hpp), and the
 // tests drive them through a stub implementation of the interface.
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -22,7 +24,13 @@
 #include "runtime/vm/vm_stack_api.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::CallFrame;
+using luma::ExceptionHandler;
+using luma::TaskScope;
+using luma::Value;
+using luma::VM;
+using luma::VMExceptionHandler;
+using luma::VMStackAPI;
 
 namespace {
 
@@ -109,17 +117,16 @@ static_assert(std::is_base_of_v<VMStackAPI, VM>, "VM must implement the VMStackA
 
 static void test_mock_push_pop_peek() {
     MockStackAPI s;
-    ValueHash hash;
 
     s.push(Value{10});
     s.push(Value{20});
 
-    ASSERT_EQ(s.stack.size(), static_cast<std::size_t>(2));
-    ASSERT_EQ(hash(s.peek(0)), hash(Value{20}));
-    ASSERT_EQ(hash(s.peek(1)), hash(Value{10}));
+    ASSERT_EQ(s.stack.size(), 2);
+    ASSERT_EQ(s.peek(0).as_integer(), 20);
+    ASSERT_EQ(s.peek(1).as_integer(), 10);
 
-    ASSERT_EQ(hash(s.pop()), hash(Value{20}));
-    ASSERT_EQ(hash(s.pop()), hash(Value{10}));
+    ASSERT_EQ(s.pop().as_integer(), 20);
+    ASSERT_EQ(s.pop().as_integer(), 10);
     ASSERT_TRUE(s.stack.empty());
 }
 
@@ -127,27 +134,26 @@ static void test_mock_push_pop_peek() {
 
 static void test_handler_dup_against_mock() {
     MockStackAPI s;
-    ValueHash hash;
 
     s.push(Value{7});
     handler_dup(s);
 
-    ASSERT_EQ(s.stack.size(), static_cast<std::size_t>(2));
-    ASSERT_EQ(hash(s.pop()), hash(Value{7}));
-    ASSERT_EQ(hash(s.pop()), hash(Value{7}));
+    ASSERT_EQ(s.stack.size(), 2);
+    ASSERT_EQ(s.pop().as_integer(), 7);
+    ASSERT_EQ(s.pop().as_integer(), 7);
 }
 
 static void test_handler_swap_against_mock() {
     MockStackAPI s;
-    ValueHash hash;
 
     s.push(Value{1});
     s.push(Value{2});
     handler_swap(s);
 
     // After swap the original lower value is on top.
-    ASSERT_EQ(hash(s.pop()), hash(Value{1}));
-    ASSERT_EQ(hash(s.pop()), hash(Value{2}));
+    ASSERT_EQ(s.stack.size(), 2);
+    ASSERT_EQ(s.pop().as_integer(), 1);
+    ASSERT_EQ(s.pop().as_integer(), 2);
 }
 
 // ─── Operand readers ───
@@ -156,9 +162,10 @@ static void test_operand_readers() {
     MockStackAPI s;
     s.bytecode = {0xAB, 0x12, 0x34, 0x00, 0x00, 0x10, 0x00};
 
-    ASSERT_EQ(static_cast<int>(s.read_byte()), 0xAB);
-    ASSERT_EQ(static_cast<int>(s.read_u16()), 0x1234);
-    ASSERT_EQ(static_cast<std::uint32_t>(s.read_u32()), static_cast<std::uint32_t>(0x00001000));
+    ASSERT_EQ(s.read_byte(), 0xAB);
+    ASSERT_EQ(s.read_u16(), 0x1234);
+    ASSERT_EQ(s.read_u32(), 0x00001000U);
+    ASSERT_EQ(s.ip, s.bytecode.size());
 }
 
 // ─── Context accessors ───
@@ -167,23 +174,23 @@ static void test_current_frame_and_scope() {
     MockStackAPI s;
     s.frame.slot_offset = 5;
 
-    ASSERT_EQ(s.current_frame().slot_offset, static_cast<std::size_t>(5));
-    ASSERT_TRUE(s.current_task_scope() == nullptr);
+    ASSERT_EQ(s.current_frame().slot_offset, 5);
+    ASSERT_EQ(s.current_task_scope(), nullptr);
 }
 
 // ─── Error reporting ───
 
 static void test_runtime_error_throws() {
-    MockStackAPI s;
-    ASSERT_THROWS(s.runtime_error("boom"));
+    const MockStackAPI s;
+    ASSERT_THROWS_WITH_MESSAGE(s.runtime_error("boom"), "boom");
 }
 
 static void test_exception_handler_boundary() {
     VMExceptionHandler handlers;
-    const std::uint8_t catch_code[] = {0};
+    const std::array<std::uint8_t, 1> catch_code{0};
 
     handlers.push(ExceptionHandler{
-        .catch_ip = catch_code,
+        .catch_ip = catch_code.data(),
         .frame_index = 2,
         .stack_depth = 4,
         .task_scope_depth = 1,
@@ -191,10 +198,15 @@ static void test_exception_handler_boundary() {
 
     ASSERT_TRUE(handlers.has_handler_for(2));
     ASSERT_FALSE(handlers.has_handler_for(3));
-    ASSERT_EQ(handlers.current().stack_depth, static_cast<std::size_t>(4));
+    ASSERT_EQ(handlers.current().stack_depth, 4);
 
     const auto handler = handlers.pop();
-    ASSERT_TRUE(handler.catch_ip == catch_code);
+    // Compare as untyped addresses: streaming a `const std::uint8_t*` on failure
+    // would print it as a C string.
+    ASSERT_EQ(static_cast<const void*>(handler.catch_ip),
+              static_cast<const void*>(catch_code.data()));
+    ASSERT_EQ(handler.frame_index, 2);
+    ASSERT_EQ(handler.task_scope_depth, 1);
     ASSERT_TRUE(handlers.empty());
 }
 
@@ -207,7 +219,9 @@ static void test_handler_can_signal_error() {
 
     MockStackAPI s;
     s.push(Value{1});
-    ASSERT_THROWS(guard(s));
+    ASSERT_THROWS_WITH_MESSAGE(guard(s), "rejected");
+    // The handler consumed its operand before rejecting it.
+    ASSERT_TRUE(s.stack.empty());
 }
 
 int main() {

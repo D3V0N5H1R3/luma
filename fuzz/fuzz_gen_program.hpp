@@ -1,25 +1,87 @@
-#pragma once
+#ifndef LUMA_FUZZ_FUZZ_GEN_PROGRAM_HPP
+#define LUMA_FUZZ_FUZZ_GEN_PROGRAM_HPP
 
 #include <cstddef>
 #include <string>
 
 #include "fuzz_gen_grammar.hpp"
+#include "fuzz_gen_typed.hpp"
+#include "fuzz_gen_vocab.hpp"
 
 // Declaration builders and whole-program assembly.
 //
-// generate_function / generate_record / generate_choice build top-level
-// declarations from the vocabulary and grammar, and generate_program stitches
-// them together with the fixed preludes (records, type aliases, interfaces, a
-// namespace, and a concurrency helper) that make the type-correct usage statements
-// in the grammar and stdlib emitters valid.  See fuzz_source_generator.hpp for the
-// Provider concept these templates require.
+// generate_program picks one of two modes per input:
+//   * well-typed — only the typed grammar (fuzz_gen_typed.hpp), well-typed
+//     records, choices and functions, and the curated emitters, so the program
+//     type-checks and reaches the compiler, optimiser, verifier and VM;
+//   * chaos — the deliberately ill-typed grammar (fuzz_gen_grammar.hpp), which
+//     stresses parser recovery and the type checker's error paths.
+// Mixing the two in one program would let a single ill-typed statement reject
+// all of it, which is why the mode is chosen up front.  Both modes share the
+// fixed preludes (records, type aliases, interfaces, a namespace, and a
+// concurrency helper) that the curated emitters rely on.  See
+// fuzz_source_generator.hpp for the Provider concept these templates require.
 
 namespace luma::fuzz::gen {
 
-inline constexpr std::size_t min_structured_input = 8;
-inline constexpr std::size_t max_structured_input = 4096;
+inline constexpr std::size_t k_min_structured_input = 8;
+inline constexpr std::size_t k_max_structured_input = 4096;
 
-template <typename Provider> [[nodiscard]] std::string generate_function(Provider& fdp) {
+// The fixed declarations every program starts with: the targets of the curated
+// feature and stdlib emitters in fuzz_gen_features.hpp / fuzz_gen_stdlib.hpp.
+// Every name is disjoint from the generated record, choice, function, and
+// identifier pools.
+[[nodiscard]] inline std::string generate_prelude() {
+    std::string prelude;
+
+    // A record with one required and one defaulted field (generate_record_usage).
+    prelude += "record FuzzRec {\n    integer a,\n    integer b = 0\n}\n\n";
+
+    // Simple, chained, collection, function, and generic type aliases
+    // (generate_alias_usage).  FuzzChain -> FuzzAlias -> integer drives the
+    // recursive-alias cycle guard; FuzzPair<T> generic-alias binding.
+    prelude += "type FuzzAlias = integer\n"
+               "type FuzzChain = FuzzAlias\n"
+               "type FuzzList = array<integer>\n"
+               "type FuzzFn = function(integer) -> integer\n"
+               "type FuzzPair<T> = (T, T)\n\n";
+
+    // A plain interface and a satisfying record with an extra field, plus a
+    // generic interface and its satisfying record (generate_interface_usage).
+    prelude += "interface FuzzIface {\n    integer ival,\n    boolean flag\n}\n\n"
+               "record FuzzImpl {\n    integer ival,\n    boolean flag,\n    integer extra\n}\n\n"
+               "function integer fuzz_use_iface(FuzzIface fi) {\n"
+               "    if fi.flag {\n        return fi.ival\n    }\n    return 0 - fi.ival\n}\n\n"
+               "interface FuzzBox<T> {\n    T item\n}\n\n"
+               "record FuzzItem {\n    integer item\n}\n\n"
+               "function<T> T fuzz_unbox(FuzzBox<T> b) {\n    return b.item\n}\n\n";
+
+    // A namespace with a public function calling an internal helper, a public
+    // record and choice, and a wildcard `use FuzzNs` import
+    // (generate_namespace_statement): qualified and use-imported member access,
+    // and internal-member access control from within the namespace.
+    prelude += "namespace FuzzNs {\n"
+               "    function integer fuzz_ns_add(integer a, integer b) {\n"
+               "        return FuzzNs.fuzz_ns_secret(a) + b\n"
+               "    }\n"
+               "    internal function integer fuzz_ns_secret(integer n) {\n"
+               "        return n + 1\n"
+               "    }\n"
+               "    record FuzzNsRec {\n        integer v\n    }\n"
+               "    choice FuzzNsChoice {\n        NsA\n        NsB(integer x)\n    }\n"
+               "}\n\n"
+               "use FuzzNs\n\n";
+
+    // The bounded task body of every spawn in generate_concurrency_statement,
+    // so task_scope blocks always join and never deadlock or leak threads.
+    prelude += "function integer fuzz_conc_work(integer n) {\n    return n + 1\n}\n\n";
+
+    return prelude;
+}
+
+// ─── Chaos mode ─────────────────────────────────────────────────────────────
+
+template <typename Provider> [[nodiscard]] std::string generate_chaos_function(Provider& fdp) {
     const auto name = generate_identifier(fdp);
     const int param_count = fdp.template ConsumeIntegralInRange<int>(0, 3);
     std::string params;
@@ -29,7 +91,7 @@ template <typename Provider> [[nodiscard]] std::string generate_function(Provide
             params += ", ";
         }
         // Optionally mark the parameter mutable to reach mutable-parameter
-        // handling in the resolver, compiler, and VM.
+        // handling in the type checker, compiler, and VM.
         if (fdp.ConsumeBool()) {
             params += "mutable ";
         }
@@ -60,13 +122,16 @@ template <typename Provider> [[nodiscard]] std::string generate_function(Provide
     std::string body;
     const int stmt_count = fdp.template ConsumeIntegralInRange<int>(1, 5);
     for (int i = 0; i < stmt_count; ++i) {
-        body += "    " + generate_statement(fdp, 0);
+        body += "    " + generate_chaos_statement(fdp, 0);
     }
+    // Every path must return a value for any non-void return type, so end with
+    // a return rather than failing every function on "may fall through".
+    body += "    return " + generate_expression(fdp, 0) + "\n";
 
     return "function " + ret_type + " " + name + "(" + params + ") {\n" + body + "}\n\n";
 }
 
-template <typename Provider> [[nodiscard]] std::string generate_record(Provider& fdp) {
+template <typename Provider> [[nodiscard]] std::string generate_chaos_record(Provider& fdp) {
     const auto name = "Record" + std::to_string(fdp.template ConsumeIntegralInRange<int>(0, 9));
     const int field_count = fdp.template ConsumeIntegralInRange<int>(1, 4);
     std::string fields;
@@ -79,20 +144,16 @@ template <typename Provider> [[nodiscard]] std::string generate_record(Provider&
     return "record " + name + " {\n" + fields + "\n}\n\n";
 }
 
-template <typename Provider> [[nodiscard]] std::string generate_choice(Provider& fdp) {
+template <typename Provider> [[nodiscard]] std::string generate_chaos_choice(Provider& fdp) {
     const auto name = "Choice" + std::to_string(fdp.template ConsumeIntegralInRange<int>(0, 9));
-    const int variant_count =
-        fdp.template ConsumeIntegralInRange<int>(1, static_cast<int>(variant_names.size()));
+    const auto variant_count =
+        fdp.template ConsumeIntegralInRange<std::size_t>(1, k_variant_names.size());
     std::string variants;
-    for (int i = 0; i < variant_count; ++i) {
+    for (std::size_t i = 0; i < variant_count; ++i) {
         if (i > 0) {
             variants += "\n";
         }
-        // Modulo keeps the index in range regardless of variant_count, so the
-        // loop bound and the array size can change independently without risk
-        // of an out-of-bounds access.
-        variants +=
-            std::string("    ") + variant_names[static_cast<std::size_t>(i) % variant_names.size()];
+        variants += std::string("    ") + k_variant_names[i];
         if (fdp.ConsumeBool()) {
             variants += "(" + generate_type(fdp) + " " + generate_identifier(fdp) + ")";
         }
@@ -100,106 +161,169 @@ template <typename Provider> [[nodiscard]] std::string generate_choice(Provider&
     return "choice " + name + " {\n" + variants + "\n}\n\n";
 }
 
-template <typename Provider> [[nodiscard]] std::string generate_program(Provider& fdp) {
-    std::string program;
-
-    // A fixed record with one required and one defaulted field, emitted in
-    // every program so that the record-usage statement (case 9 in
-    // generate_statement) can construct, mutate, read, and copy-with a record
-    // as type-correct code that survives type-checking and reaches the compiler
-    // and VM — exercising MakeRecord, GetField, SetField, and RecordWith.
-    program += "record FuzzRec {\n    integer a,\n    integer b = 0\n}\n\n";
-
-    // A fixed set of type aliases — simple, chained, collection, function, and
-    // generic — emitted in every program so the type-alias usage statement
-    // (case 11 in generate_statement) is type-correct and reaches the VM.  This
-    // structurally exercises the type checker's alias registration and
-    // resolution, including chained resolution (FuzzChain -> FuzzAlias ->
-    // integer) which drives the recursive-alias cycle guard, and generic-alias
-    // type-argument binding (FuzzPair<T>).  Type aliases are erased before
-    // runtime, so the names never collide with the generated record, choice,
-    // function, or identifier pools.
-    program += "type FuzzAlias = integer\n"
-               "type FuzzChain = FuzzAlias\n"
-               "type FuzzList = array<integer>\n"
-               "type FuzzFn = function(integer) -> integer\n"
-               "type FuzzPair<T> = (T, T)\n\n";
-
-    // A fixed plain interface and a satisfying record, plus a generic interface
-    // and its satisfying record, emitted in every program so the interface-usage
-    // statement (case 12 in generate_statement) is type-correct and reaches the
-    // VM.  FuzzImpl has an extra field to exercise the "record may have more
-    // fields than the interface requires" satisfaction path; fuzz_use_iface and
-    // fuzz_unbox read interface fields.  This structurally drives the type
-    // checker's structural interface satisfaction (record-vs-interface, plus the
-    // generic prefixed-binding save/restore in check_structural_satisfaction)
-    // and the compiler/VM's handling of interface-typed parameters.  Interfaces
-    // are compile-time only, so the names never collide with the generated
-    // record, choice, function, or identifier pools at runtime.
-    program += "interface FuzzIface {\n    integer ival,\n    boolean flag\n}\n\n"
-               "record FuzzImpl {\n    integer ival,\n    boolean flag,\n    integer extra\n}\n\n"
-               "function integer fuzz_use_iface(FuzzIface fi) {\n"
-               "    if fi.flag {\n        return fi.ival\n    }\n    return 0 - fi.ival\n}\n\n"
-               "interface FuzzBox<T> {\n    T item\n}\n\n"
-               "record FuzzItem {\n    integer item\n}\n\n"
-               "function<T> T fuzz_unbox(FuzzBox<T> b) {\n    return b.item\n}\n\n";
-
-    // A fixed namespace with a public function that calls an internal helper, an
-    // internal function, a public record, and a public choice, followed by a
-    // wildcard `use FuzzNs` import — emitted in every program so the
-    // namespace-usage statement (case 13 in generate_statement) can exercise
-    // both qualified (`FuzzNs.x`) and use-imported bare (`x`) member access as
-    // type-correct code that reaches the compiler and VM.  Declaring the
-    // namespace structurally drives the type checker's namespace registration,
-    // internal-member access control (the internal helper is reached from within
-    // the namespace via a qualified call — the allowed path), and the compiler's
-    // qualified-global emission plus `use` alias emission.  Internal members are
-    // skipped by the wildcard import, and the public member names are disjoint
-    // from the generated record, choice, function, and identifier pools, so no
-    // name collisions occur.
-    program += "namespace FuzzNs {\n"
-               "    function integer fuzz_ns_add(integer a, integer b) {\n"
-               "        return FuzzNs.fuzz_ns_secret(a) + b\n"
-               "    }\n"
-               "    internal function integer fuzz_ns_secret(integer n) {\n"
-               "        return n + 1\n"
-               "    }\n"
-               "    record FuzzNsRec {\n        integer v\n    }\n"
-               "    choice FuzzNsChoice {\n        NsA\n        NsB(integer x)\n    }\n"
-               "}\n\n"
-               "use FuzzNs\n\n";
-
-    // A fixed integer→integer helper used by every spawned task in the
-    // concurrency-usage statement (case 14 in generate_statement).  Keeping the
-    // task body in a named top-level function means each `spawn fuzz_conc_work(n)`
-    // is type-correct and bounded (it returns immediately), so task_scope blocks
-    // always join and never deadlock or leak threads.  The name is disjoint from
-    // the generated record, choice, function, and identifier pools.
-    program += "function integer fuzz_conc_work(integer n) {\n    return n + 1\n}\n\n";
+template <typename Provider> [[nodiscard]] std::string generate_chaos_program(Provider& fdp) {
+    std::string program = generate_prelude();
 
     const int record_count = fdp.template ConsumeIntegralInRange<int>(0, 2);
     for (int i = 0; i < record_count; ++i) {
-        program += generate_record(fdp);
+        program += generate_chaos_record(fdp);
     }
 
     const int choice_count = fdp.template ConsumeIntegralInRange<int>(0, 2);
     for (int i = 0; i < choice_count; ++i) {
-        program += generate_choice(fdp);
+        program += generate_chaos_choice(fdp);
     }
 
     const int func_count = fdp.template ConsumeIntegralInRange<int>(0, 3);
     for (int i = 0; i < func_count; ++i) {
-        program += generate_function(fdp);
+        program += generate_chaos_function(fdp);
     }
 
     program += "@main\nfunction void main() {\n";
     const int stmt_count = fdp.template ConsumeIntegralInRange<int>(1, 10);
     for (int i = 0; i < stmt_count; ++i) {
-        program += "    " + generate_statement(fdp, 0);
+        program += "    " + generate_chaos_statement(fdp, 0);
     }
     program += "}\n";
 
     return program;
 }
 
+// ─── Well-typed mode ────────────────────────────────────────────────────────
+
+// A record `WRec<index>` with typed fields f0..fN, plus the statement that
+// constructs it (every field initialised with a literal of its type) and reads
+// each field back.
+struct TypedDeclaration {
+    std::string declaration;
+    std::string usage;
+};
+
+template <typename Provider>
+[[nodiscard]] TypedDeclaration generate_typed_record(Provider& fdp, int index) {
+    const auto name = "WRec" + std::to_string(index);
+    const auto binding = "wr" + std::to_string(index);
+    const int field_count = fdp.template ConsumeIntegralInRange<int>(1, 4);
+
+    std::string fields;
+    std::string initialisers;
+    std::string reads;
+    for (int i = 0; i < field_count; ++i) {
+        const auto type = pick_kind<ValueType>(fdp);
+        const auto field = "f" + std::to_string(i);
+        if (i > 0) {
+            fields += ",\n";
+            initialisers += ", ";
+        }
+        fields += "    " + type_name(type) + " " + field;
+        initialisers += field + " = " + generate_typed_literal(fdp, type);
+        reads += "print(" + binding + "." + field + ")\n";
+    }
+
+    return TypedDeclaration{.declaration = "record " + name + " {\n" + fields + "\n}\n\n",
+                            .usage = name + " " + binding + " = " + name + " { " + initialisers +
+                                     " }\n" + reads};
+}
+
+// A choice `WChoice<index>` whose variants optionally carry a typed payload,
+// plus the statement that constructs one variant and matches every variant.
+template <typename Provider>
+[[nodiscard]] TypedDeclaration generate_typed_choice(Provider& fdp, int index) {
+    const auto name = "WChoice" + std::to_string(index);
+    const auto binding = "wc" + std::to_string(index);
+    const auto variant_count =
+        fdp.template ConsumeIntegralInRange<std::size_t>(1, k_variant_names.size());
+    const auto chosen = fdp.template ConsumeIntegralInRange<std::size_t>(0, variant_count - 1);
+
+    std::string variants;
+    std::string arms;
+    std::string constructed;
+    for (std::size_t i = 0; i < variant_count; ++i) {
+        const std::string variant = k_variant_names[i];
+        const bool has_payload = fdp.ConsumeBool();
+        const auto payload_type = pick_kind<ValueType>(fdp);
+
+        variants += "    " + variant;
+        arms += "case " + name + "." + variant;
+        std::string value = name + "." + variant;
+        if (has_payload) {
+            variants += "(" + type_name(payload_type) + " payload)";
+            arms += "(_p" + std::to_string(i) + ")";
+            value += "(" + generate_typed_literal(fdp, payload_type) + ")";
+        }
+        variants += "\n";
+        arms += " { " + std::to_string(i) + " }\n";
+        if (i == chosen) {
+            constructed = value;
+        }
+    }
+
+    return TypedDeclaration{.declaration = "choice " + name + " {\n" + variants + "}\n\n",
+                            .usage = name + " " + binding + " = " + constructed + "\n" +
+                                     "print(match " + binding + " {\n" + arms + "})\n"};
+}
+
+// A function `wf<index>(integer a, integer b) -> integer` with a well-typed
+// body, plus a statement calling it positionally or with named arguments.
+template <typename Provider>
+[[nodiscard]] TypedDeclaration generate_typed_function(Provider& fdp, int index) {
+    const auto name = "wf" + std::to_string(index);
+    std::string body;
+    const int stmt_count = fdp.template ConsumeIntegralInRange<int>(1, 4);
+    for (int i = 0; i < stmt_count; ++i) {
+        body += "    " + generate_typed_statement(fdp, 1);
+    }
+    body += "    return a + b + " + generate_typed_expression(fdp, ValueType::Integer, 0) + "\n";
+
+    const auto a = generate_int_literal(fdp, -1000, 1000);
+    const auto b = generate_int_literal(fdp, -1000, 1000);
+    const auto call =
+        fdp.ConsumeBool() ? name + "(" + a + ", " + b + ")" : name + "(b: " + b + ", a: " + a + ")";
+
+    return TypedDeclaration{.declaration = "function integer " + name +
+                                           "(integer a, integer b) {\n" + body + "}\n\n",
+                            .usage = "print(" + call + ")\n"};
+}
+
+template <typename Provider> [[nodiscard]] std::string generate_typed_program(Provider& fdp) {
+    std::string declarations = generate_prelude();
+    std::string usages;
+
+    const auto add = [&](const TypedDeclaration& generated) {
+        declarations += generated.declaration;
+        usages += "    " + generated.usage;
+    };
+
+    const int record_count = fdp.template ConsumeIntegralInRange<int>(0, 2);
+    for (int i = 0; i < record_count; ++i) {
+        add(generate_typed_record(fdp, i));
+    }
+
+    const int choice_count = fdp.template ConsumeIntegralInRange<int>(0, 2);
+    for (int i = 0; i < choice_count; ++i) {
+        add(generate_typed_choice(fdp, i));
+    }
+
+    const int func_count = fdp.template ConsumeIntegralInRange<int>(0, 3);
+    for (int i = 0; i < func_count; ++i) {
+        add(generate_typed_function(fdp, i));
+    }
+
+    std::string main_body;
+    const int stmt_count = fdp.template ConsumeIntegralInRange<int>(1, 10);
+    for (int i = 0; i < stmt_count; ++i) {
+        main_body += "    " + generate_typed_statement(fdp, 0);
+    }
+
+    return declarations + "@main\nfunction void main() {\n" + main_body + usages + "}\n";
+}
+
+// ─── Entry point ────────────────────────────────────────────────────────────
+
+template <typename Provider> [[nodiscard]] std::string generate_program(Provider& fdp) {
+    return fdp.ConsumeBool() ? generate_typed_program(fdp) : generate_chaos_program(fdp);
+}
+
 } // namespace luma::fuzz::gen
+
+#endif // LUMA_FUZZ_FUZZ_GEN_PROGRAM_HPP

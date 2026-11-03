@@ -76,9 +76,10 @@ enum class EvaluationContext {
 }
 
 // Callback to allocate a variable reference for a structured Value,
-// decoupling from VariableInspector.  Takes a shared pointer to the
-// Value and returns a variablesReference ID.
-using RefAllocator = std::function<int(std::shared_ptr<Value>)>;
+// decoupling from VariableInspector.  Takes a shared pointer to the Value and
+// the Luma expression that evaluates to it (used to build the children's
+// evaluateName), and returns a variablesReference ID.
+using RefAllocator = std::function<int(std::shared_ptr<Value>, std::string evaluate_name)>;
 
 class ExpressionEvaluator {
 public:

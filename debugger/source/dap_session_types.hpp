@@ -12,8 +12,11 @@
 #include <cassert>
 #include <concepts>
 #include <condition_variable>
+#include <cstddef>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "dap_types.hpp"
 
@@ -90,6 +93,14 @@ struct ThreadState {
     bool exception_caught{false};        // GUARDED_BY(mutex)
     StepState step;                      // GUARDED_BY(mutex)
     PendingEvents pending;               // GUARDED_BY(mutex)
+
+    // Last (file_id, line) the debug hook saw at each frame depth (index =
+    // depth - 1).  Lets the hook recognise a return to a caller's line — the
+    // VM reports that as a line change, but the line's breakpoints were
+    // already evaluated when execution first reached it.  Only touched by the
+    // thread's own execution thread.
+    std::vector<std::pair<int, int>> frame_lines; // GUARDED_BY(mutex)
+    std::size_t last_hook_depth{0};               // GUARDED_BY(mutex)
 };
 
 // ─── Lock ordering enforcement (debug builds only) ───
@@ -144,6 +155,12 @@ inline void validate_dap_lock_order(DapLockId id) {
             assert(!(held & static_cast<unsigned>(DapLockId::PerThread)) &&
                    "Lock ordering violation: thread_states_mutex_ acquired "
                    "while holding ThreadState::mutex");
+            assert(!(held & static_cast<unsigned>(DapLockId::Config)) &&
+                   "Lock ordering violation: thread_states_mutex_ acquired "
+                   "while holding config_mutex_");
+            assert(!(held & static_cast<unsigned>(DapLockId::Exception)) &&
+                   "Lock ordering violation: thread_states_mutex_ acquired "
+                   "while holding exception_mutex_");
             break;
         case DapLockId::PerThread:
             assert(!(held & static_cast<unsigned>(DapLockId::Config)) &&

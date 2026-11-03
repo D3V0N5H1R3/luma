@@ -48,7 +48,7 @@ function void main() {
     print(second)
 
     # zip, contains, flatten, to_result, and tap.
-    (integer za, integer zb) = Optional.zip(some(1), some(2))
+    (integer za, integer zb) = Optional.zip(some(1), some(2)) |> Optional.unwrap_or((0, 0))
     print(za + zb)
 
     print(Optional.contains(some(42), 42))

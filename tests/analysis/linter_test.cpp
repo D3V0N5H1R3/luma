@@ -9,23 +9,31 @@
 #include "lex_parse_util.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::Linter;
+using luma::test::lex_and_parse_with_errors;
 
 // ─── Helpers ───
 
-static std::vector<Diagnostic> lint(const std::string& source) {
-    const auto program = luma::test::lex_and_parse(source);
+// Lint `source`. Every source must parse cleanly, so that a negative test
+// cannot pass merely because a syntax error dropped the code under test.
+[[nodiscard]] static std::vector<Diagnostic> lint(const std::string& source) {
+    const auto parsed = lex_and_parse_with_errors(source);
+
+    ASSERT_TRUE(parsed.errors.empty());
 
     Linter linter;
 
-    return linter.lint(program);
+    return linter.lint(parsed.program);
 }
 
-static bool no_warnings(const std::string& source) {
+[[nodiscard]] static bool no_warnings(const std::string& source) {
     return lint(source).empty();
 }
 
-static bool has_warning_containing(const std::string& source, const std::string& substring) {
+[[nodiscard]] static bool has_warning_containing(const std::string& source,
+                                                 const std::string& substring) {
     const auto warnings = lint(source);
 
     return std::ranges::any_of(warnings, [&](const Diagnostic& d) {
@@ -35,7 +43,8 @@ static bool has_warning_containing(const std::string& source, const std::string&
 
 // Returns the hint attached to the first warning with the given diagnostic code,
 // or nullopt if no such warning was produced.
-static std::optional<std::string> hint_for_code(const std::string& source, DiagnosticCode code) {
+[[nodiscard]] static std::optional<std::string> hint_for_code(const std::string& source,
+                                                              DiagnosticCode code) {
     const auto warnings = lint(source);
 
     const auto match =
@@ -120,11 +129,9 @@ static void test_no_false_positive_on_integer_equality() {
     const auto warnings = lint("integer x = 1\n"
                                "boolean y = x == 42\n");
 
-    bool has_float_warn = std::ranges::any_of(warnings, [](const Diagnostic& d) {
+    ASSERT_TRUE(std::ranges::none_of(warnings, [](const Diagnostic& d) {
         return d.message.find("Floating-point") != std::string::npos;
-    });
-
-    ASSERT_FALSE(has_float_warn);
+    }));
 }
 
 // ─── Additional warning category tests ───
@@ -176,12 +183,10 @@ static void test_no_warning_on_underscore_variable() {
                                "    integer _unused = 42\n"
                                "}\n");
 
-    bool has_unused = std::ranges::any_of(warnings, [](const Diagnostic& d) {
+    ASSERT_TRUE(std::ranges::none_of(warnings, [](const Diagnostic& d) {
         return d.message.find("unused") != std::string::npos &&
                d.message.find("_unused") != std::string::npos;
-    });
-
-    ASSERT_FALSE(has_unused);
+    }));
 }
 
 static void test_double_negation() {
@@ -213,8 +218,8 @@ static void test_discarded_result_hint_suggests_valid_luma() {
 
     ASSERT_TRUE(hint.has_value());
     ASSERT_FALSE(hint->empty());
-    ASSERT_TRUE(hint->find("let ") == std::string::npos);
-    ASSERT_TRUE(hint->find("_ = ...") != std::string::npos);
+    ASSERT_EQ(hint->find("let "), std::string::npos);
+    ASSERT_NE(hint->find("_ = ..."), std::string::npos);
 }
 
 static void test_discarded_result_collection_functions() {
@@ -250,8 +255,11 @@ static void test_no_discarded_result_warning_in_if_expression_branch() {
 
 static void test_no_discarded_result_warning_in_lambda_body() {
     // W0010 must NOT fire when the call is the return expression of a lambda.
+    // (This test used to spell the return type `function<() -> result<string>>`,
+    // which is not Luma syntax; it passed only because the syntax error dropped
+    // the lambda before the linter could see it.)
     ASSERT_FALSE(
-        has_warning_containing("function<() -> result<string>> make_reader(string path) {\n"
+        has_warning_containing("function function() -> result<string> make_reader(string path) {\n"
                                "    return () -> FileSystem.read_file(path)\n"
                                "}\n",
                                "discarded"));
@@ -284,8 +292,8 @@ static void test_empty_catch_hint_suggests_valid_luma() {
                                     DiagnosticCode::EmptyCatch);
 
     ASSERT_TRUE(hint.has_value());
-    ASSERT_TRUE(hint->find("Console.print") == std::string::npos);
-    ASSERT_TRUE(hint->find("print(err)") != std::string::npos);
+    ASSERT_EQ(hint->find("Console.print"), std::string::npos);
+    ASSERT_NE(hint->find("print(err)"), std::string::npos);
 }
 
 static void test_division_by_literal_zero() {
@@ -322,9 +330,12 @@ static void test_no_division_by_zero_warning_for_variable_divisor() {
 // ─── Bug regression tests: expression-level scope and block handling ───
 
 static void test_unreachable_code_in_lambda_body() {
-    // Lambda bodies should detect unreachable code after return.
+    // Lambda bodies should detect unreachable code after return.  (This test
+    // used to spell the type `(integer) -> integer`, which is not a Luma type;
+    // it only passed because the syntax error cascaded to top-level recovery,
+    // which then parsed the lambda body as loose statements.)
     ASSERT_TRUE(has_warning_containing("function void example() {\n"
-                                       "    mutable (integer) -> integer fn = (integer x) -> {\n"
+                                       "    function(integer) -> integer fn = (integer x) -> {\n"
                                        "        return x\n"
                                        "        integer y = 2\n"
                                        "    }\n"
@@ -336,7 +347,7 @@ static void test_shadowed_variable_in_lambda() {
     // Variables declared inside a lambda body should detect shadowing
     // against variables in outer scopes.
     ASSERT_TRUE(has_warning_containing("integer x = 1\n"
-                                       "mutable (integer) -> integer fn = (integer a) -> {\n"
+                                       "function(integer) -> integer fn = (integer a) -> {\n"
                                        "    integer x = a\n"
                                        "    return x\n"
                                        "}\n",
@@ -448,6 +459,47 @@ static void test_mutable_field_decrement_not_never_mutated() {
 
 // ─── main ───
 
+static void test_shadowing_initializer_reads_outer_variable() {
+    // Regression: `integer count = count + 1` reads the OUTER `count`; linting the
+    // initializer after declaring the inner name marked the wrong variable used,
+    // giving a false "never used" warning for the outer one.
+    ASSERT_FALSE(has_warning_containing("function integer f() {\n"
+                                        "    integer count = 1\n"
+                                        "    if count > 0 {\n"
+                                        "        integer count = count + 1\n"
+                                        "        return count\n"
+                                        "    }\n"
+                                        "    return 0\n"
+                                        "}\n",
+                                        "never used"));
+}
+
+static void test_shadowing_initializer_unused_inner_variable_warns() {
+    // The inner, shadowing variable is genuinely unused and must be reported.
+    ASSERT_TRUE(has_warning_containing("function integer f() {\n"
+                                       "    integer total = 1\n"
+                                       "    if true {\n"
+                                       "        integer total = total + 1\n"
+                                       "    }\n"
+                                       "    return 0\n"
+                                       "}\n",
+                                       "Variable 'total' is never used"));
+}
+
+static void test_boolean_literal_comparison_has_own_code() {
+    // Regression: `x == true` was reported as W0008 "always true/false".
+    const auto warnings = lint("function boolean f(boolean ready) {\n"
+                               "    return ready == true\n"
+                               "}\n");
+
+    const auto match = std::ranges::find_if(
+        warnings, [](const Diagnostic& d) { return d.message == "Comparison to boolean literal"; });
+
+    ASSERT_TRUE(match != warnings.end());
+    ASSERT_EQ(match->code, DiagnosticCode::BooleanLiteralComparison);
+    ASSERT_EQ(match->code_string(), std::string{"W0017"});
+}
+
 int main() {
     RUN(test_clean_code_no_warnings);
     RUN(test_empty_function_body);
@@ -504,6 +556,11 @@ int main() {
     RUN(test_mutable_field_increment_not_never_mutated);
     RUN(test_mutable_element_increment_not_never_mutated);
     RUN(test_mutable_field_decrement_not_never_mutated);
+
+    // Shadowing initializer order and the dedicated boolean-comparison code.
+    RUN(test_shadowing_initializer_reads_outer_variable);
+    RUN(test_shadowing_initializer_unused_inner_variable_warns);
+    RUN(test_boolean_literal_comparison_has_own_code);
 
     return SUMMARY();
 }

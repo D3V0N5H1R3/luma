@@ -26,6 +26,7 @@
 #include "lsp_diagnostic_builder.hpp"
 #include "lsp_exception_utils.hpp"
 #include "lsp_include_processor.hpp"
+#include "lsp_path_utils.hpp"
 #include "lsp_string_utils.hpp"
 #include "lsp_types.hpp"
 #include "protocol/uri_utils.hpp"
@@ -122,10 +123,8 @@ void LspAnalysisService::include_phase(Program& program, const std::string& uri,
             // Cannot resolve includes without a valid file path.
             return;
         }
-        const auto base_dir = std::filesystem::path(file_path).parent_path();
-        const auto log = [this](const std::string& msg) {
-            callbacks_.log(msg);
-        };
+        const auto base_dir = utf8_path(file_path).parent_path();
+        const auto log = [this](const std::string& msg) { callbacks_.log(msg); };
 
         include_processor::merge_include_declarations(program, base_dir, cache_snapshot,
                                                       cache_updates, result, log);
@@ -266,7 +265,28 @@ void LspAnalysisService::lint_phase(const Program& program, AnalysisResult& resu
             if (prelude_file_id != 0 && lw.primary_location().file_id == prelude_file_id) {
                 continue;
             }
+
+            auto& diagnostics = result.semantic.diagnostics;
+            const auto earlier_count = diagnostics.size();
             append_diagnostic(result, lw, source, uri, line_starts);
+
+            // Drop a lint finding the type checker already reported with the
+            // same code at the same place (both check some rules, e.g. W0009).
+            if (diagnostics.size() > earlier_count) {
+                const auto& added = diagnostics.back();
+                const auto is_duplicate = std::any_of(
+                    diagnostics.begin(),
+                    diagnostics.begin() + static_cast<std::ptrdiff_t>(earlier_count),
+                    [&](const auto& earlier) {
+                        return !added.code.empty() && earlier.code == added.code &&
+                               earlier.range.start.line == added.range.start.line &&
+                               earlier.range.start.character == added.range.start.character;
+                    });
+
+                if (is_duplicate) {
+                    diagnostics.pop_back();
+                }
+            }
         }
     });
     if (!lint_error.empty()) {

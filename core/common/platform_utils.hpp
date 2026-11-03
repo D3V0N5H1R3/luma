@@ -5,15 +5,24 @@
 // conversion, and terminal (TTY) detection.  Header-only; all functions
 // are inline.
 
+#include <array>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
+#include <new>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <io.h>
 #include <windows.h>
 #else
@@ -21,6 +30,20 @@
 #endif
 
 namespace luma {
+
+// Process-wide lock for the environment block.  The C and Win32 environment
+// APIs are not safe against a concurrent writer, and Luma tasks run on several
+// threads: Process.set_environment_variable takes it exclusively, while every
+// read (safe_getenv, Process.get_all_environment_variables) and every child
+// process launch (which copies the environment into the child) takes it
+// shared.  Never call safe_getenv while holding it — std::shared_mutex is not
+// recursive.  Constructed in static storage and never destroyed, so it outlives
+// static destruction (placement new cannot fail with bad_alloc).
+[[nodiscard]] inline std::shared_mutex& environment_mutex() noexcept {
+    alignas(std::shared_mutex) static std::array<std::byte, sizeof(std::shared_mutex)> storage{};
+    static auto* const mutex = ::new (static_cast<void*>(storage.data())) std::shared_mutex{};
+    return *mutex;
+}
 
 #ifdef _WIN32
 // Convert a wide string to UTF-8 using the Win32 API.
@@ -38,22 +61,36 @@ namespace luma {
 }
 #endif
 
-// Safe wrapper around environment variable lookup.
-// Uses _dupenv_s on MSVC to satisfy the Security Development
-// Lifecycle (/sdl) checks; falls back to std::getenv elsewhere.
+// Safe wrapper around environment variable lookup, returning the value as
+// UTF-8 on every platform.  On MSVC it reads the wide environment with
+// _wdupenv_s (which also satisfies the Security Development Lifecycle /sdl
+// checks) and converts to UTF-8 — the narrow _dupenv_s would return text in
+// the ANSI code page instead.  Elsewhere it uses std::getenv, whose bytes are
+// already UTF-8 on the platforms Luma supports.
 [[nodiscard]] inline std::optional<std::string> safe_getenv(const char* name) {
+    // Process.set_environment_variable can run on another task thread, and
+    // neither getenv nor _wdupenv_s is safe against a concurrent setenv.
+    const std::shared_lock lock{environment_mutex()};
+
 #ifdef _MSC_VER
-    char* raw_buf{nullptr};
+    // Environment variable names are ASCII in practice; widen byte-by-byte.
+    std::wstring wide_name;
+
+    for (const char* p = name; *p != '\0'; ++p) {
+        wide_name += static_cast<wchar_t>(static_cast<unsigned char>(*p));
+    }
+
+    wchar_t* raw_buf{nullptr};
     std::size_t len{0};
 
-    if (_dupenv_s(&raw_buf, &len, name) == 0 && raw_buf != nullptr) {
-        const auto buf = std::unique_ptr<char, decltype(&free)>{raw_buf, free};
+    if (_wdupenv_s(&raw_buf, &len, wide_name.c_str()) == 0 && raw_buf != nullptr) {
+        const auto buf = std::unique_ptr<wchar_t, decltype(&free)>{raw_buf, free};
 
-        return std::string{buf.get()};
+        return wstring_to_utf8(std::wstring{buf.get()});
     }
     return std::nullopt;
 #else
-    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative; read at startup only.
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): serialised against setenv by environment_mutex().
     const char* val = std::getenv(name);
 
     if (val) {

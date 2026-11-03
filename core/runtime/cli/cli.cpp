@@ -14,6 +14,7 @@ void print_usage() {
               << "Usage:\n"
               << "  luma                          Start interactive REPL\n"
               << "  luma <file.luma> [args...]    Run a Luma program\n"
+              << "  luma <file.luma> -- [args...] Run, passing all args to the program\n"
               << "\n"
               << "Options:\n";
 
@@ -29,8 +30,11 @@ void print_usage() {
     }
 
     std::cout << "\n"
-              << "Flags may appear in any order. Arguments after the .luma\n"
-              << "file are available via Process.get_arguments().\n"
+              << "Luma flags may appear before or after the .luma file. Other\n"
+              << "arguments after the file, and every argument after '--', are\n"
+              << "passed to the program via Process.get_arguments(). After the\n"
+              << "file, an -O argument that is not a valid level (e.g. -O3) is\n"
+              << "passed to the program too.\n"
               << "\n"
               << "Exit codes:\n"
               << "  0  Success\n"

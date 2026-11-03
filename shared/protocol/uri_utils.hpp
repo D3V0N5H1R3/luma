@@ -17,7 +17,10 @@ namespace luma::protocol {
 [[nodiscard]] std::string percent_encode_path(std::string_view path);
 
 // Convert a file:// URI to a local filesystem path.
-// Full RFC 3986 percent-decoding for all %XX sequences.
+// Full RFC 3986 percent-decoding for all %XX sequences.  An empty or
+// "localhost" authority is the local machine; any other authority yields a
+// UNC path ("file://server/share/x" → "//server/share/x").  The result is
+// UTF-8 text on every platform.
 // Returns std::nullopt for non-file:// URIs — callers must handle the
 // missing value rather than silently operating on an empty path.
 [[nodiscard]] std::optional<std::string> uri_to_path(const std::string& uri);
@@ -26,7 +29,9 @@ namespace luma::protocol {
 // Percent-encodes characters that are not valid in URIs.
 [[nodiscard]] std::string path_to_uri(const std::string& path);
 
-// Canonicalize a URI for use as a cache key: lowercase drive letter on Windows.
+// Canonicalize a URI for use as a cache key: on a Windows drive URI, decode a
+// percent-encoded drive colon ("file:///c%3A/…", as VS Code sends it) and
+// lowercase the drive letter, so every spelling of a file maps to one key.
 [[nodiscard]] std::string canonicalize_uri(const std::string& uri);
 
 } // namespace luma::protocol

@@ -8,13 +8,15 @@
 # An exhaustive match over every Ordering variant. With no else branch it only
 # type-checks if the choice declares exactly these three variants, so it doubles
 # as a check that the top-level Ordering choice is fully registered.
-function string ordering_label(Ordering o) {
-    return match o {
-    case Ordering.Less    { "less" }
-    case Ordering.Equal   { "equal" }
-    case Ordering.Greater { "greater" }
+function string ordering_label(Ordering ordering) {
+    return match ordering {
+        case Ordering.Less    { "less" }
+        case Ordering.Equal   { "equal" }
+        case Ordering.Greater { "greater" }
     }
 }
+
+# ─── Ordering values and combinators ─────────────────────
 
 @test
 function void test_order_of_basic() {
@@ -25,6 +27,10 @@ function void test_order_of_basic() {
     # Works for strings and booleans too (false < true).
     assert(Order.of("apple", "banana") == Ordering.Less)
     assert(Order.of(true, false) == Ordering.Greater)
+
+    # Mixed integer/number operands are promoted before comparing.
+    assert(Order.of(1, 1.5) == Ordering.Less)
+    assert(Order.of(2, 2.0) == Ordering.Equal)
 }
 
 @test
@@ -34,9 +40,10 @@ function void test_order_is_exhaustive() {
     assert(ordering_label(Ordering.Greater) == "greater")
 
     # Variants compare by identity, and the type annotates a local.
-    Ordering o = Order.of(5, 1)
-    assert(o == Ordering.Greater)
-    assert(o != Ordering.Less)
+    Ordering ordering = Order.of(5, 1)
+
+    assert(ordering == Ordering.Greater)
+    assert(ordering != Ordering.Less)
 }
 
 @test
@@ -53,6 +60,8 @@ function void test_order_then_tie_break() {
     assert(Order.then(Ordering.Equal, Ordering.Less) == Ordering.Less)
     assert(Order.then(Ordering.Equal, Ordering.Equal) == Ordering.Equal)
 }
+
+# ─── Numeric comparator bridge ───────────────────────────
 
 @test
 function void test_order_number_bridge() {
@@ -73,6 +82,7 @@ function void test_order_number_bridge() {
 }
 
 # ─── Multi-key sort ──────────────────────────────────────
+
 # The motivating use case: sort "by last name, then first name". Order.then
 # chains the two comparisons, and Order.to_number bridges the Ordering back to
 # the numeric comparator that Array.sort expects — so the typed, self-documenting
@@ -99,14 +109,12 @@ function void test_order_multi_key_sort() {
     )
 
     # Jones before Smith; within each surname, first names ascend.
-    assert(sorted[0].last == "Jones")
-    assert(sorted[0].first == "Alice")
-    assert(sorted[1].last == "Jones")
-    assert(sorted[1].first == "Bob")
-    assert(sorted[2].last == "Smith")
-    assert(sorted[2].first == "Adam")
-    assert(sorted[3].last == "Smith")
-    assert(sorted[3].first == "Zoe")
+    assert(sorted == [
+        Person { last = "Jones", first = "Alice" },
+        Person { last = "Jones", first = "Bob" },
+        Person { last = "Smith", first = "Adam" },
+        Person { last = "Smith", first = "Zoe" }
+    ])
 }
 
 @test
@@ -117,12 +125,10 @@ function void test_order_reverse_sort() {
             Order.to_number(Order.reverse(Order.of(a, b))))
     )
 
-    assert(sorted[0] == 5)
-    assert(sorted[1] == 4)
-    assert(sorted[4] == 1)
+    assert(sorted == [5, 4, 3, 1, 1])
 }
 
-# ─── boolean predicate additions ─────────────────────────
+# ─── Boolean predicates ──────────────────────────────────
 
 @test
 function void test_order_predicates() {
@@ -134,4 +140,21 @@ function void test_order_predicates() {
     assert(Order.is_less_or_equal(Order.of(1, 3)))
     assert(Order.is_greater_or_equal(Order.of(3, 3)))
     assert(Order.is_greater_or_equal(Order.of(9, 3)))
+}
+
+# ─── Incomparable operands ────────────────────────────────
+
+@test
+function void test_order_of_nan_throws() {
+    # Comparing NaN is a programmer error, not a recoverable failure.
+    number nan = Math.infinity - Math.infinity
+    mutable string error_message = ""
+
+    try {
+        Ordering _ = Order.of(nan, 1.0)
+    } catch(err) {
+        error_message = err
+    }
+
+    assert(error_message == "Order.of: NaN is not comparable")
 }

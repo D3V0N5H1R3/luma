@@ -96,7 +96,7 @@ void register_process_functions(std::vector<FunctionSpec>& specs, const ModuleBu
             m.fn("command", 2, "(program: string, arguments: array<string>)", named::command(),
                  {p.string, p.array_string}),
             m.fn("execute", 1, "(command: string)", R::result(named::command_output()), {p.string}),
-            m.fn("exit", 1, "(code: integer)", R::void_type(), {p.integer}),
+            never_returning(m.fn("exit", 1, "(code: integer)", R::void_type(), {p.integer})),
             m.fn("exit_status", 1, "(output: Process.CommandOutput)", named::exit_status(),
                  {named::command_output()}),
             m.fn("find_executable", 1, "(name: string)", R::optional(R::string_type()), {p.string}),
@@ -294,11 +294,12 @@ void register_key_value_store_functions(std::vector<FunctionSpec>& specs, const 
                  R::result(named::key_value_store()), {p.kv_store, p.dict_any}),
             m.fn("to_dictionary", 1, "(store: key_value_store)", R::dict_string(), {p.kv_store}),
             m.fn("transaction", 2,
-                 "(store: key_value_store, apply: func(key_value_store) -> "
+                 "(store: key_value_store, apply: function(key_value_store) -> "
                  "result<key_value_store>)",
                  R::result(named::key_value_store()), {p.kv_store, p.func}),
             m.fn("update", 3,
-                 "(store: key_value_store, key: string, updater: func(optional<string>) -> string)",
+                 "(store: key_value_store, key: string, updater: function(optional<string>) -> "
+                 "string)",
                  R::result(named::key_value_store()), {p.kv_store, p.string, p.func}),
             m.fn("values", 1, "(store: key_value_store)", R::array_string(), {p.kv_store}),
         });

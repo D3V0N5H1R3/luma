@@ -13,10 +13,12 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "common/comparison_ops.hpp"
 #include "common/overflow.hpp"
 #include "common/resource_limits.hpp"
+#include "common/string_utils.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/vm/vm.hpp"
@@ -28,50 +30,30 @@ namespace luma {
 
 namespace {
 
-// Unified checked arithmetic: IntOp attempts the integer operation and
-// returns std::nullopt on overflow; DblOp provides the double fallback.
-template <typename IntOp, typename DblOp>
-[[nodiscard]] Value checked_arithmetic(std::int64_t l, std::int64_t r, IntOp int_op, DblOp dbl_op) {
-    if (auto result = int_op(l, r)) {
-        return Value{*result};
+// Overflow-checked integer +, -, *: std::nullopt when the exact result does
+// not fit in an int64.  The VM raises "integer overflow in <operation>" for
+// that case instead of widening to `number`, so an `integer` stays an integer.
+[[nodiscard]] std::optional<std::int64_t> checked_integer_op(Op op, std::int64_t l,
+                                                             std::int64_t r) noexcept {
+    switch (op) {
+        case Op::Add:
+            if (would_overflow_add(l, r)) {
+                return std::nullopt;
+            }
+            return l + r;
+        case Op::Subtract:
+            if (would_overflow_sub(l, r)) {
+                return std::nullopt;
+            }
+            return l - r;
+        case Op::Multiply:
+            if (would_overflow_mul(l, r)) {
+                return std::nullopt;
+            }
+            return l * r;
+        default:
+            return std::nullopt;
     }
-    return Value{dbl_op(static_cast<double>(l), static_cast<double>(r))};
-}
-
-Value checked_add(std::int64_t l, std::int64_t r) {
-    return checked_arithmetic(
-        l, r,
-        [](std::int64_t a, std::int64_t b) -> std::optional<std::int64_t> {
-            if (would_overflow_add(a, b)) {
-                return std::nullopt;
-            }
-            return a + b;
-        },
-        std::plus<double>{});
-}
-
-Value checked_sub(std::int64_t l, std::int64_t r) {
-    return checked_arithmetic(
-        l, r,
-        [](std::int64_t a, std::int64_t b) -> std::optional<std::int64_t> {
-            if (would_overflow_sub(a, b)) {
-                return std::nullopt;
-            }
-            return a - b;
-        },
-        std::minus<double>{});
-}
-
-Value checked_mul(std::int64_t l, std::int64_t r) {
-    return checked_arithmetic(
-        l, r,
-        [](std::int64_t a, std::int64_t b) -> std::optional<std::int64_t> {
-            if (would_overflow_mul(a, b)) {
-                return std::nullopt;
-            }
-            return a * b;
-        },
-        std::multiplies<double>{});
 }
 
 } // namespace
@@ -80,15 +62,12 @@ Value checked_mul(std::int64_t l, std::int64_t r) {
 
 namespace {
 
-/// Mixed-numeric binary operation: promotes operands to double, applies DblOp,
-/// and checks for overflow (finite inputs producing non-finite result).
-template <typename CheckedIntOp, typename DblOp>
-[[nodiscard]] Value numeric_binary(const Value& a, const Value& b, CheckedIntOp int_op,
-                                   DblOp dbl_op) {
-    if (a.is_integer() && b.is_integer()) [[likely]] {
-        return int_op(a.as_integer(), b.as_integer());
-    }
-
+/// Mixed-numeric binary operation (at least one `number` operand): promotes
+/// operands to double, applies DblOp, and checks for overflow (finite inputs
+/// producing a non-finite result).  Integer/integer operands are handled by
+/// the caller (checked_integer_op) before reaching here.
+template <typename DblOp>
+[[nodiscard]] Value numeric_binary(const Value& a, const Value& b, DblOp dbl_op) {
     if ((a.is_integer() || a.is_number()) && (b.is_integer() || b.is_number())) {
         const auto l = a.is_integer() ? static_cast<double>(a.as_integer()) : a.as_number();
         const auto r = b.is_integer() ? static_cast<double>(b.as_integer()) : b.as_number();
@@ -107,9 +86,9 @@ template <typename CheckedIntOp, typename DblOp>
     return Value{}; // Unsupported combination.
 }
 
-/// Handles addition for all numeric type combinations plus string concatenation.
+/// Handles addition for mixed numeric type combinations plus string concatenation.
 [[nodiscard]] Value numeric_add(const Value& a, const Value& b) {
-    auto result = numeric_binary(a, b, checked_add, std::plus<double>{});
+    auto result = numeric_binary(a, b, std::plus<double>{});
 
     if (result.is_some()) {
         return result;
@@ -126,25 +105,42 @@ template <typename CheckedIntOp, typename DblOp>
     return Value{}; // Unsupported combination.
 }
 
-/// Handles subtraction for all numeric type combinations.
+/// Handles subtraction for mixed numeric type combinations.
 [[nodiscard]] Value numeric_subtract(const Value& a, const Value& b) {
-    return numeric_binary(a, b, checked_sub, std::minus<double>{});
+    return numeric_binary(a, b, std::minus<double>{});
 }
 
-/// Handles multiplication for all numeric type combinations.
+/// Handles multiplication for mixed numeric type combinations.
 /// String repetition is handled by the caller.
 [[nodiscard]] Value numeric_multiply(const Value& a, const Value& b) {
-    return numeric_binary(a, b, checked_mul, std::multiplies<double>{});
+    return numeric_binary(a, b, std::multiplies<double>{});
+}
+
+/// Returns true if the operand is numeric (integer or number).
+[[nodiscard]] bool is_numeric(const Value& v) {
+    return v.is_integer() || v.is_number();
 }
 
 /// Returns true if both operands are numeric (integer or float).
 [[nodiscard]] bool both_numeric(const Value& a, const Value& b) {
-    return (a.is_integer() || a.is_number()) && (b.is_integer() || b.is_number());
+    return is_numeric(a) && is_numeric(b);
 }
 
-/// Handles string repetition: "abc" * 3 or 3 * "abc".
-/// Returns nullopt if the operands are not a string/integer pair.
-[[nodiscard]] std::optional<Value> try_string_repeat(const Value& a, const Value& b) {
+/// Outcome of a string repetition attempt: `value` on success, otherwise the
+/// error to raise.  `applies` is false when the operands are not a
+/// string/integer pair (so the caller reports a type error instead).
+struct StringRepeatOutcome {
+    bool applies{false};
+    Value value;
+    std::string_view error;
+};
+
+/// Handles string repetition: "abc" * 3 or 3 * "abc".  Enforces the same
+/// limits as String.repeat — the repeat count (ResourceLimits::max_string_repeat)
+/// and the result size — and never iterates over the count itself: a count
+/// above the limit (even for "") raises the repeat-count error, and an empty
+/// string within it returns "" at once instead of spinning.
+[[nodiscard]] StringRepeatOutcome try_string_repeat(const Value& a, const Value& b) {
     const std::string* str = nullptr;
     std::int64_t count = 0;
 
@@ -157,32 +153,25 @@ template <typename CheckedIntOp, typename DblOp>
     }
 
     if (str == nullptr) {
-        return std::nullopt;
+        return {};
     }
 
     if (count <= 0) {
-        return Value{std::string{}};
+        return {.applies = true, .value = Value{std::string{}}, .error = {}};
+    }
+
+    if (count > ResourceLimits::max_string_repeat) {
+        return {.applies = true, .value = {}, .error = vm_errors::string_repeat_count_exceeds_max};
     }
 
     if (!str->empty() &&
         static_cast<std::size_t>(count) > ResourceLimits::max_string_size / str->size()) {
-        return std::nullopt; // Sentinel — caller reports overflow.
+        return {.applies = true, .value = {}, .error = vm_errors::string_repetition_exceeds_max};
     }
 
-    const auto total = str->size() * static_cast<std::size_t>(count);
-
-    if (total > ResourceLimits::max_string_size) {
-        return std::nullopt; // Sentinel — caller reports overflow.
-    }
-
-    std::string repeated;
-    repeated.reserve(total);
-
-    for (std::size_t i = 0; i < static_cast<std::size_t>(count); ++i) {
-        repeated.append(*str);
-    }
-
-    return Value{std::move(repeated)};
+    return {.applies = true,
+            .value = Value{repeat_string(*str, static_cast<std::size_t>(count))},
+            .error = {}};
 }
 
 /// Maps an arithmetic Op to its verb for error messages.
@@ -199,11 +188,39 @@ template <typename CheckedIntOp, typename DblOp>
     }
 }
 
+/// Maps an arithmetic Op to its noun for overflow messages ("integer overflow
+/// in addition", "number overflow in multiplication", …).
+[[nodiscard]] constexpr std::string_view op_noun(Op op) noexcept {
+    switch (op) {
+        case Op::Add:
+            return "addition";
+        case Op::Subtract:
+            return "subtraction";
+        case Op::Multiply:
+            return "multiplication";
+        case Op::Divide:
+            return "division";
+        default:
+            return "arithmetic";
+    }
+}
+
 } // namespace
 
 // ─────────── Arithmetic dispatch ───────────
 
 Value VM::numeric_binary_op(const Value& a, const Value& b, Op op) const {
+    // Hot path: integer op integer.  Overflow is an error, never a silent
+    // widening to `number` (User Manual §29, "integer overflow in …").
+    if (a.is_integer() && b.is_integer()) [[likely]] {
+        if (const auto result = checked_integer_op(op, a.as_integer(), b.as_integer())) [[likely]] {
+            return Value{*result};
+        }
+
+        runtime_error(vm_errors::integer_overflow_in(op_noun(op)),
+                      vm_errors::hint_integer_overflow);
+    }
+
     switch (op) {
         case Op::Add: {
             auto result = numeric_add(a, b);
@@ -216,7 +233,7 @@ Value VM::numeric_binary_op(const Value& a, const Value& b, Op op) const {
             }
 
             if (both_numeric(a, b)) [[unlikely]] {
-                runtime_error(vm_errors::number_overflow);
+                runtime_error(vm_errors::number_overflow_in(op_noun(op)));
             }
 
             break;
@@ -228,7 +245,7 @@ Value VM::numeric_binary_op(const Value& a, const Value& b, Op op) const {
             }
 
             if (both_numeric(a, b)) [[unlikely]] {
-                runtime_error(vm_errors::number_overflow);
+                runtime_error(vm_errors::number_overflow_in(op_noun(op)));
             }
 
             break;
@@ -239,17 +256,16 @@ Value VM::numeric_binary_op(const Value& a, const Value& b, Op op) const {
                 return result;
             }
 
-            if (auto repeated = try_string_repeat(a, b)) {
-                return *repeated;
-            }
+            if (auto repeated = try_string_repeat(a, b); repeated.applies) {
+                if (!repeated.error.empty()) [[unlikely]] {
+                    runtime_error(repeated.error, vm_errors::hint_reduce_repeat_count);
+                }
 
-            // String repetition was attempted but exceeded size limit.
-            if (a.is_string() || b.is_string()) [[unlikely]] {
-                runtime_error(vm_errors::string_repetition_exceeds_max);
+                return std::move(repeated.value);
             }
 
             if (both_numeric(a, b)) [[unlikely]] {
-                runtime_error(vm_errors::number_overflow);
+                runtime_error(vm_errors::number_overflow_in(op_noun(op)));
             }
 
             break;
@@ -287,11 +303,27 @@ Value VM::compare_values(const Value& a, const Value& b, Op op) const {
 void VM::handle_divide() {
     auto [a_ref, b] = pop_binary_ref();
 
+    // Report a type mismatch as a located Luma error up front, instead of
+    // letting Value::to_numeric() throw its internal-sounding message.
+    if (!both_numeric(a_ref, b)) [[unlikely]] {
+        runtime_error(vm_errors::cannot_operate_on("divide", a_ref.display_type_name(),
+                                                   b.display_type_name()));
+    }
+
     validate_nonzero_divisor(b, "Division");
 
     // True division always produces a number (float), so integer / integer
     // promotes (7 / 2 == 3.5). Use // for integer (floor) division.
-    a_ref = Value{a_ref.to_numeric() / b.to_numeric()};
+    const auto l = a_ref.to_numeric();
+    const auto r = b.to_numeric();
+    const auto result = l / r;
+
+    // Finite operands producing ±Infinity (e.g. 1e308 / 1e-308) overflowed.
+    if (std::isfinite(l) && std::isfinite(r) && !std::isfinite(result)) [[unlikely]] {
+        runtime_error(vm_errors::number_overflow_in(op_noun(Op::Divide)));
+    }
+
+    a_ref = Value{result};
 }
 
 void VM::handle_int_divide() {
@@ -323,6 +355,11 @@ void VM::handle_int_divide() {
 
 void VM::handle_modulo() {
     auto [a_ref, b] = pop_binary_ref();
+
+    if (!both_numeric(a_ref, b)) [[unlikely]] {
+        runtime_error(vm_errors::cannot_operate_on(
+            "take the remainder of", a_ref.display_type_name(), b.display_type_name()));
+    }
 
     validate_nonzero_divisor(b, "Modulo");
 

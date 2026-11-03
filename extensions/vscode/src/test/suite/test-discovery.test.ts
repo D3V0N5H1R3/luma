@@ -85,8 +85,22 @@ suite("testAnnotationPattern", () => {
         assert.ok(testAnnotationPattern().test("code\n@test\nmore code"));
     });
 
+    test("matches an indented @test inside a namespace", () => {
+        assert.ok(
+            testAnnotationPattern().test("namespace Ns {\n    @test\n    function void t() {}\n}"),
+        );
+    });
+
+    test("matches an @test line followed by a comment", () => {
+        assert.ok(testAnnotationPattern().test("@test  # slow\nfunction void t() {}"));
+    });
+
     test("does not match a file without an @test annotation", () => {
         assert.ok(!testAnnotationPattern().test("function void helper() {}\n"));
+    });
+
+    test("does not match @test inside a comment", () => {
+        assert.ok(!testAnnotationPattern().test("# use @test to mark tests\n"));
     });
 });
 
@@ -95,7 +109,20 @@ suite("mainAnnotationPattern", () => {
         assert.ok(mainAnnotationPattern().test("@main\nfunction void main() {}\n"));
     });
 
+    test("matches an indented @main line", () => {
+        assert.ok(mainAnnotationPattern().test("  @main\nfunction void main() {}\n"));
+    });
+
     test("does not match a file without an @main annotation", () => {
         assert.ok(!mainAnnotationPattern().test("@test\nfunction void test_a() {}\n"));
+    });
+});
+
+suite("testFunctionPattern inside a namespace", () => {
+    test("matches an indented @test function", () => {
+        assert.strictEqual(
+            firstTestName("namespace Ns {\n    @test\n    function void test_inner() {}\n}\n"),
+            "test_inner",
+        );
     });
 });

@@ -80,20 +80,6 @@ inline void define_native(const EnvPtr& env, std::string_view name, NativeFuncti
     env->define(std::string{name}, Value{std::move(nfv)}, false);
 }
 
-// ─── Method Registration Macros ───
-// These macros reduce boilerplate for stdlib module definitions.
-//
-// Tradeoffs vs. a builder pattern:
-//   + Macros: More concise, familiar pattern across 50+ modules
-//   + Macros: Zero runtime overhead (expanded at compile time)
-//   - Macros: Can't set breakpoints on macro expansions directly
-//   - Macros: Harder to refactor with IDE tooling
-//   + Builder: More debuggable, better IDE support
-//   - Builder: More verbose, runtime overhead from std::function construction
-//
-// Decision: Keep macros. The stdlib is stable and rarely debugged at the
-// registration level. If debugging is needed, expand the macro manually.
-
 // ─── Method-style definition helpers ───
 // These reduce the per-function boilerplate in stdlib modules.  A typical
 // method definition goes from:
@@ -126,7 +112,12 @@ void define_method(const EnvPtr& env, std::string_view name, std::size_t arity, 
                   [n = std::string{name}, arity, extract, body = std::move(body)](
                       std::span<const Value> args, SourceLocation loc) -> Value {
                       expect_args(n, args, arity, loc);
-                      auto self = extract(args[0], n, loc);
+                      // decltype(auto) preserves the extractor's reference
+                      // return (e.g. expect_string → const std::string&) so a
+                      // large string or container handle is not copied on
+                      // every call.  The referent lives in `args`, which
+                      // outlives the body call.
+                      decltype(auto) self = extract(args[0], n, loc);
                       return body(self, args, loc);
                   });
 }

@@ -92,6 +92,17 @@ inline constexpr std::string_view k_internal_error_hint =
         "reduce the number of functions or lambdas, or split the program into smaller modules");
 }
 
+[[nodiscard]] inline DiagnosticText too_many_constants(std::size_t maximum) {
+    return limit_exceeded("distinct constants in function", maximum,
+                          "split the function into smaller functions, or load large tables of "
+                          "literal data from a file at runtime");
+}
+
+[[nodiscard]] inline DiagnosticText too_many_names(std::size_t maximum) {
+    return limit_exceeded("distinct global and field names in function", maximum,
+                          "split the function into smaller functions");
+}
+
 [[nodiscard]] inline DiagnosticText too_many_positional_arguments(std::size_t maximum) {
     return limit_exceeded(
         "positional arguments", maximum,

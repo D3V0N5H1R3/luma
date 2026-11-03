@@ -48,7 +48,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --target luma_lsp --parallel
 ```
 
-This produces `build/luma_lsp` on Linux and macOS, or `build\Release\luma_lsp.exe` on Windows with MSVC.
+This produces `build/luma_lsp` (`build\luma_lsp.exe` on Windows).
 
 ## Usage
 

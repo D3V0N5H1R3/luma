@@ -66,6 +66,14 @@ DiagnosticBuilder& DiagnosticBuilder::error_code(DiagnosticCode code) {
 
 DiagnosticBuilder& DiagnosticBuilder::add_span(SourceLocation start, SourceLocation end,
                                                std::string label, bool is_primary) {
+    // A location copied from a token points one past the token and records the
+    // token's start.  Anchor the span at that start so the caret sits on the
+    // token; a single-location span (end == start) then underlines the whole
+    // token, because `end` keeps the one-past-the-end column.
+    if (start.has_start()) {
+        start = start.start();
+    }
+
     diag_.spans.push_back(
         {.start = start, .end = end, .label = std::move(label), .is_primary = is_primary});
 

@@ -35,10 +35,10 @@ function result<number> parse_and_validate(string input) {
 record Profile { string name, optional<string> email }
 
 function optional<string> get_email_domain(optional<Profile> profile) {
-    Profile p = profile?
-    string email = p.email?
+    Profile found = profile?
+    string email = found.email?
     array<string> parts = String.split(email, "@")
-    return Array.last(parts) ?? ""
+    return Array.last(parts)
 }
 
 # ── Typed error values ──
@@ -76,13 +76,13 @@ function void demo_result_basics() {
     result<number> bad = failure("something went wrong")
 
     match good {
-        success(v) { print("Good: ${v}") }
-        failure(m) { print("Error: ${m}") }
+        success(value) { print("Good: ${value}") }
+        failure(message) { print("Error: ${message}") }
     }
 
     match bad {
-        success(v) { print("Good: ${v}") }
-        failure(m) { print("Error: ${m}") }
+        success(value) { print("Good: ${value}") }
+        failure(message) { print("Error: ${message}") }
     }
 }
 
@@ -93,11 +93,18 @@ function void demo_result_basics() {
 # input so the !> chain is written once.
 function result<number> run_validation_pipeline(string raw) {
     result<number> validated = success(raw)
-    !> parse_number()
-    !> validate_positive()
-    !> double_it()
+        !> parse_number()
+        !> validate_positive()
+        !> double_it()
 
     return validated
+}
+
+function string describe_outcome(result<number> outcome) {
+    return match outcome {
+        success(value) { "${value}" }
+        failure(message) { "error: ${message}" }
+    }
 }
 
 function void demo_error_pipe() {
@@ -105,13 +112,13 @@ function void demo_error_pipe() {
     print("=== Error-pipe !> ===")
 
     result<number> pipeline_ok = run_validation_pipeline("3.14")
-    print("Pipeline ok: ${pipeline_ok}")
+    print("Pipeline ok: ${describe_outcome(pipeline_ok)}")
 
     result<number> pipeline_bad = run_validation_pipeline("-5")
-    print("Pipeline bad: ${pipeline_bad}")
+    print("Pipeline bad: ${describe_outcome(pipeline_bad)}")
 
     result<number> pipeline_parse_fail = run_validation_pipeline("not_a_number")
-    print("Pipeline parse fail: ${pipeline_parse_fail}")
+    print("Pipeline parse fail: ${describe_outcome(pipeline_parse_fail)}")
 }
 
 # ── Error propagation with ? ──
@@ -124,8 +131,8 @@ function void demo_error_propagation() {
 
     for input in inputs {
         match parse_and_validate(input) {
-            success(v) { print("  '${input}' -> ${v}") }
-            failure(m) { print("  '${input}' -> error: ${m}") }
+            success(value) { print("  '${input}' -> ${value}") }
+            failure(message) { print("  '${input}' -> error: ${message}") }
         }
     }
 }
@@ -155,8 +162,8 @@ function void demo_typed_errors() {
 
     for score in scores {
         match validate_score(score) {
-            success(v) {
-                print("  '${score}' -> valid: ${v}")
+            success(value) {
+                print("  '${score}' -> valid: ${value}")
             }
             failure(err) {
                 string reason = match err {
@@ -200,8 +207,8 @@ function void demo_try_catch_finally() {
 
     try {
         try {
-            array<integer> arr = [1, 2, 3]
-            integer _ = arr[99]
+            array<integer> values = [1, 2, 3]
+            integer _ = values[99]
         } finally {
             has_cleanup_run = true
         }

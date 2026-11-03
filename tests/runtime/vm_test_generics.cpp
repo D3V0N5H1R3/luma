@@ -15,6 +15,8 @@
 #include "runtime/vm/vm_introspection.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::test::eval;
+
 // ─── Generic execution: records, turbofish, multi-param, constructors ───
 
 LUMA_TEST(vm_generic_record_construct_access) {
@@ -84,8 +86,9 @@ LUMA_TEST(vm_trusted_downcast_success) {
 
 LUMA_TEST(vm_trusted_downcast_throws) {
     // trusted_downcast to an incompatible type throws a RuntimeError.
-    ASSERT_THROWS(eval("function string f(integer x) { return trusted_downcast<string>(x) }\n"
-                       "f(42)"));
+    ASSERT_EVAL_THROWS("function string f(integer x) { return trusted_downcast<string>(x) }\n"
+                       "f(42)",
+                       "trusted_downcast failed: expected 'string', got 'integer'");
 }
 
 LUMA_TEST(vm_downcast_interface_to_record) {
@@ -127,7 +130,7 @@ LUMA_TEST(vm_is_nested_array_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_dictionary_value_match) {
@@ -150,7 +153,7 @@ LUMA_TEST(vm_is_dictionary_value_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_dictionary_nested_array_mismatch) {
@@ -161,7 +164,7 @@ LUMA_TEST(vm_is_dictionary_nested_array_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_result_inner_match) {
@@ -184,7 +187,7 @@ LUMA_TEST(vm_is_result_inner_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_result_two_param_error_match) {
@@ -207,7 +210,7 @@ LUMA_TEST(vm_is_reference_inner_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_reference_inner_match) {
@@ -230,7 +233,7 @@ LUMA_TEST(vm_is_queue_element_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_queue_element_match) {
@@ -266,7 +269,7 @@ LUMA_TEST(vm_is_stack_element_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_set_element_match) {
@@ -288,7 +291,7 @@ LUMA_TEST(vm_is_set_element_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_optional_some_match) {
@@ -322,7 +325,7 @@ LUMA_TEST(vm_is_optional_some_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_tuple_nested_element_mismatch) {
@@ -334,7 +337,7 @@ LUMA_TEST(vm_is_tuple_nested_element_mismatch) {
                              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_is_tuple_nested_element_match) {
@@ -360,7 +363,7 @@ LUMA_TEST(vm_downcast_dictionary_value_mismatch_fails) {
              "f()");
 
     ASSERT_TRUE(result.is_bool());
-    ASSERT_TRUE(!result.as_bool());
+    ASSERT_FALSE(result.as_bool());
 }
 
 LUMA_TEST(vm_downcast_dictionary_value_match_succeeds) {

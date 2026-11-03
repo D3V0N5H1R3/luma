@@ -3,6 +3,7 @@
 #include "analysis/source/source_location.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/collections/container_module_builder.hpp"
+#include "runtime/stdlib/collections/container_ops.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/common/native_function_containers.hpp"
@@ -38,13 +39,7 @@ void register_queue_ns(const EnvPtr& env) {
         .func("contains", 2)
         .extract_body(expect_queue,
                       [](const auto& src, const Args& args, SourceLocation) -> Value {
-                          for (const auto& v : src->elements) {
-                              if (v.equals(args[1])) {
-                                  return Value{true};
-                              }
-                          }
-
-                          return Value{false};
+                          return Value{contains_value(src->elements, args[1])};
                       })
         // Queue.find(q, fn) -> result<T> — first FIFO match.
         .func("find", 2)

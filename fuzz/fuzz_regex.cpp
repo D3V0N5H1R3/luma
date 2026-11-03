@@ -1,3 +1,4 @@
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -47,11 +48,12 @@ struct KnownAnswer {
 // Representative anchors. Dangerous: a group that both contains a quantifier and
 // is itself quantified. Safe: single quantifiers, quantified groups with no inner
 // quantifier, a quantifier inside a character class, and escaped parentheses.
-constexpr KnownAnswer k_known_answers[] = {
-    {"", false},     {"abc", false},          {"a+", false},     {"a{2,3}", false},
-    {"(a)+", false}, {"(a+)", false},         {"[a+]+", false},  {"\\(a+\\)+", false},
-    {"(a+)+", true}, {"(a+)+b", true},        {"((a+))+", true}, {"(?:a+)+", true},
-    {"(a*)*", true}, {"(a{2,3}){2,3}", true},
+constexpr std::array k_known_answers{
+    KnownAnswer{"", false},       KnownAnswer{"abc", false},          KnownAnswer{"a+", false},
+    KnownAnswer{"a{2,3}", false}, KnownAnswer{"(a)+", false},         KnownAnswer{"(a+)", false},
+    KnownAnswer{"[a+]+", false},  KnownAnswer{"\\(a+\\)+", false},    KnownAnswer{"(a+)+", true},
+    KnownAnswer{"(a+)+b", true},  KnownAnswer{"((a+))+", true},       KnownAnswer{"(?:a+)+", true},
+    KnownAnswer{"(a*)*", true},   KnownAnswer{"(a{2,3}){2,3}", true},
 };
 
 // Verify the input-independent known-answer table.  Run once at startup.
@@ -72,7 +74,7 @@ extern "C" int LLVMFuzzerInitialize(int* /*argc*/, char*** /*argv*/) {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             using luma::has_dangerous_quantifier_nesting;
 
             // ── Never-crash: arbitrary bytes are classified. ──

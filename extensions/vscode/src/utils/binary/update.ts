@@ -28,16 +28,69 @@ export type UpdateMode = "interactive" | "silent";
 
 interface BinPaths {
     bin_dir: string;
-    tmp_bin: string;
+    binary_name: string;
     old_bin: string;
 }
 
 function getBinPaths(config: BinaryConfig, context: vscode.ExtensionContext): BinPaths {
     const binary_name = getBinaryFilename(config.name);
     const bin_dir = getBinDir(context);
-    const tmp_bin = path.join(bin_dir, binary_name + ".tmp");
     const old_bin = path.join(bin_dir, binary_name);
-    return { bin_dir, tmp_bin, old_bin };
+    return { bin_dir, binary_name, old_bin };
+}
+
+/** Infix of the backup a binary is moved to while its replacement downloads. */
+const BACKUP_INFIX = ".old-";
+/** Backup suffix used by earlier versions of the extension. */
+const LEGACY_BACKUP_SUFFIX = ".tmp";
+
+/**
+ * Deletes a file, reporting rather than throwing on failure.
+ *
+ * On Windows a running executable can be renamed but not deleted, so the
+ * backup of a binary that is still in use (the language server until it
+ * restarts) cannot be removed yet. That must not turn a successful update into
+ * a reported failure; the leftover is cleaned up by a later update.
+ *
+ * @returns Whether the file is gone.
+ */
+export function discardBackup(
+    file_path: string,
+    output: vscode.OutputChannel,
+    remove: (file_path: string) => void = (p) => fs.rmSync(p, { force: true }),
+): boolean {
+    try {
+        remove(file_path);
+        return true;
+    } catch (err: unknown) {
+        output.appendLine(
+            `Could not remove ${file_path} yet (${extractErrorMessage(err)}); ` +
+                "it will be removed after the next update.",
+        );
+        return false;
+    }
+}
+
+/** Removes backups left by earlier updates whose binary was still running. */
+export function removeStaleBackups(
+    bin_dir: string,
+    binary_name: string,
+    output: vscode.OutputChannel,
+): void {
+    let entries: string[];
+    try {
+        entries = fs.readdirSync(bin_dir);
+    } catch {
+        return;
+    }
+    for (const entry of entries) {
+        if (
+            entry.startsWith(binary_name + BACKUP_INFIX) ||
+            entry === binary_name + LEGACY_BACKUP_SUFFIX
+        ) {
+            discardBackup(path.join(bin_dir, entry), output);
+        }
+    }
 }
 
 export function shouldUpdateBinary(
@@ -85,44 +138,50 @@ async function performBinaryUpdate(
     output: vscode.OutputChannel,
     restart_command?: string,
 ): Promise<void> {
-    const { tmp_bin, old_bin } = getBinPaths(config, context);
+    const { bin_dir, binary_name, old_bin } = getBinPaths(config, context);
 
-    if (fs.existsSync(tmp_bin)) {
-        fs.unlinkSync(tmp_bin);
-    }
-    if (fs.existsSync(old_bin)) {
-        fs.renameSync(old_bin, tmp_bin);
+    removeStaleBackups(bin_dir, binary_name, output);
+
+    // Move the current binary aside (a running executable can be renamed even
+    // on Windows) so the download can take its place. The name is unique, so
+    // a backup that is still locked from an earlier update never blocks this one.
+    const backup = fs.existsSync(old_bin)
+        ? path.join(bin_dir, `${binary_name}${BACKUP_INFIX}${Date.now()}`)
+        : undefined;
+    if (backup) {
+        fs.renameSync(old_bin, backup);
     }
 
-    const downloaded = await downloadBinary(config, context, output, release);
-    if (downloaded) {
-        if (fs.existsSync(tmp_bin)) {
-            fs.unlinkSync(tmp_bin);
+    let downloaded: string | undefined;
+    try {
+        downloaded = await downloadBinary(config, context, output, release);
+    } finally {
+        if (!downloaded && backup && !fs.existsSync(old_bin)) {
+            fs.renameSync(backup, old_bin);
+            output.appendLine("Update failed — restored previous binary.");
         }
-        // downloadBinary already recorded installed_tag_key on success.
-        if (restart_command) {
-            const restart = await vscode.window.showInformationMessage(
-                `Updated ${config.name} to ${release.tag_name}. Restart?`,
-                "Restart",
-                "Later",
-            );
-            if (restart === "Restart") {
-                await vscode.commands.executeCommand(restart_command);
-            }
-        } else {
-            const done = `Updated ${config.name} to ${release.tag_name}.`;
-            void reportInfo(output, done, done);
-        }
-    } else if (fs.existsSync(tmp_bin)) {
-        fs.renameSync(tmp_bin, old_bin);
-        output.appendLine("Update failed — restored previous binary.");
     }
-}
 
-function restoreBinaryOnError(config: BinaryConfig, context: vscode.ExtensionContext): void {
-    const { tmp_bin, old_bin } = getBinPaths(config, context);
-    if (fs.existsSync(tmp_bin) && !fs.existsSync(old_bin)) {
-        fs.renameSync(tmp_bin, old_bin);
+    if (!downloaded) {
+        return;
+    }
+
+    if (backup) {
+        discardBackup(backup, output);
+    }
+    // downloadBinary already recorded installed_tag_key on success.
+    if (restart_command) {
+        const restart = await vscode.window.showInformationMessage(
+            `Updated ${config.name} to ${release.tag_name}. Restart?`,
+            "Restart",
+            "Later",
+        );
+        if (restart === "Restart") {
+            await vscode.commands.executeCommand(restart_command);
+        }
+    } else {
+        const done = `Updated ${config.name} to ${release.tag_name}.`;
+        void reportInfo(output, done, done);
     }
 }
 
@@ -169,7 +228,6 @@ export async function checkForBinaryUpdate(
 
         await performBinaryUpdate(config, context, release, output, restart_command);
     } catch (err: unknown) {
-        restoreBinaryOnError(config, context);
         const msg = extractErrorMessage(err);
         const channel_message = `Update check failed: ${msg}`;
         if (mode === "interactive") {

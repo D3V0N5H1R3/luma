@@ -25,7 +25,7 @@ Add a new built-in function to a Luma standard library module. Follow the existi
     - **Fuzz** — only if the function decodes or parses *untrusted input* (a new parser/decoder entry point, regex, compression, etc.). Extend the existing module's target in `fuzz/` (e.g. `fuzz_json.cpp`, `fuzz_xml.cpp`, `fuzz_string.cpp`) and its seed corpus — the targets are trust-boundary/codec-scoped, not per-function, so do not add a new target for one function.
     - **Benchmark** — only if the function is performance-sensitive or on a hot path. Add a `time_it` case to the relevant `bench_<topic>.luma` in `benchmarks/` (e.g. `bench_strings.luma`); do not create a new file for a single case. CI fails on a >10% regression against the cached baseline.
 9. Document the function in `Luma_Standard_Library_Reference.md` under the module's section. If the module has its own dedicated guide, update that guide's detailed reference too.
-10. Build and verify: `cmake --build --preset default`, then run the relevant tests (`ctest --preset default` for the C++ unit test and `build/Release/luma --test <your-feature-test>.luma` for the Luma test). Confirm everything passes before finishing.
+10. Build and verify: `cmake --build --preset default`, then run the relevant tests (`ctest --preset default` for the C++ unit test and `build/luma --test <your-feature-test>.luma` for the Luma test). Confirm everything passes before finishing.
 
 ## For a Named Constant
 
@@ -40,12 +40,12 @@ A named constant (e.g. `Math.pi`, `Math.tau`) is a nullary, bodyless variation o
 
 Verify incrementally as you work — don't wait until step 10 to discover a cascade of failures.
 
-| After… | Run | Why |
-|---------|-----|-----|
-| Implementing the runtime body (step 5) | `cmake --build --preset default` (compile only) | Catches typos, missing includes, signature mismatches |
-| Compiling cleanly | `ctest -R stdlib_test_<module>` (targeted test) | Confirms the function works in isolation |
-| Adding catalog metadata | `ctest -R stdlib_catalog_conformance` | Catches arity/name mismatches between runtime and catalog |
-| All C++ tests pass | `build/Release/luma --strict --test <feature-test>.luma` | Validates Luma-level behaviour and catches lint warnings |
+| After…                                 | Run                                                      | Why                                                       |
+| -------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| Implementing the runtime body (step 5) | `cmake --build --preset default` (compile only)          | Catches typos, missing includes, signature mismatches     |
+| Compiling cleanly                      | `ctest -R stdlib_test_<module>` (targeted test)          | Confirms the function works in isolation                  |
+| Adding catalog metadata                | `ctest -R stdlib_catalog_conformance`                    | Catches arity/name mismatches between runtime and catalog |
+| All C++ tests pass                     | `build/luma --strict --test <feature-test>.luma` | Validates Luma-level behaviour and catches lint warnings  |
 
 If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
 

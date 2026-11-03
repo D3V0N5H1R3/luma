@@ -48,6 +48,10 @@ public:
     using CompilerHelper::CompilerHelper;
 
     void compile_declaration(const Declaration& decl);
+    // Records every record declaration (top-level and namespaced) before any
+    // function body is compiled, so a record literal may precede its type's
+    // declaration in source order.
+    void register_record_declarations(const std::vector<DeclarationPtr>& declarations);
     void compile_function_decl(const FunctionDeclaration& decl);
     void compile_choice_declaration(const ChoiceDeclaration& decl);
     void compile_record_declaration(const RecordDeclaration& decl);

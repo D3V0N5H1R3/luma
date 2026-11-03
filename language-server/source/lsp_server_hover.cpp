@@ -1,6 +1,8 @@
 #include <format>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "analysis/lexer/token.hpp"
 #include "analysis/lexer/token_type.hpp"
@@ -15,6 +17,7 @@
 #include "lsp_symbol_lookup.hpp"
 #include "lsp_symbol_resolver.hpp"
 #include "lsp_token_utils.hpp"
+#include "lsp_type_formatter.hpp"
 #include "lsp_types.hpp"
 
 namespace luma::lsp {
@@ -120,7 +123,30 @@ namespace {
     if (!resolved.has_value()) {
         return {};
     }
-    return format_hover_block(std::format("{}: {}", token.lexeme, resolved->type_name));
+    return format_hover_block(std::format("{}{} {}", resolved->is_mutable ? "mutable " : "",
+                                          resolved->type_name, token.lexeme));
+}
+
+// Resolve hover for a variable declared inside the enclosing function (not a
+// parameter, not a module-level symbol). Such a local shadows a top-level
+// symbol of the same name, so it is tried before them — except at a call
+// `name(…)` of a user function, which locals declared later in the function
+// must not hide.
+[[nodiscard]] std::string hover_scoped_local(const Token& token, std::size_t idx,
+                                             const AnalysisResult& result) {
+    const auto& tokens = result.semantic.tokens;
+    if (idx + 1 < tokens.size() && tokens[idx + 1].type == TokenType::LeftParen &&
+        SymbolLookup{result}.find_function(token.lexeme)) {
+        return {};
+    }
+    const ScopeStack scopes{result, token.location.line};
+    const auto sym = scopes.find_symbol(token.lexeme);
+    if (!sym.has_value() || sym->origin == ScopeKind::Module || sym->is_parameter ||
+        !util::is_known_type(sym->type_name)) {
+        return {};
+    }
+    return format_hover_block(
+        std::format("{}{} {}", sym->is_mutable ? "mutable " : "", sym->type_name, token.lexeme));
 }
 
 // Resolve hover for a function parameter within its enclosing function.
@@ -134,7 +160,19 @@ namespace {
     if (!sym.has_value() || !sym->is_parameter) {
         return {};
     }
-    return format_hover_block(std::format("(parameter) {}: {}", sym->name, sym->type_name));
+    return format_hover_block(std::format("(parameter) {} {}", sym->type_name, sym->name));
+}
+
+// Render declared fields as the body of a record/interface declaration:
+// one `type name` per line, comma-separated as in Luma source.
+[[nodiscard]] std::string
+format_field_lines(const std::vector<std::pair<std::string, std::string>>& fields) {
+    std::string body;
+    for (std::size_t i{0}; i < fields.size(); ++i) {
+        body += std::format("    {} {}{}\n", fields[i].second, fields[i].first,
+                            i + 1 < fields.size() ? "," : "");
+    }
+    return body;
 }
 
 // Resolve hover for a record type definition, showing its fields.
@@ -144,11 +182,8 @@ namespace {
     if (!rec_ref || token.lexeme.starts_with(k_interface_record_prefix)) {
         return {};
     }
-    std::string fields;
-    for (const auto& [fname, ftype] : rec_ref->fields) {
-        fields += std::format("    {}: {}\n", fname, ftype);
-    }
-    return format_hover_block(std::format("record {} {{\n{}}}", token.lexeme, fields));
+    return format_hover_block(
+        std::format("record {} {{\n{}}}", token.lexeme, format_field_lines(rec_ref->fields)));
 }
 
 // Resolve hover for a choice type definition, showing its variants.
@@ -172,11 +207,8 @@ namespace {
     if (!iface_ref) {
         return {};
     }
-    std::string fields;
-    for (const auto& [fname, ftype] : iface_ref->fields) {
-        fields += std::format("    {}: {}\n", fname, ftype);
-    }
-    return format_hover_block(std::format("interface {} {{\n{}}}", token.lexeme, fields));
+    return format_hover_block(
+        std::format("interface {} {{\n{}}}", token.lexeme, format_field_lines(iface_ref->fields)));
 }
 
 // Resolve hover for a user-defined namespace name, showing its member count.
@@ -247,7 +279,7 @@ namespace {
     }
     for (const auto& [fname, ftype] : rec_ref->fields) {
         if (fname == field_name) {
-            return format_hover_block(std::format("(field) {}: {}", fname, ftype));
+            return format_hover_block(std::format("(field) {} {}", ftype, fname));
         }
     }
     return {};
@@ -304,65 +336,72 @@ using lsp_builders::try_resolve;
 } // namespace
 
 // ═══════════════════════════════════════════════════════════
+// Hover text resolution
+// ═══════════════════════════════════════════════════════════
+
+std::string resolve_hover_text(const AnalysisResult& result, std::size_t idx,
+                               const StdlibRegistry& stdlib_registry) {
+    const auto& tokens = result.semantic.tokens;
+    const auto& token = tokens[idx];
+
+    std::string hover_text;
+
+    // ── Dot-access hover resolution ──
+    // Pattern: Identifier.Identifier — the hovered token is the member after
+    // the dot, so only member resolvers apply: the plain-identifier ones
+    // would describe an unrelated local or top-level symbol of the same name.
+    if (is_dot_access_pattern(tokens, idx)) {
+        const auto& prefix = tokens[idx - 2].lexeme;
+        const auto& member = token.lexeme;
+
+        hover_text = try_resolve(
+            [&] { return hover_stdlib_function(prefix, member, stdlib_registry); },
+            [&] { return hover_user_ns_function(prefix, member, result); },
+            [&] { return hover_record_field(prefix, member, token.location.line, result); },
+            [&] { return hover_choice_variant(prefix, member, result); });
+    } else if (is_identifier(token)) {
+        // ── Identifier hover resolution ──
+        // Innermost scope first: parameters and locals shadow top-level
+        // symbols. The module-level variable resolver comes last: it also
+        // matches declarations (a record named `Point` resolves to type
+        // "record"), which the dedicated resolvers render in full.
+        hover_text = try_resolve([&] { return hover_stdlib_module(token, stdlib_registry); },
+                                 [&] { return hover_function_parameter(token, result); },
+                                 [&] { return hover_scoped_local(token, idx, result); },
+                                 [&] { return hover_user_function(token, result); },
+                                 [&] { return hover_record_type(token, result); },
+                                 [&] { return hover_choice_type(token, result); },
+                                 [&] { return hover_interface_type(token, result); },
+                                 [&] { return hover_user_namespace(token, result); },
+                                 [&] { return hover_local_variable(token, result); });
+    }
+
+    // ── Keyword and literal hover ──
+    if (hover_text.empty()) {
+        hover_text = keyword_hover(token);
+    }
+    return hover_text;
+}
+
+// ═══════════════════════════════════════════════════════════
 // Top-level hover handler
 // ═══════════════════════════════════════════════════════════
 
 JsonValue LspHoverHandler::handle_hover(const JsonValue& params) {
     return ctx_.resolve_token_context(params, [&](const TokenContext& ctx) -> JsonValue {
-        const auto& [uri, result, idx, token_ptr, cache] = ctx;
-        const AnalysisResultView view{*result};
-        const auto& tokens = view.tokens();
-        const auto& token = *token_ptr;
-
-        std::string hover_text;
-
         // resolve_token_context only invokes this handler once it has verified
         // a cached analysis exists, so `result` is always a valid pointer here.
         // The static analyzer cannot prove that: find_analysis() is defined in a
         // separate translation unit, so the analyzer conjures its optional_ref
-        // return value and models the dereferenced pointer as undefined. Suppress
-        // the resulting false-positive null-dereference reports across both
-        // resolver blocks below.
+        // return value and models the dereferenced pointer as undefined.
         // NOLINTBEGIN(clang-analyzer-core.NullDereference)
-
-        // ── Identifier hover resolution ──
-        // Try each resolver in priority order for plain identifiers.
-        if (is_identifier(token)) {
-            hover_text =
-                try_resolve([&] { return hover_stdlib_module(token, ctx_.stdlib_registry); },
-                            [&] { return hover_user_function(token, *result); },
-                            [&] { return hover_local_variable(token, *result); },
-                            [&] { return hover_function_parameter(token, *result); },
-                            [&] { return hover_record_type(token, *result); },
-                            [&] { return hover_choice_type(token, *result); },
-                            [&] { return hover_interface_type(token, *result); },
-                            [&] { return hover_user_namespace(token, *result); });
-        }
-
-        // ── Dot-access hover resolution ──
-        // Pattern: Identifier.Identifier — the hovered token is after the dot.
-        if (hover_text.empty() && is_dot_access_pattern(tokens, idx)) {
-            const auto& prefix = tokens[idx - 2].lexeme;
-            const auto& member = token.lexeme;
-
-            hover_text = try_resolve(
-                [&] { return hover_stdlib_function(prefix, member, ctx_.stdlib_registry); },
-                [&] { return hover_user_ns_function(prefix, member, *result); },
-                [&] { return hover_record_field(prefix, member, token.location.line, *result); },
-                [&] { return hover_choice_variant(prefix, member, *result); });
-        }
-        // NOLINTEND(clang-analyzer-core.NullDereference)
-
-        // ── Keyword and literal hover ──
-        if (hover_text.empty()) {
-            hover_text = keyword_hover(token);
-        }
-
+        const auto hover_text =
+            resolve_hover_text(*ctx.result, ctx.token_idx, ctx_.stdlib_registry);
         if (hover_text.empty()) {
             return {}; // null = no hover
         }
-
-        return make_hover_response(hover_text, token, result->encoder());
+        return make_hover_response(hover_text, *ctx.token, ctx.result->encoder());
+        // NOLINTEND(clang-analyzer-core.NullDereference)
     });
 }
 

@@ -673,7 +673,7 @@ void register_math_ns(const EnvPtr& env) {
             }
 
             auto rec = std::make_shared<RecordValue>();
-            rec->type_name = "Interval";
+            rec->type_name = "Math.Interval";
             rec->fields.emplace_back("minimum", Value{min});
             rec->fields.emplace_back("maximum", Value{max});
 

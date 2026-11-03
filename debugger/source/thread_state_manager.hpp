@@ -72,10 +72,6 @@ public:
 
     [[nodiscard]] int paused_count() const noexcept;
 
-    // Count paused threads while thread_states_mutex_ is already held.
-    // Caller MUST hold lock_states() before calling this.
-    [[nodiscard]] int count_paused_locked() const;
-
     // ─── VM signalling ───
 
     void signal_all_vms_pause_check();
