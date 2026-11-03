@@ -79,6 +79,15 @@ function result<Library> register_member(Library lib, Member member) {
 
 # ─── Loan Operations ─────────────────────────────────────
 
+# Dictionary.get's own missing-key error is generic, so give library users a friendlier one.
+function result<Book> find_book(Library lib, string book_id) {
+    if !Dictionary.has(lib.books, book_id) {
+        return failure("No book found with id ${book_id}. Check the catalog and try again.")
+    }
+
+    return Dictionary.get(lib.books, book_id)
+}
+
 function boolean is_available(Book book) {
     return match book.state {
     case LoanState.Available       { true }
@@ -93,11 +102,7 @@ function result<Library> check_out(
     integer today,
     integer loan_days
 ) {
-    if !Dictionary.has(lib.books, book_id) {
-        return failure("No book found with id ${book_id}. Check the catalog and try again.")
-    }
-
-    Book book = Dictionary.get(lib.books, book_id)?
+    Book book = find_book(lib, book_id)?
 
     if !Dictionary.has(lib.members, member_id) {
         return failure("unknown member ${member_id}")
@@ -116,11 +121,7 @@ function result<Library> check_out(
 }
 
 function result<Library> return_book(Library lib, string book_id) {
-    if !Dictionary.has(lib.books, book_id) {
-        return failure("No book found with id ${book_id}. Check the catalog and try again.")
-    }
-
-    Book book = Dictionary.get(lib.books, book_id)?
+    Book book = find_book(lib, book_id)?
 
     if is_available(book) {
         return failure("'${book.title}' was not on loan")
@@ -132,11 +133,7 @@ function result<Library> return_book(Library lib, string book_id) {
 }
 
 function result<Library> renew(Library lib, string book_id, integer extra_days) {
-    if !Dictionary.has(lib.books, book_id) {
-        return failure("No book found with id ${book_id}. Check the catalog and try again.")
-    }
-
-    Book book = Dictionary.get(lib.books, book_id)?
+    Book book = find_book(lib, book_id)?
 
     match book.state {
     case LoanState.Borrowed(holder, due_day) {
@@ -158,14 +155,14 @@ function array<Book> all_books(Library lib) {
 
 function array<Book> available_books(Library lib) {
     return all_books(lib)
-    |> Array.filter((Book b) -> is_available(b))
-    |> Result.unwrap_or([])
+        |> Array.filter((Book b) -> is_available(b))
+        |> Result.unwrap_or([])
 }
 
 function array<Book> books_by_author(Library lib, string author) {
     return all_books(lib)
-    |> Array.filter((Book b) -> b.author == author)
-    |> Result.unwrap_or([])
+        |> Array.filter((Book b) -> b.author == author)
+        |> Result.unwrap_or([])
 }
 
 # True when a book is on loan and its (holder, due_day) satisfies the predicate.
@@ -186,8 +183,8 @@ function array<Book> borrowed_books_where(
     function(string, integer) -> boolean predicate
 ) {
     return all_books(lib)
-    |> Array.filter((Book book) -> is_borrowed_matching(book, predicate))
-    |> Result.unwrap_or([])
+        |> Array.filter((Book book) -> is_borrowed_matching(book, predicate))
+        |> Result.unwrap_or([])
 }
 
 function array<Book> overdue_books(Library lib, integer today) {
@@ -213,9 +210,8 @@ function string describe_book(Book book) {
     string title = Result.unwrap_or(String.pad_right(book.title, 29, " "), book.title)
     string author = Result.unwrap_or(String.pad_right(book.author, 17, " "), book.author)
     string year = Result.unwrap_or(String.pad_left("${book.year}", 4, " "), "${book.year}")
-    string status_cell = Result.unwrap_or(String.pad_right(status, 24, " "), status)
 
-    return "  ${id} ${title} ${author} ${year}  ${status_cell}"
+    return "  ${id} ${title} ${author} ${year}  ${status}"
 }
 
 function void print_book_table(array<Book> books, string empty_message) {

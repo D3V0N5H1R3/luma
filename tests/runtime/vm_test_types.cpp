@@ -15,6 +15,8 @@
 #include "runtime/vm/vm_introspection.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::test::eval;
+
 // ─── Record tests ───
 
 LUMA_TEST(vm_record_creation) {
@@ -683,7 +685,8 @@ LUMA_TEST(vm_record_with) {
 
 // ─── Downcast and is-type tests ───
 
-LUMA_TEST(vm_downcast_success) {
+LUMA_TEST(vm_downcast_incompatible_type_fails) {
+    // downcast<string> of an integer yields a failure result, not a success.
     const auto result = eval("function result<string> f(integer x) { return downcast<string>(x) }\n"
                              "result<string> r = f(42)\n"
                              "boolean ok = match r {\n"

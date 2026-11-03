@@ -166,6 +166,16 @@ function void test_encoder_url_encode_control_chars() {
 }
 
 @test
+function void test_encoder_url_utf8_multibyte() {
+    # Non-ASCII characters are escaped byte by byte from their UTF-8 form.
+    string encoded = Result.unwrap(Encoder.encode_url("café/ü"))
+
+    assert(encoded == "caf%C3%A9%2F%C3%BC")
+    assert(Result.unwrap(Encoder.decode_url(encoded)) == "café/ü")
+    assert(Result.unwrap(Encoder.decode_url_typed("a%20b")) == "a b")
+}
+
+@test
 function void test_encoder_url_trailing_percent_invalid() {
     # A lone '%' with no following hex digits is malformed.
     assert(Result.is_failure(Encoder.decode_url("%")))
@@ -177,9 +187,11 @@ function void test_encoder_url_trailing_percent_invalid() {
 @test
 function void test_encoder_text_utf8_roundtrip() {
     array<integer> bytes = Result.unwrap(Encoder.encode_text("Héllo", Encoder.Encoding.Utf8))
-    string back = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Utf8))
+    string decoded = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Utf8))
 
-    assert(back == "Héllo")
+    # 'é' takes two bytes in UTF-8, so five characters become six bytes.
+    assert(Array.length(bytes) == 6)
+    assert(decoded == "Héllo")
 }
 
 @test
@@ -201,6 +213,7 @@ function void test_encoder_text_latin1() {
     array<integer> bytes = Result.unwrap(Encoder.encode_text("café", Encoder.Encoding.Latin1))
 
     assert(Array.length(bytes) == 4)
+    assert(bytes[3] == 233)
     assert(Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1)) == "café")
 
     # A codepoint above U+00FF cannot be represented in Latin-1.
@@ -213,8 +226,10 @@ function void test_encoder_decode_text_failures() {
     assert(Result.is_failure(Encoder.decode_text([300], Encoder.Encoding.Ascii)))
     # A byte above 127 is not valid ASCII.
     assert(Result.is_failure(Encoder.decode_text([200], Encoder.Encoding.Ascii)))
-    # A lone continuation byte is not valid UTF-8.
+    # 0xFF never appears in well-formed UTF-8.
     assert(Result.is_failure(Encoder.decode_text([255], Encoder.Encoding.Utf8)))
+    # A lone continuation byte is not valid UTF-8 either.
+    assert(Result.is_failure(Encoder.decode_text([0x80], Encoder.Encoding.Utf8)))
 }
 
 # ─── Encoder.Error (opt-in typed decode errors) ───
@@ -233,17 +248,17 @@ function string encoder_error_label(Encoder.Error e) {
 
 @test
 function void test_encoder_decode_base64_typed_success() {
-    result<string, Encoder.Error> r = Encoder.decode_base64_typed("aGVsbG8=")
+    result<string, Encoder.Error> decoded = Encoder.decode_base64_typed("aGVsbG8=")
 
-    assert(Result.is_success(r), "a valid base64 string decodes")
-    assert(Result.unwrap(r) == "hello")
+    assert(Result.is_success(decoded), "a valid base64 string decodes")
+    assert(Result.unwrap(decoded) == "hello")
 }
 
 @test
 function void test_encoder_decode_base64_typed_invalid() {
-    result<string, Encoder.Error> r = Encoder.decode_base64_typed("@@@not base64@@@")
+    result<string, Encoder.Error> decoded = Encoder.decode_base64_typed("@@@not base64@@@")
 
-    string label = match r {
+    string label = match decoded {
         success(_s) { "unexpected_success" }
         failure(e) { encoder_error_label(e) }
     }
@@ -253,9 +268,9 @@ function void test_encoder_decode_base64_typed_invalid() {
 
 @test
 function void test_encoder_decode_url_typed_invalid() {
-    result<string, Encoder.Error> r = Encoder.decode_url_typed("%zz")
+    result<string, Encoder.Error> decoded = Encoder.decode_url_typed("%zz")
 
-    string label = match r {
+    string label = match decoded {
         success(_s) { "unexpected_success" }
         failure(e) { encoder_error_label(e) }
     }
@@ -265,21 +280,36 @@ function void test_encoder_decode_url_typed_invalid() {
 
 @test
 function void test_encoder_decode_text_typed_invalid_utf8() {
-    result<string, Encoder.Error> r = Encoder.decode_text_typed([255], Encoder.Encoding.Utf8)
+    result<string, Encoder.Error> decoded = Encoder.decode_text_typed([255], Encoder.Encoding.Utf8)
 
-    string label = match r {
+    string label = match decoded {
         success(_s) { "unexpected_success" }
         failure(e) { encoder_error_label(e) }
     }
 
-    assert(label == "invalid_utf8", "a lone continuation byte classifies as InvalidUtf8")
+    assert(label == "invalid_utf8", "a 0xFF byte classifies as InvalidUtf8")
+}
+
+@test
+function void test_encoder_decode_text_typed_out_of_range_latin1() {
+    # Latin-1 accepts every byte, so only a value outside 0-255 can fail — and
+    # that is reported as InvalidUtf8 rather than InvalidAscii.
+    result<string, Encoder.Error> decoded =
+        Encoder.decode_text_typed([300], Encoder.Encoding.Latin1)
+
+    string label = match decoded {
+        success(_s) { "unexpected_success" }
+        failure(e) { encoder_error_label(e) }
+    }
+
+    assert(label == "invalid_utf8", "an out-of-range byte under Latin1 classifies as InvalidUtf8")
 }
 
 @test
 function void test_encoder_decode_text_typed_invalid_ascii() {
-    result<string, Encoder.Error> r = Encoder.decode_text_typed([200], Encoder.Encoding.Ascii)
+    result<string, Encoder.Error> decoded = Encoder.decode_text_typed([200], Encoder.Encoding.Ascii)
 
-    string label = match r {
+    string label = match decoded {
         success(_s) { "unexpected_success" }
         failure(e) { encoder_error_label(e) }
     }
@@ -289,10 +319,11 @@ function void test_encoder_decode_text_typed_invalid_ascii() {
 
 @test
 function void test_encoder_decode_text_typed_latin1_success() {
-    result<string, Encoder.Error> r = Encoder.decode_text_typed([104, 105], Encoder.Encoding.Latin1)
+    result<string, Encoder.Error> decoded =
+        Encoder.decode_text_typed([104, 105], Encoder.Encoding.Latin1)
 
-    assert(Result.is_success(r), "Latin-1 bytes always decode")
-    assert(Result.unwrap(r) == "hi")
+    assert(Result.is_success(decoded), "Latin-1 bytes always decode")
+    assert(Result.unwrap(decoded) == "hi")
 }
 
 @test

@@ -58,4 +58,5 @@ jobs:
         with:
           name: VS Code Extension v${{ steps.version.outputs.version }}
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: extensions/vscode/${{ steps.build.outputs.vsix-file }}

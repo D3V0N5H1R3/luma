@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { LSP_CONFIG, checkForBinaryUpdate } from "../utils/binary-download";
 import { ClientManager } from "./client-manager";
+import { showReferences } from "./show-references";
 import { COMMANDS } from "../utils/constants";
 
 /**
@@ -38,10 +39,15 @@ export function registerCommands(
             );
         }),
 
-        // NOTE: luma.showReferences is intentionally NOT registered here.
-        // The language server advertises it via executeCommandProvider, so
-        // vscode-languageclient's ExecuteCommandFeature registers it
-        // automatically.  The middleware in client-manager.ts intercepts
-        // the call and delegates to editor.action.showReferences.
+        // The server advertises luma.showReferences, but every per-folder
+        // client would register it (see LumaLanguageClient), so it is
+        // registered once here and forwarded to the client owning the document.
+        vscode.commands.registerCommand(COMMANDS.showReferences, (...args: unknown[]) =>
+            showReferences(args, {
+                execute: (command, ...rest) => vscode.commands.executeCommand(command, ...rest),
+                request: (uri, request_args) =>
+                    manager.executeServerCommand(uri, COMMANDS.showReferences, request_args),
+            }),
+        ),
     );
 }

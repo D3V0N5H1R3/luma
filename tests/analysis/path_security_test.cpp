@@ -7,8 +7,15 @@
 #include "runtime/stdlib/common/path_validator.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
 namespace fs = std::filesystem;
+
+using luma::canonical_escapes_root;
+using luma::escapes_root;
+using luma::has_directory_traversal;
+using luma::is_symlink_or_contains_symlinks;
+using luma::RuntimeError;
+using luma::SourceLocation;
+using luma::validate_path;
 
 // ═══════════════════════════════════════════════════════════
 // has_directory_traversal
@@ -93,23 +100,25 @@ static void test_escapes_root_parent_traversal() {
 
 static void test_contains_symlinks_regular_path() {
     // A path that does not exist should not contain symlinks.
-    ASSERT_FALSE(luma::is_symlink_or_contains_symlinks(
-        fs::path("nonexistent_dir_xyz/nonexistent_file_xyz.tmp")));
+    ASSERT_FALSE(
+        is_symlink_or_contains_symlinks(fs::path("nonexistent_dir_xyz/nonexistent_file_xyz.tmp")));
 }
 
 static void test_contains_symlinks_existing_regular_file() {
-    // The test executable itself is a regular file, not a symlink.
-    auto exe_path = fs::current_path() / "path_security_test";
-#ifdef _WIN32
-    exe_path = fs::current_path() / "path_security_test.exe";
-#endif
-    if (fs::exists(exe_path)) {
-        ASSERT_FALSE(luma::is_symlink_or_contains_symlinks(exe_path));
-    }
+    // A freshly written regular file, addressed by a relative path inside a
+    // freshly created directory, contains no symlinks.  A relative path keeps
+    // the check independent of symlinks in the temp or build directory's
+    // ancestors (for example /tmp -> /private/tmp on macOS).
+    const auto directory = fs::path{"luma_path_security_" + luma::test::process_token()};
+    const luma::test::ScopedPathCleanup cleanup{directory};
+    const luma::test::TempFile file{directory / "regular.tmp", "content"};
+
+    ASSERT_TRUE(fs::is_regular_file(file.path()));
+    ASSERT_FALSE(is_symlink_or_contains_symlinks(file.path()));
 }
 
 static void test_contains_symlinks_empty_path() {
-    ASSERT_FALSE(luma::is_symlink_or_contains_symlinks(fs::path("")));
+    ASSERT_FALSE(is_symlink_or_contains_symlinks(fs::path("")));
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -118,6 +127,7 @@ static void test_contains_symlinks_empty_path() {
 
 static void test_is_symlink_regular_path() {
     // A path that does not exist should not be a symlink.
+    // Qualified: ADL on fs::path would also find std::filesystem::is_symlink.
     ASSERT_FALSE(luma::is_symlink(fs::path("nonexistent_file_xyz_12345.tmp")));
 }
 

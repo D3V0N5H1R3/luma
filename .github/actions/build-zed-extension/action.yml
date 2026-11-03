@@ -18,13 +18,20 @@ inputs:
 runs:
   using: composite
   steps:
+    # The SHA pins this action's code; `toolchain: stable` still resolves to the
+    # newest stable Rust at run time, which is why the cache key below includes
+    # the resolved compiler (`cachekey`).
     - name: Install Rust toolchain
+      id: toolchain
       uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable (1.94.1)
       with:
         toolchain: stable
         targets: wasm32-wasip1
         components: clippy,rustfmt
 
+    # Keyed on the OS, the resolved rustc, and Cargo.lock so a new compiler or
+    # dependency set starts a fresh entry instead of restoring stale artefacts
+    # into an ever-growing target/ directory.
     - name: Cache Cargo registry and build
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -32,9 +39,9 @@ runs:
           ~/.cargo/registry
           ~/.cargo/git
           ${{ inputs.working-directory }}/target
-        key: cargo-zed-${{ hashFiles(format('{0}/Cargo.toml', inputs.working-directory)) }}
+        key: cargo-zed-${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-${{ hashFiles(format('{0}/Cargo.lock', inputs.working-directory)) }}
         restore-keys: |
-          cargo-zed-
+          cargo-zed-${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-
 
     - name: Check formatting
       shell: bash

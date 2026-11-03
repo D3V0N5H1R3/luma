@@ -1,6 +1,5 @@
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <string>
 
 #include "fuzz_harness.hpp"
@@ -33,7 +32,7 @@
 //     year 9999) simply yield no text and are skipped.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return luma::fuzz::run_text(
-        data, size, luma::fuzz::max_input_size, [&](const std::string& input) {
+        data, size, luma::fuzz::k_max_input_size, [&](const std::string& input) {
             using luma::datetime::format_iso8601;
             using luma::datetime::parse_iso8601;
 
@@ -43,11 +42,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
             // ── Never-crash: format an arbitrary bit pattern as a timestamp so the
             // range / NaN / infinity guards are driven with hostile doubles.
-            double raw_seconds = 0.0;
-            if (size >= sizeof(raw_seconds)) {
-                std::memcpy(&raw_seconds, data, sizeof(raw_seconds));
-            }
-            const auto raw_text = format_iso8601(raw_seconds);
+            const auto raw_text = format_iso8601(luma::fuzz::leading_double(data, size));
             luma::fuzz::do_not_optimize(raw_text.has_value());
 
             // ── Oracle: a parsed instant that can be formatted must round-trip.

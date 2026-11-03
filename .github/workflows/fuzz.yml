@@ -2,8 +2,8 @@
 # Luma — Fuzz Workflow
 #
 # Builds the libFuzzer targets once, then fuzzes each target in
-# parallel. The fuzz binaries link the AddressSanitizer runtime
-# statically, so the fan-out jobs only need to download and run
+# parallel. The fuzz binaries link the sanitizer runtimes (ASan and
+# UBSan) statically, so the fan-out jobs only need to download and run
 # them — no toolchain reinstall required.
 #
 # Each target's corpus is seeded from the checked-in fuzz/corpus/<name>
@@ -42,23 +42,38 @@ jobs:
         with:
           packages: clang
 
+      # AddressSanitizer catches memory errors; UndefinedBehaviorSanitizer turns
+      # silent undefined behaviour (signed overflow, bad shifts, …) into a
+      # crash, and -fno-sanitize-recover makes every finding abort so libFuzzer
+      # records it.
       - name: Configure
         run: |
           cmake -B build-fuzz -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address" \
-            -DLUMA_BUILD_FUZZ=ON
+            -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined" \
+            -DLUMA_BUILD_FUZZ=ON -DLUMA_BUILD_TESTS=OFF
 
+      # Build only the fuzzers (the luma_fuzzers aggregate target): the default
+      # "all" also compiled every test, the language server and the debugger
+      # under the sanitizers, which exhausted the runner before any fuzzer ran.
+      # An explicit job count is required: a bare `--parallel` becomes `make -j`
+      # (unlimited) under the Makefiles generator and OOM-kills the runner,
+      # especially for these sanitizer-instrumented compiles.
       - name: Build
-        run: cmake --build build-fuzz --parallel
+        run: cmake --build build-fuzz --target luma_fuzzers --parallel "$(nproc)"
 
       # Package just the fuzz executables; tar preserves the executable bit
       # that upload-artifact would otherwise drop. A file list (-T) avoids
-      # word-splitting the find output.
+      # word-splitting the find output. CMAKE_RUNTIME_OUTPUT_DIRECTORY places
+      # every executable at the build-tree root, not in build-fuzz/fuzz/.
       - name: Package fuzzers
-        working-directory: build-fuzz/fuzz
+        working-directory: build-fuzz
         run: |
           find . -maxdepth 1 -type f -executable -name 'fuzz_*' -printf '%P\n' > fuzzer-list.txt
+          if [ ! -s fuzzer-list.txt ]; then
+            echo "::error::no fuzz_* executables found in build-fuzz" >&2
+            exit 1
+          fi
           tar -czf "$GITHUB_WORKSPACE/fuzzers.tar.gz" -T fuzzer-list.txt
 
       - name: Upload fuzzers
@@ -86,8 +101,6 @@ jobs:
           - target: fuzz_type_checker
             time: 120
           - target: fuzz_compiler
-            time: 120
-          - target: fuzz_resolver
             time: 120
           - target: fuzz_vm
             time: 120
@@ -140,11 +153,14 @@ jobs:
             time: 120
 
     steps:
-      - name: Checkout seed corpus
+      - name: Checkout seed corpus and dictionary
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: fuzz/corpus
+          sparse-checkout: |
+            fuzz/corpus
+            fuzz/dictionary.txt
+          sparse-checkout-cone-mode: false
 
       - name: Download fuzzers
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -182,7 +198,13 @@ jobs:
           mkdir -p "$work"
           seeds=()
           [ -d "$seed" ] && seeds+=("$seed")
+          # -dict guides mutations with Luma keywords and stdlib names.
+          # -timeout reports a hung input (keep in step with
+          # LUMA_FUZZ_UNIT_TIMEOUT in fuzz/CMakeLists.txt) instead of letting it
+          # silently consume the whole run; -close_fd_mask=1 closes the target's
+          # stdout so programs that print cannot flood the log.
           ./fuzzers/"$TARGET" "$work" "${seeds[@]}" \
+            -dict=fuzz/dictionary.txt -timeout=25 -close_fd_mask=1 \
             -max_total_time="$MAX_TIME" -print_final_stats=1
 
       # Minimise the corpus so the cached set stays small while preserving
@@ -195,7 +217,7 @@ jobs:
           work="corpus/$TARGET"
           min="corpus-min/$TARGET"
           mkdir -p "$min"
-          ./fuzzers/"$TARGET" -merge=1 "$min" "$work"
+          ./fuzzers/"$TARGET" -merge=1 -timeout=25 -close_fd_mask=1 "$min" "$work"
           rm -rf "$work"
           mv "$min" "$work"
 

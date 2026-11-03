@@ -9,6 +9,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "analysis/linter/linter.hpp"
@@ -24,16 +25,18 @@ namespace luma::test {
 
 // ─── Pipeline sub-helpers ─────────────────────────────────────────
 //
-// lex_and_parse() lives in lex_parse_util.hpp — a front-end-only header — so
-// pure-analysis test TUs can reuse it without dragging in the backend below.
+// lex_and_parse_valid() and describe_diagnostics() live in lex_parse_util.hpp —
+// a front-end-only header — so pure-analysis test TUs can reuse them without
+// dragging in the backend below.
 
-// Compile a parsed program in REPL mode, throwing on failure.
-[[nodiscard]] inline auto compile_for_eval(const Program& program) {
+// Compile a parsed program in REPL mode, throwing (with the compiler's
+// diagnostics) on failure.
+[[nodiscard]] inline CompileResult compile_for_eval(const Program& program) {
     Compiler compiler;
     auto result = compiler.compile(program, /*repl_mode=*/true);
 
     if (!result.success) {
-        throw std::runtime_error{"compilation failed"};
+        throw std::runtime_error{"compilation failed:" + describe_diagnostics(result.diagnostics)};
     }
 
     return result;
@@ -49,10 +52,10 @@ enum class EvalMode {
 
 // Shared, immutable standard-library prototype environment.
 //
-// register_all() builds all 39 stdlib module namespaces (each defining dozens
-// of native functions), so doing it per eval() throws away ~38/39 of that work
-// for a source that references a single module.  Instead we register the full
-// stdlib exactly once per test process into a prototype scope, and layer a
+// register_all() builds every stdlib module namespace (each defining dozens of
+// native functions), so doing it per eval() would throw away almost all of that
+// work for a source that references a single module.  Instead we register the
+// full stdlib exactly once per test process into a prototype scope, and layer a
 // fresh child environment on top for each eval() (see eval_impl).
 //
 // Why this is safe to share across every eval():
@@ -79,20 +82,17 @@ enum class EvalMode {
     return prototype;
 }
 
-// Unified evaluator — runs the Luma pipeline with the given mode.
+// Unified evaluator — runs the Luma pipeline with the given mode. A lexer or
+// parser error always fails the evaluation (see lex_and_parse_valid).
 [[nodiscard]] inline Value eval_impl(const std::string& source, EvalMode mode) {
-    const auto program = lex_and_parse(source);
+    const auto program = lex_and_parse_valid(source);
 
     if (mode == EvalMode::checked) {
         TypeChecker checker;
         const auto errors = checker.check(program, /*require_main=*/false);
 
         if (!errors.empty()) {
-            std::string msg = "Type check failed:";
-            for (const auto& d : errors) {
-                msg += "\n  " + d.message;
-            }
-            throw std::runtime_error{msg};
+            throw std::runtime_error{"Type check failed:" + describe_diagnostics(errors)};
         }
 
         Linter linter;
@@ -102,7 +102,7 @@ enum class EvalMode {
     const auto result = compile_for_eval(program);
 
     // Layer a fresh child scope over the shared stdlib prototype so this eval's
-    // own globals stay isolated while the 39 modules are registered only once.
+    // own globals stay isolated while the modules are registered only once.
     const auto env = Environment::create(eval_std_prototype());
 
     VM vm{env};
@@ -117,30 +117,28 @@ enum class EvalMode {
 }
 
 // Evaluate source through a minimal pipeline (no type checking or linting).
-// Used by stdlib unit tests that exercise individual functions.
+// Used by stdlib unit tests that exercise individual functions. Because the
+// type checker does not run, an error-path test must pin the expected message
+// (ASSERT_EVAL_THROWS): a typo in the source surfaces as a runtime
+// "undefined variable" error, not as a compile error.
 [[nodiscard]] inline Value eval(const std::string& source) {
     return eval_impl(source, EvalMode::unchecked);
-}
-
-// Evaluate source and report whether it raised a runtime error.
-// RuntimeError derives from std::runtime_error, so catching std::exception
-// covers every failure mode the VM can surface.
-[[nodiscard]] inline bool eval_throws(const std::string& source) {
-    try {
-        (void)eval(source);
-        return false;
-    } catch (const std::exception&) {
-        return true;
-    }
 }
 
 // ─── Environment helpers ──────────────────────────────────────────
 
 // Create an environment with the full standard library registered.
-// Replaces the repeated Environment::create() + register_all(env) pair.
-[[nodiscard]] inline EnvPtr make_std_env(bool sandbox = false) {
+[[nodiscard]] inline EnvPtr make_std_env() {
     const auto env = Environment::create();
-    register_all(env, sandbox);
+    register_all(env, /*sandbox=*/false);
+    return env;
+}
+
+// Create an environment with the standard library registered in sandbox mode
+// (filesystem, network, and process access withheld).
+[[nodiscard]] inline EnvPtr make_sandboxed_std_env() {
+    const auto env = Environment::create();
+    register_all(env, /*sandbox=*/true);
     return env;
 }
 
@@ -151,66 +149,87 @@ enum class EvalMode {
     return v.is_result() && v.as_result()->is_success;
 }
 
+// Fail unless `value` is a result with the `expected_outcome` ("success" or
+// "failure").
+inline void assert_result_outcome(const Value& value, std::string_view macro_name,
+                                  std::string_view expected_outcome,
+                                  std::string_view expression_text, const AssertionSite& site) {
+    if (!value.is_result()) {
+        fail_at(site, std::string{macro_name} + " failed: " + std::string{expression_text} +
+                          " is not a result: " + value.to_string());
+    }
+
+    const bool is_success = value.as_result()->is_success;
+    const std::string_view actual_outcome = is_success ? "success" : "failure";
+
+    if (actual_outcome != expected_outcome) {
+        fail_at(site, std::string{macro_name} + " failed: " + std::string{expression_text} +
+                          " is " + value.to_string());
+    }
+}
+
+// Evaluate `source` and return the inner value of its successful result,
+// failing the assertion when the program yields anything else.
+[[nodiscard]] inline Value eval_success_inner(const std::string& source,
+                                              std::string_view macro_name,
+                                              const AssertionSite& site) {
+    const auto value = eval(source);
+    assert_result_outcome(value, macro_name, "success", source, site);
+    return *value.as_result()->owned_inner;
+}
+
+} // namespace luma::test
+
 // ─── Value assertion macros ──────────────────────────────────────
 
 // Assert that a value is a successful result.
 #define ASSERT_RESULT_SUCCESS(value)                                                               \
-    ASSERT_TRUE((value).is_result());                                                              \
-    ASSERT_TRUE((value).as_result()->is_success)
+    luma::test::assert_result_outcome((value), "ASSERT_RESULT_SUCCESS", "success", #value,         \
+                                      LUMA_ASSERTION_SITE)
 
 // Assert that a value is a failure result.
 #define ASSERT_RESULT_FAILURE(value)                                                               \
-    ASSERT_TRUE((value).is_result());                                                              \
-    ASSERT_TRUE(!(value).as_result()->is_success)
+    luma::test::assert_result_outcome((value), "ASSERT_RESULT_FAILURE", "failure", #value,         \
+                                      LUMA_ASSERTION_SITE)
 
 // Assert that evaluating source code yields a successful result whose
 // inner value equals the expected integer.
 #define ASSERT_EVAL_INT(source, expected)                                                          \
-    LUMA_MSVC_SUPPRESS_C4127_BEGIN                                                                 \
-    do {                                                                                           \
-        auto val_ = luma::test::eval(source);                                                      \
-        ASSERT_RESULT_SUCCESS(val_);                                                               \
-        ASSERT_EQ(val_.as_result()->owned_inner->as_integer(), (expected));                        \
-    } while (false) LUMA_MSVC_SUPPRESS_C4127_END
+    luma::test::assert_comparison<luma::test::Comparison::equal>(                                  \
+        luma::test::eval_success_inner((source), "ASSERT_EVAL_INT", LUMA_ASSERTION_SITE)           \
+            .as_integer(),                                                                         \
+        (expected), "ASSERT_EVAL_INT", LUMA_ASSERTION_SITE)
 
 // Assert that evaluating source code yields a successful result whose
 // inner value equals the expected string.
 #define ASSERT_EVAL_STR(source, expected)                                                          \
-    LUMA_MSVC_SUPPRESS_C4127_BEGIN                                                                 \
-    do {                                                                                           \
-        auto val_ = luma::test::eval(source);                                                      \
-        ASSERT_RESULT_SUCCESS(val_);                                                               \
-        ASSERT_EQ(val_.as_result()->owned_inner->as_string(), std::string(expected));              \
-    } while (false) LUMA_MSVC_SUPPRESS_C4127_END
+    luma::test::assert_comparison<luma::test::Comparison::equal>(                                  \
+        luma::test::eval_success_inner((source), "ASSERT_EVAL_STR", LUMA_ASSERTION_SITE)           \
+            .as_string(),                                                                          \
+        std::string{expected}, "ASSERT_EVAL_STR", LUMA_ASSERTION_SITE)
 
 // Assert that evaluating source code yields a successful result whose
 // inner value equals the expected boolean.
 #define ASSERT_EVAL_BOOL(source, expected)                                                         \
-    LUMA_MSVC_SUPPRESS_C4127_BEGIN                                                                 \
-    do {                                                                                           \
-        auto val_ = luma::test::eval(source);                                                      \
-        ASSERT_RESULT_SUCCESS(val_);                                                               \
-        ASSERT_EQ(val_.as_result()->owned_inner->as_bool(), (expected));                           \
-    } while (false) LUMA_MSVC_SUPPRESS_C4127_END
+    luma::test::assert_comparison<luma::test::Comparison::equal>(                                  \
+        luma::test::eval_success_inner((source), "ASSERT_EVAL_BOOL", LUMA_ASSERTION_SITE)          \
+            .as_bool(),                                                                            \
+        (expected), "ASSERT_EVAL_BOOL", LUMA_ASSERTION_SITE)
 
 // Assert that evaluating source code yields a successful result whose
-// inner value equals the expected double.
+// inner value equals the expected double (exact comparison).
 #define ASSERT_EVAL_NUM(source, expected)                                                          \
-    LUMA_MSVC_SUPPRESS_C4127_BEGIN                                                                 \
-    do {                                                                                           \
-        auto val_ = luma::test::eval(source);                                                      \
-        ASSERT_RESULT_SUCCESS(val_);                                                               \
-        ASSERT_EQ(val_.as_result()->owned_inner->as_number(), (expected));                         \
-    } while (false) LUMA_MSVC_SUPPRESS_C4127_END
+    luma::test::assert_comparison<luma::test::Comparison::equal>(                                  \
+        luma::test::eval_success_inner((source), "ASSERT_EVAL_NUM", LUMA_ASSERTION_SITE)           \
+            .as_number(),                                                                          \
+        (expected), "ASSERT_EVAL_NUM", LUMA_ASSERTION_SITE)
 
 // Assert that evaluating source code yields a failure result.
-#define ASSERT_EVAL_FAILURE(source)                                                                \
-    LUMA_MSVC_SUPPRESS_C4127_BEGIN                                                                 \
-    do {                                                                                           \
-        auto val_ = luma::test::eval(source);                                                      \
-        ASSERT_RESULT_FAILURE(val_);                                                               \
-    } while (false) LUMA_MSVC_SUPPRESS_C4127_END
+#define ASSERT_EVAL_FAILURE(source) ASSERT_RESULT_FAILURE(luma::test::eval(source))
 
-} // namespace luma::test
+// Assert that evaluating source code raises an error whose message contains
+// `expected_substr`.
+#define ASSERT_EVAL_THROWS(source, expected_substr)                                                \
+    ASSERT_THROWS_WITH_MESSAGE(luma::test::eval(source), expected_substr)
 
 #endif // LUMA_SHARED_EVAL_HPP

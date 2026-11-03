@@ -20,8 +20,10 @@
 //     completions (always returns a value).
 // ═══════════════════════════════════════════════════════════
 
+#include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -30,6 +32,13 @@
 #include "lsp_handler_context.hpp"
 
 namespace luma::lsp {
+
+// Completion items for the files and directories that complete the partial
+// include path `partial_path` (UTF-8, `/` or `\` separated), relative to
+// `base_dir`. Paths escaping `base_dir` yield nothing. Defined in
+// lsp_completion_strategy.cpp; declared here for direct unit testing.
+[[nodiscard]] JsonValue::ArrayType
+collect_include_completions(const std::filesystem::path& base_dir, const std::string& partial_path);
 
 // Abstract base for context-aware completion strategies.
 class CompletionStrategy {

@@ -9,6 +9,7 @@
 #include <mutex>
 #include <optional>
 
+#include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/channel_buffer.hpp"
 #include "runtime/interpreter/value.hpp"
 
@@ -30,33 +31,41 @@ public:
     Channel& operator=(Channel&&) = delete;
 
     // Send a value into the channel.  Blocks if buffered and full.
-    // Throws ChannelClosedError if the channel is closed.
-    void send(Value value);
+    // Throws ChannelClosedError if the channel is closed.  When `cancel` is
+    // non-null the wait is cooperative: it throws CancelledException once the
+    // token is cancelled instead of blocking forever.
+    void send(Value value, const CancellationToken* cancel = nullptr);
 
     // Receive a value.  Blocks until a value is available.
-    // Throws ChannelClosedError if the channel is closed and drained.
-    [[nodiscard]] Value receive();
+    // Throws ChannelClosedError if the channel is closed and drained, or
+    // CancelledException if `cancel` is non-null and becomes cancelled.
+    [[nodiscard]] Value receive(const CancellationToken* cancel = nullptr);
 
     // Receive with timeout.  Blocks for at most timeout_ms milliseconds.
     // Returns the value on success, std::nullopt on timeout.
-    // Throws ChannelClosedError if the channel is closed and drained.
+    // Throws ChannelClosedError if the channel is closed and drained, or
+    // CancelledException if `cancel` is non-null and becomes cancelled while
+    // waiting (re-checked every k_cancel_poll_interval).
     struct ReceiveTimeoutResult {
         std::optional<Value> value;
         bool timed_out{false};
     };
 
-    [[nodiscard]] ReceiveTimeoutResult receive_timeout(std::chrono::milliseconds timeout_ms);
+    [[nodiscard]] ReceiveTimeoutResult receive_timeout(std::chrono::milliseconds timeout_ms,
+                                                       const CancellationToken* cancel = nullptr);
 
     // Send with timeout.  Blocks for at most timeout_ms milliseconds
     // when a buffered channel is full.
     // Returns timed_out = true if the deadline elapsed before the value could
     // be enqueued, timed_out = false once it was sent.
-    // Throws ChannelClosedError if the channel is closed.
+    // Throws ChannelClosedError if the channel is closed, or CancelledException
+    // if `cancel` is non-null and becomes cancelled while waiting.
     struct SendTimeoutResult {
         bool timed_out{false};
     };
 
-    [[nodiscard]] SendTimeoutResult send_timeout(Value value, std::chrono::milliseconds timeout_ms);
+    [[nodiscard]] SendTimeoutResult send_timeout(Value value, std::chrono::milliseconds timeout_ms,
+                                                 const CancellationToken* cancel = nullptr);
 
     // Non-blocking receive.  Returns the value if available.
     // Throws ChannelEmptyError if the buffer is empty.
@@ -116,6 +125,31 @@ private:
     // only).  Call after releasing mutex_, mirroring the send path, so a woken
     // sender does not immediately block on the lock the consumer still holds.
     void notify_senders_if_needed();
+
+    // How often a cancellable blocking wait re-checks its token.
+    static constexpr std::chrono::milliseconds k_cancel_poll_interval{10};
+
+    // Block on `cv` until `predicate` holds.  With a non-null `cancel` the wait
+    // polls the token and throws CancelledException once it is cancelled.
+    // Precondition: `lock` holds mutex_.
+    template <typename Predicate>
+    static void wait_cancellable(std::unique_lock<std::mutex>& lock, std::condition_variable& cv,
+                                 const CancellationToken* cancel, Predicate predicate);
+
+    // Block on `cv` until `predicate` holds or `deadline` passes; returns the
+    // final predicate value.  With a non-null `cancel` each step waits at most
+    // k_cancel_poll_interval and throws CancelledException once cancelled.
+    // Precondition: `lock` holds mutex_.
+    template <typename Predicate>
+    static bool wait_until_cancellable(std::unique_lock<std::mutex>& lock,
+                                       std::condition_variable& cv,
+                                       std::chrono::steady_clock::time_point deadline,
+                                       const CancellationToken* cancel, Predicate predicate);
+
+    // steady_clock deadline `timeout` from now, with the timeout clamped to
+    // [0, INT32_MAX] ms so the addition cannot overflow.
+    [[nodiscard]] static std::chrono::steady_clock::time_point
+    deadline_after(std::chrono::milliseconds timeout);
 };
 
 } // namespace luma

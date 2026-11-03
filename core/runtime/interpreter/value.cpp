@@ -1,6 +1,10 @@
 ﻿#include <atomic>
 #include <cassert>
 #include <optional>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -70,6 +74,98 @@ bool Value::is_truthy() const {
     }
 
     return true; // all other types are truthy
+}
+
+// ─────────── Value::release_heap_iteratively ───────────
+
+namespace {
+
+template <typename T> inline constexpr bool is_shared_ptr_v = false;
+template <typename T> inline constexpr bool is_shared_ptr_v<std::shared_ptr<T>> = true;
+
+// Teardown state of the current thread.  Both are trivially destructible, so
+// a Value destroyed during thread or static teardown never touches a dead
+// thread_local.  The worklist itself lives on the outermost teardown's frame.
+thread_local std::size_t t_teardown_depth{0};
+thread_local std::vector<Value>* t_teardown_pending{nullptr};
+
+// Levels of nested compound values destroyed by plain recursion before the
+// rest is deferred to the worklist.  Each level costs a handful of frames
+// (~Value → shared_ptr release → ~T → ~vector → ~Value), so this bounds the
+// teardown's native-stack use to a few KiB.
+constexpr std::size_t k_max_inline_teardown_depth{32};
+
+// True when `data` holds the only reference to a heap object, so dropping it
+// destroys the object (and, transitively, its children).  When the count is
+// above one, dropping it is just a decrement.  For the sole owner the answer
+// is exact: no other thread can obtain a new reference to the object without
+// one to copy from (no Value type is ever held through a weak_ptr).
+[[nodiscard]] bool holds_unique_heap_object(const Value::Variant& data) noexcept {
+    if (data.valueless_by_exception()) {
+        return false;
+    }
+
+    // std::visit throws only for a valueless variant, ruled out above; the
+    // handler keeps that unreachable path from escaping a noexcept function.
+    try {
+        return std::visit(
+            [](const auto& alternative) noexcept {
+                if constexpr (is_shared_ptr_v<std::decay_t<decltype(alternative)>>) {
+                    return alternative != nullptr && alternative.use_count() == 1;
+                } else {
+                    return false;
+                }
+            },
+            data);
+    } catch (...) {
+        return false;
+    }
+}
+
+} // namespace
+
+void Value::release_heap_iteratively() noexcept {
+    if (!holds_unique_heap_object(data_)) {
+        return; // Shared or empty: the implicit member destructor just decrements.
+    }
+
+    if (t_teardown_pending == nullptr) {
+        // Outermost teardown on this thread: own the worklist, destroy this
+        // object (deeper levels defer into the worklist), then drain it.
+        std::vector<Value> pending;
+        t_teardown_pending = &pending;
+        t_teardown_depth = 1;
+
+        data_ = NullValue{};
+
+        while (!pending.empty()) {
+            Value next{std::move(pending.back())};
+            pending.pop_back();
+            next.data_ = NullValue{};
+        }
+
+        t_teardown_depth = 0;
+        t_teardown_pending = nullptr;
+        return;
+    }
+
+    if (t_teardown_depth < k_max_inline_teardown_depth) {
+        ++t_teardown_depth;
+        data_ = NullValue{};
+        --t_teardown_depth;
+        return;
+    }
+
+    try {
+        // Too deep to recurse further: hand the subtree to the outermost
+        // teardown.  Moving leaves this Value an empty shared_ptr.
+        t_teardown_pending->push_back(std::move(*this));
+    } catch (...) {
+        // Out of memory growing the worklist: fall back to plain recursion.
+        ++t_teardown_depth;
+        data_ = NullValue{};
+        --t_teardown_depth;
+    }
 }
 
 // ─────────── SocketValue RAII ───────────

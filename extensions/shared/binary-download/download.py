@@ -29,6 +29,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import sys
 import tarfile
 import urllib.request
@@ -132,25 +133,37 @@ def fetch_release(version: str, urls: dict[str, str]) -> dict[str, Any]:
 
 
 def download_file(url: str, dest: Path) -> None:
-    """Download a file with progress reporting."""
+    """Download a file with progress reporting.
+
+    A network failure emits an ``error`` event, removes the partial file, and
+    exits with status 1, so callers parsing the JSON-lines protocol never see a
+    Python traceback instead of an event.
+    """
     emit_progress("download_start", f"Downloading {dest.name}...", url=url)
 
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        total = int(resp.headers.get("Content-Length", 0))
-        downloaded = 0
-        chunk_size = 65536
+    downloaded = 0
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            total = int(resp.headers.get("Content-Length", 0))
+            chunk_size = 65536
 
-        with open(dest, "wb") as f:
-            while True:
-                chunk = resp.read(chunk_size)
-                if not chunk:
-                    break
-                f.write(chunk)
-                downloaded += len(chunk)
-                if total > 0:
-                    pct = int(downloaded * 100 / total)
-                    emit_progress("download_progress", percent=pct, bytes=downloaded, total=total)
+            with open(dest, "wb") as f:
+                while True:
+                    chunk = resp.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total > 0:
+                        pct = int(downloaded * 100 / total)
+                        emit_progress(
+                            "download_progress", percent=pct, bytes=downloaded, total=total
+                        )
+    except OSError as e:  # URLError, HTTPError, timeouts, and file errors
+        dest.unlink(missing_ok=True)
+        emit_progress("error", f"Failed to download {dest.name}: {e}")
+        sys.exit(1)
 
     emit_progress("download_complete", f"Downloaded {dest.name} ({downloaded} bytes)")
 
@@ -218,8 +231,13 @@ def fetch_expected_checksum(release: dict, asset_name: str, checksums_filename: 
 
     url = checksums_asset["browser_download_url"]
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        content = resp.read().decode("utf-8")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            content = resp.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        # The caller treats a missing hash as a verification failure and aborts.
+        emit_progress("error", f"Failed to read {checksums_filename}: {e}")
+        return None
 
     digest = find_asset_hash(content, asset_name)
     if digest is None:
@@ -247,17 +265,39 @@ def _safe_extract_zip(archive_path: Path, dest_dir: Path) -> None:
 
 
 def _safe_extract_tar(archive_path: Path, dest_dir: Path) -> None:
-    """Extract a tar archive, rejecting entries with path-traversal components or unsafe links."""
+    """Extract a tar archive, rejecting entries with path-traversal components or unsafe links.
+
+    Every member is vetted first. Extraction then goes through tarfile's ``data`` filter
+    where the interpreter has it (Python 3.12, backported to 3.10.12 and 3.11.4); older
+    interpreters copy the vetted regular files and directories by hand instead of calling
+    an unfiltered ``extractall``.
+    """
     dest_real = dest_dir.resolve()
     with tarfile.open(archive_path, "r:gz") as tf:
+        vetted: list[tuple[tarfile.TarInfo, Path]] = []
         for member in tf.getmembers():
-            if member.issym() or member.islnk() or member.isdev() or member.isfifo():
+            if not (member.isfile() or member.isdir()):
                 raise ValueError(f"Unsafe archive member type ({member.type!r}) for: {member.name}")
-            _reject_unsafe_member((dest_dir / member.name).resolve(), dest_real, member.name)
+            target = (dest_dir / member.name).resolve()
+            _reject_unsafe_member(target, dest_real, member.name)
+            vetted.append((member, target))
+
         if hasattr(tarfile, "data_filter"):
             tf.extractall(dest_dir, filter="data")
-        else:
-            tf.extractall(dest_dir)
+            return
+
+        for member, target in vetted:
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = tf.extractfile(member)
+            if source is None:
+                raise ValueError(f"Cannot read archive member: {member.name}")
+            with source, target.open("wb") as out:
+                shutil.copyfileobj(source, out)
+            # Like the data filter: keep the permission bits, drop group/other write.
+            target.chmod(member.mode & 0o755)
 
 
 def extract_archive(archive_path: Path, dest_dir: Path) -> None:
@@ -351,8 +391,10 @@ def main() -> None:
     # Make executable
     bin_ext = ".exe" if os_name == "windows" else ""
     binary_path = target_dir / f"{args.binary}{bin_ext}"
-    if binary_path.exists():
-        make_executable(binary_path)
+    if not binary_path.is_file():
+        emit_progress("error", f"{binary_path.name} not found in {asset_name}")
+        sys.exit(1)
+    make_executable(binary_path)
 
     emit_progress(
         "complete",

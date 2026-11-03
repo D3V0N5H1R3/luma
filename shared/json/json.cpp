@@ -16,13 +16,14 @@ namespace {
 
 // Append a JSON-escaped string (with surrounding quotes) to the output buffer.
 //
-// This serializer targets the LSP/DAP wire protocol (Content-Length framed JSON
-// over stdio), so it emits only the escapes RFC 8259 requires: quote, backslash,
-// and the C0 control range.  It deliberately does NOT escape '/', U+2028, or
-// U+2029 — those matter only when JSON is embedded in an HTML <script> element
-// or evaluated as a JavaScript literal, which never happens on the wire.  A
-// caller embedding output in HTML/JS must use the slash-escaping variant
-// (luma::json_escape) instead.
+// This serializer backs both the LSP/DAP wire protocol (Content-Length framed
+// JSON over stdio) and the Json module's Json.to_string, so it emits only the
+// escapes RFC 8259 requires: quote, backslash, and the C0 control range — the
+// same policy as the Json module's own serializer (Json.serialize).  It
+// deliberately does NOT escape '/', U+2028, or U+2029 — those matter only when
+// JSON is embedded in an HTML <script> element or evaluated as a JavaScript
+// literal.  A caller embedding output in HTML/JS must use the slash-escaping
+// variant (luma::json_escape) instead.
 void escape_json_string(std::string_view s, std::string& out) {
     out.reserve(out.size() + s.size() + 2);
     out += '"';
@@ -72,7 +73,7 @@ JsonValue::JsonValue(const char* value) : data_{std::string{value}} {}
 
 JsonValue::JsonValue(ArrayType value) noexcept : data_{std::move(value)} {}
 
-JsonValue::JsonValue(ObjectType value) noexcept : data_{std::move(value)} {}
+JsonValue::JsonValue(ObjectType value) : data_{std::move(value)} {}
 
 // ═══════════════════════════════════════════════════════════
 // Type queries
@@ -211,12 +212,12 @@ std::string JsonValue::to_string() const {
 
 void JsonValue::serialise(std::string& out, int depth) const {
     // Bound recursion so a pathologically deep value cannot overflow the native
-    // stack.  Mirrors the parser's depth guard and the stdlib serializer
-    // (json_module_serializer.cpp); over-deep nodes collapse to null, matching
-    // that serializer's behaviour.
+    // stack.  Parsed values never reach the limit (the parser caps max_depth at
+    // the same value), so only a programmatically built value can; fail loudly
+    // rather than silently emitting a truncated document.
     if (depth > CompileTimeLimits::max_json_depth) {
-        out += "null";
-        return;
+        throw std::runtime_error(std::format("Cannot serialise JSON nested deeper than {} levels",
+                                             CompileTimeLimits::max_json_depth));
     }
 
     std::visit(luma::overloaded{[&out](std::monostate) { out += "null"; },

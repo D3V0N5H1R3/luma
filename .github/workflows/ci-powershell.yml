@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────────
 # Luma — PowerShell Lint Workflow
 #
-# Runs PSScriptAnalyzer on all first-party PowerShell scripts
-# (*.ps1, *.psm1) on every push and PR targeting main that touches
+# Lints all first-party PowerShell scripts (*.ps1, *.psm1) with
+# PSScriptAnalyzer on every push and PR targeting main that touches
 # them. Rule configuration lives in PSScriptAnalyzerSettings.psd1.
 # ─────────────────────────────────────────────────────────────
 
@@ -14,8 +14,8 @@ on:
     paths: &paths
       - ".github/workflows/ci-powershell.yml"
       - "PSScriptAnalyzerSettings.psd1"
-      - "scripts/**"
-      - "extensions/zed/scripts/**"
+      - "**/*.ps1"
+      - "**/*.psm1"
   pull_request:
     branches: [main]
     paths: *paths

@@ -9,6 +9,14 @@ function integer double_value(integer value) {
     return value * 2
 }
 
+function integer bump(reference<integer> counter) {
+    Reference.set(counter, Reference.get(counter) + 1)
+
+    return Reference.get(counter)
+}
+
+# ─── Arithmetic, comparison, and logical operators ───────
+
 @test
 function void test_arithmetic_operators() {
     assert(2 + 3 == 5)
@@ -16,12 +24,15 @@ function void test_arithmetic_operators() {
     assert(4 * 5 == 20)
     assert(15 // 4 == 3)
     assert(17 % 5 == 2)
+    # True division always yields a number, even for two integer operands.
+    assert(Math.approximately_equal(7 / 2, 3.5))
 }
 
 @test
 function void test_string_concatenation() {
     string greeting = "Hello"
     string suffix = ", World!"
+
     string combined = greeting + suffix
 
     assert(combined == "Hello, World!")
@@ -29,7 +40,6 @@ function void test_string_concatenation() {
 
 @test
 function void test_string_containment_operator() {
-    # in operator for string containment
     assert("world" in "hello world")
     assert("hello" in "hello world")
     assert(!("xyz" in "hello world"))
@@ -37,7 +47,6 @@ function void test_string_containment_operator() {
 
 @test
 function void test_range_containment_operator() {
-    # in operator for integer range membership
     assert(1 in 1..=100)
     assert(100 in 1..=100)
     assert(50 in 1..=100)
@@ -50,8 +59,9 @@ function void test_range_containment_operator() {
 
     # Works with variables and negative bounds.
     integer score = 87
-    assert(score in 1..=100)
     integer low = -10
+
+    assert(score in 1..=100)
     assert(-5 in low..=0)
     assert(!(-11 in low..=0))
 }
@@ -85,7 +95,7 @@ function void test_logical_operators() {
 function void test_range_operator() {
     mutable integer sum = 0
 
-    for counter in 0 .. 5 {
+    for counter in 0..5 {
         sum += counter
     }
 
@@ -96,12 +106,14 @@ function void test_range_operator() {
 function void test_inclusive_range_operator() {
     mutable integer sum = 0
 
-    for counter in 0 ..= 5 {
+    for counter in 0..=5 {
         sum += counter
     }
 
     assert(sum == 15)
 }
+
+# ─── Pipe ────────────────────────────────────────────────
 
 @test
 function void test_pipe_basic() {
@@ -111,34 +123,36 @@ function void test_pipe_basic() {
 }
 
 @test
-function void test_pipe_chain() {
+function void test_pipe_into_stdlib_function() {
     array<integer> numbers = [1, 2, 3, 4, 5]
+
     number total = Result.unwrap(numbers |> Array.sum())
 
-    assert(total == 15)
+    assert(Math.approximately_equal(total, 15.0))
 }
 
 @test
 function void test_pipe_with_extra_args() {
     array<integer> numbers = [1, 2, 3, 4, 5, 6]
-    array<integer> even_numbers = numbers
-    |> Array.filter((integer x) -> x % 2 == 0)
-    |> Result.unwrap_or([])
 
-    assert(Array.length(even_numbers) == 3)
-    assert(Result.unwrap(Array.sum(even_numbers)) == 12)
+    array<integer> even_numbers = numbers
+        |> Array.filter((integer x) -> x % 2 == 0)
+        |> Result.unwrap_or([])
+
+    assert(even_numbers == [2, 4, 6])
 }
 
 @test
 function void test_pipe_multi_step() {
     array<integer> numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    array<integer> squares = numbers
-    |> Array.filter((integer x) -> x % 2 == 0)
-    |> Result.unwrap_or([])
-    |> Array.map((integer x) -> x * x) # 4, 16, 36, 64, 100
-    |> Result.unwrap_or([])
 
-    assert(Result.unwrap(Array.sum(squares)) == 220)
+    array<integer> squares = numbers
+        |> Array.filter((integer x) -> x % 2 == 0)
+        |> Result.unwrap_or([])
+        |> Array.map((integer x) -> x * x)
+        |> Result.unwrap_or([])
+
+    assert(squares == [4, 16, 36, 64, 100])
 }
 
 @test
@@ -151,23 +165,21 @@ function void test_negative_integer_operations() {
 
 @test
 function void test_mixed_integer_number_arithmetic() {
+    # Mixed arithmetic promotes the integer operand to a number.
     number integer_plus_number = 5 + 3.0
-
-    integer int_sum = Result.unwrap(Converter.to_integer(integer_plus_number))
-    assert(int_sum == 8)
-
     number integer_times_number = 10 * 2.5
 
-    integer int_product = Result.unwrap(Converter.to_integer(integer_times_number))
-    assert(int_product == 25)
+    assert(is<number>(integer_plus_number))
+    assert(Math.approximately_equal(integer_plus_number, 8.0))
+    assert(Math.approximately_equal(integer_times_number, 25.0))
 }
 
 @test
 function void test_pipe_multiline() {
     string processed_string = "  hello world  "
-    |> String.trim()
-    |> String.uppercase()
-    |> String.replace("WORLD", "LUMA")
+        |> String.trim()
+        |> String.uppercase()
+        |> String.replace("WORLD", "LUMA")
 
     assert(processed_string == "HELLO LUMA")
 }
@@ -179,7 +191,7 @@ function void test_pipe_with_named_args() {
     assert(padded == "000042")
 }
 
-# ─── String Repeat Operator ───
+# ─── String repeat operator ──────────────────────────────
 
 @test
 function void test_string_repeat_operator() {
@@ -211,15 +223,17 @@ function void test_string_repeat_operator_empty() {
 
 @test
 function void test_string_repeat_operator_negative_count() {
-    # A negative repeat count clamps to zero rather than erroring, yielding
-    # an empty string (mirrors the forgiving clamping used elsewhere).
-    string repeated = "ab" * -3
+    # A negative repeat count computed at run time clamps to zero rather than
+    # erroring, yielding an empty string (mirrors the forgiving clamping used
+    # elsewhere).  A negative *literal* count is a compile-time error.
+    integer count = 2 - 5
+    string repeated = "ab" * count
 
     assert(repeated == "")
     assert(String.length(repeated) == 0)
 }
 
-# ─── In Operator ───
+# ─── In operator ─────────────────────────────────────────
 
 @test
 function void test_in_array() {
@@ -256,24 +270,24 @@ function void test_in_empty_array() {
 
 @test
 function void test_hex_literals() {
-    integer a = 0xff
-    integer b = 0xFF
-    integer c = 0x10
+    integer lowercase_hex = 0xff
+    integer uppercase_hex = 0xFF
+    integer sixteen = 0x10
 
-    assert(a == 255)
-    assert(b == 255)
-    assert(c == 16)
+    assert(lowercase_hex == 255)
+    assert(uppercase_hex == 255)
+    assert(sixteen == 16)
 }
 
 @test
 function void test_binary_literals() {
-    integer a = 0b1010
-    integer b = 0b11111111
-    integer c = 0b0
+    integer ten = 0b1010
+    integer all_ones_byte = 0b11111111
+    integer zero = 0b0
 
-    assert(a == 10)
-    assert(b == 255)
-    assert(c == 0)
+    assert(ten == 10)
+    assert(all_ones_byte == 255)
+    assert(zero == 0)
 }
 
 @test
@@ -286,125 +300,130 @@ function void test_hex_binary_arithmetic() {
     assert(Bits.xor(0b0101, 0b0011) == 0b0110)
 }
 
-# ─── Combined Operator Tests ───
+# ─── Combined operator tests ─────────────────────────────
 
 @test
 function void test_while_with_in() {
-    array<string> words = ["hello", "world", "foo"]
-
-    mutable integer count = 0
+    array<string> words = ["hello", "world", "sky"]
+    mutable integer words_with_o = 0
     mutable integer word_index = 0
 
     while word_index < Array.length(words) {
         if "o" in words[word_index] {
-            count++
+            words_with_o++
         }
 
         word_index++
     }
 
-    # "hello" has o, "world" has o, "foo" has o
-    assert(count == 3)
+    assert(words_with_o == 2)
 }
 
 @test
 function void test_slice_with_repeat() {
+    # "abc" * 3 is "abcabcabc"; the slice takes the second repetition.
     string text = "abc" * 3
-    # text == "abcabcabc"
-    string sliced = text[3 .. 6]
+
+    string sliced = text[3..6]
 
     assert(sliced == "abc")
 }
 
-# ─── Null-Coalescing Operator ?? ───
+# ─── Null-coalescing operator ?? ─────────────────────────
 
 @test
 function void test_null_coalescing_null_left() {
-    optional<string> maybe = none
-    string val = maybe ?? "default"
+    optional<string> maybe_name = none
 
-    assert(val == "default")
+    string name = maybe_name ?? "default"
+
+    assert(name == "default")
 }
 
 @test
 function void test_null_coalescing_non_null_left() {
-    integer maybe = 42
-    integer val = maybe ?? 0
+    optional<integer> maybe_count = some(42)
 
-    assert(val == 42)
+    integer count = maybe_count ?? 0
+
+    assert(count == 42)
 }
 
 @test
 function void test_null_coalescing_chained() {
-    optional<string> a = none
-    optional<string> b = none
-    string c = "found"
-    string val = a ?? b ?? c
+    optional<string> first = none
+    optional<string> second = none
+    string fallback = "found"
 
-    assert(val == "found")
+    string chosen = first ?? second ?? fallback
+
+    assert(chosen == "found")
 }
 
 @test
 function void test_null_coalescing_right_not_evaluated_when_left_non_null() {
-    # When left is non-none the right side is not evaluated.
-    integer x = 1
-    integer val = x ?? 999
+    reference<integer> counter = Reference.new(0)
+    optional<integer> present = some(1)
 
-    assert(val == 1)
+    integer chosen = present ?? bump(counter)
+
+    assert(chosen == 1)
+    assert(Reference.get(counter) == 0, "right operand must not run when left is some")
 }
 
 @test
 function void test_null_coalescing_result_failure() {
-    result<string> r = failure("oops")
-    string val = r ?? "fallback"
+    result<string> loaded = failure("oops")
 
-    assert(val == "fallback")
+    string text = loaded ?? "fallback"
+
+    assert(text == "fallback")
 }
 
 @test
 function void test_null_coalescing_result_success() {
-    result<integer> r = success(42)
-    integer val = r ?? 0
+    result<integer> parsed = success(42)
 
-    assert(val == 42)
+    integer value = parsed ?? 0
+
+    assert(value == 42)
 }
 
 @test
 function void test_null_coalescing_result_chained() {
-    result<string> a = failure("err1")
-    result<string> b = failure("err2")
-    string val = a ?? b ?? "default"
+    result<string> first = failure("err1")
+    result<string> second = failure("err2")
 
-    assert(val == "default")
+    string chosen = first ?? second ?? "default"
+
+    assert(chosen == "default")
 }
 
 @test
-function void test_null_coalescing_result_with_pipe() {
-    # ?? on a result produced by a pipe chain
-    integer val = String.parse_integer("abc") ?? -1
+function void test_null_coalescing_result_from_pipe() {
+    # |> binds more loosely than ??, so the pipe is parenthesised to apply ?? to
+    # its result.
+    integer invalid = ("abc" |> String.parse_integer()) ?? -1
+    integer valid = ("99" |> String.parse_integer()) ?? -1
 
-    assert(val == -1)
-
-    integer val2 = String.parse_integer("99") ?? -1
-
-    assert(val2 == 99)
+    assert(invalid == -1)
+    assert(valid == 99)
 }
 
 @test
-function void test_null_coalescing_result_from_array_function() {
-    # Array.first returns result<T> — ?? provides fallback
+function void test_null_coalescing_optional_from_array_function() {
+    # Array.first returns optional<T>; ?? provides the fallback for none.
     array<integer> empty = []
-    integer first = Array.first(empty) ?? 0
+    array<integer> numbers = [10, 20, 30]
 
-    assert(first == 0)
+    integer first_of_empty = Array.first(empty) ?? 0
+    integer head = Array.first(numbers) ?? 0
 
-    array<integer> nums = [10, 20, 30]
-    integer head = Array.first(nums) ?? 0
-
+    assert(first_of_empty == 0)
     assert(head == 10)
 }
 
-# ─── Integer Division Operator // ───
+# ─── Integer division operator // ────────────────────────
 
 @test
 function void test_integer_division_basic() {
@@ -424,14 +443,15 @@ function void test_integer_division_negative() {
 
 @test
 function void test_integer_division_compound_assignment() {
-    mutable integer x = 17
+    mutable integer value = 17
 
-    x //= 5
+    value //= 5
 
-    assert(x == 3)
+    assert(value == 3)
 }
 
-# ─── Bit manipulation (Bits module) ───
+# ─── Bit manipulation (Bits module) ──────────────────────
+
 # The `& | ^ ~ << >>` operators were removed from the language (R06); bit
 # manipulation now lives in the Bits stdlib module. Full coverage is in
 # tests/features/stdlib/bits_functions.luma; these keep a smoke check here.
@@ -472,11 +492,11 @@ function void test_bits_composition() {
 function void test_bits_with_logical() {
     integer flags = 5  # 101
 
-    assert((Bits.and(flags, 1) == 1) && (Bits.and(flags, 4) == 4))
+    assert(Bits.and(flags, 1) == 1 && Bits.and(flags, 4) == 4)
     assert(Bits.and(flags, 2) == 0)
 }
 
-# ─── Cross-Category Precedence ───
+# ─── Cross-category precedence ───────────────────────────
 
 @test
 function void test_precedence_arithmetic_before_comparison() {
@@ -495,14 +515,17 @@ function void test_precedence_comparison_before_logical() {
 }
 
 @test
-function void test_precedence_null_coalescing_lowest() {
-    # ?? has lower precedence than arithmetic, so the sum is computed first.
-    integer x = 2 + 3 ?? 0
+function void test_precedence_null_coalescing_below_arithmetic() {
+    # ?? binds more loosely than +, so this is present ?? (1 + 2), not
+    # (present ?? 1) + 2 (which would yield 6).
+    optional<integer> present = some(4)
 
-    assert(x == 5)
+    integer chosen = present ?? 1 + 2
+
+    assert(chosen == 4)
 }
 
-# ─── Unary Operator Combinations ───
+# ─── Unary operator combinations ─────────────────────────
 
 @test
 function void test_unary_minus_with_arithmetic() {
@@ -526,10 +549,12 @@ function void test_unary_logical_not_precedence() {
 
 @test
 function void test_unary_double_negation() {
-    integer x = 7
+    integer value = 7
 
-    assert(-(-x) == 7)
+    assert(-(-value) == 7)
 }
+
+# ─── Number overflow ─────────────────────────────────────
 
 @test
 function void test_number_overflow_add() {
@@ -561,14 +586,16 @@ function void test_number_overflow_multiply() {
 
 @test
 function void test_number_infinity_is_not_overflow() {
-    # Arithmetic involving Math.infinity itself is not treated as overflow.
-    number r = 1.0 / Math.infinity
+    # Overflow is only reported for finite inputs; arithmetic on Math.infinity
+    # itself yields an infinite or zero result without throwing.
+    number still_infinite = Math.infinity + 1.0
+    number reciprocal = 1.0 / Math.infinity
 
-    assert(r < 0.0001)
-    assert(r > -0.0001)
+    assert(still_infinite > 1e308)
+    assert(Math.approximately_equal(reciprocal, 0.0))
 }
 
-# ─── Bit manipulation via Bits module (basic) ───
+# ─── Bit manipulation via Bits module (documented examples) ───
 
 @test
 function void test_bits_operators() {
@@ -580,18 +607,19 @@ function void test_bits_operators() {
     assert(Bits.shift_right(16, 2) == 4)
 }
 
-# ─── Shift Out-of-Range ───
+# ─── Shift out of range ──────────────────────────────────
 
 @test
 function void test_shift_out_of_range() {
-    mutable boolean is_caught = false
+    # Shift amounts must be in 0..63; anything else is a runtime error.
+    mutable string caught = ""
 
     try {
         integer bits = 64
         integer _ = Bits.shift_left(1, bits)
-    } catch(_err) {
-        is_caught = true
+    } catch(err) {
+        caught = err
     }
 
-    assert(is_caught)
+    assert(String.contains(caught, "out of range"), "got: ${caught}")
 }

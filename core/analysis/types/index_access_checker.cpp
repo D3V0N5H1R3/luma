@@ -41,8 +41,18 @@ TypeInfo ExpressionTypeChecker::visit_index_access(const IndexAccessExpression& 
         return with_optional_null(check_tuple_index(expr, object_type));
     }
 
-    // Optional chaining: optional<T>[i] — unwrap T and check indexability.
+    // Optional chaining: optional<T>[i] — unwrap T and check indexability.  A
+    // plain `[i]` fails at runtime when the value is none, so it requires `?[`.
     if (object_type.kind == TypeInfo::Kind::Optional && !object_type.inner_types.empty()) {
+        if (!expr.is_optional) {
+            tc_.error(std::format("cannot index into '{}' — the value may be none",
+                                  object_type.to_string()),
+                      expr.location,
+                      "use '?[' for optional indexing, or unwrap the value first with '?\?' or "
+                      "match",
+                      DiagnosticCode::TypeMismatch);
+        }
+
         return with_optional_null(check_optional_index(object_type));
     }
 
@@ -77,9 +87,10 @@ TypeInfo ExpressionTypeChecker::check_array_index(const IndexAccessExpression& e
             "use an integer value or a range expression to index into an array");
     }
 
-    // Compile-time bounds check: literal index on a literal array.
+    // Compile-time bounds check: literal index (including a negated literal
+    // such as `-1`) on a literal array.
     if (expr.object->kind == ExpressionKind::ArrayLiteral) {
-        if (const auto idx = get_integer_value(*expr.index)) {
+        if (const auto idx = get_signed_integer_value(*expr.index)) {
             const auto& arr = static_cast<const ArrayLiteralExpression&>(*expr.object);
             const auto len = static_cast<std::int64_t>(arr.elements.size());
 
@@ -136,8 +147,9 @@ TypeInfo ExpressionTypeChecker::check_string_index(const IndexAccessExpression& 
 
 TypeInfo ExpressionTypeChecker::check_tuple_index(const IndexAccessExpression& expr,
                                                   const TypeInfo& object_type) {
-    // A compile-time integer literal index yields the specific element type.
-    if (const auto idx = get_integer_value(*expr.index)) {
+    // A compile-time integer literal index (including a negated literal such
+    // as `-1`) yields the specific element type.
+    if (const auto idx = get_signed_integer_value(*expr.index)) {
         if (*idx >= 0 && static_cast<std::size_t>(*idx) < object_type.inner_types.size()) {
             return object_type.inner_types[static_cast<std::size_t>(*idx)];
         }

@@ -1,13 +1,65 @@
 // Standard library tests: Process.
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <format>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "common/path_utils.hpp"
+#include "common/scope_guard.hpp"
+#include "runtime/stdlib/system/platform_process.hpp"
 #include "runtime/stdlib/system/process_module.hpp"
 #include "stdlib_test_helpers.hpp"
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
+using luma::set_program_args;
+using luma::tokenize_command;
+using luma::test::eval;
+using luma::test::ScopedPathCleanup;
+using luma::test::TempDir;
+using luma::test::write_file;
+
+namespace {
+
+// Sets the arguments Process.get_arguments reports and clears them when the
+// test ends, so a failing assertion cannot leak them into a later test.
+class ScopedProgramArgs {
+public:
+    explicit ScopedProgramArgs(std::vector<std::string> args) {
+        set_program_args(std::move(args));
+    }
+
+    ScopedProgramArgs(const ScopedProgramArgs&) = delete;
+    ScopedProgramArgs& operator=(const ScopedProgramArgs&) = delete;
+    ScopedProgramArgs(ScopedProgramArgs&&) = delete;
+    ScopedProgramArgs& operator=(ScopedProgramArgs&&) = delete;
+
+    ~ScopedProgramArgs() noexcept {
+        try {
+            set_program_args({});
+        } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+            // An exception must not escape a destructor.
+        }
+    }
+};
+
+} // namespace
+
 static void test_process_get_args_empty() {
-    set_program_args({});
+    const ScopedProgramArgs args{std::vector<std::string>{}};
 
     const auto v = eval("Process.get_arguments()");
 
@@ -16,7 +68,7 @@ static void test_process_get_args_empty() {
 }
 
 static void test_process_get_args_with_values() {
-    set_program_args({"hello", "world", "42"});
+    const ScopedProgramArgs args{std::vector<std::string>{"hello", "world", "42"}};
 
     const auto v = eval("Process.get_arguments()");
 
@@ -25,9 +77,6 @@ static void test_process_get_args_with_values() {
     ASSERT_EQ((*v.as_array()->elements)[0].as_string(), "hello");
     ASSERT_EQ((*v.as_array()->elements)[1].as_string(), "world");
     ASSERT_EQ((*v.as_array()->elements)[2].as_string(), "42");
-
-    // Reset to avoid affecting other tests.
-    set_program_args({});
 }
 
 static void test_process_run_returns_record() {
@@ -45,14 +94,14 @@ static void test_process_run_returns_record() {
     const auto& inner = *v.as_result()->owned_inner;
 
     ASSERT_TRUE(inner.is_record());
-    ASSERT_TRUE(inner.as_record()->type_name == "ProcessResult");
-    ASSERT_TRUE(inner.as_record()->find_field("exit_code") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("output") != nullptr);
+    ASSERT_EQ(inner.as_record()->type_name, "ProcessResult");
+    ASSERT_NE(inner.as_record()->find_field("exit_code"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("output"), nullptr);
     ASSERT_TRUE(inner.as_record()->find_field("exit_code")->is_integer());
-    ASSERT_TRUE(inner.as_record()->find_field("exit_code")->as_integer() == 0);
+    ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(), 0);
     ASSERT_TRUE(inner.as_record()->find_field("output")->is_string());
-    ASSERT_TRUE(inner.as_record()->find_field("output")->as_string().find("hello") !=
-                std::string::npos);
+    ASSERT_NE(inner.as_record()->find_field("output")->as_string().find("hello"),
+              std::string::npos);
 }
 
 static void test_process_run_unclosed_quote() {
@@ -76,9 +125,24 @@ static void test_process_signal_missing_process_fails() {
     ASSERT_EVAL_FAILURE("Process.signal(2147483646, Process.Signal.Interrupt)");
 }
 
+static void test_process_signal_rejects_out_of_range_pid() {
+    // Regression: a pid above 32 bits used to be truncated to pid_t on POSIX,
+    // so 4294967295 became kill(-1, ...) — signal every process the user owns —
+    // and 4294967296 became kill(0, ...) — our own process group.  The values
+    // used here truncate to a harmless, non-existent pid, and the assertion
+    // checks the range-check message so a regression is caught without ever
+    // signalling a real process.
+    for (const char* const pid : {"6442450942", "9223372036854775807"}) {
+        const auto v = eval(std::string{"Process.signal("} + pid + ", Process.Signal.Terminate)");
+
+        ASSERT_RESULT_FAILURE(v);
+        ASSERT_NE(v.as_result()->owned_inner->as_string().find("out of range"), std::string::npos);
+    }
+}
+
 static void test_process_signal_rejects_non_choice_argument() {
     // The signal argument must be a Process.Signal choice, not an arbitrary value.
-    ASSERT_TRUE(luma::test::eval_throws("Process.signal(1, 9)"));
+    ASSERT_EVAL_THROWS("Process.signal(1, 9)", "Process.signal: expected a Process.Signal choice");
 }
 
 // ─── tokenize_command — the untrusted command-string parser behind ──────────
@@ -171,6 +235,230 @@ static void test_tokenize_command_unclosed_single_quote_throws() {
 
 // ─── Process environment / introspection (portable) ─────────────────────────
 
+// ─── Windows batch-script refusal ("BatBadBut") ─────────────────────────────
+// CreateProcess runs .bat/.cmd files through cmd.exe, which re-parses the
+// arguments with its own metacharacter rules, so the launch layer refuses them.
+
+static void test_is_windows_batch_script_detects_batch_extensions() {
+    using luma::platform_process::is_windows_batch_script;
+
+    ASSERT_TRUE(is_windows_batch_script("build.bat"));
+    ASSERT_TRUE(is_windows_batch_script("BUILD.CMD"));
+    ASSERT_TRUE(is_windows_batch_script("tools\\deploy.Bat"));
+    ASSERT_TRUE(is_windows_batch_script("tools/deploy.cmd"));
+}
+
+static void test_is_windows_batch_script_sees_through_path_normalisation() {
+    using luma::platform_process::is_windows_batch_script;
+
+    // Win32 strips trailing dots/spaces, accepts drive-relative names, and
+    // resolves the default NTFS data stream — none may hide the extension.
+    ASSERT_TRUE(is_windows_batch_script("build.bat."));
+    ASSERT_TRUE(is_windows_batch_script("build.bat . "));
+    ASSERT_TRUE(is_windows_batch_script("C:build.bat"));
+    ASSERT_TRUE(is_windows_batch_script("build.bat::$DATA"));
+}
+
+static void test_is_windows_batch_script_accepts_ordinary_programs() {
+    using luma::platform_process::is_windows_batch_script;
+
+    ASSERT_FALSE(is_windows_batch_script("cmd.exe"));
+    ASSERT_FALSE(is_windows_batch_script("cmd"));
+    ASSERT_FALSE(is_windows_batch_script("build.batch"));
+    ASSERT_FALSE(is_windows_batch_script("bat"));
+    ASSERT_FALSE(is_windows_batch_script("C:\\scripts.bat\\tool.exe"));
+    ASSERT_FALSE(is_windows_batch_script(""));
+}
+
+// Regression: a trailing `\.` or `/.` left "." as the basename, so the check
+// returned false while Windows normalised the path back to the .bat file and
+// ran it through cmd.exe.
+static void test_is_windows_batch_script_sees_through_trailing_dot_components() {
+    using luma::platform_process::is_windows_batch_script;
+
+    ASSERT_TRUE(is_windows_batch_script("x.bat\\."));
+    ASSERT_TRUE(is_windows_batch_script("x.bat/."));
+    ASSERT_TRUE(is_windows_batch_script("x.cmd\\.\\."));
+    ASSERT_TRUE(is_windows_batch_script("X.BaT. ."));
+    ASSERT_TRUE(is_windows_batch_script("dir\\x.bat::$DATA"));
+    ASSERT_TRUE(is_windows_batch_script("dir\\x.bat\\"));
+    ASSERT_TRUE(is_windows_batch_script("C:\\dir\\x.bat. ::$DATA\\."));
+    ASSERT_TRUE(is_windows_batch_script("tool.exe:payload.bat"));
+}
+
+static void test_has_normalised_away_suffix_detects_trailing_noise() {
+    using luma::platform_process::has_normalised_away_suffix;
+
+    ASSERT_TRUE(has_normalised_away_suffix("tool.exe."));
+    ASSERT_TRUE(has_normalised_away_suffix("tool.exe "));
+    ASSERT_TRUE(has_normalised_away_suffix("tool\\"));
+    ASSERT_TRUE(has_normalised_away_suffix("tool/"));
+    ASSERT_FALSE(has_normalised_away_suffix("tool.exe"));
+    ASSERT_FALSE(has_normalised_away_suffix(""));
+}
+
+#ifdef _WIN32
+static void test_process_batch_script_launch_is_refused() {
+    // The program never runs: every entry point fails with a clear message
+    // before any process is created, so the '&' payload cannot execute.
+    const std::array programs{
+        R"(Process.run_command(Process.command("_luma_batbadbut.bat", ["x&echo injected"])))",
+        R"(Process.run_command_timeout()"
+        R"(Process.command("_luma_batbadbut.CMD", ["x&echo injected"]), 5000))",
+        R"(Process.execute("_luma_batbadbut.bat x&echo injected"))",
+        R"(Process.run("_luma_batbadbut.bat x&echo injected"))",
+    };
+
+    for (const char* const program : programs) {
+        const auto v = eval(program);
+
+        ASSERT_RESULT_FAILURE(v);
+        ASSERT_NE(v.as_result()->owned_inner->as_string().find("batch script"), std::string::npos);
+    }
+
+    const auto typed = eval(R"(Process.run_command_typed()"
+                            R"(Process.command("_luma_batbadbut.bat", ["x&echo injected"])))");
+
+    ASSERT_RESULT_FAILURE(typed);
+    ASSERT_EQ(typed.as_result()->owned_inner->as_choice()->variant, std::string{"InvalidCommand"});
+}
+
+// Regression: "x.bat\." and friends passed the extension check, and Windows
+// normalised the path back to the real batch file and ran it through cmd.exe.
+// A real batch file that would leave a marker behind proves it never runs.
+static void test_process_batch_script_disguised_by_trailing_dot_is_refused() {
+    const TempDir dir{};
+    const auto marker = dir.path() / "ran.txt";
+
+    // cmd.exe expects CRLF line endings.
+    for (const char* const script_name : {"x.bat", "x.cmd"}) {
+        write_file(dir.path() / script_name,
+                   "@echo off\r\necho ran> \"" + luma::path_to_utf8(marker) + "\"\r\n");
+    }
+
+    // Forward slashes keep the names free of Luma string escapes and of
+    // Process.run's backslash escaping.
+    std::string base = luma::path_to_utf8(dir.path());
+    std::ranges::replace(base, '\\', '/');
+    const std::vector<std::string> disguised = {
+        base + "/x.bat/.",  base + "/x.bat/./",     base + "/x.cmd/./.",
+        base + "/X.BaT. .", base + "/x.bat::$DATA",
+    };
+
+    for (const auto& name : disguised) {
+        ASSERT_TRUE(luma::platform_process::windows_launch_refusal(name).has_value());
+
+        const auto run_command = eval(std::format(
+            R"(Process.run_command(Process.command("{}", ["x&echo injected"])))", name));
+        ASSERT_RESULT_FAILURE(run_command);
+
+        const auto timeout = eval(std::format(
+            R"(Process.run_command_timeout(Process.command("{}", ["x&echo injected"]), 5000))",
+            name));
+        ASSERT_RESULT_FAILURE(timeout);
+
+        const auto typed = eval(std::format(
+            R"(Process.run_command_typed(Process.command("{}", ["x&echo injected"])))", name));
+        ASSERT_RESULT_FAILURE(typed);
+        ASSERT_EQ(typed.as_result()->owned_inner->as_choice()->variant,
+                  std::string{"InvalidCommand"});
+    }
+
+    // The tokenizing entry points split on spaces, so use the space-free names.
+    ASSERT_EVAL_FAILURE(std::format(R"(Process.execute("{}/x.bat/. x&echo injected"))", base));
+    ASSERT_EVAL_FAILURE(std::format(R"(Process.run("{}/x.cmd/./. x&echo injected"))", base));
+
+    ASSERT_FALSE(std::filesystem::exists(marker));
+}
+
+static void test_windows_launch_refusal_allows_ordinary_programs() {
+    using luma::platform_process::windows_launch_refusal;
+
+    ASSERT_FALSE(windows_launch_refusal("cmd.exe").has_value());
+    ASSERT_FALSE(windows_launch_refusal("cmd").has_value());
+    ASSERT_FALSE(windows_launch_refusal("_luma_nonexistent_xyz_123").has_value());
+    ASSERT_TRUE(windows_launch_refusal("cmd.exe.").has_value());
+    ASSERT_TRUE(windows_launch_refusal(std::string{"cmd\0.exe", 8}).has_value());
+}
+
+static void test_process_explicit_cmd_is_still_allowed() {
+    // Naming cmd.exe explicitly opts into shell semantics and keeps working.
+    const auto v =
+        eval(R"(Process.run_command(Process.command("cmd.exe", ["/c", "echo", "explicit"])))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_NE(v.as_result()
+                  ->owned_inner->as_record()
+                  ->find_field("standard_output")
+                  ->as_string()
+                  .find("explicit"),
+              std::string::npos);
+}
+
+static void test_process_run_unclosed_quote_does_not_leak_handles() {
+    // Regression: Process.run created its pipe BEFORE tokenizing, so every
+    // unclosed-quote failure leaked both pipe handles.  200 failing calls would
+    // have leaked 400 handles; allow generous slack for unrelated runtime noise.
+    DWORD before{0};
+    ASSERT_NE(GetProcessHandleCount(GetCurrentProcess(), &before), 0);
+
+    for (int i = 0; i < 200; ++i) {
+        ASSERT_EVAL_FAILURE("Process.run(\"cmd \\\"unclosed\")");
+    }
+
+    DWORD after{0};
+    ASSERT_NE(GetProcessHandleCount(GetCurrentProcess(), &after), 0);
+    ASSERT_LT(after, before + 50);
+}
+#endif
+
+static void test_process_find_executable_handles_utf8_names() {
+    // Regression: find_executable built std::filesystem paths straight from the
+    // UTF-8 name / PATH strings, which Windows reinterprets in the ANSI code
+    // page, so a non-ASCII executable name was never found (and a found path
+    // came back mis-encoded).  The conversions now go through path_from_utf8 /
+    // path_to_utf8.
+    namespace fs = std::filesystem;
+
+    const std::string dir_utf8 = "_test_find_exe_\xC3\xA9";
+    const std::string tool_utf8 = "t\xC3\xB4ol";
+#ifdef _WIN32
+    const std::string file_utf8 = tool_utf8 + ".exe";
+#else
+    const std::string file_utf8 = tool_utf8;
+#endif
+
+    const fs::path dir = luma::path_from_utf8(dir_utf8);
+    const fs::path file = dir / luma::path_from_utf8(file_utf8);
+    const ScopedPathCleanup cleanup{dir};
+
+    write_file(file, "x");
+#ifndef _WIN32
+    fs::permissions(file, fs::perms::owner_exec, fs::perm_options::add);
+#endif
+
+    const auto v = eval("Process.find_executable(\"" + dir_utf8 + "/" + tool_utf8 + "\")");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_NE(v.as_string().find(dir_utf8), std::string::npos);
+    ASSERT_NE(v.as_string().find(tool_utf8), std::string::npos);
+}
+
+static void test_process_environment_variable_utf8_roundtrip() {
+    // Luma strings are UTF-8 and get_environment_variable returns UTF-8, so set
+    // must store UTF-8 too: on Windows the narrow _putenv_s used to store the
+    // bytes as ANSI text, which then read back as mojibake.
+    const std::string value = "\xE6\xB5\x8B\xE8\xAF\x95_\xC3\xA9";
+
+    ASSERT_RESULT_SUCCESS(
+        eval("Process.set_environment_variable(\"LUMA_TEST_UTF8_ENV\", \"" + value + "\")"));
+
+    const auto v = eval(R"(Process.get_environment_variable("LUMA_TEST_UTF8_ENV"))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_string(), value);
+}
+
 static void test_process_get_environment_variable_path_success() {
     // PATH is defined on every supported platform.
     const auto v = eval("Process.get_environment_variable(\"PATH\")");
@@ -219,7 +507,7 @@ static void test_process_get_all_environment_variables_contains_set_var() {
 
     const auto* entry = v.as_dictionary()->find("_LUMA_IO_ALLENV");
 
-    ASSERT_TRUE(entry != nullptr);
+    ASSERT_NE(entry, nullptr);
     ASSERT_EQ(entry->as_string(), "present");
 }
 
@@ -235,11 +523,13 @@ static void test_process_get_environment_variable_missing_fails() {
 }
 
 static void test_process_get_environment_variable_rejects_non_string() {
-    ASSERT_THROWS(eval("Process.get_environment_variable(42)"));
+    ASSERT_EVAL_THROWS("Process.get_environment_variable(42)",
+                       "Process.get_environment_variable: expected string");
 }
 
 static void test_process_has_environment_variable_rejects_non_string() {
-    ASSERT_THROWS(eval("Process.has_environment_variable(42)"));
+    ASSERT_EVAL_THROWS("Process.has_environment_variable(42)",
+                       "Process.has_environment_variable: expected string");
 }
 
 static void test_process_set_environment_variable_empty_name_fails() {
@@ -251,13 +541,14 @@ static void test_process_set_environment_variable_name_with_equals_fails() {
 }
 
 static void test_process_set_environment_variable_rejects_non_string() {
-    ASSERT_THROWS(eval("Process.set_environment_variable(1, 2)"));
+    ASSERT_EVAL_THROWS("Process.set_environment_variable(1, 2)",
+                       "Process.set_environment_variable: expected string");
 }
 
 static void test_process_exit_out_of_range_throws() {
     // A 64-bit code that cannot fit in a 32-bit exit status is rejected before
     // any ExitSignal is raised, so this never terminates the test process.
-    ASSERT_THROWS(eval("Process.exit(9999999999)"));
+    ASSERT_EVAL_THROWS("Process.exit(9999999999)", "Process.exit: exit code out of range");
 }
 
 // ─── Process.run end-to-end execution (platform-specific commands) ──────────
@@ -272,8 +563,7 @@ static void test_process_run_nonzero_exit_code() {
 #endif
 
     ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_record()->find_field("exit_code")->as_integer() ==
-                7);
+    ASSERT_EQ(v.as_result()->owned_inner->as_record()->find_field("exit_code")->as_integer(), 7);
 }
 
 static void test_process_run_nonexistent_command_fails() {
@@ -301,17 +591,17 @@ static void test_process_execute_returns_command_output() {
     const auto& inner = *v.as_result()->owned_inner;
 
     ASSERT_TRUE(inner.is_record());
-    ASSERT_TRUE(inner.as_record()->type_name == "CommandOutput");
-    ASSERT_TRUE(inner.as_record()->find_field("exit_code") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("standard_output") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("standard_error") != nullptr);
-    ASSERT_TRUE(inner.as_record()->find_field("success") != nullptr);
+    ASSERT_EQ(inner.as_record()->type_name, "CommandOutput");
+    ASSERT_NE(inner.as_record()->find_field("exit_code"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("standard_output"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("standard_error"), nullptr);
+    ASSERT_NE(inner.as_record()->find_field("success"), nullptr);
 
     ASSERT_TRUE(inner.as_record()->find_field("exit_code")->is_integer());
-    ASSERT_TRUE(inner.as_record()->find_field("exit_code")->as_integer() == 0);
+    ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(), 0);
     ASSERT_TRUE(inner.as_record()->find_field("standard_output")->is_string());
-    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->as_string().find("hello") !=
-                std::string::npos);
+    ASSERT_NE(inner.as_record()->find_field("standard_output")->as_string().find("hello"),
+              std::string::npos);
     ASSERT_TRUE(inner.as_record()->find_field("success")->is_bool());
     ASSERT_TRUE(inner.as_record()->find_field("success")->as_bool());
 }
@@ -329,10 +619,10 @@ static void test_process_execute_captures_stderr() {
 
     const auto& inner = *v.as_result()->owned_inner;
 
-    ASSERT_TRUE(inner.as_record()->find_field("standard_error")->as_string().find("err_text") !=
-                std::string::npos);
-    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->as_string().find("err_text") ==
-                std::string::npos);
+    ASSERT_NE(inner.as_record()->find_field("standard_error")->as_string().find("err_text"),
+              std::string::npos);
+    ASSERT_EQ(inner.as_record()->find_field("standard_output")->as_string().find("err_text"),
+              std::string::npos);
 }
 
 static void test_process_execute_nonzero_exit_sets_success_false() {
@@ -346,7 +636,7 @@ static void test_process_execute_nonzero_exit_sets_success_false() {
 
     const auto& inner = *v.as_result()->owned_inner;
 
-    ASSERT_TRUE(inner.as_record()->find_field("exit_code")->as_integer() == 7);
+    ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(), 7);
     ASSERT_FALSE(inner.as_record()->find_field("success")->as_bool());
 }
 
@@ -378,7 +668,8 @@ static void test_process_command_builds_record() {
 }
 
 static void test_process_command_rejects_non_string_argument() {
-    ASSERT_THROWS(eval(R"(Process.command("echo", [1, 2]))"));
+    ASSERT_EVAL_THROWS(R"(Process.command("echo", [1, 2]))",
+                       "Process.command: every argument must be a string");
 }
 
 static void test_process_run_command_returns_command_output() {
@@ -396,8 +687,8 @@ static void test_process_run_command_returns_command_output() {
     ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(),
               static_cast<std::int64_t>(0));
     ASSERT_TRUE(inner.as_record()->find_field("success")->as_bool());
-    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->as_string().find("hello") !=
-                std::string::npos);
+    ASSERT_NE(inner.as_record()->find_field("standard_output")->as_string().find("hello"),
+              std::string::npos);
 }
 
 #ifndef _WIN32
@@ -411,7 +702,7 @@ static void test_process_run_command_metacharacters_are_inert() {
 
     const auto& out =
         v.as_result()->owned_inner->as_record()->find_field("standard_output")->as_string();
-    ASSERT_TRUE(out.find("a; b | c $(whoami)") != std::string::npos);
+    ASSERT_NE(out.find("a; b | c $(whoami)"), std::string::npos);
 }
 #endif
 
@@ -424,7 +715,8 @@ static void test_process_run_command_empty_program_fails() {
 }
 
 static void test_process_run_command_rejects_non_record() {
-    ASSERT_THROWS(eval("Process.run_command(42)"));
+    ASSERT_EVAL_THROWS("Process.run_command(42)",
+                       "Process.run_command: expected a Process.Command record");
 }
 
 // ─── Process.exit_status — classifies the exit_code sign convention ────────
@@ -480,7 +772,8 @@ static void test_process_exit_status_negative_is_launch_failed() {
 }
 
 static void test_process_exit_status_rejects_non_record() {
-    ASSERT_THROWS(eval("Process.exit_status(42)"));
+    ASSERT_EVAL_THROWS("Process.exit_status(42)",
+                       "Process.exit_status: expected a Process.CommandOutput record");
 }
 
 // ─── Process.run_command_typed (typed launch errors via Process.Error) ────────
@@ -527,7 +820,8 @@ static void test_process_run_command_typed_empty_program_is_invalid() {
 }
 
 static void test_process_run_command_typed_rejects_non_record() {
-    ASSERT_THROWS(eval("Process.run_command_typed(42)"));
+    ASSERT_EVAL_THROWS("Process.run_command_typed(42)",
+                       "Process.run_command_typed: expected a Process.Command record");
 }
 
 static void test_process_run_command_typed_registered() {
@@ -552,8 +846,8 @@ static void test_process_run_command_timeout_completes_within_deadline() {
     ASSERT_EQ(inner.as_record()->type_name, std::string{"CommandOutput"});
     ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(),
               static_cast<std::int64_t>(0));
-    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->as_string().find("hi") !=
-                std::string::npos);
+    ASSERT_NE(inner.as_record()->find_field("standard_output")->as_string().find("hi"),
+              std::string::npos);
 }
 
 static void test_process_run_command_timeout_kills_slow_command() {
@@ -568,6 +862,7 @@ static void test_process_run_command_timeout_kills_slow_command() {
 #endif
 
     ASSERT_RESULT_FAILURE(v);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("timed out"), std::string::npos);
 }
 
 static void test_process_run_command_timeout_kills_child_tree() {
@@ -579,15 +874,61 @@ static void test_process_run_command_timeout_kills_child_tree() {
     // the direct child (sh) is killed and reaped without draining to EOF, so the
     // orphaned grandchild cannot hang the call either.
 #ifdef _WIN32
-    const auto v = eval(
-        R"(Process.run_command_timeout(Process.command("cmd", ["/c", "ping", "-n", "20", "127.0.0.1"]), 400))");
+    const auto v = eval(R"(Process.run_command_timeout(Process.command()"
+                        R"("cmd", ["/c", "ping", "-n", "20", "127.0.0.1"]), 400))");
 #else
     const auto v =
         eval(R"(Process.run_command_timeout(Process.command("sh", ["-c", "sleep 30"]), 300))");
 #endif
 
     ASSERT_RESULT_FAILURE(v);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("timed out"), std::string::npos);
 }
+
+#ifndef _WIN32
+static void test_process_run_command_timeout_bounds_child_that_closed_its_output() {
+    // Regression: once the child closed stdout AND stderr the drain loop ended
+    // and the parent fell into an unbounded waitpid, so a child that kept
+    // running after closing its streams hung run_command_timeout forever.
+    const auto v = eval(R"(Process.run_command_timeout(Process.command()"
+                        R"("sh", ["-c", "exec >&- 2>&-; sleep 30"]), 300))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("timed out"), std::string::npos);
+}
+
+static void test_process_run_command_timeout_child_stdin_is_dev_null() {
+    // Regression: the timeout child leads its own (background) process group,
+    // yet inherited the interpreter's stdin — reading a terminal stopped it
+    // with SIGTTIN, and reading an open pipe blocked it until the deadline.
+    // Point our own stdin at a pipe whose write end stays open: `cat` returns
+    // at once only if it reads /dev/null instead.
+    std::array<int, 2> stdin_pipe{-1, -1};
+    ASSERT_EQ(::pipe(stdin_pipe.data()), 0);
+
+    const int saved_stdin = ::dup(STDIN_FILENO);
+    const luma::ScopeGuard restore_stdin{[&stdin_pipe, saved_stdin]() {
+        if (saved_stdin >= 0) {
+            ::dup2(saved_stdin, STDIN_FILENO);
+            ::close(saved_stdin);
+        }
+
+        ::close(stdin_pipe[0]);
+        ::close(stdin_pipe[1]);
+    }};
+
+    ASSERT_GE(saved_stdin, 0);
+    ASSERT_EQ(::dup2(stdin_pipe[0], STDIN_FILENO), STDIN_FILENO);
+
+    const auto v = eval(R"(Process.run_command_timeout(Process.command("cat", []), 10000))");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(),
+              static_cast<std::int64_t>(0));
+}
+#endif
 
 static void test_process_run_command_timeout_rejects_nonpositive() {
 #ifdef _WIN32
@@ -598,6 +939,8 @@ static void test_process_run_command_timeout_rejects_nonpositive() {
 #endif
 
     ASSERT_RESULT_FAILURE(v);
+    ASSERT_NE(v.as_result()->owned_inner->as_string().find("timeout_ms must be a positive"),
+              std::string::npos);
 }
 
 static void test_process_run_command_timeout_empty_program_fails() {
@@ -610,7 +953,8 @@ static void test_process_run_command_timeout_nonexistent_program_fails() {
 }
 
 static void test_process_run_command_timeout_rejects_non_record() {
-    ASSERT_THROWS(eval("Process.run_command_timeout(42, 1000)"));
+    ASSERT_EVAL_THROWS("Process.run_command_timeout(42, 1000)",
+                       "Process.run_command_timeout: expected a Process.Command record");
 }
 
 static void test_process_run_command_timeout_registered() {
@@ -625,7 +969,20 @@ int main() {
     RUN(test_process_run_unclosed_quote);
     RUN(test_process_signal_rejects_nonpositive_pid);
     RUN(test_process_signal_missing_process_fails);
+    RUN(test_process_signal_rejects_out_of_range_pid);
     RUN(test_process_signal_rejects_non_choice_argument);
+    RUN(test_is_windows_batch_script_detects_batch_extensions);
+    RUN(test_is_windows_batch_script_sees_through_path_normalisation);
+    RUN(test_is_windows_batch_script_accepts_ordinary_programs);
+    RUN(test_is_windows_batch_script_sees_through_trailing_dot_components);
+    RUN(test_has_normalised_away_suffix_detects_trailing_noise);
+#ifdef _WIN32
+    RUN(test_process_batch_script_launch_is_refused);
+    RUN(test_process_batch_script_disguised_by_trailing_dot_is_refused);
+    RUN(test_windows_launch_refusal_allows_ordinary_programs);
+    RUN(test_process_explicit_cmd_is_still_allowed);
+    RUN(test_process_run_unclosed_quote_does_not_leak_handles);
+#endif
     RUN(test_tokenize_command_simple);
     RUN(test_tokenize_command_collapses_repeated_whitespace);
     RUN(test_tokenize_command_double_quotes_preserve_spaces);
@@ -638,6 +995,8 @@ int main() {
     RUN(test_tokenize_command_whitespace_only_input);
     RUN(test_tokenize_command_unclosed_double_quote_throws);
     RUN(test_tokenize_command_unclosed_single_quote_throws);
+    RUN(test_process_find_executable_handles_utf8_names);
+    RUN(test_process_environment_variable_utf8_roundtrip);
     RUN(test_process_get_environment_variable_path_success);
     RUN(test_process_has_environment_variable_true);
     RUN(test_process_set_and_get_environment_variable_roundtrip);
@@ -681,6 +1040,10 @@ int main() {
     RUN(test_process_run_command_timeout_completes_within_deadline);
     RUN(test_process_run_command_timeout_kills_slow_command);
     RUN(test_process_run_command_timeout_kills_child_tree);
+#ifndef _WIN32
+    RUN(test_process_run_command_timeout_bounds_child_that_closed_its_output);
+    RUN(test_process_run_command_timeout_child_stdin_is_dev_null);
+#endif
     RUN(test_process_run_command_timeout_rejects_nonpositive);
     RUN(test_process_run_command_timeout_empty_program_fails);
     RUN(test_process_run_command_timeout_nonexistent_program_fails);

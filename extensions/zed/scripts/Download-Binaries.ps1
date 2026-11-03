@@ -1,4 +1,5 @@
-# Download Luma LSP binary for Zed (Windows).
+# Download Luma LSP binary for Zed (Windows) and verify it against the
+# release's SHA256SUMS manifest before extracting it.
 # Counterpart to download_binaries.sh for Unix systems.
 #
 # Usage:
@@ -16,16 +17,23 @@ $BinaryName = 'luma_lsp'
 # Detect architecture.
 $Arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
     'aarch64'
-} else {
+}
+else {
     'x86_64'
 }
 
 $Suffix = "windows-${Arch}.zip"
 $AssetName = "${BinaryName}-${Suffix}"
 
-# Fetch latest release tag.
-$ReleaseUrl = "https://api.github.com/repos/${Repo}/releases/latest"
-Write-Host "Fetching latest release from ${ReleaseUrl}..."
+# Fetch the requested release (LUMA_VERSION, e.g. v0.16.0) or the latest one.
+$Version = if ($env:LUMA_VERSION) { $env:LUMA_VERSION } else { 'latest' }
+$ReleaseUrl = if ($Version -eq 'latest') {
+    "https://api.github.com/repos/${Repo}/releases/latest"
+}
+else {
+    "https://api.github.com/repos/${Repo}/releases/tags/${Version}"
+}
+Write-Host "Fetching release from ${ReleaseUrl}..."
 $Release = Invoke-RestMethod -Uri $ReleaseUrl -Headers @{ Accept = 'application/json' }
 $Tag = $Release.tag_name
 Write-Host "Latest release: ${Tag}"
@@ -38,8 +46,16 @@ if (-not $Asset) {
 }
 
 $DownloadUrl = $Asset.browser_download_url
+$ChecksumsName = 'SHA256SUMS'
+$ChecksumsAsset = $Release.assets | Where-Object { $_.name -eq $ChecksumsName }
+if (-not $ChecksumsAsset) {
+    Write-Error "Release ${Tag} has no ${ChecksumsName}; refusing to install an unverified binary."
+    exit 1
+}
+
 $BinDir = Join-Path -Path $PSScriptRoot -ChildPath '..' 'bin'
 $ArchivePath = Join-Path -Path $BinDir -ChildPath $AssetName
+$ChecksumsPath = Join-Path -Path $BinDir -ChildPath $ChecksumsName
 
 # Create bin directory.
 New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
@@ -48,30 +64,50 @@ try {
     # Download.
     Write-Host "Downloading ${DownloadUrl}..."
     Invoke-WebRequest -Uri $DownloadUrl -OutFile $ArchivePath
+    Invoke-WebRequest -Uri $ChecksumsAsset.browser_download_url -OutFile $ChecksumsPath
 
-    # Extract.
+    # Verify. A SHA256SUMS line is "<64-hex digest> <space or *><file name>".
+    $Expected = Get-Content -LiteralPath $ChecksumsPath |
+        ForEach-Object {
+            if ($_ -match '^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$' -and $Matches[2] -eq $AssetName) {
+                $Matches[1].ToLowerInvariant()
+            }
+        } |
+        Select-Object -First 1
+    if (-not $Expected) {
+        throw "${ChecksumsName} has no entry for ${AssetName}; refusing to install."
+    }
+    $Actual = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($Actual -ne $Expected) {
+        throw "Checksum mismatch for ${AssetName} (expected ${Expected}, got ${Actual}); refusing to install."
+    }
+
+    # Extract. -LiteralPath: -Path would treat [ ] in the path as wildcards.
     Write-Host "Extracting ${AssetName}..."
-    Expand-Archive -Path $ArchivePath -DestinationPath $BinDir -Force
+    Expand-Archive -LiteralPath $ArchivePath -DestinationPath $BinDir -Force
 }
 catch [System.Net.WebException] {
     Write-Error "Network error downloading binary: $_"
     exit 1
 }
 catch {
-    Write-Error "Failed to download or extract binary: $_"
+    Write-Error "Failed to download, verify, or extract binary: $_"
     exit 1
 }
 finally {
-    # Clean up archive.
-    if (Test-Path -Path $ArchivePath) {
-        Remove-Item -Path $ArchivePath -Force
+    # Clean up the archive and the checksum manifest.
+    foreach ($Downloaded in @($ArchivePath, $ChecksumsPath)) {
+        if (Test-Path -LiteralPath $Downloaded) {
+            Remove-Item -LiteralPath $Downloaded -Force
+        }
     }
 }
 
 $BinaryPath = Join-Path -Path $BinDir -ChildPath "${BinaryName}.exe"
 if (Test-Path -Path $BinaryPath) {
     Write-Host "Installed: ${BinaryPath}"
-} else {
+}
+else {
     Write-Error "Binary not found after extraction: ${BinaryPath}"
     exit 1
 }

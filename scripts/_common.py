@@ -62,21 +62,18 @@ def _explicit_or_env(explicit: str | None, env_var: str) -> Path | None:
 
 
 def find_luma_exe(explicit: str | None) -> Path:
-    """Resolve the luma executable path using platform-appropriate defaults.
+    """Resolve the luma executable path.
 
     Precedence: the *explicit* argument, then the ``LUMA_EXE`` environment
-    variable, then the platform's default build output under ``build/``.
+    variable, then the default build output, which is at the root of ``build/``
+    on every platform.
     """
     override = _explicit_or_env(explicit, "LUMA_EXE")
     if override is not None:
         return override
 
-    if sys.platform == "win32":
-        candidate = REPO_ROOT / "build" / "Release" / "luma.exe"
-    else:
-        candidate = REPO_ROOT / "build" / "luma"
-
-    return candidate.resolve()
+    name = "luma.exe" if sys.platform == "win32" else "luma"
+    return (REPO_ROOT / "build" / name).resolve()
 
 
 def resolve_dir(explicit: str | None, env_var: str, default_rel: str) -> Path:
@@ -102,6 +99,52 @@ def resolve_jobs(explicit: int | None) -> int:
     if explicit < 1:
         raise ValueError("jobs must be a positive integer")
     return explicit
+
+
+def find_visual_studio_llvm_tool(tool: str) -> str | None:
+    """Return Visual Studio's bundled LLVM *tool* (e.g. ``clang-format``), or ``None``.
+
+    Visual Studio's "C++ Clang tools for Windows" component installs the LLVM
+    tools under ``VC\\Tools\\Llvm\\<arch>\\bin`` but puts them on ``PATH`` only
+    inside a Developer prompt. ``vswhere -sort`` lists every installation newest
+    first — ``-latest`` would search only the newest, which may lack the
+    component — and the host architecture selects the binary that can run here
+    (an ARM64 build does not start on x64). Returns ``None`` off Windows or when
+    not installed.
+    """
+    if sys.platform != "win32":
+        return None
+    program_files = os.environ.get("PROGRAMFILES(X86)")
+    if not program_files:
+        return None
+    vswhere = Path(program_files) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
+    if not vswhere.is_file():
+        return None
+    arch = "ARM64" if os.environ.get("PROCESSOR_ARCHITECTURE", "").upper() == "ARM64" else "x64"
+    try:
+        result = subprocess.run(
+            [
+                str(vswhere),
+                "-sort",
+                "-prerelease",
+                "-products",
+                "*",
+                "-utf8",
+                "-find",
+                rf"VC\Tools\Llvm\{arch}\bin\{tool}.exe",
+            ],
+            capture_output=True,
+            encoding="utf-8",
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in result.stdout.splitlines():
+        candidate = line.strip()
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return None
 
 
 def reconfigure_utf8_streams() -> None:

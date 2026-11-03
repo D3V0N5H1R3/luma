@@ -5,9 +5,11 @@ labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
-      value: |
-        Thanks for suggesting an improvement! Describing the **problem** you want
-        to solve — not only the solution — helps us find the best design.
+      # Folded (>) so source wrapping does not become hard line breaks in the
+      # rendered form.
+      value: >
+        Thanks for suggesting an improvement! Describing the **problem** you want to
+        solve — not only the solution — helps us find the best design.
   - type: checkboxes
     id: preflight
     attributes:

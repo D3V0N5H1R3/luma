@@ -6,6 +6,14 @@
 # choice type (Less, Equal, Greater).
 # ═══════════════════════════════════════════════════════════
 
+function string ordering_name(Ordering o) {
+    return match o {
+    case Ordering.Less    { "Less" }
+    case Ordering.Equal   { "Equal" }
+    case Ordering.Greater { "Greater" }
+    }
+}
+
 @main
 function void main() {
     # ── Basic comparisons ──
@@ -44,13 +52,14 @@ function void main() {
     Ordering decided = Order.then(Order.of("Alice", "Bob"), Order.of(100.0, 50.0))
     print("Different name (decided): ${ordering_name(decided)}")
 
-    # ── Sorting with sort_by ──
+    # ── Sorting with an Order-based comparator ──
     print("\n=== Sorting ===")
 
+    # Array.sort expects a numeric comparator; Order.to_number bridges to it.
     array<number> scores = [88.0, 95.0, 72.0, 91.0, 85.0]
-    array<number> sorted = Result.unwrap(
-        scores |> Array.sort_by((number n) -> Converter.to_string(n))
-    )
+    array<number> sorted = scores
+        |> Array.sort((number a, number b) -> Order.to_number(Order.of(a, b)))
+        |> Result.unwrap_or(scores)
     print("Sorted scores: ${sorted}")
 
     # ── Predicate helpers ──
@@ -60,14 +69,6 @@ function void main() {
     print("100 > 1? ${Order.is_greater(big)}")
     print("100 >= 1? ${Order.is_greater_or_equal(big)}")
     print("100 <= 1? ${Order.is_less_or_equal(big)}")
-}
-
-function string ordering_name(Ordering o) {
-    return match o {
-    case Ordering.Less    { "Less" }
-    case Ordering.Equal   { "Equal" }
-    case Ordering.Greater { "Greater" }
-    }
 }
 
 # ── Tests ──

@@ -135,7 +135,7 @@ enum class TokenType {
     EndOfFile,
 
     // Sentinel (must remain last)
-    Count_
+    Count
 };
 
 // Indexed by the underlying value of TokenType — order must match the enum exactly.
@@ -262,7 +262,7 @@ inline constexpr auto k_token_type_names = std::to_array<std::string_view>({
     "end of file", // EndOfFile
 });
 
-static_assert(k_token_type_names.size() == static_cast<std::size_t>(TokenType::Count_),
+static_assert(k_token_type_names.size() == static_cast<std::size_t>(TokenType::Count),
               "k_token_type_names must have one entry per TokenType");
 
 [[nodiscard]] constexpr std::string_view token_type_to_string(TokenType type) noexcept {
@@ -382,9 +382,9 @@ struct KeywordClassification {
     bool is_type_keyword{false};
 };
 
-inline constexpr std::array<KeywordClassification, static_cast<std::size_t>(TokenType::Count_)>
+inline constexpr std::array<KeywordClassification, static_cast<std::size_t>(TokenType::Count)>
 build_keyword_classifications() noexcept {
-    std::array<KeywordClassification, static_cast<std::size_t>(TokenType::Count_)> table{};
+    std::array<KeywordClassification, static_cast<std::size_t>(TokenType::Count)> table{};
 
     for (const auto& entry : k_keywords) {
         auto& slot = table[static_cast<std::size_t>(entry.type)];

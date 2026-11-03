@@ -60,7 +60,7 @@ function void demo_dictionary_iteration() {
     print("")
     print("=== Dictionary iteration ===")
 
-    dictionary<integer> scores = {
+    dictionary<number> scores = {
         "Alice": 95,
         "Bob": 87,
         "Charlie": 92,
@@ -69,7 +69,7 @@ function void demo_dictionary_iteration() {
 
     for name, score in scores {
         string grade = if score >= 90 { "A" } else if score >= 80 { "B" } else { "C" }
-        print("  ${name}: ${score} (${grade})")
+        print("  ${name}: ${String.format_number(score, 0)} (${grade})")
     }
 }
 
@@ -80,8 +80,8 @@ function void demo_iterating_over_a_string() {
 
     string word = "Luma"
 
-    for ch in word {
-        print("  '${ch}'")
+    for character in word {
+        print("  '${character}'")
     }
 }
 
@@ -92,40 +92,40 @@ function void demo_match_with_multiple_patterns() {
 
     array<string> commands = ["quit", "help", "run", "?", "exit", "build"]
 
-    for cmd in commands {
-        string response = match cmd {
+    for command in commands {
+        string response = match command {
         case "quit" | "exit" | "q" { "Goodbye!" }
         case "help" | "?"          { "Showing help..." }
-        else                       { "Running: ${cmd}" }
+        else                       { "Running: ${command}" }
         }
 
-        print("  ${cmd} -> ${response}")
+        print("  ${command} -> ${response}")
     }
 
     # Number grouping with match.
     array<integer> values = [1, 3, 5, 7, 10]
 
-    for v in values {
-        string label = match v {
+    for value in values {
+        string label = match value {
         case 1 | 2 | 3 { "low" }
         case 4 | 5 | 6 { "mid" }
         else           { "high" }
         }
 
-        print("  ${v} -> ${label}")
+        print("  ${value} -> ${label}")
     }
 }
 
-# ── While with break ──
+# ── While with an if expression ──
 function void demo_collatz_sequence() {
     print("")
     print("=== Collatz sequence ===")
 
-    mutable integer c = 27
+    mutable integer value = 27
     mutable integer steps = 0
 
-    while c != 1 {
-        c = if c % 2 == 0 { c // 2 } else { 3 * c + 1 }
+    while value != 1 {
+        value = if value % 2 == 0 { value // 2 } else { 3 * value + 1 }
         steps++
     }
 

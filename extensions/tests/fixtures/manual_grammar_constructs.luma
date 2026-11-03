@@ -1,0 +1,101 @@
+# Constructs from the User Manual's formal grammar (§32) that the tree-sitter
+# grammar must parse without ERROR nodes. Kept valid under `luma --check`.
+
+namespace Geometry {
+    record Point { number x, number y }
+
+    choice Shape { Circle(number radius), Square(number side) }
+
+    function Point origin() {
+        return Point { x = 0, y = 0 }
+    }
+}
+
+use Geometry
+
+choice Color { Red, Green, Blue }
+
+choice Light {
+    On,
+    Off
+}
+
+interface Named {
+    string name
+}
+
+interface Scored {
+    string name,
+    number score,
+}
+
+record Player { string name, number score }
+
+function (number, number) coords() {
+    return (1, 2)
+}
+
+function string grade(number score) {
+    return match score {
+        case >= 90 { "A" }
+        case >= 80 { "B" }
+        else { "C" }
+    }
+}
+
+function string classify(integer n) {
+    match n {
+        case >= 0 when n == 0 { return "zero" }
+        case >= 0 { return "positive" }
+        case != 0 { return "negative" }
+        else { return "unreachable" }
+    }
+}
+
+function string describe(Player p) {
+    match p {
+        case Player { name, score } when score > 10 { return "${name} scores" }
+        case Player { name, score } { return "${name}: ${score}" }
+    }
+}
+
+function number area(Geometry.Shape shape) {
+    return match shape {
+        case Geometry.Shape.Circle(r) { 3.14 * r * r }
+        case Geometry.Shape.Square(s) { s * s }
+    }
+}
+
+function string paint(Color c) {
+    match c {
+        case Color.Red | Color.Green { return "warm" }
+        case Color.Blue { return "cool" }
+    }
+}
+
+@main
+function void main() {
+    string label = if 75 >= 60 { "pass" } else { "fail" }
+    (number x, number y) = coords()
+    mutable (number a, number b) = coords()
+    a += x
+    b += y
+
+    Geometry.Point p = Geometry.origin()
+    Geometry.Point q = Geometry.Point { x = 1, y = 2 }
+    Terminal.Color tone = Terminal.Color.Red
+
+    print("Total: $${a + b} and $5 with \$ escaped")
+    print("""
+        Price: $10
+        """)
+    print(label)
+    print(p.x + q.y)
+    print(grade(95))
+    print(classify(0))
+    print(describe(Player { name = "Ada", score = 12 }))
+    print(area(Geometry.Shape.Circle(1)))
+    print(paint(Color.Red))
+    print(Light.On == Light.Off)
+    print(tone == Terminal.Color.Blue)
+}

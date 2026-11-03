@@ -13,6 +13,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "analysis/source/source_location.hpp"
 #include "common/utf8.hpp"
@@ -24,6 +25,33 @@
 #include "runtime/stdlib/text/string_module.hpp"
 
 namespace luma {
+
+// Decode `s` into one comparison key per codepoint for String.levenshtein_distance.
+// Well-formed sequences map to their codepoint.  An ill-formed byte decodes as
+// U+FFFD (length 1); to keep comparison byte-exact — distinct invalid bytes
+// must not compare equal to each other or to a genuine U+FFFD — such a byte
+// maps to a value above U+10FFFF that encodes the raw byte.
+[[nodiscard]] static std::vector<char32_t> codepoints_for_comparison(const std::string& s) {
+    constexpr char32_t k_invalid_byte_base = 0x110000;
+
+    std::vector<char32_t> cps{};
+    cps.reserve(s.size());
+
+    for (std::size_t pos{0}; pos < s.size();) {
+        const auto decoded = utf8_decode(s, pos);
+        const auto byte = static_cast<unsigned char>(s[pos]);
+
+        if (decoded.length == 1 && byte >= 0x80) {
+            cps.push_back(k_invalid_byte_base + byte);
+        } else {
+            cps.push_back(static_cast<char32_t>(decoded.codepoint));
+        }
+
+        pos += std::max<std::size_t>(decoded.length, 1);
+    }
+
+    return cps;
+}
 
 // Shared body for String.is_uppercase / is_lowercase.  Returns true when the
 // string contains at least one alphabetic character and every alphabetic
@@ -128,8 +156,9 @@ void register_string_transform(const EnvPtr& env) {
     ModuleBuilder{"String", env}
         .func("center", 3)
         .extract_body(expect_string,
-                      [](const auto& self, const Args& args, SourceLocation) -> Value {
-                          const auto raw_width = args[1].as_integer();
+                      [](const auto& self, const Args& args, SourceLocation loc) -> Value {
+                          const auto raw_width = expect_integer(args[1], "String.center", loc);
+                          const auto& fill = expect_string(args[2], "String.center", loc);
 
                           if (raw_width < 0) {
                               return make_failure_value(
@@ -137,7 +166,6 @@ void register_string_transform(const EnvPtr& env) {
                           }
 
                           const auto width = static_cast<std::size_t>(raw_width);
-                          const auto& fill = args[2].as_string();
                           const auto cp_len = utf8_count_size(self);
 
                           if (cp_len >= width || fill.empty()) {
@@ -184,8 +212,8 @@ void register_string_transform(const EnvPtr& env) {
 
         .func("remove_prefix", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto& prefix = args[1].as_string();
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& prefix = expect_string(args[1], "String.remove_prefix", loc);
 
                           if (s.starts_with(prefix)) {
                               return Value{s.substr(prefix.size())};
@@ -196,8 +224,8 @@ void register_string_transform(const EnvPtr& env) {
 
         .func("remove_suffix", 2)
         .extract_body(expect_string,
-                      [](const auto& s, const Args& args, SourceLocation) -> Value {
-                          const auto& suffix = args[1].as_string();
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& suffix = expect_string(args[1], "String.remove_suffix", loc);
 
                           if (s.ends_with(suffix)) {
                               return Value{s.substr(0, s.size() - suffix.size())};
@@ -310,7 +338,7 @@ void register_string_transform(const EnvPtr& env) {
             std::string result{};
 
             for (const auto& elem : elems) {
-                const auto raw = elem.as_integer();
+                const auto raw = expect_integer(elem, "String.from_codepoints", loc);
 
                 if (raw < 0 || raw > 0x10FFFF || (raw >= 0xD800 && raw <= 0xDFFF)) {
                     return failure_msg("String", "from_codepoints",
@@ -351,7 +379,7 @@ void register_string_transform(const EnvPtr& env) {
             result.reserve(elems.size());
 
             for (const auto& elem : elems) {
-                const auto byte = elem.as_integer();
+                const auto byte = expect_integer(elem, "String.from_bytes", loc);
 
                 if (byte < 0 || byte > 255) {
                     return failure_msg("String", "from_bytes",
@@ -467,11 +495,8 @@ void register_string_transform(const EnvPtr& env) {
 
         .func("levenshtein_distance", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "String.levenshtein_distance", loc);
-            (void)expect_string(args[1], "String.levenshtein_distance", loc);
-
-            const auto& a = args[0].as_string();
-            const auto& b = args[1].as_string();
+            const auto& a = expect_string(args[0], "String.levenshtein_distance", loc);
+            const auto& b = expect_string(args[1], "String.levenshtein_distance", loc);
 
             const auto len_a = utf8_count(a);
             const auto len_b = utf8_count(b);
@@ -484,40 +509,34 @@ void register_string_transform(const EnvPtr& env) {
                                    loc, "use shorter strings"};
             }
 
-            const auto cols = static_cast<std::size_t>(len_b) + 1;
+            // Decode each string once up front; the O(len_a * len_b) inner loop
+            // then compares plain integers instead of re-decoding `b` and
+            // building a std::string per comparison.
+            const auto cps_a = codepoints_for_comparison(a);
+            const auto cps_b = codepoints_for_comparison(b);
+
+            const auto cols = cps_b.size() + 1;
 
             std::vector<std::int64_t> prev(cols);
             std::vector<std::int64_t> curr(cols);
 
             std::iota(prev.begin(), prev.end(), std::int64_t{0});
 
-            std::size_t byte_i = 0;
+            for (std::size_t i = 1; i <= cps_a.size(); ++i) {
+                const auto cp_a = cps_a[i - 1];
 
-            for (std::int64_t i = 1; i <= len_a; ++i) {
-                const auto cp_a = utf8_char_at_byte(a, byte_i);
-                byte_i += utf8_advance(a, byte_i);
+                curr[0] = static_cast<std::int64_t>(i);
 
-                curr[0] = i;
+                for (std::size_t j = 1; j < cols; ++j) {
+                    const std::int64_t cost = (cp_a == cps_b[j - 1]) ? 0 : 1;
 
-                std::size_t byte_j = 0;
-
-                for (std::int64_t j = 1; j <= len_b; ++j) {
-                    const auto cp_b = utf8_char_at_byte(b, byte_j);
-                    byte_j += utf8_advance(b, byte_j);
-
-                    const auto cost = (cp_a == cp_b) ? 0 : 1;
-
-                    curr[static_cast<std::size_t>(j)] = std::min({
-                        prev[static_cast<std::size_t>(j)] + 1,
-                        curr[static_cast<std::size_t>(j) - 1] + 1,
-                        prev[static_cast<std::size_t>(j) - 1] + cost,
-                    });
+                    curr[j] = std::min({prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost});
                 }
 
                 std::swap(prev, curr);
             }
 
-            return Value{prev[static_cast<std::size_t>(len_b)]};
+            return Value{prev[cps_b.size()]};
         })
 
         .func("is_palindrome", 1)

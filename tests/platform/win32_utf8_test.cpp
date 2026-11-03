@@ -8,7 +8,7 @@
 #include "common/platform_utils.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::wstring_to_utf8;
 
 // ═══════════════════════════════════════════════════════════
 // wstring_to_utf8

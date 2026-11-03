@@ -9,16 +9,13 @@
 #include "analysis/source/source_location.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/collections/container_module_builder.hpp"
+#include "runtime/stdlib/collections/container_ops.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 
 namespace luma {
 
 namespace {
-
-[[nodiscard]] bool contains_value(std::span<const Value> elements, const Value& needle) {
-    return std::ranges::any_of(elements, [&](const Value& v) { return v.equals(needle); });
-}
 
 // Predicate helpers for the set-algebra queries.  `set.contains()` consults
 // SetValue's own cached hash index, so each test is O(1) average and the whole

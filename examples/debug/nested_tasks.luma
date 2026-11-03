@@ -1,0 +1,24 @@
+# Nested task test — a spawned task opens its own task_scope and spawns again.
+# Every task, at any nesting depth, must appear as its own debugger thread.
+
+function integer inner_work(integer n) {
+    integer doubled = n * 2
+    return doubled
+}
+
+function integer outer_work(integer n) {
+    array<integer> parts = task_scope {
+        spawn inner_work(n)
+    }
+
+    return Array.get(parts, 0) ?? 0
+}
+
+@main
+function void main() {
+    array<integer> results = task_scope {
+        spawn outer_work(21)
+    }
+
+    print("Result: ${Array.get(results, 0) ?? 0}")
+}

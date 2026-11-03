@@ -12,7 +12,8 @@
 //   - analysis/types/type_checking_context.hpp: Accessed via TypeCheckingServices (in .cpp only).
 // ─────────────────────────────────────────────────────────────────────────────
 
-#pragma once
+#ifndef LUMA_TYPES_SYMBOL_EXPORTER_HPP
+#define LUMA_TYPES_SYMBOL_EXPORTER_HPP
 
 #include "analysis/types/type_info.hpp"
 
@@ -26,3 +27,5 @@ public:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_SYMBOL_EXPORTER_HPP

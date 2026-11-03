@@ -1,24 +1,35 @@
 # ─────────────────────────────────────────────────────────────
 # Luma — CodeQL configuration
 #
-# Excludes vendored third-party code from CodeQL analysis. The
-# excluded libraries are built from upstream source and are not
-# maintained in this repository, so their findings are not
-# actionable here and must not be patched locally (that would
-# fork upstream).
+# Query suite: security-extended adds lower-precision security
+# queries on top of the default suite. Luma ships a sandbox,
+# sockets, HTTP/TLS, decompression, process spawning, and an
+# editor-extension downloader, so the broader coverage is worth
+# the extra alerts.
 #
-# This mirrors how the clang-tidy HeaderFilterRegex restricts
-# diagnostics to first-party directories.
+# Vendored third-party code (external/mbedtls, external/miniz)
+# is built from upstream source and is not maintained in this
+# repository, so its findings are not actionable here and must
+# not be patched locally (that would fork upstream).
+#
+# paths-ignore is honoured only by languages analysed WITHOUT a
+# build (build-mode: none — actions, javascript-typescript,
+# python, rust in codeql.yml). It has NO effect on c-cpp, which
+# uses build-mode: manual: CodeQL extracts every compilation it
+# observes. codeql.yml therefore excludes the vendored C sources
+# by building mbedtls_lib and miniz_lib BEFORE the CodeQL init
+# step, so their compilations are never traced. The entries
+# below are kept so the exclusion still holds if c-cpp is ever
+# switched to build-mode: none.
 #
 # paths-ignore entries use glob patterns (trailing /**) to ensure
-# all files under each directory are excluded. This is honoured
-# for every language in codeql.yml because each one is analysed
-# with build-mode: none (buildless extraction), which supports
-# path filtering for compiled languages (C/C++) too.
+# all files under each directory are excluded.
 # ─────────────────────────────────────────────────────────────
 name: "Luma CodeQL config"
+
+queries:
+  - uses: security-extended
 
 paths-ignore:
   - "external/mbedtls/**"
   - "external/miniz/**"
-  - "benchmarks/**"

@@ -27,7 +27,7 @@ from __future__ import annotations
 import sys
 
 from _common import REPO_ROOT
-from _gates import Gate, git_ls, npm_script_gate, run_cli, skip, which
+from _gates import Gate, find_clang_format, git_ls, npm_script_gate, run_cli, skip, which
 
 VSCODE_DIR = REPO_ROOT / "extensions" / "vscode"
 ZED_DIR = REPO_ROOT / "extensions" / "zed"
@@ -67,9 +67,9 @@ def _ruff_gates() -> list[Gate]:
 def _clang_format_gate() -> Gate:
     """clang-format in place over tracked C++ (excluding vendored external/)."""
     name, description = "clang-format", "C++ format (clang-format)"
-    exe = which("clang-format")
+    exe, reason = find_clang_format()
     if exe is None:
-        return skip(name, description, "clang-format not found (install LLVM/clang tools)")
+        return skip(name, description, reason)
     files = [f for f in git_ls(*CLANG_FORMAT_DIRS) if f.endswith((".cpp", ".hpp"))]
     if not files:
         return skip(name, description, "no C++ files tracked")

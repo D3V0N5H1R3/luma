@@ -32,6 +32,17 @@ void register_log_functions(std::vector<FunctionSpec>& specs, const ModuleBuilde
 
 void register_terminal_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                  const ParamShorthands& p) {
+    // The console-input members — enable_raw_mode, enable_mouse, read_key,
+    // read_key_timeout, get_input, read_line, get_cursor_position — read the
+    // interactive console, so the runtime withholds them in sandbox mode (--box):
+    // Terminal is a sandbox-aware module and skips them at registration
+    // (register_terminal_ns / register_terminal_ansi), and
+    // sandbox_withheld_functions() reports them with the sandbox error.  They
+    // stay Capability::None here for the same reason as Log.set_output:
+    // tagging them Console would put the whole "Terminal" prefix in the
+    // module-level blocked set, contradicting the registry (Terminal is not
+    // os_only) and mislabelling typos of the still-available output functions.
+    // See the cap_override note in stdlib_catalog_internal.hpp.
     append_specs(
         specs,
         {

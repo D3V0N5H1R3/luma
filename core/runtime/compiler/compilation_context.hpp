@@ -55,6 +55,12 @@ struct CompilerScope {
     // Active try/catch/finally blocks — used to unwind exception handlers
     // on break, continue, and return.
     ExceptionContext exception_context;
+
+    // Set once a full constant pool / name table has been reported for this
+    // function, so the overflow produces one diagnostic instead of one per
+    // remaining constant or name.
+    bool constant_overflow_reported{false};
+    bool name_overflow_reported{false};
 };
 
 /// Tracks compiled function artifacts during compilation.

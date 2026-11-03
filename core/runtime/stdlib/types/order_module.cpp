@@ -65,12 +65,15 @@ constexpr std::string_view k_ordering_type = "Ordering";
                            "pass an Ordering variant, e.g. Ordering.Less"};
     }
 
-    const auto sign = ordering_sign_from_variant(arg.as_choice()->variant);
+    const auto& choice = *arg.as_choice();
+    const auto sign = choice.type_name == k_ordering_type
+                          ? ordering_sign_from_variant(choice.variant)
+                          : std::nullopt;
 
     if (!sign.has_value()) {
-        throw RuntimeError{
-            std::format("{}: unknown ordering 'Ordering.{}'", func_name, arg.as_choice()->variant),
-            loc, "use an Ordering variant: Less, Equal, or Greater"};
+        throw RuntimeError{std::format("{}: expected an Ordering, got '{}.{}'", func_name,
+                                       choice.type_name, choice.variant),
+                           loc, "use an Ordering variant: Less, Equal, or Greater"};
     }
 
     return *sign;

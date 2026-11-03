@@ -2,8 +2,12 @@
 
 #include <algorithm>
 #include <format>
+#include <optional>
+#include <variant>
+#include <vector>
 
 #include "analysis/ast/declaration.hpp"
+#include "analysis/ast/expression.hpp"
 #include "analysis/types/type_checking_context.hpp"
 #include "common/string_hash.hpp"
 
@@ -115,6 +119,97 @@ struct BooleanCoverage {
     return cov;
 }
 
+// A constant a pattern compares against: an integer (possibly negated),
+// number, string, boolean, or none literal.
+using PatternConstant = LiteralExpression::Value;
+
+[[nodiscard]] std::optional<PatternConstant> literal_constant(const Expression& expr) {
+    if (const auto value = get_signed_integer_value(expr)) {
+        return PatternConstant{*value};
+    }
+
+    if (const auto* literal = try_cast<LiteralExpression>(expr)) {
+        return literal->value;
+    }
+
+    return std::nullopt;
+}
+
+// The single constant a pattern matches exactly — a bare literal arm, or an
+// `== <literal>` comparison — if any.
+[[nodiscard]] std::optional<PatternConstant> equality_constant(const MatchPattern& pattern) {
+    switch (pattern.kind()) {
+        case MatchArm::Kind::IntegerCase:
+            return PatternConstant{pattern.integer_value()};
+        case MatchArm::Kind::StringCase:
+            return PatternConstant{pattern.string_value()};
+        case MatchArm::Kind::BooleanCase:
+            return PatternConstant{pattern.boolean_value()};
+        case MatchArm::Kind::NoneCase:
+            return PatternConstant{std::monostate{}};
+        case MatchArm::Kind::Comparison:
+            if (pattern.comparison_op() == TokenType::EqualsEquals && pattern.comparison_value()) {
+                return literal_constant(*pattern.comparison_value());
+            }
+
+            return std::nullopt;
+        default:
+            return std::nullopt;
+    }
+}
+
+// Does an unguarded arm match every value of any type?  An 'else' does; so
+// does an unguarded `case != c` when another unguarded arm matches exactly `c`
+// — together the two cover every value.  A lone `case != c` does not: the
+// value `c` itself would fall through every arm (and a match expression would
+// then yield the subject unchanged).
+[[nodiscard]] bool has_catch_all(const std::vector<MatchArm>& arms) {
+    std::vector<PatternConstant> exact;
+
+    for (const auto& arm : arms) {
+        if (arm.kind() == MatchArm::Kind::Else) {
+            return true;
+        }
+
+        if (arm.has_guard()) {
+            continue;
+        }
+
+        if (auto constant = equality_constant(arm)) {
+            exact.push_back(*std::move(constant));
+        }
+
+        for (const auto& alt : arm.alternatives) {
+            if (auto constant = equality_constant(alt)) {
+                exact.push_back(*std::move(constant));
+            }
+        }
+    }
+
+    return std::ranges::any_of(arms, [&](const MatchArm& arm) {
+        if (arm.has_guard() || arm.kind() != MatchArm::Kind::Comparison ||
+            arm.comparison_op() != TokenType::BangEquals || !arm.comparison_value()) {
+            return false;
+        }
+
+        const auto excluded = literal_constant(*arm.comparison_value());
+
+        return excluded && std::ranges::find(exact, *excluded) != exact.end();
+    });
+}
+
+// Does every pattern of every arm (and alternative) satisfy `pred`, ignoring
+// 'else' arms?
+template <typename Pred>
+[[nodiscard]] bool all_patterns(const std::vector<MatchArm>& arms, Pred pred) {
+    return std::ranges::all_of(arms, [&](const MatchArm& arm) {
+        return arm.kind() == MatchArm::Kind::Else ||
+               (pred(arm.kind()) && std::ranges::all_of(arm.alternatives, [&](const auto& alt) {
+                    return pred(alt.kind());
+                }));
+    });
+}
+
 } // namespace
 
 // ═══════════════════════════════════════════════════════════
@@ -157,11 +252,15 @@ void MatchExhaustivenessChecker::check(const std::vector<MatchArm>& arms,
                       loc, "add a 'case Type { ... } { ... }' arm or an 'else' arm");
         }
     } else {
-        // For other types, an else arm is required if comparison, string,
-        // or integer case arms are used.
-        bool has_else = std::ranges::any_of(
-            arms, [](const auto& arm) { return arm.kind() == MatchArm::Kind::Else; });
+        // Other subjects have no finite set of values to enumerate, so any
+        // refutable arm needs a catch-all.  A permissive subject (unknown or
+        // StdlibAny) keeps the pattern-based rule: only comparison, string,
+        // and integer arms demand one.
+        const bool is_dynamic_subject = subject_type.kind == TypeInfo::Kind::StdlibAny ||
+                                        subject_type.kind == TypeInfo::Kind::Unknown ||
+                                        subject_type.kind == TypeInfo::Kind::Interface;
         bool has_comparison{false};
+        bool has_refutable{false};
 
         for (const auto& arm : arms) {
             if (arm.kind() == MatchArm::Kind::Comparison ||
@@ -169,19 +268,25 @@ void MatchExhaustivenessChecker::check(const std::vector<MatchArm>& arms,
                 arm.kind() == MatchArm::Kind::IntegerCase ||
                 arm.kind() == MatchArm::Kind::IntegerRangeCase) {
                 has_comparison = true;
+            }
 
-                // A != arm acts as a catch-all, but only when it is unguarded —
-                // a guarded != might not match, so it cannot stand in for 'else'.
-                if (arm.kind() == MatchArm::Kind::Comparison &&
-                    arm.comparison_op() == TokenType::BangEquals && !arm.has_guard()) {
-                    has_else = true;
-                }
+            if (arm.kind() != MatchArm::Kind::Else) {
+                has_refutable = true;
             }
         }
 
-        if (has_comparison && !has_else) {
+        if (has_catch_all(arms)) {
+            return;
+        }
+
+        if (has_comparison) {
             tc_.error("match with comparison arms must include an 'else' arm", loc,
-                      "add an 'else' arm to handle values not covered by comparisons");
+                      "add an 'else' arm to handle values not covered by comparisons (a "
+                      "'case != v' arm covers the rest only alongside a 'case v' arm)");
+        } else if (has_refutable && !is_dynamic_subject) {
+            tc_.error(
+                std::format("match on '{}' must include an 'else' arm", subject_type.to_string()),
+                loc, "add an 'else' arm to handle values the other arms do not match");
         }
     }
 }
@@ -191,63 +296,53 @@ void MatchExhaustivenessChecker::check(const std::vector<MatchArm>& arms,
 // ═══════════════════════════════════════════════════════════
 
 bool MatchExhaustivenessChecker::is_exhaustive(const MatchStatement& match_stmt) const {
-    if (match_stmt.arms.empty()) {
+    const auto& arms = match_stmt.arms;
+
+    if (arms.empty()) {
         return false;
     }
 
-    bool has_else{false};
-    bool has_success{false};
-    bool has_failure{false};
-    bool has_some{false};
-    bool has_none{false};
-
-    const auto bool_cov = collect_boolean_coverage(match_stmt.arms);
-
-    for (const auto& arm : match_stmt.arms) {
-        // Guarded arms are conditional and cannot make a match exhaustive.
-        if (arm.has_guard()) {
-            continue;
-        }
-
-        if (arm.kind() == MatchArm::Kind::Else) {
-            has_else = true;
-        }
-
-        if (arm.kind() == MatchArm::Kind::SuccessResult) {
-            has_success = true;
-        }
-
-        if (arm.kind() == MatchArm::Kind::FailureResult) {
-            has_failure = true;
-        }
-
-        if (arm.kind() == MatchArm::Kind::SomeCase) {
-            has_some = true;
-        }
-
-        if (arm.kind() == MatchArm::Kind::NoneCase) {
-            has_none = true;
-        }
+    if (has_catch_all(arms)) {
+        return true;
     }
 
-    const bool simple_exhaustive = has_else || (has_success && has_failure) ||
-                                   (has_some && has_none) ||
-                                   (bool_cov.has_true && bool_cov.has_false);
+    // This query serves return-path analysis, which has no subject type.  The
+    // arms' patterns are validated against the subject when the match is
+    // checked, so infer the subject's kind from them instead: arms cover the
+    // subject only when every pattern belongs to one kind and together they
+    // enumerate it.  Mixing kinds (`case true` beside `success(v)`) proves
+    // nothing about any single subject type.
+    using Kind = MatchArm::Kind;
 
-    if (simple_exhaustive) {
-        return true;
+    const auto unguarded_covers = [&](Kind kind) {
+        return std::ranges::any_of(arms, [&](const MatchArm& arm) {
+            return !arm.has_guard() && (arm.kind() == kind ||
+                                        std::ranges::any_of(arm.alternatives, [&](const auto& alt) {
+                                            return alt.kind() == kind;
+                                        }));
+        });
+    };
+
+    if (all_patterns(arms, [](Kind k) { return k == Kind::BooleanCase; })) {
+        const auto bool_cov = collect_boolean_coverage(arms);
+        return bool_cov.has_true && bool_cov.has_false;
+    }
+
+    if (all_patterns(arms,
+                     [](Kind k) { return k == Kind::SuccessResult || k == Kind::FailureResult; })) {
+        return unguarded_covers(Kind::SuccessResult) && unguarded_covers(Kind::FailureResult);
+    }
+
+    if (all_patterns(arms, [](Kind k) { return k == Kind::SomeCase || k == Kind::NoneCase; })) {
+        return unguarded_covers(Kind::SomeCase) && unguarded_covers(Kind::NoneCase);
     }
 
     // An unguarded record pattern irrefutably covers a record subject.
-    const bool has_record = std::ranges::any_of(match_stmt.arms, [](const MatchArm& arm) {
-        return !arm.has_guard() && arm.kind() == MatchArm::Kind::RecordCase;
-    });
-
-    if (has_record) {
-        return true;
+    if (all_patterns(arms, [](Kind k) { return k == Kind::RecordCase; })) {
+        return unguarded_covers(Kind::RecordCase);
     }
 
-    return is_choice_exhaustive(match_stmt.arms);
+    return is_choice_exhaustive(arms);
 }
 
 // ═══════════════════════════════════════════════════════════

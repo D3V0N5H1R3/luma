@@ -12,33 +12,33 @@ function void main() {
     # ── Type conversions ──
     print("=== Type conversions ===")
 
-    string s = Converter.to_string(42)
-    print("to_string(42)    = '${s}'")
+    string text = Converter.to_string(42)
+    print("to_string(42)    = '${text}'")
 
-    number n = Result.unwrap(Converter.to_number("3.14"))
-    print("to_number('3.14') = ${n}")
+    number parsed_number = Result.unwrap(Converter.to_number("3.14"))
+    print("to_number('3.14') = ${parsed_number}")
 
-    integer i = Result.unwrap(Converter.to_integer("256"))
-    print("to_integer('256') = ${i}")
+    integer parsed_integer = Result.unwrap(Converter.to_integer("256"))
+    print("to_integer('256') = ${parsed_integer}")
 
-    boolean b = Result.unwrap(Converter.to_boolean("true"))
-    print("to_boolean('true') = ${b}")
+    boolean parsed_boolean = Result.unwrap(Converter.to_boolean("true"))
+    print("to_boolean('true') = ${parsed_boolean}")
 
     # ── Base conversions ──
     print("")
     print("=== Base conversions ===")
 
     string binary = Converter.to_binary(42)
-    print("to_binary(42)   = ${binary}")
+    print("to_binary(42)          = ${binary}")
 
     integer from_bin = Result.unwrap(Converter.from_binary("101010"))
-    print("from_binary     = ${from_bin}")
+    print("from_binary('101010')  = ${from_bin}")
 
     string hex = Converter.to_hexadecimal(255)
-    print("to_hex(255)     = ${hex}")
+    print("to_hexadecimal(255)    = ${hex}")
 
     integer from_hex = Result.unwrap(Converter.from_hexadecimal("ff"))
-    print("from_hex('ff')  = ${from_hex}")
+    print("from_hexadecimal('ff') = ${from_hex}")
 
     # Roundtrip check
     integer original = 12345
@@ -52,10 +52,10 @@ function void main() {
 
     array<integer> roman_values = [1, 4, 9, 14, 42, 1999, 2024]
 
-    for v in roman_values {
-        string roman = Result.unwrap(Converter.to_roman(v))
+    for value in roman_values {
+        string roman = Result.unwrap(Converter.to_roman(value))
         integer back = Result.unwrap(Converter.from_roman(roman))
-        print("  ${v} -> ${roman} -> ${back}")
+        print("  ${value} -> ${roman} -> ${back}")
     }
 
     # ── Number to words ──
@@ -64,8 +64,8 @@ function void main() {
 
     array<integer> numbers = [0, 1, 13, 42, 100, 999, 1000]
 
-    for n in numbers {
-        print("  ${n} -> ${Converter.number_to_words(n)}")
+    for value in numbers {
+        print("  ${value} -> ${Converter.number_to_words(value)}")
     }
 
     # ── Ordinals ──
@@ -87,8 +87,8 @@ function void main() {
     integer code = Result.unwrap(Converter.character_to_codepoint("A"))
     print("'A' -> codepoint ${code}")
 
-    string ch = Result.unwrap(Converter.codepoint_to_character(65))
-    print("65  -> character '${ch}'")
+    string letter = Result.unwrap(Converter.codepoint_to_character(65))
+    print("65  -> character '${letter}'")
 
     string star = Result.unwrap(Converter.codepoint_to_character(9733))
     print("9733 -> character '${star}'")

@@ -1,12 +1,13 @@
 // Include resolver unit tests.
 
 #include <algorithm>
-#include <cstdlib>
 #include <filesystem>
 #include <format>
-#include <fstream>
+#include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -15,26 +16,92 @@
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/parser/parser.hpp"
 #include "analysis/source/source_manager.hpp"
+#include "common/path_utils.hpp"
 #include "runtime/include/include_resolver.hpp"
 #include "runtime/include/include_resolver_detail.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::DeclarationKind;
+using luma::Diagnostic;
+using luma::DiagnosticCollector;
+using luma::FileId;
+using luma::FunctionDeclaration;
+using luma::IncludeResolver;
+using luma::InclusionGuard;
+using luma::InclusionStack;
+using luma::Lexer;
+using luma::make_default_parse_callback;
+using luma::Parser;
+using luma::path_from_utf8;
+using luma::path_to_utf8;
+using luma::Program;
+using luma::Severity;
+using luma::SourceFile;
+using luma::SourceManager;
+using luma::StringSet;
+using luma::test::ScopedEnv;
+using luma::test::TempDir;
+using luma::test::TempFile;
 
 // ─── Helpers ───
+
+// Parse `source` as input with no file of its own (FileId 0), as the REPL and
+// `--eval` do.
+[[nodiscard]] static Program parse_unanchored(const std::string& source) {
+    DiagnosticCollector discarded;
+    Lexer lexer{source, discarded, FileId{0}};
+    auto tokens = lexer.tokenize();
+    Parser parser{std::move(tokens)};
+    return parser.parse();
+}
+
+// Parse a file already loaded into `sm`.
+[[nodiscard]] static Program parse_loaded(const SourceFile& source_file) {
+    DiagnosticCollector discarded;
+    Lexer lexer{source_file.text, discarded, source_file.file_id};
+    auto tokens = lexer.tokenize();
+    Parser parser{std::move(tokens)};
+    return parser.parse();
+}
+
+namespace {
+
+// Switches the working directory for the guard's lifetime.
+class ScopedCwd {
+public:
+    explicit ScopedCwd(const std::filesystem::path& dir)
+        : previous_{std::filesystem::current_path()} {
+        std::filesystem::current_path(dir);
+    }
+
+    ~ScopedCwd() noexcept {
+        std::error_code ec;
+        std::filesystem::current_path(previous_, ec);
+    }
+
+    ScopedCwd(const ScopedCwd&) = delete;
+    ScopedCwd& operator=(const ScopedCwd&) = delete;
+    ScopedCwd(ScopedCwd&&) = delete;
+    ScopedCwd& operator=(ScopedCwd&&) = delete;
+
+private:
+    std::filesystem::path previous_;
+};
+
+[[nodiscard]] bool any_message_contains(const std::vector<Diagnostic>& diagnostics,
+                                        std::string_view needle) {
+    return std::ranges::any_of(diagnostics, [needle](const Diagnostic& d) {
+        return d.message.find(needle) != std::string::npos;
+    });
+}
+
+} // namespace
 
 // Load and resolve a program from a real file.
 // Asserts that resolution succeeds (no errors).
 [[nodiscard]] static Program load_and_resolve(const std::string& path,
                                               SourceManager& source_manager) {
-    const auto& source_file = source_manager.load(path);
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(source_manager.load(path));
 
     IncludeResolver resolver{source_manager};
     const bool success = resolver.resolve(program);
@@ -55,10 +122,10 @@ static void test_program_without_includes() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile main_file{dir / "no_includes.luma", "@main\n"
-                                                 "function void main() {\n"
-                                                 "    print(\"hello\")\n"
-                                                 "}\n"};
+    const TempFile main_file{dir / "no_includes.luma", "@main\n"
+                                                       "function void main() {\n"
+                                                       "    print(\"hello\")\n"
+                                                       "}\n"};
 
     SourceManager sm;
 
@@ -72,15 +139,15 @@ static void test_single_include() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile helper{dir / "helper.luma", "function string greet(string name) {\n"
-                                         "    return \"hello \" + name\n"
-                                         "}\n"};
-    TempFile main_file{dir / "single_include.luma", "include \"helper.luma\"\n"
-                                                    "\n"
-                                                    "@main\n"
-                                                    "function void main() {\n"
-                                                    "    print(greet(\"world\"))\n"
-                                                    "}\n"};
+    const TempFile helper{dir / "helper.luma", "function string greet(string name) {\n"
+                                               "    return \"hello \" + name\n"
+                                               "}\n"};
+    const TempFile main_file{dir / "single_include.luma", "include \"helper.luma\"\n"
+                                                          "\n"
+                                                          "@main\n"
+                                                          "function void main() {\n"
+                                                          "    print(greet(\"world\"))\n"
+                                                          "}\n"};
 
     SourceManager sm;
 
@@ -95,16 +162,16 @@ static void test_multiple_includes() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile file_a{dir / "a.luma", "function integer func_a() { return 1 }\n"};
-    TempFile file_b{dir / "b.luma", "function integer func_b() { return 2 }\n"};
-    TempFile main_file{dir / "multi_include.luma", "include \"a.luma\"\n"
-                                                   "include \"b.luma\"\n"
-                                                   "\n"
-                                                   "@main\n"
-                                                   "function void main() {\n"
-                                                   "    print(func_a())\n"
-                                                   "    print(func_b())\n"
-                                                   "}\n"};
+    const TempFile file_a{dir / "a.luma", "function integer func_a() { return 1 }\n"};
+    const TempFile file_b{dir / "b.luma", "function integer func_b() { return 2 }\n"};
+    const TempFile main_file{dir / "multi_include.luma", "include \"a.luma\"\n"
+                                                         "include \"b.luma\"\n"
+                                                         "\n"
+                                                         "@main\n"
+                                                         "function void main() {\n"
+                                                         "    print(func_a())\n"
+                                                         "    print(func_b())\n"
+                                                         "}\n"};
 
     SourceManager sm;
 
@@ -118,14 +185,14 @@ static void test_include_once() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile shared{dir / "shared.luma", "function integer shared_func() { return 42 }\n"};
-    TempFile main_file{dir / "include_once.luma", "include \"shared.luma\"\n"
-                                                  "include \"shared.luma\"\n"
-                                                  "\n"
-                                                  "@main\n"
-                                                  "function void main() {\n"
-                                                  "    print(shared_func())\n"
-                                                  "}\n"};
+    const TempFile shared{dir / "shared.luma", "function integer shared_func() { return 42 }\n"};
+    const TempFile main_file{dir / "include_once.luma", "include \"shared.luma\"\n"
+                                                        "include \"shared.luma\"\n"
+                                                        "\n"
+                                                        "@main\n"
+                                                        "function void main() {\n"
+                                                        "    print(shared_func())\n"
+                                                        "}\n"};
 
     SourceManager sm;
 
@@ -140,17 +207,17 @@ static void test_transitive_include() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile base{dir / "base.luma", "function integer base_func() { return 10 }\n"};
-    TempFile middle{dir / "middle.luma", "include \"base.luma\"\n"
-                                         "\n"
-                                         "function integer middle_func() { return 20 }\n"};
-    TempFile main_file{dir / "transitive.luma", "include \"middle.luma\"\n"
-                                                "\n"
-                                                "@main\n"
-                                                "function void main() {\n"
-                                                "    print(base_func())\n"
-                                                "    print(middle_func())\n"
-                                                "}\n"};
+    const TempFile base{dir / "base.luma", "function integer base_func() { return 10 }\n"};
+    const TempFile middle{dir / "middle.luma", "include \"base.luma\"\n"
+                                               "\n"
+                                               "function integer middle_func() { return 20 }\n"};
+    const TempFile main_file{dir / "transitive.luma", "include \"middle.luma\"\n"
+                                                      "\n"
+                                                      "@main\n"
+                                                      "function void main() {\n"
+                                                      "    print(base_func())\n"
+                                                      "    print(middle_func())\n"
+                                                      "}\n"};
 
     SourceManager sm;
 
@@ -167,10 +234,10 @@ static void test_circular_include_is_safe() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile file_a{dir / "circ_a.luma", "include \"circ_b.luma\"\n"
-                                         "function integer func_a() { return 1 }\n"};
-    TempFile file_b{dir / "circ_b.luma", "include \"circ_a.luma\"\n"
-                                         "function integer func_b() { return 2 }\n"};
+    const TempFile file_a{dir / "circ_a.luma", "include \"circ_b.luma\"\n"
+                                               "function integer func_a() { return 1 }\n"};
+    const TempFile file_b{dir / "circ_b.luma", "include \"circ_a.luma\"\n"
+                                               "function integer func_b() { return 2 }\n"};
 
     SourceManager sm;
 
@@ -187,8 +254,8 @@ static void test_self_include_is_safe() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile self_file{dir / "self.luma", "include \"self.luma\"\n"
-                                          "function integer self_func() { return 1 }\n"};
+    const TempFile self_file{dir / "self.luma", "include \"self.luma\"\n"
+                                                "function integer self_func() { return 1 }\n"};
 
     SourceManager sm;
 
@@ -202,23 +269,16 @@ static void test_include_nonexistent_file() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile main_file{dir / "bad_include.luma", "include \"does_not_exist.luma\"\n"
-                                                 "\n"
-                                                 "@main\n"
-                                                 "function void main() {\n"
-                                                 "    print(\"unreachable\")\n"
-                                                 "}\n"};
+    const TempFile main_file{dir / "bad_include.luma", "include \"does_not_exist.luma\"\n"
+                                                       "\n"
+                                                       "@main\n"
+                                                       "function void main() {\n"
+                                                       "    print(\"unreachable\")\n"
+                                                       "}\n"};
 
     SourceManager sm;
 
-    const auto& source_file = sm.load(main_file.path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
     IncludeResolver resolver{sm};
     const bool success = resolver.resolve(program);
@@ -226,7 +286,7 @@ static void test_include_nonexistent_file() {
     ASSERT_FALSE(success);
 
     const auto& diagnostics = resolver.get_diagnostics();
-    ASSERT_TRUE(!diagnostics.empty());
+    ASSERT_FALSE(diagnostics.empty());
     ASSERT_EQ(diagnostics.front().severity, Severity::Error);
 }
 
@@ -236,18 +296,18 @@ static void test_diamond_include() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile d_file{dir / "d.luma", "function integer func_d() { return 4 }\n"};
-    TempFile b_file{dir / "diamond_b.luma", "include \"d.luma\"\n"
-                                            "function integer func_b() { return 2 }\n"};
-    TempFile c_file{dir / "diamond_c.luma", "include \"d.luma\"\n"
-                                            "function integer func_c() { return 3 }\n"};
-    TempFile main_file{dir / "diamond_main.luma", "include \"diamond_b.luma\"\n"
-                                                  "include \"diamond_c.luma\"\n"
-                                                  "\n"
-                                                  "@main\n"
-                                                  "function void main() {\n"
-                                                  "    print(func_d())\n"
-                                                  "}\n"};
+    const TempFile d_file{dir / "d.luma", "function integer func_d() { return 4 }\n"};
+    const TempFile b_file{dir / "diamond_b.luma", "include \"d.luma\"\n"
+                                                  "function integer func_b() { return 2 }\n"};
+    const TempFile c_file{dir / "diamond_c.luma", "include \"d.luma\"\n"
+                                                  "function integer func_c() { return 3 }\n"};
+    const TempFile main_file{dir / "diamond_main.luma", "include \"diamond_b.luma\"\n"
+                                                        "include \"diamond_c.luma\"\n"
+                                                        "\n"
+                                                        "@main\n"
+                                                        "function void main() {\n"
+                                                        "    print(func_d())\n"
+                                                        "}\n"};
 
     SourceManager sm;
 
@@ -262,17 +322,17 @@ static void test_include_with_records() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile types_file{dir / "types.luma", "record Point {\n"
-                                            "    number x,\n"
-                                            "    number y\n"
-                                            "}\n"};
-    TempFile main_file{dir / "use_types.luma", "include \"types.luma\"\n"
-                                               "\n"
-                                               "@main\n"
-                                               "function void main() {\n"
-                                               "    Point p = Point { x = 1.0, y = 2.0 }\n"
-                                               "    print(p.x)\n"
-                                               "}\n"};
+    const TempFile types_file{dir / "types.luma", "record Point {\n"
+                                                  "    number x,\n"
+                                                  "    number y\n"
+                                                  "}\n"};
+    const TempFile main_file{dir / "use_types.luma", "include \"types.luma\"\n"
+                                                     "\n"
+                                                     "@main\n"
+                                                     "function void main() {\n"
+                                                     "    Point p = Point { x = 1.0, y = 2.0 }\n"
+                                                     "    print(p.x)\n"
+                                                     "}\n"};
 
     SourceManager sm;
 
@@ -289,10 +349,10 @@ static void test_include_preserves_declaration_order() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile helper{dir / "order_helper.luma", "function integer helper() { return 1 }\n"};
-    TempFile main_file{dir / "order_main.luma", "function integer before() { return 0 }\n"
-                                                "include \"order_helper.luma\"\n"
-                                                "function integer after() { return 2 }\n"};
+    const TempFile helper{dir / "order_helper.luma", "function integer helper() { return 1 }\n"};
+    const TempFile main_file{dir / "order_main.luma", "function integer before() { return 0 }\n"
+                                                      "include \"order_helper.luma\"\n"
+                                                      "function integer after() { return 2 }\n"};
 
     SourceManager sm;
 
@@ -304,9 +364,9 @@ static void test_include_preserves_declaration_order() {
     const auto& second = static_cast<const FunctionDeclaration&>(*program.declarations[1]);
     const auto& third = static_cast<const FunctionDeclaration&>(*program.declarations[2]);
 
-    ASSERT_TRUE(first.name == "before");
-    ASSERT_TRUE(second.name == "helper");
-    ASSERT_TRUE(third.name == "after");
+    ASSERT_EQ(first.name, "before");
+    ASSERT_EQ(second.name, "helper");
+    ASSERT_EQ(third.name, "after");
 }
 
 static void test_subdirectory_include() {
@@ -316,13 +376,13 @@ static void test_subdirectory_include() {
 
     std::filesystem::create_directories(sub);
 
-    TempFile sub_file{sub / "sub_helper.luma", "function integer sub_func() { return 99 }\n"};
-    TempFile main_file{dir / "subdir_main.luma", "include \"sub/sub_helper.luma\"\n"
-                                                 "\n"
-                                                 "@main\n"
-                                                 "function void main() {\n"
-                                                 "    print(sub_func())\n"
-                                                 "}\n"};
+    const TempFile sub_file{sub / "sub_helper.luma", "function integer sub_func() { return 99 }\n"};
+    const TempFile main_file{dir / "subdir_main.luma", "include \"sub/sub_helper.luma\"\n"
+                                                       "\n"
+                                                       "@main\n"
+                                                       "function void main() {\n"
+                                                       "    print(sub_func())\n"
+                                                       "}\n"};
 
     SourceManager sm;
 
@@ -338,52 +398,35 @@ static void test_warnings_cleared_between_resolves() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile stmts{dir / "has_stmts.luma", "print(\"side effect\")\n"
-                                           "function integer stmts_func() { return 1 }\n"};
-    TempFile main_a{dir / "warn_a.luma", "include \"has_stmts.luma\"\n"
-                                         "\n"
-                                         "@main\n"
-                                         "function void main() {\n"
-                                         "    print(stmts_func())\n"
-                                         "}\n"};
-    TempFile main_b{dir / "warn_b.luma", "@main\n"
-                                         "function void main() {\n"
-                                         "    print(\"no includes\")\n"
-                                         "}\n"};
+    const TempFile stmts{dir / "has_stmts.luma", "print(\"side effect\")\n"
+                                                 "function integer stmts_func() { return 1 }\n"};
+    const TempFile main_a{dir / "warn_a.luma", "include \"has_stmts.luma\"\n"
+                                               "\n"
+                                               "@main\n"
+                                               "function void main() {\n"
+                                               "    print(stmts_func())\n"
+                                               "}\n"};
+    const TempFile main_b{dir / "warn_b.luma", "@main\n"
+                                               "function void main() {\n"
+                                               "    print(\"no includes\")\n"
+                                               "}\n"};
 
-    SourceManager sm_a;
-    SourceManager sm_b;
+    SourceManager sm;
+    IncludeResolver resolver{sm};
 
-    // Use one resolver for the first call.
-    IncludeResolver resolver_a{sm_a};
+    // The first resolve() warns about the included file's top-level statement.
+    auto prog_a = parse_loaded(sm.load(main_a.path_string()));
 
-    const auto& sf_a = sm_a.load(main_a.path_string());
-    DiagnosticCollector discarded_a;
-    Lexer lexer_a{sf_a.text, discarded_a, sf_a.file_id};
-    auto tokens_a = lexer_a.tokenize();
-    Parser parser_a{std::move(tokens_a)};
-    auto prog_a = parser_a.parse();
+    ASSERT_TRUE(resolver.resolve(prog_a));
+    ASSERT_EQ(resolver.get_diagnostics().size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(resolver.get_diagnostics().front().severity, Severity::Warning);
 
-    (void)resolver_a.resolve(prog_a);
+    // A second resolve() on the same resolver, for a program without
+    // includes, must start from an empty diagnostic list.
+    auto prog_b = parse_loaded(sm.load(main_b.path_string()));
 
-    ASSERT_EQ(resolver_a.get_diagnostics().size(), static_cast<std::size_t>(1));
-
-    // Use a fresh resolver for the second call — a new resolver should
-    // obviously have no warnings.  But also re-resolve the same program
-    // on the original resolver to confirm clearing.
-    SourceManager sm_c;
-    IncludeResolver resolver_b{sm_c};
-
-    const auto& sf_b = sm_c.load(main_b.path_string());
-    DiagnosticCollector discarded_b;
-    Lexer lexer_b{sf_b.text, discarded_b, sf_b.file_id};
-    auto tokens_b = lexer_b.tokenize();
-    Parser parser_b{std::move(tokens_b)};
-    auto prog_b = parser_b.parse();
-
-    (void)resolver_b.resolve(prog_b);
-
-    ASSERT_EQ(resolver_b.get_diagnostics().size(), static_cast<std::size_t>(0));
+    ASSERT_TRUE(resolver.resolve(prog_b));
+    ASSERT_TRUE(resolver.get_diagnostics().empty());
 }
 
 static void test_transitive_warning_not_misattributed() {
@@ -392,36 +435,30 @@ static void test_transitive_warning_not_misattributed() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile c_file{dir / "warn_c.luma", "print(\"side effect in C\")\n"
-                                         "function integer c_func() { return 3 }\n"};
-    TempFile b_file{dir / "warn_b_mid.luma", "include \"warn_c.luma\"\n"
-                                             "function integer b_func() { return 2 }\n"};
-    TempFile main_file{dir / "warn_main.luma", "include \"warn_b_mid.luma\"\n"
-                                               "\n"
-                                               "@main\n"
-                                               "function void main() {\n"
-                                               "    print(b_func())\n"
-                                               "}\n"};
+    const TempFile c_file{dir / "warn_c.luma", "print(\"side effect in C\")\n"
+                                               "function integer c_func() { return 3 }\n"};
+    const TempFile b_file{dir / "warn_b_mid.luma", "include \"warn_c.luma\"\n"
+                                                   "function integer b_func() { return 2 }\n"};
+    const TempFile main_file{dir / "warn_main.luma", "include \"warn_b_mid.luma\"\n"
+                                                     "\n"
+                                                     "@main\n"
+                                                     "function void main() {\n"
+                                                     "    print(b_func())\n"
+                                                     "}\n"};
 
     SourceManager sm;
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
-    const auto program = load_and_resolve(main_file.path_string(), sm);
+    IncludeResolver resolver{sm};
+    ASSERT_TRUE(resolver.resolve(program));
 
     // Only one warning should be emitted — for C, which actually has
     // top-level statements.  B should NOT produce a spurious warning.
-    IncludeResolver resolver{sm};
-    SourceManager sm2;
-    const auto& sf = sm2.load(main_file.path_string());
-    DiagnosticCollector discarded;
-    Lexer lexer{sf.text, discarded, sf.file_id};
-    auto tokens = lexer.tokenize();
-    Parser parser{std::move(tokens)};
-    auto prog = parser.parse();
-
-    IncludeResolver resolver2{sm2};
-    (void)resolver2.resolve(prog);
-
-    ASSERT_EQ(resolver2.get_diagnostics().size(), static_cast<std::size_t>(1));
+    const auto& diagnostics = resolver.get_diagnostics();
+    ASSERT_EQ(diagnostics.size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(diagnostics.front().severity, Severity::Warning);
+    ASSERT_TRUE(any_message_contains(diagnostics, "'warn_c.luma'"));
+    ASSERT_FALSE(any_message_contains(diagnostics, "warn_b_mid.luma"));
 }
 
 static void test_traversal_rejected_before_resolve() {
@@ -433,25 +470,18 @@ static void test_traversal_rejected_before_resolve() {
 
     std::filesystem::create_directories(sub);
 
-    TempFile target{dir / "traverse_target.luma",
-                    "function integer traverse_func() { return 1 }\n"};
-    TempFile main_file{sub / "traverse_main.luma", "include \"../traverse_target.luma\"\n"
-                                                   "\n"
-                                                   "@main\n"
-                                                   "function void main() {\n"
-                                                   "    print(traverse_func())\n"
-                                                   "}\n"};
+    const TempFile target{dir / "traverse_target.luma",
+                          "function integer traverse_func() { return 1 }\n"};
+    const TempFile main_file{sub / "traverse_main.luma", "include \"../traverse_target.luma\"\n"
+                                                         "\n"
+                                                         "@main\n"
+                                                         "function void main() {\n"
+                                                         "    print(traverse_func())\n"
+                                                         "}\n"};
 
     SourceManager sm;
 
-    const auto& source_file = sm.load(main_file.path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
     IncludeResolver resolver{sm};
     const bool success = resolver.resolve(program);
@@ -459,9 +489,9 @@ static void test_traversal_rejected_before_resolve() {
     ASSERT_FALSE(success);
 
     const auto& diagnostics = resolver.get_diagnostics();
-    ASSERT_TRUE(!diagnostics.empty());
+    ASSERT_FALSE(diagnostics.empty());
     ASSERT_EQ(diagnostics.front().severity, Severity::Error);
-    ASSERT_TRUE(diagnostics.front().message.find("traversal") != std::string::npos);
+    ASSERT_NE(diagnostics.front().message.find("traversal"), std::string::npos);
 }
 
 // ─── InclusionStack tests ───
@@ -519,29 +549,22 @@ static void test_custom_parse_callback() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile helper{dir / "callback_helper.luma", "placeholder content\n"};
-    TempFile main_file{dir / "callback_main.luma", "include \"callback_helper.luma\"\n"
-                                                   "\n"
-                                                   "@main\n"
-                                                   "function void main() {\n"
-                                                   "    print(\"hello\")\n"
-                                                   "}\n"};
+    const TempFile helper{dir / "callback_helper.luma", "placeholder content\n"};
+    const TempFile main_file{dir / "callback_main.luma", "include \"callback_helper.luma\"\n"
+                                                         "\n"
+                                                         "@main\n"
+                                                         "function void main() {\n"
+                                                         "    print(\"hello\")\n"
+                                                         "}\n"};
 
     SourceManager sm;
 
     // Load and parse the main file normally.
-    const auto& source_file = sm.load(main_file.path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
     // Use a custom callback that returns an empty program (no declarations).
-    auto empty_callback = [](const SourceFile& /*sf*/,
-                             std::vector<Diagnostic>& /*diags*/) -> std::optional<Program> {
+    const auto empty_callback = [](const SourceFile& /*sf*/,
+                                   std::vector<Diagnostic>& /*diags*/) -> std::optional<Program> {
         return Program{};
     };
 
@@ -562,25 +585,18 @@ static void test_make_default_parse_callback() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile helper{dir / "default_cb_helper.luma",
-                    "function string default_greet() { return \"hi\" }\n"};
-    TempFile main_file{dir / "default_cb_main.luma", "include \"default_cb_helper.luma\"\n"
-                                                     "\n"
-                                                     "@main\n"
-                                                     "function void main() {\n"
-                                                     "    print(default_greet())\n"
-                                                     "}\n"};
+    const TempFile helper{dir / "default_cb_helper.luma",
+                          "function string default_greet() { return \"hi\" }\n"};
+    const TempFile main_file{dir / "default_cb_main.luma", "include \"default_cb_helper.luma\"\n"
+                                                           "\n"
+                                                           "@main\n"
+                                                           "function void main() {\n"
+                                                           "    print(default_greet())\n"
+                                                           "}\n"};
 
     SourceManager sm;
 
-    const auto& source_file = sm.load(main_file.path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
     IncludeResolver resolver{sm, make_default_parse_callback()};
     const bool success = resolver.resolve(program);
@@ -608,13 +624,13 @@ static void test_luma_path_include() {
     std::filesystem::create_directories(lib);
     std::filesystem::create_directories(app);
 
-    TempFile lib_file{lib / "lp_helper.luma", "function integer lp_func() { return 7 }\n"};
-    TempFile main_file{app / "lp_main.luma", "include \"lp_helper.luma\"\n"
-                                             "\n"
-                                             "@main\n"
-                                             "function void main() {\n"
-                                             "    print(lp_func())\n"
-                                             "}\n"};
+    const TempFile lib_file{lib / "lp_helper.luma", "function integer lp_func() { return 7 }\n"};
+    const TempFile main_file{app / "lp_main.luma", "include \"lp_helper.luma\"\n"
+                                                   "\n"
+                                                   "@main\n"
+                                                   "function void main() {\n"
+                                                   "    print(lp_func())\n"
+                                                   "}\n"};
 
     // Set LUMA_PATH before constructing the resolver (it reads the variable in
     // its constructor). The scoped guard restores the previous environment on
@@ -624,13 +640,7 @@ static void test_luma_path_include() {
 
     SourceManager sm;
 
-    const auto& source_file = sm.load(main_file.path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
     // Construct the resolver AFTER setting LUMA_PATH so it is picked up.
     IncludeResolver resolver{sm};
@@ -649,24 +659,18 @@ static void test_included_statements_merged_into_parent() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile helper{dir / "stmt_helper.luma", "print(\"included side effect\")\n"
-                                              "function integer stmt_func() { return 1 }\n"};
-    TempFile main_file{dir / "stmt_main.luma", "include \"stmt_helper.luma\"\n"
-                                               "\n"
-                                               "@main\n"
-                                               "function void main() {\n"
-                                               "    print(stmt_func())\n"
-                                               "}\n"};
+    const TempFile helper{dir / "stmt_helper.luma", "print(\"included side effect\")\n"
+                                                    "function integer stmt_func() { return 1 }\n"};
+    const TempFile main_file{dir / "stmt_main.luma", "include \"stmt_helper.luma\"\n"
+                                                     "\n"
+                                                     "@main\n"
+                                                     "function void main() {\n"
+                                                     "    print(stmt_func())\n"
+                                                     "}\n"};
 
     SourceManager sm;
 
-    const auto& source_file = sm.load(main_file.path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
     // The main file has no top-level statements of its own.
     ASSERT_EQ(program.statements.size(), static_cast<std::size_t>(0));
@@ -693,25 +697,19 @@ static void test_include_with_parse_errors() {
     const TempDir temp;
     const auto& dir = temp.path();
 
-    TempFile broken{dir / "broken_helper.luma", "function integer broken( {\n"
-                                                "    return 1\n"
-                                                "}\n"};
-    TempFile main_file{dir / "broken_main.luma", "include \"broken_helper.luma\"\n"
-                                                 "\n"
-                                                 "@main\n"
-                                                 "function void main() {\n"
-                                                 "    print(\"unreachable\")\n"
-                                                 "}\n"};
+    const TempFile broken{dir / "broken_helper.luma", "function integer broken( {\n"
+                                                      "    return 1\n"
+                                                      "}\n"};
+    const TempFile main_file{dir / "broken_main.luma", "include \"broken_helper.luma\"\n"
+                                                       "\n"
+                                                       "@main\n"
+                                                       "function void main() {\n"
+                                                       "    print(\"unreachable\")\n"
+                                                       "}\n"};
 
     SourceManager sm;
 
-    const auto& source_file = sm.load(main_file.path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
     IncludeResolver resolver{sm};
     const bool success = resolver.resolve(program);
@@ -719,7 +717,7 @@ static void test_include_with_parse_errors() {
     ASSERT_FALSE(success);
 
     const auto& diagnostics = resolver.get_diagnostics();
-    ASSERT_TRUE(!diagnostics.empty());
+    ASSERT_FALSE(diagnostics.empty());
 
     // The parser error and the wrapping "errors in included file" diagnostic
     // should both surface as errors.
@@ -742,29 +740,24 @@ static void test_absolute_path_escape_rejected() {
     std::filesystem::create_directories(inside);
     std::filesystem::create_directories(outside);
 
-    TempFile target{outside / "abs_target.luma", "function integer abs_func() { return 1 }\n"};
+    const TempFile target{outside / "abs_target.luma",
+                          "function integer abs_func() { return 1 }\n"};
 
     // Use a forward-slash absolute path so the Luma string literal does not
     // contain backslash escape sequences on Windows.
     const std::string abs_path = (outside / "abs_target.luma").generic_string();
 
-    TempFile main_file{inside / "abs_main.luma", "include \"" + abs_path +
-                                                     "\"\n"
-                                                     "\n"
-                                                     "@main\n"
-                                                     "function void main() {\n"
-                                                     "    print(abs_func())\n"
-                                                     "}\n"};
+    const TempFile main_file{inside / "abs_main.luma", "include \"" + abs_path +
+                                                           "\"\n"
+                                                           "\n"
+                                                           "@main\n"
+                                                           "function void main() {\n"
+                                                           "    print(abs_func())\n"
+                                                           "}\n"};
 
     SourceManager sm;
 
-    const auto& source_file = sm.load(main_file.path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(main_file.path_string()));
 
     IncludeResolver resolver{sm};
     const bool success = resolver.resolve(program);
@@ -772,9 +765,9 @@ static void test_absolute_path_escape_rejected() {
     ASSERT_FALSE(success);
 
     const auto& diagnostics = resolver.get_diagnostics();
-    ASSERT_TRUE(!diagnostics.empty());
+    ASSERT_FALSE(diagnostics.empty());
     ASSERT_EQ(diagnostics.front().severity, Severity::Error);
-    ASSERT_TRUE(diagnostics.front().message.find("outside") != std::string::npos);
+    ASSERT_NE(diagnostics.front().message.find("outside"), std::string::npos);
 }
 
 // ─── Negative: include depth limit ───
@@ -811,13 +804,7 @@ static void test_include_depth_limit_exceeded() {
 
     SourceManager sm;
 
-    const auto& source_file = sm.load(files.front()->path_string());
-
-    DiagnosticCollector discarded;
-    Lexer lexer{source_file.text, discarded, source_file.file_id};
-    auto tokens = lexer.tokenize();
-    Parser parser{std::move(tokens)};
-    auto program = parser.parse();
+    auto program = parse_loaded(sm.load(files.front()->path_string()));
 
     IncludeResolver resolver{sm};
     const bool success = resolver.resolve(program);
@@ -831,7 +818,227 @@ static void test_include_depth_limit_exceeded() {
     ASSERT_TRUE(has_depth_error);
 }
 
-// ─── main ───
+// ─── Regression: a file-anchored include must not fall back to the CWD ───
+
+static void test_anchored_include_does_not_fall_back_to_cwd() {
+    // Previously a missing include was retried relative to the working
+    // directory: it could load an unrelated file of the same name there, or
+    // misreport a simple missing file as escaping the allowed tree.
+    const TempDir temp;
+    const auto app = temp.path() / "anchor_app";
+    const auto elsewhere = temp.path() / "anchor_elsewhere";
+    std::filesystem::create_directories(app);
+    std::filesystem::create_directories(elsewhere);
+
+    const TempFile decoy{elsewhere / "anchor_only_in_cwd.luma",
+                         "function integer anchor_decoy() { return 1 }\n"};
+    const TempFile main_file{app / "anchor_main.luma", "include \"anchor_only_in_cwd.luma\"\n"};
+
+    const ScopedCwd cwd{elsewhere};
+    SourceManager sm;
+    auto program = parse_loaded(sm.load(main_file.path_string()));
+
+    IncludeResolver resolver{sm};
+    ASSERT_FALSE(resolver.resolve(program));
+    ASSERT_TRUE(any_message_contains(resolver.get_diagnostics(), "file not found"));
+    ASSERT_FALSE(any_message_contains(resolver.get_diagnostics(), "outside"));
+}
+
+// ─── Regression: unanchored (REPL/stdin) includes search the CWD first ───
+
+static void test_unanchored_include_searches_cwd_before_luma_path() {
+    const TempDir temp;
+    const auto cwd_dir = temp.path() / "order_cwd";
+    const auto lib_dir = temp.path() / "order_lib";
+    std::filesystem::create_directories(cwd_dir);
+    std::filesystem::create_directories(lib_dir);
+
+    const TempFile in_cwd{cwd_dir / "order_helper.luma",
+                          "function integer order_value() { return 1 }\n"};
+    const TempFile in_lib{lib_dir / "order_helper.luma",
+                          "function integer order_value() { return 2 }\n"};
+
+    const ScopedEnv luma_path{"LUMA_PATH", lib_dir.string()};
+    const ScopedCwd cwd{cwd_dir};
+
+    SourceManager sm;
+    auto program = parse_unanchored("include \"order_helper.luma\"\n");
+
+    IncludeResolver resolver{sm};
+    ASSERT_TRUE(resolver.resolve(program));
+    ASSERT_EQ(sm.files().size(), 1U);
+    ASSERT_NE(sm.files().front().text.find("return 1"), std::string::npos);
+}
+
+static void test_unanchored_include_falls_back_to_luma_path() {
+    const TempDir temp;
+    const auto cwd_dir = temp.path() / "fallback_cwd";
+    const auto lib_dir = temp.path() / "fallback_lib";
+    std::filesystem::create_directories(cwd_dir);
+    std::filesystem::create_directories(lib_dir);
+
+    const TempFile in_lib{lib_dir / "fallback_helper.luma", "function integer fb() { return 2 }\n"};
+
+    const ScopedEnv luma_path{"LUMA_PATH", lib_dir.string()};
+    const ScopedCwd cwd{cwd_dir};
+
+    SourceManager sm;
+    auto program = parse_unanchored("include \"fallback_helper.luma\"\n");
+
+    IncludeResolver resolver{sm};
+    ASSERT_TRUE(resolver.resolve(program));
+    ASSERT_EQ(count_declarations(program, DeclarationKind::Function), 1);
+}
+
+// ─── Regression: include paths are UTF-8 end to end (MSVC used the ANSI
+// code page, turning "café.luma" into mojibake or failing outright) ───
+
+static void test_non_ascii_include_path_resolves() {
+    const TempDir temp;
+    const auto dir = temp.path() / "utf8_inc";
+    std::filesystem::create_directories(dir);
+
+    // "café_日本_helper.luma": 'é' is in Windows-1252 but the CJK characters
+    // are in no single-byte ANSI code page, so any remaining ANSI conversion
+    // fails here regardless of the machine's code page.
+    const std::string utf8_name = "caf\xC3\xA9_\xE6\x97\xA5\xE6\x9C\xAC_helper.luma";
+    const TempFile helper{dir / path_from_utf8(utf8_name),
+                          "function integer cafe() { return 3 }\n"};
+    const TempFile main_file{dir / "utf8_main.luma", "include \"" + utf8_name + "\"\n"};
+
+    SourceManager sm;
+    auto program = parse_loaded(sm.load(path_to_utf8(main_file.path())));
+
+    IncludeResolver resolver{sm};
+    const bool resolved = resolver.resolve(program);
+
+    for (const auto& d : resolver.get_diagnostics()) {
+        std::cerr << "diagnostic: " << d.message << "\n";
+    }
+
+    ASSERT_TRUE(resolved);
+    ASSERT_EQ(count_declarations(program, DeclarationKind::Function), 1);
+
+    // The included file is registered under its UTF-8 path.
+    const auto included = std::ranges::find_if(sm.files(), [](const SourceFile& file) {
+        return file.text.find("cafe()") != std::string::npos;
+    });
+    ASSERT_TRUE(included != sm.files().end());
+    ASSERT_NE(included->path.find(utf8_name), std::string::npos);
+}
+
+// ─── Regression: containment fails closed when the including file's
+// directory cannot be canonicalised (previously the check was skipped) ───
+
+static void test_containment_fails_closed_for_unresolvable_base() {
+#ifdef _WIN32
+    // A device path the OS cannot resolve: weakly_canonical reports an error
+    // for its parent directory.  The include itself is found on LUMA_PATH, so
+    // only the containment check stands between it and being accepted.
+    const TempDir temp;
+    const auto lib_dir = temp.path() / "closed_lib";
+    std::filesystem::create_directories(lib_dir);
+    const TempFile in_lib{lib_dir / "closed_helper.luma",
+                          "function integer closed() { return 4 }\n"};
+
+    const ScopedEnv luma_path{"LUMA_PATH", lib_dir.string()};
+
+    SourceManager sm;
+    const auto& source_file = sm.load_virtual("\\\\.\\nul\\closed_dir\\closed_main.luma",
+                                              "include \"closed_helper.luma\"\n");
+    auto program = parse_loaded(source_file);
+
+    IncludeResolver resolver{sm};
+    ASSERT_FALSE(resolver.resolve(program));
+    ASSERT_TRUE(any_message_contains(resolver.get_diagnostics(), "cannot resolve the directory"));
+#endif
+}
+
+// ─── Session mode (regression: the REPL used SourceManager registration as its
+// include-once rule, so a file read by a rejected input was skipped forever) ───
+
+static void test_session_mode_rereads_registered_file() {
+    const TempDir temp;
+    const TempFile main_file{temp.path() / "session_main.luma",
+                             "include \"session_helper.luma\"\n"};
+    const TempFile helper{temp.path() / "session_helper.luma",
+                          "function integer session_value() { return 1 }\n"};
+
+    SourceManager sm;
+    (void)load_and_resolve(main_file.path_string(), sm);
+
+    luma::test::write_file(helper.path(), "function integer session_value() { return 2 }\n");
+
+    // Default mode: the registered helper counts as included and is skipped.
+    auto skipped = parse_loaded(sm.load(main_file.path_string()));
+    IncludeResolver default_resolver{sm};
+    ASSERT_TRUE(default_resolver.resolve(skipped));
+    ASSERT_EQ(count_declarations(skipped, DeclarationKind::Function), 0);
+    ASSERT_TRUE(default_resolver.included_files().empty());
+
+    // Session mode: only the entry file counts; the helper is re-read from disk.
+    const auto entry = sm.load(main_file.path_string()).path;
+    auto reread = parse_loaded(sm.load(main_file.path_string()));
+    IncludeResolver session_resolver{sm};
+    session_resolver.set_session_included(StringSet{entry});
+    ASSERT_TRUE(session_resolver.resolve(reread));
+    ASSERT_EQ(count_declarations(reread, DeclarationKind::Function), 1);
+    ASSERT_EQ(session_resolver.included_files().size(), 1U);
+    ASSERT_NE(sm.files().back().text.find("return 2"), std::string::npos);
+}
+
+static void test_session_mode_skips_listed_and_repeated_files() {
+    const TempDir temp;
+    const TempFile main_file{temp.path() / "listed_main.luma",
+                             "include \"listed_a.luma\"\ninclude \"listed_b.luma\"\n"
+                             "include \"listed_b.luma\"\n"};
+    const TempFile a{temp.path() / "listed_a.luma", "function integer listed_a() { return 1 }\n"};
+    const TempFile b{temp.path() / "listed_b.luma",
+                     "include \"listed_main.luma\"\nfunction integer listed_b() { return 2 }\n"};
+
+    SourceManager sm;
+    const auto& source_file = sm.load(main_file.path_string());
+    auto program = parse_loaded(source_file);
+
+    // listed_a counts as already included; listed_b is entered once, and its
+    // include of the entry file is skipped.
+    const auto canonical_a = path_to_utf8(std::filesystem::weakly_canonical(a.path()));
+
+    IncludeResolver resolver{sm};
+    resolver.set_session_included(StringSet{source_file.path, canonical_a});
+    ASSERT_TRUE(resolver.resolve(program));
+    ASSERT_EQ(count_declarations(program, DeclarationKind::Function), 1);
+    ASSERT_EQ(resolver.included_files().size(), 1U);
+}
+
+static void test_bracketed_virtual_source_is_unanchored() {
+    // A REPL input registered as "<repl:N>" resolves includes against the
+    // working directory, exactly like unregistered (file id 0) input.
+    const TempDir temp;
+    const TempFile helper{temp.path() / "bracket_helper.luma",
+                          "function integer bracket_value() { return 1 }\n"};
+    const ScopedCwd cwd{temp.path()};
+
+    SourceManager sm;
+    const auto& input = sm.load_virtual("<repl:1>", "include \"bracket_helper.luma\"\n");
+    auto program = parse_loaded(input);
+
+    IncludeResolver resolver{sm};
+    ASSERT_TRUE(resolver.resolve(program));
+    ASSERT_EQ(count_declarations(program, DeclarationKind::Function), 1);
+
+    // An absolute path is still rejected, as for any input with no file.
+    // Forward slashes: a backslash would be an escape in the Luma string.
+    auto absolute_path = path_to_utf8(helper.path());
+    std::ranges::replace(absolute_path, '\\', '/');
+    const auto absolute = std::format("include \"{}\"\n", absolute_path);
+    const auto& absolute_input = sm.load_virtual("<repl:2>", absolute);
+    auto absolute_program = parse_loaded(absolute_input);
+
+    IncludeResolver absolute_resolver{sm};
+    ASSERT_FALSE(absolute_resolver.resolve(absolute_program));
+    ASSERT_TRUE(any_message_contains(absolute_resolver.get_diagnostics(), "absolute path"));
+}
 
 int main() {
     RUN(test_program_without_includes);
@@ -860,5 +1067,13 @@ int main() {
     RUN(test_include_with_parse_errors);
     RUN(test_absolute_path_escape_rejected);
     RUN(test_include_depth_limit_exceeded);
+    RUN(test_anchored_include_does_not_fall_back_to_cwd);
+    RUN(test_unanchored_include_searches_cwd_before_luma_path);
+    RUN(test_unanchored_include_falls_back_to_luma_path);
+    RUN(test_non_ascii_include_path_resolves);
+    RUN(test_containment_fails_closed_for_unresolvable_base);
+    RUN(test_session_mode_rereads_registered_file);
+    RUN(test_session_mode_skips_listed_and_repeated_files);
+    RUN(test_bracketed_virtual_source_is_unanchored);
     return SUMMARY();
 }

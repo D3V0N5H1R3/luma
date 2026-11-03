@@ -1,9 +1,9 @@
 function integer compute(integer n) {
-    mutable integer result = 0
+    mutable integer total = 0
     for i in 0..n {
-        result += i * 2 + 1
+        total += i * 2 + 1
     }
-    return result
+    return total
 }
 
 @main

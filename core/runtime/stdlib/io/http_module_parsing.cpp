@@ -73,9 +73,7 @@ namespace {
 
 // Trim leading and trailing ASCII whitespace.
 [[nodiscard]] std::string trim(std::string_view s) {
-    const auto not_space = [](unsigned char c) {
-        return std::isspace(c) == 0;
-    };
+    const auto not_space = [](unsigned char c) { return std::isspace(c) == 0; };
 
     const auto begin = std::ranges::find_if(s, not_space);
     const auto end = std::find_if(s.rbegin(), s.rend(), not_space).base();

@@ -19,7 +19,9 @@
 #include <cassert>
 
 // Assert that the vm pointer in a ThreadState (passed by reference) is
-// non-null.  Fires in both debug and release builds via assert().
+// non-null.  Like assert(), it is checked in debug builds only (compiled out
+// under NDEBUG).  A macro rather than a function so the assertion reports the
+// caller's file and line.
 // Usage:  LUMA_ASSERT_VM(state)   — where state is a ThreadState&
 #define LUMA_ASSERT_VM(state)                                                                      \
     assert((state).vm != nullptr &&                                                                \

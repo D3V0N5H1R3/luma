@@ -119,7 +119,7 @@ JsonValue serialise_markup_content(const MarkupContent& content) {
 JsonValue serialise_document_symbol(const DocumentSymbol& sym) {
     JsonValue::ObjectType obj{
         {"name", JsonValue(sym.name)},
-        {"kind", JsonValue(to_lsp_symbol_kind(sym.kind))},
+        {"kind", JsonValue(symbols::to_lsp_symbol_kind(sym.kind))},
         {"range", serialise_range(sym.range)},
         {"selectionRange", serialise_range(sym.selection_range)},
     };

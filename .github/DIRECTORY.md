@@ -4,17 +4,17 @@ This directory holds everything that GitHub, Dependabot, and AI-powered agents (
 
 ## Directory Structure
 
-| Directory                        | Purpose                                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [`actions/`](actions/)           | Reusable composite actions shared across workflows (build helpers, packaging).                    |
-| [`agents/`](agents/)             | Copilot agent definitions — role-specific personas (`plan`, `implement`, `review`, `docs`, `test`). |
-| [`codeql/`](codeql/)             | CodeQL configuration for the security analysis workflow.                                         |
-| [`hooks/`](hooks/)               | AI agent hooks — deterministic guardrails run at tool-call lifecycle points.                      |
-| [`ISSUE_TEMPLATE/`](ISSUE_TEMPLATE/) | GitHub issue form templates (bug report, feature request) and chooser config.                |
-| [`prompts/`](prompts/)           | Copilot prompt files — reusable workflow instructions for AI agents (27 prompts).                 |
-| [`workflows/`](workflows/)       | GitHub Actions workflow definitions (CI, linting, release, fuzzing, etc.).                        |
+| Directory                            | Purpose                                                                                             |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| [`actions/`](actions/)               | Reusable composite actions shared across workflows (build helpers, packaging).                      |
+| [`agents/`](agents/)                 | Copilot agent definitions — role-specific personas (`plan`, `implement`, `review`, `docs`, `test`). |
+| [`codeql/`](codeql/)                 | CodeQL configuration for the security analysis workflow.                                            |
+| [`hooks/`](hooks/)                   | AI agent hooks — deterministic guardrails run at tool-call lifecycle points.                        |
+| [`ISSUE_TEMPLATE/`](ISSUE_TEMPLATE/) | GitHub issue form templates (bug report, feature request) and chooser config.                       |
+| [`prompts/`](prompts/)               | Copilot prompt files — reusable workflow instructions for AI agents (27 prompts).                   |
+| [`workflows/`](workflows/)           | GitHub Actions workflow definitions (CI, linting, release, fuzzing, etc.).                          |
 
-Each subdirectory carries its own `DIRECTORY.md` with detailed documentation.
+The [`actions/`](actions/DIRECTORY.md), [`hooks/`](hooks/DIRECTORY.md), [`prompts/`](prompts/DIRECTORY.md), and [`workflows/`](workflows/DIRECTORY.md) subdirectories carry their own `DIRECTORY.md` with detailed documentation. The agents are indexed alongside their Claude Code ports in [`.claude/DIRECTORY.md`](../.claude/DIRECTORY.md).
 
 ## Root-Level Files
 

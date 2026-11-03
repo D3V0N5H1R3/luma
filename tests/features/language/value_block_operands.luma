@@ -1,6 +1,12 @@
 # ═══════════════════════════════════════════════════════════
 # Luma v1.0 — Feature Tests — Value-Block Operands
 #
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+#
+# See Luma_User_Manual.md §5 (If as an Expression) and §15 (Match
+# as an Expression).
+#
 # Regression coverage for a compiler codegen bug where a
 # value-producing block (`match` / `if` used as an expression)
 # appearing as a non-first operand of a surrounding construct
@@ -15,19 +21,16 @@
 # Companion to value_block_assignment.luma, which covers the
 # assignment-target positions. This file covers call arguments,
 # collection literals, binary operands, string interpolation,
-# pipes, index expressions, ranges, record construction, and
-# compound assignment right-hand sides.
-#
-# Feature Tests are based on Luma_Initial_Concept.md and
-# Luma_User_Manual.md.
+# pipes, index expressions, ranges, record construction,
+# compound assignment right-hand sides, and default parameters.
 # ═══════════════════════════════════════════════════════════
 
-function string second(string _a, string b) {
-    return b
+function string second(string _first, string chosen) {
+    return chosen
 }
 
-function string third(string _a, string _b, string c) {
-    return c
+function string third(string _first, string _second, string chosen) {
+    return chosen
 }
 
 record Box {
@@ -39,95 +42,111 @@ record Box {
 
 @test
 function void test_call_arg_second() {
-    result<string> res = failure("cors")
-    string out = second("prefix", match res {
+    result<string> response = failure("cors")
+
+    string output = second("prefix", match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     })
-    assert(out == "fail:cors")
+
+    assert(output == "fail:cors")
 }
 
 @test
 function void test_call_arg_third() {
-    result<string> res = success("ok")
-    string out = third("a", "b", match res {
+    result<string> response = success("ok")
+
+    string output = third("a", "b", match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     })
-    assert(out == "ok")
+
+    assert(output == "ok")
 }
 
 @test
 function void test_nested_call_args() {
-    result<string> a = failure("A")
-    result<string> b = success("B")
-    string out = second(match a {
-        success(x) { x }
-        failure(e) { "fail:${e}" }
-    }, match b {
-        success(x) { x }
-        failure(e) { "fail:${e}" }
+    result<string> first_response = failure("A")
+    result<string> second_response = success("B")
+
+    string output = second(match first_response {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }, match second_response {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
     })
-    assert(out == "B")
+
+    assert(output == "B")
 }
 
 # ─── Value block as a collection-literal element/value ───
 
 @test
 function void test_array_element() {
-    result<string> res = failure("boom")
-    array<string> arr = ["p", match res {
+    result<string> response = failure("boom")
+
+    array<string> items = ["p", match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }]
-    assert(arr[0] == "p")
-    assert(arr[1] == "fail:boom")
+
+    assert(items == ["p", "fail:boom"])
 }
 
 @test
 function void test_dict_value() {
-    result<string> res = failure("nope")
-    dictionary<string> d = {"k": match res {
+    result<string> response = failure("nope")
+
+    dictionary<string> model = {"key": match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }}
-    assert(d["k"] == "fail:nope")
+
+    assert(model["key"] == "fail:nope")
 }
 
 @test
 function void test_tuple_element() {
-    result<string> res = success("yo")
-    (string, string) pair = ("p", match res {
+    result<string> response = success("yo")
+
+    (string, string) pair = ("p", match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     })
+
+    assert(pair.0 == "p")
     assert(pair.1 == "yo")
 }
 
 @test
 function void test_record_field() {
-    result<string> res = failure("rf")
-    Box b = Box {
+    result<string> response = failure("rf")
+
+    Box box = Box {
         label = "L",
-        value = match res {
+        value = match response {
             success(body) { body }
             failure(err) { "fail:${err}" }
         }
     }
-    assert(b.label == "L")
-    assert(b.value == "fail:rf")
+
+    assert(box.label == "L")
+    assert(box.value == "fail:rf")
 }
 
 @test
 function void test_record_with_override() {
-    result<string> res = failure("rw")
+    result<string> response = failure("rw")
     Box base = Box { label = "L", value = "old" }
+
     Box updated = base with {
-        value = match res {
+        value = match response {
             success(body) { body }
             failure(err) { "fail:${err}" }
         }
     }
+
     assert(updated.label == "L")
     assert(updated.value == "fail:rw")
 }
@@ -136,48 +155,57 @@ function void test_record_with_override() {
 
 @test
 function void test_binary_right_operand() {
-    result<string> res = failure("x")
-    string out = "p:" + match res {
+    # The value block is the right operand of string `+` on purpose.
+    result<string> response = failure("x")
+
+    string output = "p:" + match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }
-    assert(out == "p:fail:x")
+
+    assert(output == "p:fail:x")
 }
 
 @test
 function void test_interpolation_part() {
-    result<string> res = failure("zz")
+    result<string> response = failure("zz")
     string label = "got"
-    string out = "${label}=${match res {
+
+    string output = "${label}=${match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }}!"
-    assert(out == "got=fail:zz!")
+
+    assert(output == "got=fail:zz!")
 }
 
 # ─── Value block as an index expression / range end ───
 
 @test
 function void test_index_expression() {
-    result<integer> res = failure("ie")
-    array<string> arr = ["zero", "one", "two"]
-    string out = arr[match res {
-        success(n) { n }
-        failure(_e) { 2 }
+    result<integer> parsed_index = failure("ie")
+    array<string> items = ["zero", "one", "two"]
+
+    string output = items[match parsed_index {
+        success(index) { index }
+        failure(_err) { 2 }
     }]
-    assert(out == "two")
+
+    assert(output == "two")
 }
 
 @test
 function void test_range_end() {
-    result<integer> res = failure("re")
+    result<integer> parsed_limit = failure("re")
     mutable integer total = 0
-    for _ in 0 .. (match res {
-        success(n) { n }
-        failure(_e) { 3 }
+
+    for _ in 0 .. (match parsed_limit {
+        success(limit) { limit }
+        failure(_err) { 3 }
     }) {
         total = total + 1
     }
+
     assert(total == 3)
 }
 
@@ -185,61 +213,71 @@ function void test_range_end() {
 
 @test
 function void test_pipe_argument() {
-    result<string> res = failure("pp")
-    string out = "a" |> second(match res {
+    result<string> response = failure("pp")
+
+    string output = "a" |> second(match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     })
-    assert(out == "fail:pp")
+
+    assert(output == "fail:pp")
 }
 
 # ─── Value block as a compound-assignment right-hand side ───
 
 @test
 function void test_compound_assign_variable() {
-    result<string> res = failure("cv")
-    mutable string s = "p:"
-    s += match res {
+    result<string> response = failure("cv")
+    mutable string text = "p:"
+
+    text += match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }
-    assert(s == "p:fail:cv")
+
+    assert(text == "p:fail:cv")
 }
 
 @test
 function void test_compound_assign_index() {
-    result<string> res = failure("ci")
-    mutable dictionary<string> d = {"k": "p:"}
-    d["k"] += match res {
+    result<string> response = failure("ci")
+    mutable dictionary<string> model = {"key": "p:"}
+
+    model["key"] += match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }
-    assert(d["k"] == "p:fail:ci")
+
+    assert(model["key"] == "p:fail:ci")
 }
 
 @test
 function void test_compound_assign_field() {
-    result<string> res = failure("cf")
-    mutable Box b = Box { label = "L", value = "p:" }
-    b.value += match res {
+    result<string> response = failure("cf")
+    mutable Box box = Box { label = "L", value = "p:" }
+
+    box.value += match response {
         success(body) { body }
         failure(err) { "fail:${err}" }
     }
-    assert(b.value == "p:fail:cf")
+
+    assert(box.value == "p:fail:cf")
 }
 
 # ─── Control: if value block as a call argument ───
 
 @test
 function void test_if_block_call_arg() {
-    boolean flag = true
-    string out = second("prefix", if flag {
+    boolean is_computed = String.length("abc") == 3
+
+    string output = second("prefix", if is_computed {
         string computed = "computed"
         computed
     } else {
         "other"
     })
-    assert(out == "computed")
+
+    assert(output == "computed")
 }
 
 # ─── Value block as a default parameter value ───
@@ -253,38 +291,38 @@ function void test_if_block_call_arg() {
 # GetLocal/SetLocal read the leftover boolean instead of the intended value —
 # e.g. `v * 10` threw "cannot multiply 'boolean' and 'integer'".
 
-function integer default_match_binding(integer x = match some(5) {
+function integer default_match_binding(integer value = match some(5) {
     case some(v) { v * 10 }
     case none { 0 }
 }) {
-    return x
+    return value
 }
 
-function integer default_match_body_local(integer x = match some(6) {
+function integer default_match_body_local(integer value = match some(6) {
     case some(v) {
         integer doubled = v * 2
         doubled + 1
     }
     case none { 0 }
 }) {
-    return x
+    return value
 }
 
-function string default_match_string(string s = match some("hi") {
-    case some(v) { v + "!" }
+function string default_match_string(string text = match some("hi") {
+    case some(v) { "${v}!" }
     case none { "none" }
 }) {
-    return s
+    return text
 }
 
-function integer default_if_block(integer x = if 1 < 2 {
-    integer a = 3
-    integer b = 4
-    a * b
+function integer default_if_block(integer value = if 1 < 2 {
+    integer width = 3
+    integer height = 4
+    width * height
 } else {
     0
 }) {
-    return x
+    return value
 }
 
 @test

@@ -9,6 +9,7 @@
 // so that existing LSP code continues to compile without a direct
 // dependency on the shared protocol layer path.
 // ═══════════════════════════════════════════════════════════════════════════
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -100,6 +101,16 @@ public:
 
     [[nodiscard]] Range to_codepoint(const Range& r) const {
         return Range{to_codepoint(r.start), to_codepoint(r.end)};
+    }
+
+    // Length of the 0-based line in UTF-16 code units (newline excluded), or
+    // nullopt when the encoder has no source.
+    [[nodiscard]] std::optional<int> utf16_line_length(int line0) const {
+        if (!valid()) {
+            return std::nullopt;
+        }
+        const std::string_view line = line_text(line0);
+        return byte_offset_to_utf16_column(line, line.size());
     }
 
 private:

@@ -1,10 +1,12 @@
 # ─────────────────────────────────────────────────────────────
 # Luma — Python Lint, Format & Test Workflow
 #
-# Runs Ruff (lint + format check) over the project's Python tooling
-# and the extension tooling unit tests on every push and PR targeting
-# main that touches Python sources or the Ruff configuration. Rule
-# configuration lives in ruff.toml.
+# Runs Ruff (lint + format check) over the project's Python tooling,
+# the extension tooling unit tests, the agent hook unit tests, the
+# Git hook regression tests, and the prompt pipeline unit tests on
+# every push and PR targeting main that touches Python sources, the
+# Git hooks, or the Ruff configuration.
+# Rule configuration lives in ruff.toml.
 # ─────────────────────────────────────────────────────────────
 
 name: CI — Python
@@ -14,8 +16,10 @@ on:
     branches: [main]
     paths: &paths
       - ".github/workflows/ci-python.yml"
+      - "CMakePresets.json"
       - "ruff.toml"
       - "**/*.py"
+      - "scripts/git-hooks/**"
   pull_request:
     branches: [main]
     paths: *paths
@@ -56,3 +60,17 @@ jobs:
       - name: Run extension tooling unit tests
         working-directory: extensions/shared
         run: python -m unittest discover -p "test_*.py"
+
+      - name: Run agent hook unit tests
+        run: python -m unittest discover -s scripts/agent-hooks -p "test_*.py"
+
+      - name: Run Git hook regression tests
+        run: python -m unittest discover -s scripts -p "test_git_hooks.py"
+
+      # Also checks that every preset in CMakePresets.json has a build preset
+      # configure.py --build can run, hence CMakePresets.json in paths: above.
+      - name: Run configure.py unit tests
+        run: python -m unittest discover -s scripts -p "test_configure.py"
+
+      - name: Run prompt pipeline unit tests
+        run: python -m unittest discover -s scripts/pipeline -p "test_*.py"

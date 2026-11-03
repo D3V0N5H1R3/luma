@@ -11,10 +11,10 @@ namespace luma::runtime {
 /// Thread-safe RAII guard for tracking recursion depth in value operations.
 /// Each operation type has its own independent depth counter.
 enum class RecursionKind {
-    to_string,
-    equals,
-    deep_copy,
-    COUNT // sentinel — must remain last
+    ToString,
+    Equals,
+    DeepCopy,
+    Count // sentinel — must remain last
 };
 
 class RecursionGuard {
@@ -55,7 +55,7 @@ public:
     }
 
 private:
-    static constexpr std::size_t kind_count = static_cast<std::size_t>(RecursionKind::COUNT);
+    static constexpr std::size_t kind_count = static_cast<std::size_t>(RecursionKind::Count);
 
     // Use unsigned int to prevent undefined behaviour from signed overflow
     // if the counter is ever incremented past INT_MAX.

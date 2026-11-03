@@ -44,9 +44,10 @@ function BenchResult run_hash_encoder_benchmarks(BenchResult state) {
         string _h = Hash.hmac_sha512("secret-key", short_input)
     })
 
+    # Digest hoisted so this measures verification, not the reference hash.
+    string short_sha256 = Hash.sha256(short_input)
     st = time_it(st, "Hash.verify (sha256)", 1000, () -> {
-        string hash = Hash.sha256(short_input)
-        boolean _ok = Hash.verify("sha256", short_input, hash)
+        boolean _ok = Hash.verify("sha256", short_input, short_sha256)
     })
 
     # --- Encoder ---
@@ -62,7 +63,8 @@ function BenchResult run_hash_encoder_benchmarks(BenchResult state) {
     })
 
     st = time_it(st, "Encoder base64 roundtrip", 2000, () -> {
-        result<string> _encoded = Encoder.encode_base64(medium_input)
+        string encoded = Result.unwrap_or(Encoder.encode_base64(medium_input), "")
+        result<string> _decoded = Encoder.decode_base64(encoded)
     })
 
     st = time_it(st, "Encoder.encode_base64 (large)", 500, () -> {

@@ -88,27 +88,35 @@ public:
     // Optional callback type for resolution diagnostics.
     using DiagnosticFn = std::function<void(const std::string& message)>;
 
-    // Set an optional diagnostic callback called when breakpoints cannot be resolved.
+    // Set an optional diagnostic callback called when breakpoints cannot be
+    // resolved.  Without one, the diagnostic goes to the adapter's stderr.
     // Must be called before resolve_pending_breakpoints() to take effect.
     void set_diagnostic_callback(DiagnosticFn cb);
 
     // ─── Resolution (after compilation) ───
 
-    // Resolve path-based breakpoints against the compiled source map.
+    // Resolve path-based breakpoints against the compiled source map.  Returns
+    // the breakpoints that became bound, so the caller can send `breakpoint`
+    // events that mark them verified in the editor.
     // PRECONDITION: set_compiled_program() must have been called.
     // PRECONDITION: All path-based breakpoints must have been set via set_breakpoints().
-    void resolve_pending_breakpoints();
+    [[nodiscard]] std::vector<Breakpoint> resolve_pending_breakpoints();
 
     // ─── Runtime check ───
 
     struct BreakpointCheckResult {
+        // True when at least one non-logpoint breakpoint qualified.
         bool should_break{false};
+        // First qualifying breakpoint that stops (0 when none).
         int hit_breakpoint_id{0};
-        std::string log_message;
+        // Log messages of every qualifying logpoint, in binding order.
+        std::vector<std::string> log_messages;
     };
 
+    // Evaluate every breakpoint bound to (file_id, line), recording the hits of
+    // those whose condition holds.  Non-const: recording a hit changes state.
     [[nodiscard]] BreakpointCheckResult
-    check_breakpoint(int file_id, int line, const ConditionEvaluatorFn& eval_condition) const;
+    check_breakpoint(int file_id, int line, const ConditionEvaluatorFn& eval_condition);
 
     // ─── Queries ───
 
@@ -116,8 +124,6 @@ public:
         return breakpoints_active_.load(std::memory_order_acquire);
     }
 
-    [[nodiscard]] bool has_breakpoints_in_file(const std::string& source_path) const;
-    [[nodiscard]] bool has_breakpoints_for_file_id(int file_id) const;
     [[nodiscard]] std::vector<int> get_breakpoint_locations(const std::string& path, int start_line,
                                                             int end_line) const;
 

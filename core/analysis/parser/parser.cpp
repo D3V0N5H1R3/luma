@@ -1,9 +1,13 @@
 #include "analysis/parser/parser.hpp"
 
+#include <algorithm>
+#include <cstddef>
 #include <format>
+#include <iterator>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include "analysis/lexer/token.hpp"
 #include "analysis/lexer/token_type.hpp"
@@ -14,6 +18,29 @@
 namespace luma {
 
 namespace {
+
+// Opening delimiters that error recovery treats as one "group" nesting level
+// (everything except '{', whose closer also ends blocks).
+bool is_group_opener(TokenType type) {
+    return type == TokenType::LeftParen || type == TokenType::LeftBracket ||
+           type == TokenType::QuestionBracket || type == TokenType::InterpolationStart;
+}
+
+// True if `closer` closes a construct opened by `opener`.
+bool closes_delimiter(TokenType opener, TokenType closer) {
+    switch (closer) {
+        case TokenType::RightBrace:
+            return opener == TokenType::LeftBrace;
+        case TokenType::RightParen:
+            return opener == TokenType::LeftParen;
+        case TokenType::RightBracket:
+            return opener == TokenType::LeftBracket || opener == TokenType::QuestionBracket;
+        case TokenType::InterpolationEnd:
+            return opener == TokenType::InterpolationStart;
+        default:
+            return false;
+    }
+}
 
 // Returns a context-aware hint for an unexpected token in expect().
 std::string expect_hint(TokenType expected) {
@@ -166,8 +193,15 @@ void Parser::emit_error(std::string_view message, const SourceLocation& start,
                        .category(DiagnosticCategory::Syntax)
                        .source(DiagnosticSource::Syntax);
 
+    // Token and AST locations mark the position one past a token's last
+    // character; anchor the diagnostic on the token's real extent instead so
+    // the rendered caret (and the LSP squiggle) starts at the token itself.
+    const Token* token = end.has_value() ? nullptr : find_token_ending_at(start);
+
     if (end.has_value()) {
         builder.primary(start, *end);
+    } else if (token != nullptr && token->start_location.line != 0) {
+        builder.primary(token->start_location, token->location);
     } else {
         builder.primary(start);
     }
@@ -177,6 +211,16 @@ void Parser::emit_error(std::string_view message, const SourceLocation& start,
     }
 
     emit(builder.build());
+}
+
+const Token* Parser::find_token_ending_at(const SourceLocation& loc) const {
+    const auto it = std::ranges::lower_bound(tokens_, loc, {}, &Token::location);
+
+    if (it == tokens_.end() || it->location != loc) {
+        return nullptr;
+    }
+
+    return &*it;
 }
 
 void Parser::syntax_error(std::string_view message, const SourceLocation& loc,
@@ -312,12 +356,12 @@ bool Parser::consume_if(TokenType type) {
 // that start new statements) is found. This allows the parser to continue
 // and report multiple errors in a single pass rather than stopping at
 // the first error.
-bool Parser::recover_expect(TokenType type) {
+void Parser::recover_expect(TokenType type) {
     // Happy path: the expected token is present.
     if (check(type)) {
         advance();
 
-        return true;
+        return;
     }
 
     // Record the error.
@@ -331,21 +375,19 @@ bool Parser::recover_expect(TokenType type) {
         error_recovery::choose_strategy(type, current().type, peek_at(1).type, is_at_end());
 
     switch (strategy) {
-        case error_recovery::Strategy::skip_and_retry:
+        case error_recovery::Strategy::SkipAndRetry:
             advance(); // skip the extraneous token
             advance(); // consume the expected token
-            return true;
+            return;
 
-        case error_recovery::Strategy::insert_expected:
-            return true; // act as if the token was inserted
+        case error_recovery::Strategy::InsertExpected:
+            return; // act as if the token was inserted
 
-        case error_recovery::Strategy::synchronize:
-            return false;
+        case error_recovery::Strategy::Synchronize:
+            // No local recovery applies; unwind to the nearest recovery point
+            // like expect() does (the diagnostic was emitted above).
+            throw ParseFailure{};
     }
-
-    // Unreachable: choose_strategy always returns one of the cases handled
-    // above. Retained to satisfy the compiler's non-void return-path analysis.
-    return false;
 }
 
 bool Parser::looks_like_statement_start() const {
@@ -360,6 +402,43 @@ bool Parser::is_declaration_start() const {
     }
 
     return error_recovery::is_declaration_keyword(current().type);
+}
+
+Parser::OpenDelimiters Parser::unclosed_delimiters_since(int item_start) const {
+    std::vector<TokenType> open;
+
+    for (int pos = std::max(item_start, 0); pos < token_pos_ && pos < token_count_; ++pos) {
+        const TokenType type = tokens_[static_cast<std::size_t>(pos)].type;
+
+        if (is_group_opener(type) || type == TokenType::LeftBrace) {
+            open.push_back(type);
+
+            continue;
+        }
+
+        // A closer pops back to its opener.  Openers above it were left
+        // unclosed and already recovered by recover_expect() (treated as
+        // inserted), so they are dropped with it.  A stray closer is ignored.
+        const auto match = std::find_if(open.rbegin(), open.rend(), [type](TokenType opener) {
+            return closes_delimiter(opener, type);
+        });
+
+        if (match != open.rend()) {
+            open.erase(std::prev(match.base()), open.end());
+        }
+    }
+
+    OpenDelimiters depths;
+
+    for (const TokenType opener : open) {
+        if (opener == TokenType::LeftBrace) {
+            ++depths.braces;
+        } else {
+            ++depths.groups;
+        }
+    }
+
+    return depths;
 }
 
 void Parser::synchronize() {
@@ -416,6 +495,81 @@ void Parser::synchronize() {
 
                 return;
             }
+        }
+
+        advance();
+    }
+}
+
+bool Parser::can_start_block_item(BlockItem item) const {
+    const TokenType type = current().type;
+
+    switch (item) {
+        case BlockItem::Statement:
+            return looks_like_statement_start() ||
+                   (can_start_expression(type) && type != TokenType::LeftBrace);
+        case BlockItem::MatchArm:
+            return type == TokenType::Case || type == TokenType::Else ||
+                   type == TokenType::Success || type == TokenType::Failure;
+        case BlockItem::Declaration:
+            return error_recovery::is_declaration_keyword(type);
+        case BlockItem::Variant:
+            return type == TokenType::Identifier;
+    }
+
+    return false;
+}
+
+void Parser::synchronize_in_block(BlockItem item, int item_start) {
+    const int error_position = token_pos_;
+
+    // Start inside whatever call, array or record literal the failed item
+    // left open, so the skip runs to that construct's closer.
+    const OpenDelimiters open = unclosed_delimiters_since(item_start);
+    int brace_depth = open.braces;
+    int group_depth = open.groups; // parentheses, brackets and interpolations
+
+    while (!is_at_end()) {
+        const TokenType type = current().type;
+
+        // A '}' with no '{' open inside the skipped construct is the
+        // enclosing block's closer (any group still open was never closed):
+        // leave it for the block to consume.
+        if (type == TokenType::RightBrace && brace_depth == 0) {
+            return;
+        }
+
+        const bool at_block_level = brace_depth == 0 && group_depth == 0;
+
+        // A new line that can begin the next item ends the skip.  The error
+        // token itself never counts, so every recovery makes progress.
+        if (at_block_level && token_pos_ > error_position && current().preceded_by_newline &&
+            can_start_block_item(item)) {
+            return;
+        }
+
+        switch (type) {
+            case TokenType::LeftBrace:
+                ++brace_depth;
+                break;
+            case TokenType::RightBrace:
+                --brace_depth;
+                break;
+            case TokenType::LeftParen:
+            case TokenType::LeftBracket:
+            case TokenType::QuestionBracket:
+            case TokenType::InterpolationStart:
+                ++group_depth;
+                break;
+            case TokenType::RightParen:
+            case TokenType::RightBracket:
+            case TokenType::InterpolationEnd:
+                if (group_depth > 0) {
+                    --group_depth;
+                }
+                break;
+            default:
+                break;
         }
 
         advance();

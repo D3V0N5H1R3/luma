@@ -1,6 +1,13 @@
 // Standard library tests: Stack.
 
+#include <array>
+#include <string>
+#include <string_view>
+#include <utility>
+
 #include "stdlib_test_helpers.hpp"
+
+using luma::test::eval;
 
 static void test_stack_concat() {
     const auto v = eval("Stack.to_array(Stack.concat("
@@ -71,7 +78,7 @@ static void test_stack_push_pop() {
 
     ASSERT_TRUE(result.is_tuple());
 
-    auto& elems = result.as_tuple()->elements;
+    const auto& elems = result.as_tuple()->elements;
 
     ASSERT_EQ(elems[0].as_integer(), 42);
 }
@@ -169,6 +176,14 @@ static void test_stack_each() {
     const auto v = eval("Stack.from_array([1, 2, 3]) |> Stack.each((integer x) -> x)");
 
     ASSERT_RESULT_SUCCESS(v);
+
+    // each visits every element for its side effects.
+    ASSERT_EQ(eval("reference<integer> total = Reference.new(0)\n"
+                   "result<none> _r = Stack.each(Stack.from_array([10, 20, 30]),"
+                   "(integer x) -> { Reference.set(total, Reference.get(total) + x) })\n"
+                   "Reference.get(total)")
+                  .as_integer(),
+              60);
 }
 
 static void test_stack_to_array() {
@@ -249,28 +264,19 @@ static void test_stack_peek_empty_fails() {
 
 // ─── Negative: wrong-argument-type errors ─────────────────────────
 
-static void test_stack_length_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Stack.length(42)"), "stack");
-}
+// (source, expected error message) for each operation given a wrong-typed
+// receiver or argument.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 6> wrong_type_cases{{
+    {"Stack.length(42)", "Stack.length: expected stack, got 'integer'"},
+    {"Stack.push(42, 1)", "Stack.push: expected stack, got 'integer'"},
+    {"Stack.pop(42)", "Stack.pop: expected stack, got 'integer'"},
+    {R"(Stack.peek("x"))", "Stack.peek: expected stack, got 'string'"},
+    {"Stack.from_array(42)", "Stack.from_array: expected array, got 'integer'"},
+    {"Stack.concat(Stack.new(), 42)", "Stack.concat: expected stack, got 'integer'"},
+}};
 
-static void test_stack_push_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Stack.push(42, 1)"), "stack");
-}
-
-static void test_stack_pop_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Stack.pop(42)"), "stack");
-}
-
-static void test_stack_peek_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval(R"(Stack.peek("x"))"), "stack");
-}
-
-static void test_stack_from_array_wrong_type_throws() {
-    ASSERT_THROWS(eval("Stack.from_array(42)"));
-}
-
-static void test_stack_concat_wrong_type_throws() {
-    ASSERT_THROWS(eval("Stack.concat(Stack.new(), 42)"));
+static void test_stack_wrong_type_throws(std::string_view source, std::string_view message) {
+    ASSERT_EVAL_THROWS(std::string{source}, message);
 }
 
 int main() {
@@ -297,11 +303,6 @@ int main() {
     RUN(test_stack_contains_find);
     RUN(test_stack_pop_while);
     RUN(test_stack_reverse);
-    RUN(test_stack_length_wrong_type_throws);
-    RUN(test_stack_push_wrong_type_throws);
-    RUN(test_stack_pop_wrong_type_throws);
-    RUN(test_stack_peek_wrong_type_throws);
-    RUN(test_stack_from_array_wrong_type_throws);
-    RUN(test_stack_concat_wrong_type_throws);
+    RUN_PARAMETERIZED(test_stack_wrong_type_throws, wrong_type_cases);
     return SUMMARY();
 }

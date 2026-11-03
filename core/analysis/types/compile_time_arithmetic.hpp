@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_TYPES_COMPILE_TIME_ARITHMETIC_HPP
+#define LUMA_TYPES_COMPILE_TIME_ARITHMETIC_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -36,3 +37,5 @@ inline constexpr int k_max_shift_bits = 64;
                                                              std::size_t max_length);
 
 } // namespace luma::compile_time_arithmetic
+
+#endif // LUMA_TYPES_COMPILE_TIME_ARITHMETIC_HPP

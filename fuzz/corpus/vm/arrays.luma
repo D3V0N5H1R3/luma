@@ -29,9 +29,9 @@ function void main() {
     # ── Access ───────────────────────────────────────────────────
     integer _len = Array.length(nums)
     boolean _is_empty = Array.is_empty(nums)
-    integer _f = Array.first(nums) |> Result.unwrap_or(-1)
-    integer _l = Array.last(nums) |> Result.unwrap_or(-1)
-    integer _g = Array.get(nums, 3) |> Result.unwrap_or(-1)
+    integer _f = Array.first(nums) |> Optional.unwrap_or(-1)
+    integer _l = Array.last(nums) |> Optional.unwrap_or(-1)
+    integer _g = Array.get(nums, 3) |> Optional.unwrap_or(-1)
     array<integer> _compacted = Array.compact([some(1), none, some(3)])
 
     # ── Functional ───────────────────────────────────────────────

@@ -1,27 +1,67 @@
 // Standard library tests: Reference.
 
+#include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "stdlib_test_helpers.hpp"
 
+using luma::ReferenceValue;
+using luma::SourceLocation;
+using luma::Value;
+using luma::test::eval;
+
 namespace {
 
 // Construct a reference cell holding an integer directly, mirroring what
 // Reference.new(initial) produces.  Used by the thread-safety tests, which
 // drive the real registered native functions from worker threads.
-Value make_int_reference(std::int64_t initial) {
+[[nodiscard]] Value make_int_reference(std::int64_t initial) {
     return Value{std::make_shared<ReferenceValue>(Value{initial})};
 }
 
 // Invoke a registered native stdlib function value with the given arguments.
-Value call_native(const Value& fn, std::vector<Value> args) {
+[[nodiscard]] Value call_native(const Value& fn, const std::vector<Value>& args) {
     return fn.as_native_function()->function(args, SourceLocation{});
+}
+
+// Start `body` on a std::jthread. An exception escaping a thread function would
+// call std::terminate, so any exception `body` throws (including a failed
+// assertion) is stored in `failure` for the test thread to rethrow after the
+// join. `failure` must outlive the returned thread.
+template <typename Body>
+[[nodiscard]] std::jthread start_worker(std::exception_ptr& failure, Body body) {
+    return std::jthread{[&failure, body = std::move(body)]() {
+        try {
+            body();
+        } catch (...) {
+            failure = std::current_exception();
+        }
+    }};
+}
+
+// Rethrow the first exception a worker captured, if any. Call only after every
+// worker has been joined.
+template <std::size_t N>
+void rethrow_first_failure(const std::array<std::exception_ptr, N>& failures) {
+    const auto failed = std::ranges::find_if(
+        failures, [](const std::exception_ptr& failure) { return failure != nullptr; });
+
+    if (failed != failures.end()) {
+        std::rethrow_exception(*failed);
+    }
 }
 
 } // namespace
@@ -163,34 +203,26 @@ static void test_reference_inspect_array() {
 
 // ─── Negative: wrong-argument-type guards (runtime, unchecked eval) ───
 
-static void test_reference_get_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Reference.get(42)"), "reference");
-}
+// (source, expected error message) for each operation given a non-reference
+// where a reference cell is required.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 6> wrong_type_cases{{
+    {"Reference.get(42)", "Reference.get: expected reference, got 'integer'"},
+    {"Reference.set(42, 1)", "Reference.set: expected reference, got 'integer'"},
+    {"Reference.update(42, (integer x) -> x)",
+     "Reference.update: expected reference, got 'integer'"},
+    {"Reference.swap(42, Reference.new(1))", "Reference.swap: expected reference, got 'integer'"},
+    {"Reference.swap(Reference.new(1), 42)", "Reference.swap: expected reference, got 'integer'"},
+    {"Reference.inspect(42)", "Reference.inspect: expected reference, got 'integer'"},
+}};
 
-static void test_reference_set_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Reference.set(42, 1)"), "reference");
-}
-
-static void test_reference_update_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Reference.update(42, (integer x) -> x)"), "reference");
-}
-
-static void test_reference_swap_first_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Reference.swap(42, Reference.new(1))"), "reference");
-}
-
-static void test_reference_swap_second_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Reference.swap(Reference.new(1), 42)"), "reference");
-}
-
-static void test_reference_inspect_wrong_type_throws() {
-    ASSERT_THROWS_WITH_MESSAGE(eval("Reference.inspect(42)"), "reference");
+static void test_reference_wrong_type_throws(std::string_view source, std::string_view message) {
+    ASSERT_EVAL_THROWS(std::string{source}, message);
 }
 
 static void test_reference_update_non_callable_throws() {
     // The second argument must be callable; a non-callable must be rejected
     // after the reference is validated.
-    ASSERT_THROWS(eval("Reference.update(Reference.new(1), 42)"));
+    ASSERT_EVAL_THROWS("Reference.update(Reference.new(1), 42)", "cannot call 'integer'");
 }
 
 static void test_reference_update_error_preserves_value() {
@@ -223,32 +255,40 @@ static void test_reference_concurrent_access_is_thread_safe() {
     constexpr int iterations = 4000;
 
     std::atomic<bool> observed_torn{false};
-    std::vector<std::thread> workers;
-    workers.reserve(thread_count);
+    std::array<std::exception_ptr, thread_count> failures{};
 
-    for (int t = 0; t < thread_count; ++t) {
-        workers.emplace_back([&set_fn, &get_fn, &observed_torn, ref, t]() {
+    {
+        std::vector<std::jthread> workers;
+        workers.reserve(thread_count);
+
+        for (int t = 0; t < thread_count; ++t) {
             const auto tag = static_cast<std::int64_t>(t);
 
-            for (int i = 0; i < iterations; ++i) {
-                call_native(set_fn, {ref, Value{tag}});
+            workers.push_back(start_worker(
+                failures.at(static_cast<std::size_t>(t)),
+                [&set_fn, &get_fn, &observed_torn, ref, tag]() {
+                    for (int i = 0; i < iterations; ++i) {
+                        if (!call_native(set_fn, {ref, Value{tag}}).is_null()) {
+                            throw std::runtime_error{"Reference.set did not return none"};
+                        }
 
-                const auto seen = call_native(get_fn, {ref}).as_integer();
-                if (seen < 0 || seen >= thread_count) {
-                    observed_torn.store(true);
-                }
-            }
-        });
-    }
+                        const auto seen = call_native(get_fn, {ref}).as_integer();
 
-    for (auto& worker : workers) {
-        worker.join();
-    }
+                        if (seen < 0 || seen >= thread_count) {
+                            observed_torn.store(true);
+                        }
+                    }
+                }));
+        }
+    } // The jthreads join here.
 
+    rethrow_first_failure(failures);
     ASSERT_FALSE(observed_torn.load());
 
     const auto final_value = call_native(get_fn, {ref}).as_integer();
-    ASSERT_TRUE(final_value >= 0 && final_value < thread_count);
+
+    ASSERT_GE(final_value, 0);
+    ASSERT_LT(final_value, thread_count);
 }
 
 static void test_reference_swap_avoids_deadlock_under_contention() {
@@ -266,16 +306,24 @@ static void test_reference_swap_avoids_deadlock_under_contention() {
 
     constexpr int iterations = 5000;
 
-    const auto worker = [&swap_fn](Value first, Value second) {
-        for (int i = 0; i < iterations; ++i) {
-            call_native(swap_fn, {first, second});
-        }
+    const auto swap_repeatedly = [&swap_fn](const Value& first, const Value& second) {
+        return [&swap_fn, first, second]() {
+            for (int i = 0; i < iterations; ++i) {
+                if (!call_native(swap_fn, {first, second}).is_null()) {
+                    throw std::runtime_error{"Reference.swap did not return none"};
+                }
+            }
+        };
     };
 
-    std::thread t1{worker, a, b};
-    std::thread t2{worker, b, a};
-    t1.join();
-    t2.join();
+    std::array<std::exception_ptr, 2> failures{};
+
+    {
+        const std::jthread forward{start_worker(failures[0], swap_repeatedly(a, b))};
+        const std::jthread backward{start_worker(failures[1], swap_repeatedly(b, a))};
+    } // The jthreads join here.
+
+    rethrow_first_failure(failures);
 
     const auto va = a.as_reference()->get().as_integer();
     const auto vb = b.as_reference()->get().as_integer();
@@ -305,12 +353,7 @@ int main() {
     RUN(test_reference_inspect_boolean);
     RUN(test_reference_inspect_integer);
     RUN(test_reference_inspect_array);
-    RUN(test_reference_get_wrong_type_throws);
-    RUN(test_reference_set_wrong_type_throws);
-    RUN(test_reference_update_wrong_type_throws);
-    RUN(test_reference_swap_first_wrong_type_throws);
-    RUN(test_reference_swap_second_wrong_type_throws);
-    RUN(test_reference_inspect_wrong_type_throws);
+    RUN_PARAMETERIZED(test_reference_wrong_type_throws, wrong_type_cases);
     RUN(test_reference_update_non_callable_throws);
     RUN(test_reference_update_error_preserves_value);
     RUN(test_reference_concurrent_access_is_thread_safe);

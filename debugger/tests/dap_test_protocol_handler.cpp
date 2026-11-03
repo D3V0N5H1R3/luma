@@ -11,7 +11,7 @@
 #include "json/json.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::dap;
+using luma::dap::DapProtocolHandler;
 using luma::json::JsonValue;
 
 namespace {
@@ -215,6 +215,34 @@ void test_recoverable_transport_error_does_not_look_like_eof() {
     ASSERT_EQ(transport.written()[0]["command"].as_string(), "initialize");
 }
 
+// Regression: a post-response action that throws used to fall into the
+// dispatch catch block, which sent a *second* (error) response for the same
+// request_seq after the success response had already gone out.
+void test_failing_post_response_action_sends_one_response() {
+    FakeTransport transport;
+    transport.enqueue_request("disconnect", 1);
+
+    DapProtocolHandler handler{transport};
+    handler.register_handler("disconnect", [](const JsonValue&) {
+        auto result = DapProtocolHandler::HandlerResult::ok();
+        result.post_response_action = [] { throw std::runtime_error("teardown failed"); };
+        return result;
+    });
+
+    ASSERT_EQ(handler.run(), 0);
+
+    int responses = 0;
+
+    for (const auto& message : transport.written()) {
+        if (message["type"].as_string() == "response") {
+            ++responses;
+            ASSERT_TRUE(message["success"].as_bool());
+        }
+    }
+
+    ASSERT_EQ(responses, 1);
+}
+
 } // namespace
 
 int main() {
@@ -224,6 +252,7 @@ int main() {
     RUN(test_send_response_broken_pipe_invokes_disconnect_callback_once);
     RUN(test_clean_eof_invokes_disconnect_callback_once);
     RUN(test_recoverable_transport_error_does_not_look_like_eof);
+    RUN(test_failing_post_response_action_sends_one_response);
 
     return SUMMARY();
 }

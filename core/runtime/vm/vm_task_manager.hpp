@@ -15,7 +15,8 @@
 //   owned_pool     — thread pool owned by a top-level (root) VM.
 //   shared_pool    — non-owning pointer used by child VMs spawned into an
 //                    existing pool.
-//   next_task_id   — monotonically increasing task ID for debugger correlation.
+//   next_task_id   — process-wide monotonically increasing task ID for debugger
+//                    correlation (static, so nested task VMs never reuse an ID).
 //   current_scope  — thread-local pointer to the innermost active TaskScope for
 //                    this thread.  Spawned tasks read it to inherit the parent's
 //                    cancellation token.  It is thread-global (one per thread,
@@ -43,9 +44,9 @@
 namespace luma {
 
 /// Owns the VM's task-scope, thread-pool, and task-id state.  Instance fields
-/// are transferred field-by-field by VM's move operations (the type is not
-/// movable as a whole because std::atomic is non-movable); the static
-/// thread-local current_scope is shared across the thread and left untouched.
+/// are transferred field-by-field by VM's move operations; the static task-id
+/// counter and thread-local current_scope are process/thread-global and left
+/// untouched.
 class VMTaskManager {
 public:
     /// LIFO stack of active task_scope { } blocks.
@@ -57,8 +58,11 @@ public:
     /// Non-owning pointer used by child VMs spawned into an existing pool.
     ThreadPool* shared_pool{nullptr};
 
-    /// Monotonically increasing task ID for debugger correlation.
-    std::atomic<int> next_task_id{VMConstants::k_initial_task_id};
+    /// Monotonically increasing task ID for debugger correlation.  Process-wide
+    /// rather than per VM: a task VM spawning nested tasks would otherwise
+    /// restart at k_initial_task_id and hand out IDs already used by its
+    /// siblings, so the debugger's task → thread map would alias two tasks.
+    static inline std::atomic<int> next_task_id{VMConstants::k_initial_task_id};
 
     /// Thread-local pointer to the innermost active TaskScope for this thread.
     /// Defined in vm.cpp.  Gives spawned tasks access to the active cancellation

@@ -1,10 +1,12 @@
 # ═══════════════════════════════════════════════════════════
 # Singleton Pattern
 #
-# Ensures a shared piece of state exists exactly once,
-# using a reference<T> to hold the single instance and
-# closures to capture it. Every consumer that receives
-# the accessor functions sees the same underlying state.
+# Shares one instance of some state with every consumer.
+# Luma functions cannot reach hidden global state, so
+# instead of a global accessor the instance is created once
+# in `main` and handed to each consumer explicitly. Because
+# its closures share a single reference<T>, every holder of
+# the instance sees the same, up-to-date state.
 #
 # Usage: luma examples/design-patterns/singleton.luma
 # ═══════════════════════════════════════════════════════════
@@ -36,10 +38,10 @@ function ConfigStore create_config_store() {
     return ConfigStore {
         get = () -> Reference.get(config),
         set_debug = (boolean is_debug) -> {
-            Reference.update(config, (AppConfig c) -> c with { is_debug = is_debug })
+            Reference.update(config, (AppConfig current) -> current with { is_debug = is_debug })
         },
         set_version = (string version) -> {
-            Reference.update(config, (AppConfig c) -> c with { version = version })
+            Reference.update(config, (AppConfig current) -> current with { version = version })
         }
     }
 }
@@ -68,7 +70,7 @@ function void handle_request(ConfigStore store, Counter counter, string endpoint
     counter.increment()
 
     AppConfig cfg = store.get()
-    number count = counter.get()
+    string count = String.format_number(counter.get(), 0)
 
     if cfg.is_debug {
         print("  [debug] ${cfg.app_name} v${cfg.version} | #${count} ${endpoint}")
@@ -84,7 +86,7 @@ function void main() {
     print("=== Singleton Pattern ===")
     print("")
 
-    # Create the singletons once
+    # Create each shared instance exactly once, then pass it to every consumer
     ConfigStore config = create_config_store()
     Counter requests = create_counter()
 
@@ -105,5 +107,5 @@ function void main() {
     handle_request(config, requests, "DELETE /orders/7")
 
     print("")
-    print("Total requests: ${requests.get()}")
+    print("Total requests: ${String.format_number(requests.get(), 0)}")
 }

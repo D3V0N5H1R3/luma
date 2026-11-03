@@ -7,7 +7,11 @@
 // reachable: key-type and malformed-input guards throw RuntimeError, while
 // callback errors are converted to failure results by apply_with_error_handling.
 
+#include <string>
+
 #include "stdlib_test_helpers.hpp"
+
+using luma::test::eval;
 
 // ─── has ──────────────────────────────────────────────────────────────
 
@@ -18,7 +22,7 @@ static void test_dictionary_has() {
 }
 
 static void test_dictionary_has_non_string_key_throws() {
-    ASSERT_THROWS(eval("Dictionary.has({\"a\": 1}, 5)"));
+    ASSERT_EVAL_THROWS("Dictionary.has({\"a\": 1}, 5)", "Dictionary.has: expected string key");
 }
 
 // ─── get / get_or ─────────────────────────────────────────────────────
@@ -32,7 +36,7 @@ static void test_dictionary_get_missing_key() {
 }
 
 static void test_dictionary_get_non_string_key_throws() {
-    ASSERT_THROWS(eval("Dictionary.get({\"a\": 1}, 5)"));
+    ASSERT_EVAL_THROWS("Dictionary.get({\"a\": 1}, 5)", "Dictionary.get: expected string key");
 }
 
 static void test_dictionary_get_or() {
@@ -42,7 +46,8 @@ static void test_dictionary_get_or() {
 }
 
 static void test_dictionary_get_or_non_string_key_throws() {
-    ASSERT_THROWS(eval("Dictionary.get_or({\"a\": 1}, 5, 0)"));
+    ASSERT_EVAL_THROWS("Dictionary.get_or({\"a\": 1}, 5, 0)",
+                       "Dictionary.get_or: expected string key");
 }
 
 // ─── set ──────────────────────────────────────────────────────────────
@@ -68,7 +73,7 @@ static void test_dictionary_set_preserves_existing() {
 }
 
 static void test_dictionary_set_non_string_key_throws() {
-    ASSERT_THROWS(eval("Dictionary.set({\"a\": 1}, 5, 2)"));
+    ASSERT_EVAL_THROWS("Dictionary.set({\"a\": 1}, 5, 2)", "Dictionary.set: expected string key");
 }
 
 // ─── remove ───────────────────────────────────────────────────────────
@@ -87,7 +92,8 @@ static void test_dictionary_remove_missing_key() {
 }
 
 static void test_dictionary_remove_non_string_key_throws() {
-    ASSERT_THROWS(eval("Dictionary.remove({\"a\": 1}, 5)"));
+    ASSERT_EVAL_THROWS("Dictionary.remove({\"a\": 1}, 5)",
+                       "Dictionary.remove: expected string key");
 }
 
 // ─── length / is_empty ────────────────────────────────────────────────
@@ -211,7 +217,8 @@ static void test_dictionary_from_keys_empty() {
 }
 
 static void test_dictionary_from_keys_non_string_throws() {
-    ASSERT_THROWS(eval("Dictionary.from_keys([1, 2], 0)"));
+    ASSERT_EVAL_THROWS("Dictionary.from_keys([1, 2], 0)",
+                       "Dictionary.from_keys: all keys must be strings");
 }
 
 // ─── to_array ─────────────────────────────────────────────────────────
@@ -230,8 +237,8 @@ static void test_dictionary_to_array() {
 
     const auto* key = elem.as_record()->find_field("key");
     const auto* value = elem.as_record()->find_field("value");
-    ASSERT_TRUE(key != nullptr);
-    ASSERT_TRUE(value != nullptr);
+    ASSERT_NE(key, nullptr);
+    ASSERT_NE(value, nullptr);
     ASSERT_EQ(key->as_string(), std::string{"x"});
     ASSERT_EQ(value->as_integer(), 1);
 }
@@ -261,17 +268,20 @@ static void test_dictionary_from_entries() {
 }
 
 static void test_dictionary_from_entries_non_tuple_throws() {
-    ASSERT_THROWS(eval("Dictionary.from_entries([1, 2])"));
+    ASSERT_EVAL_THROWS("Dictionary.from_entries([1, 2])",
+                       "Dictionary.from_entries: each element must be a tuple");
 }
 
 static void test_dictionary_from_entries_non_string_key_throws() {
-    ASSERT_THROWS(eval("Dictionary.from_entries([(5, 1)])"));
+    ASSERT_EVAL_THROWS("Dictionary.from_entries([(5, 1)])",
+                       "Dictionary.from_entries: tuple key must be a string");
 }
 
 static void test_dictionary_from_entries_wrong_arity_throws() {
     // Each entry must be a (key, value) pair; tuples of any other arity are
     // rejected rather than silently truncated.
-    ASSERT_THROWS(eval("Dictionary.from_entries([(\"a\", 1, 2)])"));
+    ASSERT_EVAL_THROWS("Dictionary.from_entries([(\"a\", 1, 2)])",
+                       "each tuple must have exactly 2 elements");
 }
 
 // ─── invert ───────────────────────────────────────────────────────────
@@ -311,7 +321,7 @@ static void test_dictionary_deep_merge_nested() {
 
     const auto* outer = v.as_dictionary()->find("outer");
 
-    ASSERT_TRUE(outer != nullptr);
+    ASSERT_NE(outer, nullptr);
     ASSERT_TRUE(outer->is_dictionary());
     ASSERT_EQ(outer->as_dictionary()->entries.size(), 3U);
 }
@@ -335,8 +345,8 @@ static void test_dictionary_deep_merge_shared_substructure() {
     ASSERT_TRUE(y != nullptr && y->is_dictionary());
     ASSERT_EQ(x->as_dictionary()->entries.size(), 2U);
     ASSERT_EQ(y->as_dictionary()->entries.size(), 2U);
-    ASSERT_TRUE(x->as_dictionary()->find("q") != nullptr);
-    ASSERT_TRUE(y->as_dictionary()->find("r") != nullptr);
+    ASSERT_NE(x->as_dictionary()->find("q"), nullptr);
+    ASSERT_NE(y->as_dictionary()->find("r"), nullptr);
 }
 
 static void test_dictionary_deep_merge_self_succeeds() {
@@ -353,7 +363,7 @@ static void test_dictionary_deep_merge_self_succeeds() {
     const auto* k = v.as_dictionary()->find("k");
 
     ASSERT_TRUE(k != nullptr && k->is_dictionary());
-    ASSERT_TRUE(k->as_dictionary()->find("b") != nullptr);
+    ASSERT_NE(k->as_dictionary()->find("b"), nullptr);
 }
 
 static void test_dictionary_deep_merge_max_depth_throws() {
@@ -373,14 +383,7 @@ static void test_dictionary_deep_merge_max_depth_throws() {
 
     source += "Dictionary.deep_merge(a150, b150)";
 
-    try {
-        eval(source);
-        ASSERT_TRUE(false);
-    } catch (const RuntimeError& e) {
-        const std::string message{e.what()};
-        ASSERT_TRUE(message.find("deep_merge") != std::string::npos);
-        ASSERT_TRUE(message.find("depth") != std::string::npos);
-    }
+    ASSERT_EVAL_THROWS(source, "Dictionary.deep_merge: maximum nesting depth exceeded");
 }
 
 // ─── map_values ───────────────────────────────────────────────────────
@@ -486,8 +489,8 @@ static void test_dictionary_pick() {
 
     ASSERT_TRUE(v.is_dictionary());
     ASSERT_EQ(v.as_dictionary()->entries.size(), 2U);
-    ASSERT_TRUE(v.as_dictionary()->find("a") != nullptr);
-    ASSERT_TRUE(v.as_dictionary()->find("b") == nullptr);
+    ASSERT_NE(v.as_dictionary()->find("a"), nullptr);
+    ASSERT_EQ(v.as_dictionary()->find("b"), nullptr);
 }
 
 static void test_dictionary_pick_missing_keys() {
@@ -497,7 +500,8 @@ static void test_dictionary_pick_missing_keys() {
 }
 
 static void test_dictionary_pick_non_string_key_throws() {
-    ASSERT_THROWS(eval("Dictionary.pick({\"a\": 1}, [1])"));
+    ASSERT_EVAL_THROWS("Dictionary.pick({\"a\": 1}, [1])",
+                       "Dictionary.pick: all keys must be strings");
 }
 
 // ─── omit ─────────────────────────────────────────────────────────────
@@ -507,7 +511,7 @@ static void test_dictionary_omit() {
 
     ASSERT_TRUE(v.is_dictionary());
     ASSERT_EQ(v.as_dictionary()->entries.size(), 2U);
-    ASSERT_TRUE(v.as_dictionary()->find("b") == nullptr);
+    ASSERT_EQ(v.as_dictionary()->find("b"), nullptr);
 }
 
 static void test_dictionary_omit_missing_keys() {
@@ -516,7 +520,8 @@ static void test_dictionary_omit_missing_keys() {
 }
 
 static void test_dictionary_omit_non_string_key_throws() {
-    ASSERT_THROWS(eval("Dictionary.omit({\"a\": 1}, [1])"));
+    ASSERT_EVAL_THROWS("Dictionary.omit({\"a\": 1}, [1])",
+                       "Dictionary.omit: all keys must be strings");
 }
 
 // ─── find ─────────────────────────────────────────────────────────────
@@ -568,8 +573,13 @@ static void test_dictionary_flip() {
 
     const auto& dict = v.as_result()->owned_inner->as_dictionary();
 
-    ASSERT_TRUE(dict->find("1") != nullptr);
-    ASSERT_TRUE(dict->find("2") != nullptr);
+    const auto* one = dict->find("1");
+    const auto* two = dict->find("2");
+
+    ASSERT_NE(one, nullptr);
+    ASSERT_NE(two, nullptr);
+    ASSERT_EQ(one->as_string(), std::string{"a"});
+    ASSERT_EQ(two->as_string(), std::string{"b"});
 }
 
 static void test_dictionary_flip_non_string_value_fails() {
@@ -610,17 +620,25 @@ static void test_dictionary_update() {
     const auto v = eval("Dictionary.update({\"x\": 5}, \"x\", "
                         "(optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)");
     ASSERT_TRUE(v.is_dictionary());
-    ASSERT_EQ(v.as_dictionary()->find("x")->as_integer(), 6);
+    const auto* updated = v.as_dictionary()->find("x");
+    ASSERT_NE(updated, nullptr);
+    ASSERT_EQ(updated->as_integer(), 6);
 
     // Absent key: updater sees none.
     const auto w = eval("Dictionary.update({\"x\": 5}, \"y\", "
                         "(optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)");
-    ASSERT_EQ(w.as_dictionary()->find("y")->as_integer(), 1);
+    ASSERT_TRUE(w.is_dictionary());
+    const auto* inserted = w.as_dictionary()->find("y");
+    const auto* preserved = w.as_dictionary()->find("x");
+    ASSERT_NE(inserted, nullptr);
+    ASSERT_NE(preserved, nullptr);
+    ASSERT_EQ(inserted->as_integer(), 1);
     // Original entry is preserved and the input is not mutated.
-    ASSERT_EQ(w.as_dictionary()->find("x")->as_integer(), 5);
+    ASSERT_EQ(preserved->as_integer(), 5);
 
     // Non-string key is rejected.
-    ASSERT_THROWS(eval("Dictionary.update({\"x\": 5}, 1, (optional<integer> c) -> 0)"));
+    ASSERT_EVAL_THROWS("Dictionary.update({\"x\": 5}, 1, (optional<integer> c) -> 0)",
+                       "Dictionary.update: expected string key");
 }
 
 int main() {

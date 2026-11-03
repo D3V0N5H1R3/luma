@@ -19,6 +19,9 @@
 #include <mutex>
 #include <streambuf>
 #include <string>
+#include <string_view>
+
+#include "diagnostic_log.hpp"
 
 namespace luma::dap {
 
@@ -34,16 +37,12 @@ public:
     // ensure no output is silently lost at shutdown.
     ~LineBufferedStreamBuf() override {
         try {
-            const std::lock_guard<std::mutex> lock(mutex_);
-
-            if (!buffer_.empty()) {
-                flush_fn_(buffer_);
-                buffer_.clear();
-            }
+            flush_partial_line();
         } catch (const std::exception& e) {
-            std::cerr << "DAP: error in ~LineBufferedStreamBuf: " << e.what() << '\n';
+            write_adapter_diagnostic(std::string{"DAP: error in ~LineBufferedStreamBuf: "} +
+                                     e.what());
         } catch (...) {
-            std::cerr << "DAP: unknown exception in ~LineBufferedStreamBuf\n";
+            write_adapter_diagnostic("DAP: unknown exception in ~LineBufferedStreamBuf");
         }
     }
 
@@ -58,36 +57,51 @@ protected:
             return traits_type::eof();
         }
 
-        const std::lock_guard<std::mutex> lock(mutex_);
-        buffer_ += static_cast<char>(ch);
-
-        if (ch == '\n') {
-            flush_fn_(buffer_);
-            buffer_.clear();
-        }
-
+        const char c = traits_type::to_char_type(ch);
+        (void)xsputn(&c, 1);
         return ch;
     }
 
     std::streamsize xsputn(const char* s, std::streamsize count) override {
         const std::lock_guard<std::mutex> lock(mutex_);
+        const std::string_view text{s, static_cast<std::size_t>(count)};
+        std::size_t start = 0;
 
-        for (std::streamsize i = 0; i < count; ++i) {
-            buffer_ += static_cast<char>(s[i]);
-
-            if (s[i] == '\n') {
-                flush_fn_(buffer_);
-                buffer_.clear();
-            }
+        // Emit every complete line; keep the trailing partial line buffered.
+        for (auto newline = text.find('\n'); newline != std::string_view::npos;
+             newline = text.find('\n', start)) {
+            buffer_.append(text.substr(start, newline - start + 1));
+            flush_fn_(buffer_);
+            buffer_.clear();
+            start = newline + 1;
         }
 
+        buffer_.append(text.substr(start));
         return count;
     }
 
+    // std::flush / std::endl: emit a pending partial line (e.g. a prompt with
+    // no newline) instead of holding it until the next newline.
+    int sync() override {
+        flush_partial_line();
+        return 0;
+    }
+
 private:
+    void flush_partial_line() {
+        const std::lock_guard<std::mutex> lock(mutex_);
+
+        if (!buffer_.empty()) {
+            flush_fn_(buffer_);
+            buffer_.clear();
+        }
+    }
+
     FlushFn flush_fn_;
     std::string buffer_; // GUARDED_BY(mutex_)
-    // Leaf-level lock — never held while acquiring any other mutex.
+    // Held while flush_fn_ runs, so the output chain is mutex_ → send_mutex_ →
+    // the transport's write mutex; no lock in that chain is ever taken in the
+    // opposite order (see dap_lock_ordering.hpp), so this cannot deadlock.
     std::mutex mutex_;
 };
 
@@ -101,9 +115,10 @@ public:
         try {
             stream_.rdbuf(old_buf_);
         } catch (const std::exception& e) {
-            std::cerr << "DAP: error restoring stream buffer: " << e.what() << '\n';
+            write_adapter_diagnostic(std::string{"DAP: error restoring stream buffer: "} +
+                                     e.what());
         } catch (...) {
-            std::cerr << "DAP: unknown exception restoring stream buffer\n";
+            write_adapter_diagnostic("DAP: unknown exception restoring stream buffer");
         }
     }
 

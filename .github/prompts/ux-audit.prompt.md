@@ -23,7 +23,7 @@ Read the design principles before starting — they are the rubric for every fin
 
 - **Terminal/TUI applications.** These use the `Terminal` module for raw-mode input, cursor control, colour, screen clearing, keyboard/mouse events, and richer text interfaces. Review screen structure, keyboard flow, focus cues, status areas, shortcuts, and recovery from invalid input.
 - **Console applications.** These use plain input and output via `Console` and related modules. Review prompt wording, command discoverability, output hierarchy, error messages, progress feedback, and how well the app guides a first-time user.
-- **Running the example (optional).** Run the target to inspect the actual text UI — single-config: `build/luma <file>`, multi-config: `build/Release/luma <file>`. For non-interactive checks, use scripted stdin or the `Terminal.test_*` APIs documented in the standard library reference and feature tests.
+- **Running the example (optional).** Run the target to inspect the actual text UI with `build/luma <file>`. For non-interactive checks, use scripted stdin or the `Terminal.test_*` APIs documented in the standard library reference and feature tests.
 
 ## Review Checklist
 

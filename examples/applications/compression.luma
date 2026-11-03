@@ -5,6 +5,10 @@
 # gzip / gunzip, and run-length encoding.
 # ═══════════════════════════════════════════════════════════
 
+function string yes_or_no(boolean answer) {
+    return if answer { "yes" } else { "no" }
+}
+
 @main
 function void main() {
     # ── Deflate / Inflate ──
@@ -15,18 +19,16 @@ function void main() {
     print("Original (${String.length(original)} chars): ${original}")
 
     string compressed = original
-    |> Compression.deflate()
+        |> Compression.deflate()
 
-    number comp_size = Compression.compressed_size(original)
-
-    print("Compressed size: ${comp_size} bytes")
+    print("Compressed size: ${Compression.compressed_size(original)} bytes")
 
     string restored = compressed
-    |> Compression.inflate()
-    |> Result.unwrap_or("<inflate failed>")
+        |> Compression.inflate()
+        |> Result.unwrap_or("<inflate failed>")
 
     print("Restored text: ${restored}")
-    print("Round-trip restored the original: ${if restored == original { "yes" } else { "no" }}")
+    print("Round-trip restored the original: ${yes_or_no(restored == original)}")
 
     # ── Gzip / Gunzip ──
     print("\n=== Gzip / Gunzip ===")
@@ -34,15 +36,15 @@ function void main() {
     string data = "Luma is a beginner-friendly programming language!"
 
     string gzipped = data
-    |> Compression.gzip()
+        |> Compression.gzip()
 
     string ungzipped = gzipped
-    |> Compression.gunzip()
-    |> Result.unwrap_or("<gunzip failed>")
+        |> Compression.gunzip()
+        |> Result.unwrap_or("<gunzip failed>")
 
     print("Original:  ${data}")
     print("Restored:  ${ungzipped}")
-    print("Gzip round-trip restored the original: ${if ungzipped == data { "yes" } else { "no" }}")
+    print("Gzip round-trip restored the original: ${yes_or_no(ungzipped == data)}")
 
     # ── Run-Length Encoding ──
     print("\n=== Run-Length Encoding ===")
@@ -54,10 +56,9 @@ function void main() {
     print("Encoded: ${encoded}")
 
     string decoded = encoded
-    |> Compression.decode_rle()
-    |> Result.unwrap_or("<decode failed>")
+        |> Compression.decode_rle()
+        |> Result.unwrap_or("<decode failed>")
 
     print("Decoded: ${decoded}")
-    string matches_original = if decoded == rle_input { "yes" } else { "no" }
-    print("Run-length round-trip restored the input: ${matches_original}")
+    print("Run-length round-trip restored the input: ${yes_or_no(decoded == rle_input)}")
 }

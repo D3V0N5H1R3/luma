@@ -20,6 +20,7 @@
 #include <system_error>
 
 #include "analysis/source/source_location.hpp"
+#include "common/path_utils.hpp"
 #include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -41,7 +42,7 @@ void register_filesystem_paths(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return pure_path_query(
                 args, "FileSystem.extension", loc,
-                [](const std::filesystem::path& p) { return p.extension().string(); });
+                [](const std::filesystem::path& p) { return path_to_utf8(p.extension()); });
         })
         .func("is_directory", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -74,13 +75,13 @@ void register_filesystem_paths(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return pure_path_query(
                 args, "FileSystem.name", loc,
-                [](const std::filesystem::path& p) { return p.filename().string(); });
+                [](const std::filesystem::path& p) { return path_to_utf8(p.filename()); });
         })
         .func("parent", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return pure_path_query(
                 args, "FileSystem.parent", loc,
-                [](const std::filesystem::path& p) { return p.parent_path().string(); });
+                [](const std::filesystem::path& p) { return path_to_utf8(p.parent_path()); });
         })
         .func("size", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -98,22 +99,24 @@ void register_filesystem_paths(const EnvPtr& env) {
                     expect_min_args("FileSystem.join", args, 2, loc);
                     expect_all_strings(args, "FileSystem.join", loc, path_args_hint);
 
-                    std::filesystem::path result{args[0].as_string()};
+                    // Luma strings are UTF-8; build the path without the
+                    // MSVC ANSI code-page decoding of std::string.
+                    std::filesystem::path result = path_from_user_utf8(args[0].as_string(), loc);
 
                     for (const auto& arg : std::span{args}.subspan(1)) {
-                        result /= arg.as_string();
+                        result /= path_from_user_utf8(arg.as_string(), loc);
                     }
 
                     // Validate the joined path to prevent sandbox escape.
-                    const auto safe_path = validate_path(result.string(), loc);
+                    const auto safe_path = validate_path(path_to_utf8(result), loc);
 
-                    return Value{safe_path.string()};
+                    return Value{path_to_utf8(safe_path)};
                 })
         .func("stem", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return pure_path_query(
                 args, "FileSystem.stem", loc,
-                [](const std::filesystem::path& p) { return p.stem().string(); });
+                [](const std::filesystem::path& p) { return path_to_utf8(p.stem()); });
         })
         // FileSystem.split_path decomposes a path into its parts in one call.
         // Pure string manipulation (no I/O), so it needs no sandbox guard and
@@ -123,14 +126,14 @@ void register_filesystem_paths(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             expect_all_strings(args, "FileSystem.split_path", loc, path_args_hint);
 
-            const std::filesystem::path p{args[0].as_string()};
+            const std::filesystem::path p = path_from_user_utf8(args[0].as_string(), loc);
 
             auto rec = std::make_shared<RecordValue>();
             rec->type_name = "PathParts";
-            rec->fields.emplace_back("parent", Value{p.parent_path().string()});
-            rec->fields.emplace_back("name", Value{p.filename().string()});
-            rec->fields.emplace_back("stem", Value{p.stem().string()});
-            rec->fields.emplace_back("extension", Value{p.extension().string()});
+            rec->fields.emplace_back("parent", Value{path_to_utf8(p.parent_path())});
+            rec->fields.emplace_back("name", Value{path_to_utf8(p.filename())});
+            rec->fields.emplace_back("stem", Value{path_to_utf8(p.stem())});
+            rec->fields.emplace_back("extension", Value{path_to_utf8(p.extension())});
 
             return Value{std::move(rec)};
         })
@@ -138,7 +141,7 @@ void register_filesystem_paths(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return pure_path_query(
                 args, "FileSystem.normalize", loc,
-                [](const std::filesystem::path& p) { return p.lexically_normal().string(); });
+                [](const std::filesystem::path& p) { return path_to_utf8(p.lexically_normal()); });
         })
         .func("is_absolute", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -154,8 +157,8 @@ void register_filesystem_paths(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             expect_all_strings(args, "FileSystem.relative", loc, path_args_hint);
 
-            const auto path = std::filesystem::path{args[0].as_string()};
-            const auto base = std::filesystem::path{args[1].as_string()};
+            const auto path = path_from_user_utf8(args[0].as_string(), loc);
+            const auto base = path_from_user_utf8(args[1].as_string(), loc);
 
             // Pure lexical operation — no filesystem access. lexically_relative
             // legitimately yields ".."-prefixed results (e.g. relative("a/b",
@@ -170,7 +173,7 @@ void register_filesystem_paths(const EnvPtr& env) {
             const std::string& path_str = expect_string(args[0], "FileSystem.absolute_path", loc);
             return wrap_result_operation("FileSystem", "absolute_path", [&]() -> Value {
                 const auto safe_path = validate_path(path_str, loc);
-                return make_success_value(Value{safe_path.string()});
+                return make_success_value(Value{path_to_utf8(safe_path)});
             });
         })
         .func("home_directory", 0)

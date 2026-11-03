@@ -64,14 +64,14 @@ DeclarationPtr Parser::parse_annotated_function() {
     const auto& annotation_token = expect(TokenType::Annotation);
     const auto& annotation = annotation_token.lexeme;
 
-    auto declaration = parse_function_decl();
-
-    if (declaration->kind != DeclarationKind::Function) {
+    if (!check(TokenType::Function)) {
         syntax_error("expected a function declaration after annotation", annotation_token.location,
                      "annotations like @main and @test can only be applied to functions");
     }
 
-    // Safe: the invariant check above throws if kind is not Function.
+    auto declaration = parse_function_decl();
+
+    // parse_function_decl() always builds a FunctionDeclaration.
     auto* function = static_cast<FunctionDeclaration*>(declaration.get());
 
     if (annotation == k_annotation_main) {
@@ -183,7 +183,7 @@ DeclarationPtr Parser::parse_choice_decl() {
 
     expect(TokenType::LeftBrace);
 
-    while (!check(TokenType::RightBrace) && !is_at_end()) {
+    parse_block_items(BlockItem::Variant, [&] {
         ChoiceVariant variant;
         variant.name = expect(TokenType::Identifier).lexeme;
 
@@ -199,7 +199,7 @@ DeclarationPtr Parser::parse_choice_decl() {
         declaration->variants.push_back(std::move(variant));
 
         (void)consume_if(TokenType::Comma); // optional comma between variants
-    }
+    });
 
     recover_expect(TokenType::RightBrace);
 
@@ -235,7 +235,7 @@ DeclarationPtr Parser::parse_namespace_decl() {
 
     expect(TokenType::LeftBrace);
 
-    while (!check(TokenType::RightBrace) && !is_at_end()) {
+    parse_block_items(BlockItem::Declaration, [&] {
         bool is_internal_member = false;
 
         if (check(TokenType::Internal)) {
@@ -259,7 +259,7 @@ DeclarationPtr Parser::parse_namespace_decl() {
         decl->is_internal_to_namespace = is_internal_member;
 
         declaration->declarations.push_back(std::move(decl));
-    }
+    });
 
     recover_expect(TokenType::RightBrace);
 

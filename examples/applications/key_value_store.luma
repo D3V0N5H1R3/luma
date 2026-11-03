@@ -3,10 +3,13 @@
 #
 # Demonstrates the KeyValueStore module — creating a store,
 # setting / getting values, batch operations, and querying.
+# Every store operation that can fail returns result<T>, so
+# each demo step propagates failures with '?' and main reports
+# them in one place.
 # ═══════════════════════════════════════════════════════════
 
 # Open a fresh store and apply set operations in order. Any failure
-# short-circuits the chain, so callers unwrap the result just once.
+# short-circuits the chain, so callers handle the result just once.
 function result<key_value_store> seed(string path, array<(string, string)> pairs) {
     mutable result<key_value_store> store = KeyValueStore.open(path)
 
@@ -18,7 +21,7 @@ function result<key_value_store> seed(string path, array<(string, string)> pairs
 }
 
 # Build a store with several entries and print them as a dictionary.
-function void show_entries() {
+function result<none> show_entries() {
     print("=== Key-Value Store ===")
 
     array<(string, string)> initial = [
@@ -27,67 +30,78 @@ function void show_entries() {
         ("version", "1.0")
     ]
 
-    dictionary<string> entries = seed("demo_store.kv", initial)
-    !> KeyValueStore.set_many({"color": "blue", "editor": "vscode"})
-    |> Result.unwrap()
-    |> KeyValueStore.to_dictionary()
+    key_value_store store = (seed("demo_store.kv", initial)
+        !> KeyValueStore.set_many({"color": "blue", "editor": "vscode"}))?
+    dictionary<string> entries = KeyValueStore.to_dictionary(store)
 
-    print("Stored 5 keys; read back 'name' = ${entries["name"]}.")
+    print("Stored ${Dictionary.length(entries)} keys; read back 'name' = ${entries["name"]}.")
+
+    return success(none)
 }
 
 # Read a single value back, and test for a key's presence.
-function void get_and_has() {
+function result<none> get_and_has() {
     print("\n=== Get / Has ===")
 
-    string greeting = seed("demo_store2.kv", [("greeting", "hello")])
-    !> KeyValueStore.get("greeting")
-    |> Result.unwrap()
+    string greeting = (seed("demo_store2.kv", [("greeting", "hello")])
+        !> KeyValueStore.get("greeting"))?
 
     print("Read back 'greeting' = ${greeting}.")
 
-    boolean has_key = seed("demo_store3.kv", [("x", "1")])
-    |> Result.unwrap()
-    |> KeyValueStore.has("x")
+    boolean has_key = seed("demo_store3.kv", [("x", "1")])? |> KeyValueStore.has("x")
 
     print("Key 'x' is present: ${if has_key { "yes" } else { "no" }}.")
+
+    return success(none)
 }
 
-# List the keys held by a store.
-function void list_keys() {
+# List the keys and values held by a store.
+function result<none> list_keys_and_values() {
     print("\n=== Keys / Values ===")
 
-    array<string> keys = seed("demo_store4.kv", [("a", "1"), ("b", "2")])
-    |> Result.unwrap()
-    |> KeyValueStore.keys()
+    key_value_store store = seed("demo_store4.kv", [("a", "1"), ("b", "2")])?
 
-    print("Keys: ${keys}")
+    print("Keys:   ${KeyValueStore.keys(store)}")
+    print("Values: ${KeyValueStore.values(store)}")
+
+    return success(none)
 }
 
 # Count remaining entries after removing a key and after clearing.
-function void remove_and_clear() {
+function result<none> remove_and_clear() {
     print("\n=== Remove / Count ===")
 
-    number count = seed("demo_store5.kv", [("x", "1"), ("y", "2")])
-    !> KeyValueStore.remove("x")
-    |> Result.unwrap()
-    |> KeyValueStore.count()
+    key_value_store after_remove = (seed("demo_store5.kv", [("x", "1"), ("y", "2")])
+        !> KeyValueStore.remove("x"))?
 
-    print("Count after remove: ${count}")
+    print("Count after remove: ${KeyValueStore.count(after_remove)}")
 
-    number after_clear = seed("demo_store6.kv", [("a", "1")])
-    !> KeyValueStore.clear()
-    |> Result.unwrap()
-    |> KeyValueStore.count()
+    key_value_store after_clear = (seed("demo_store6.kv", [("a", "1")])
+        !> KeyValueStore.clear())?
 
-    print("Count after clear: ${after_clear}")
+    print("Count after clear: ${KeyValueStore.count(after_clear)}")
+
+    return success(none)
+}
+
+function result<none> run_demo() {
+    show_entries()?
+    get_and_has()?
+    list_keys_and_values()?
+    remove_and_clear()?
+
+    return success(none)
 }
 
 @main
 function void main() {
-    show_entries()
-    get_and_has()
-    list_keys()
-    remove_and_clear()
-
-    print("\nKey-value store demo complete: seeded, read, listed, removed, and cleared entries.")
+    match run_demo() {
+        success(_) {
+            print("\nKey-value store demo complete: seeded, read, listed, removed, "
+                + "and cleared entries.")
+        }
+        failure(error) {
+            print("\nKey-value store demo failed: ${error}")
+        }
+    }
 }

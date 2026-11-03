@@ -15,6 +15,7 @@ target_include_directories(luma_test_framework INTERFACE ${PROJECT_SOURCE_DIR}/t
 # Test naming convention: <component>_test.cpp
 # Exception: stdlib tests use stdlib_test_<module>.cpp for clarity.
 # Exception: type checker tests use type_checker_test_<aspect>.cpp.
+# Exception: parser, optimizer, and VM tests use <component>_test_<aspect>.cpp.
 function(luma_add_test)
     cmake_parse_arguments(ARG "" "NAME;WORKING_DIR;TIMEOUT" "SOURCES;LIBS;INCLUDES;LABELS" ${ARGN})
     add_executable(${ARG_NAME} ${ARG_SOURCES})
@@ -54,7 +55,6 @@ set(_analysis_label_map
     "lexer_=analysis|lexer"
     "parser_=analysis|parser"
     "type_checker_=analysis|types"
-    "resolver_=analysis|resolver"
     "linter_=analysis|linter"
     "error_recovery_=analysis|parser"
 )
@@ -89,7 +89,10 @@ endfunction()
 
 set(LUMA_ANALYSIS_TESTS
     lexer_test
-    parser_test
+    parser_test_declarations
+    parser_test_statements
+    parser_test_expressions
+    parser_test_errors
     type_checker_test_basics
     type_checker_test_functions
     type_checker_test_advanced
@@ -98,7 +101,6 @@ set(LUMA_ANALYSIS_TESTS
     type_checker_test_lint
     type_checker_test_generics
     type_checker_test_symbols
-    resolver_test
     linter_test
     linter_registry_test
     diagnostic_test
@@ -165,7 +167,7 @@ luma_add_test(NAME decimal_test
 
 # ── Platform tests ──
 
-# safe_getenv is cross-platform (std::getenv / _dupenv_s), so it runs on every OS.
+# safe_getenv is cross-platform (std::getenv / _wdupenv_s), so it runs on every OS.
 luma_add_test(NAME safe_getenv_test
     SOURCES platform/safe_getenv_test.cpp
     LIBS    ""
@@ -236,11 +238,15 @@ set(LUMA_RUNTIME_TESTS
     compiler_test
     compiler_opcode_test
     compiler_disassemble_test
-    optimizer_test
+    optimizer_test_peephole
+    optimizer_test_constant_fold
+    optimizer_test_control_flow
     verifier_test
     compilation_cache_test
     bytecode_serializer_test
     vm_test_core
+    vm_test_control_flow
+    vm_test_errors
     vm_test_types
     vm_test_generics
     vm_test_concurrency
@@ -288,27 +294,20 @@ luma_add_test(NAME stdio_transport_test
     LIBS    luma_shared
     LABELS  runtime)
 
-# platform_socket_test exercises the shared socket primitives (WinsockGuard,
-# sockopt_ptr, close_socket, invalid_socket).  The Winsock calls need ws2_32 on
-# Windows; POSIX sockets need no extra library.
-if(WIN32)
-    luma_add_test(NAME platform_socket_test
-        SOURCES runtime/platform_socket_test.cpp
-        LIBS    luma_shared ws2_32
-        LABELS  runtime)
-else()
-    luma_add_test(NAME platform_socket_test
-        SOURCES runtime/platform_socket_test.cpp
-        LIBS    luma_shared
-        LABELS  runtime)
-endif()
-
 # ── Integration test ──
 
 luma_add_test(NAME integration_test
     SOURCES integration/integration_test.cpp
     LIBS    luma_core
     LABELS  integration)
+
+# Pins the structured fuzzer's source generator: its well-typed programs must
+# type-check, compile, verify and run cleanly (fuzz/ is header-only here).
+luma_add_test(NAME fuzz_generator_test
+    SOURCES  integration/fuzz_generator_test.cpp
+    LIBS     luma_core
+    INCLUDES ${PROJECT_SOURCE_DIR}/fuzz
+    LABELS   integration)
 
 # ── Language server tests ──
 
@@ -368,6 +367,10 @@ luma_add_test(NAME dap_integration_test
     INCLUDES ${PROJECT_SOURCE_DIR}/debugger/source
     TIMEOUT  360
     LABELS   dap integration)
+# The suite locates luma_dap next to itself at run time rather than linking it,
+# so declare the dependency explicitly or building only this target leaves the
+# spawned adapter missing or stale.
+add_dependencies(dap_integration_test luma_dap)
 
 # ── Luma feature test suites ──
 # Each .luma file under tests/features/ is registered as a CTest test case.
@@ -382,8 +385,7 @@ luma_add_test(NAME dap_integration_test
 # race and fail. Explicit lists also follow the project guideline (no file(GLOB))
 # and make CMake re-run when the list changes. Add a new .luma suite here.
 
-set(LUMA_FEATURE_TEST_TIMEOUT 30 CACHE STRING
-    "Timeout in seconds for each Luma feature test")
+# Per-test timeout: LUMA_FEATURE_TEST_TIMEOUT (cache option in the root CMakeLists.txt).
 message(STATUS "Feature test timeout: ${LUMA_FEATURE_TEST_TIMEOUT}s")
 
 set(LUMA_FEATURE_TESTS_LANGUAGE

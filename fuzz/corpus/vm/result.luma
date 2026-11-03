@@ -10,7 +10,7 @@ function result<integer> safe_divide(integer a, integer b) {
         return failure("division by zero")
     }
 
-    return success(a / b)
+    return success(a // b)
 }
 
 function result<number, MathError> typed_divide(number a, number b) {
@@ -68,7 +68,7 @@ function void main() {
     print(label)
 
     # Structured metadata from a stdlib failure.
-    result<integer> oob = Array.get([1, 2, 3], 9)
+    result<number> oob = Math.square_root(-1.0)
     print(Result.error_code(oob))
     print(Result.source_function(oob))
 

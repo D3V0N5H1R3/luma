@@ -5,7 +5,7 @@ use zed_extension_api as zed;
 /// Normalizes path separators to the platform convention.
 ///
 /// On Windows, `worktree.which()` can return paths with mixed separators
-/// (e.g., `C:\Users\...\luma/build/Release/luma.exe`) because the worktree
+/// (e.g., `C:\Users\...\luma/build/luma.exe`) because the worktree
 /// root uses backslashes while relative segments use forward slashes.
 /// PowerShell rejects such paths as command names. This function replaces
 /// forward slashes with backslashes on Windows so the path is valid.

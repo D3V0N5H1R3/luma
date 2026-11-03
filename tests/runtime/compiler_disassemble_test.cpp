@@ -8,8 +8,11 @@
 // opcode-metadata characterization (which checks the table) by driving the code
 // that consumes that table.
 
+#include <cstddef>
+#include <cstdint>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include "runtime/compiler/chunk.hpp"
 #include "runtime/compiler/opcode.hpp"
@@ -17,7 +20,9 @@
 #include "runtime/interpreter/value.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::Chunk;
+using luma::Op;
+using luma::Value;
 
 namespace {
 
@@ -31,9 +36,7 @@ Chunk single_instruction_chunk(Op op) {
     Chunk chunk;
 
     chunk.code.push_back(static_cast<std::uint8_t>(op));
-    for (std::size_t i = 1; i < opcode_base_size(op); ++i) {
-        chunk.code.push_back(0);
-    }
+    chunk.code.resize(luma::opcode_base_size(op), 0);
 
     return chunk;
 }
@@ -43,7 +46,7 @@ Chunk single_instruction_chunk(Op op) {
 // ─── Every opcode disassembles to its mnemonic ───
 
 static void test_every_opcode_renders_its_mnemonic() {
-    for (std::size_t raw = 0; raw < opcode_enum_count; ++raw) {
+    for (std::size_t raw = 0; raw < luma::opcode_enum_count; ++raw) {
         const auto op = static_cast<Op>(raw);
         const auto chunk = single_instruction_chunk(op);
 
@@ -52,9 +55,9 @@ static void test_every_opcode_renders_its_mnemonic() {
         const std::string listing = out.str();
 
         // The mnemonic must appear — never the UNKNOWN(n) fallback.
-        const std::string_view name = opcode_name(op);
-        ASSERT_TRUE(listing.find(std::string(name)) != std::string::npos);
-        ASSERT_TRUE(listing.find("UNKNOWN") == std::string::npos);
+        const std::string_view name = luma::opcode_name(op);
+        ASSERT_NE(listing.find(std::string(name)), std::string::npos);
+        ASSERT_EQ(listing.find("UNKNOWN"), std::string::npos);
 
         // With every embedded count byte zeroed, no opcode has trailing
         // variable-length operands, so the fixed prefix is the whole instruction.
@@ -68,35 +71,31 @@ static void test_make_record_variable_size_tracks_field_count() {
     // MakeRecord: u16 type_name + u8 field_count + field_count * u16 field_names.
     Chunk chunk;
     chunk.code.push_back(static_cast<std::uint8_t>(Op::MakeRecord));
-    chunk.code.push_back(0); // type_name hi
-    chunk.code.push_back(0); // type_name lo
-    chunk.code.push_back(2); // field_count = 2
-    for (int i = 0; i < 2 * 2; ++i) {
-        chunk.code.push_back(0); // two u16 field-name indices
-    }
+    chunk.code.push_back(0);                       // type_name hi
+    chunk.code.push_back(0);                       // type_name lo
+    chunk.code.push_back(2);                       // field_count = 2
+    chunk.code.insert(chunk.code.end(), 2 * 2, 0); // two u16 field-name indices
 
     std::ostringstream out;
     const std::size_t variable_size = chunk.disassemble_instruction(0, out);
 
     ASSERT_EQ(variable_size, 4u); // 2 fields * 2 bytes each
-    ASSERT_TRUE(out.str().find("MakeRecord") != std::string::npos);
-    ASSERT_TRUE(out.str().find("fields=2") != std::string::npos);
+    ASSERT_NE(out.str().find("MakeRecord"), std::string::npos);
+    ASSERT_NE(out.str().find("fields=2"), std::string::npos);
 }
 
 static void test_record_with_variable_size_tracks_override_count() {
     // RecordWith: u8 override_count + override_count * u16 field_names.
     Chunk chunk;
     chunk.code.push_back(static_cast<std::uint8_t>(Op::RecordWith));
-    chunk.code.push_back(3); // override_count = 3
-    for (int i = 0; i < 3 * 2; ++i) {
-        chunk.code.push_back(0);
-    }
+    chunk.code.push_back(3);                       // override_count = 3
+    chunk.code.insert(chunk.code.end(), 3 * 2, 0); // three u16 field-name indices
 
     std::ostringstream out;
     const std::size_t variable_size = chunk.disassemble_instruction(0, out);
 
     ASSERT_EQ(variable_size, 6u); // 3 overrides * 2 bytes each
-    ASSERT_TRUE(out.str().find("overrides=3") != std::string::npos);
+    ASSERT_NE(out.str().find("overrides=3"), std::string::npos);
 }
 
 // ─── Operand rendering for specific layouts ───
@@ -111,10 +110,10 @@ static void test_constant_operand_value_rendered() {
     chunk.code.push_back(static_cast<std::uint8_t>(index & 0xFF));
 
     std::ostringstream out;
-    (void)chunk.disassemble_instruction(0, out);
+    ASSERT_EQ(chunk.disassemble_instruction(0, out), 0U);
 
-    ASSERT_TRUE(out.str().find("Constant") != std::string::npos);
-    ASSERT_TRUE(out.str().find("(7)") != std::string::npos);
+    ASSERT_NE(out.str().find("Constant"), std::string::npos);
+    ASSERT_NE(out.str().find("(7)"), std::string::npos);
 }
 
 static void test_global_operand_name_rendered() {
@@ -127,10 +126,10 @@ static void test_global_operand_name_rendered() {
     chunk.code.push_back(static_cast<std::uint8_t>(index & 0xFF));
 
     std::ostringstream out;
-    (void)chunk.disassemble_instruction(0, out);
+    ASSERT_EQ(chunk.disassemble_instruction(0, out), 0U);
 
-    ASSERT_TRUE(out.str().find("GetGlobal") != std::string::npos);
-    ASSERT_TRUE(out.str().find("(counter)") != std::string::npos);
+    ASSERT_NE(out.str().find("GetGlobal"), std::string::npos);
+    ASSERT_NE(out.str().find("(counter)"), std::string::npos);
 }
 
 static void test_jump_target_rendered() {
@@ -143,15 +142,61 @@ static void test_jump_target_rendered() {
     chunk.code.push_back(4); // +4
 
     std::ostringstream out;
-    (void)chunk.disassemble_instruction(0, out);
+    ASSERT_EQ(chunk.disassemble_instruction(0, out), 0U);
 
     // base_size for Jump is 5, so target = 0 + 5 + 4 = 9.
-    ASSERT_TRUE(out.str().find("Jump") != std::string::npos);
-    ASSERT_TRUE(out.str().find("(\xe2\x86\x92"
-                               "9)") != std::string::npos);
+    ASSERT_NE(out.str().find("Jump"), std::string::npos);
+    ASSERT_NE(out.str().find("(\xe2\x86\x92"
+                             "9)"),
+              std::string::npos);
 }
 
 // ─── Whole-chunk disassembly ───
+
+// Regression: a chunk ending mid-instruction (e.g. a corrupt, unverified .lumc
+// handed to a debugger) made the disassembler read operand bytes past the end
+// of the code buffer.
+static void test_truncated_instruction_renders_truncated() {
+    Chunk chunk;
+    chunk.code.push_back(static_cast<std::uint8_t>(Op::Constant));
+    chunk.code.push_back(0); // u16 operand missing its second byte
+
+    std::ostringstream out;
+    const std::size_t variable_size = chunk.disassemble_instruction(0, out);
+
+    ASSERT_EQ(variable_size, 0u);
+    ASSERT_NE(out.str().find("Constant"), std::string::npos);
+    ASSERT_NE(out.str().find("TRUNCATED"), std::string::npos);
+
+    // A variable-size instruction whose trailing field bytes are missing.
+    Chunk record;
+    record.code.push_back(static_cast<std::uint8_t>(Op::MakeRecord));
+    record.code.push_back(0);
+    record.code.push_back(0);
+    record.code.push_back(3); // claims 3 fields, but no field bytes follow
+
+    std::ostringstream record_out;
+    ASSERT_EQ(record.disassemble_instruction(0, record_out), 0U);
+    ASSERT_NE(record_out.str().find("TRUNCATED"), std::string::npos);
+
+    // An offset past the end is reported, not read.
+    std::ostringstream past_end;
+    ASSERT_EQ(chunk.disassemble_instruction(chunk.code.size(), past_end), 0U);
+    ASSERT_NE(past_end.str().find("TRUNCATED"), std::string::npos);
+}
+
+static void test_disassemble_full_chunk_stops_at_truncated_tail() {
+    Chunk chunk;
+    chunk.code.push_back(static_cast<std::uint8_t>(Op::None));
+    chunk.code.push_back(static_cast<std::uint8_t>(Op::Jump));
+    chunk.code.push_back(0); // u32 operand cut short
+
+    const std::string listing = chunk.disassemble("cut");
+
+    ASSERT_NE(listing.find("None"), std::string::npos);
+    ASSERT_NE(listing.find("Jump"), std::string::npos);
+    ASSERT_NE(listing.find("TRUNCATED"), std::string::npos);
+}
 
 static void test_disassemble_full_chunk_has_banner() {
     Chunk chunk;
@@ -160,9 +205,9 @@ static void test_disassemble_full_chunk_has_banner() {
 
     const std::string listing = chunk.disassemble("demo");
 
-    ASSERT_TRUE(listing.find("=== demo ===") != std::string::npos);
-    ASSERT_TRUE(listing.find("None") != std::string::npos);
-    ASSERT_TRUE(listing.find("Return") != std::string::npos);
+    ASSERT_NE(listing.find("=== demo ==="), std::string::npos);
+    ASSERT_NE(listing.find("None"), std::string::npos);
+    ASSERT_NE(listing.find("Return"), std::string::npos);
 }
 
 int main() {
@@ -177,6 +222,8 @@ int main() {
     RUN(test_global_operand_name_rendered);
     RUN(test_jump_target_rendered);
 
+    RUN(test_truncated_instruction_renders_truncated);
+    RUN(test_disassemble_full_chunk_stops_at_truncated_tail);
     RUN(test_disassemble_full_chunk_has_banner);
 
     return SUMMARY();

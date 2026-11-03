@@ -31,7 +31,7 @@ Apply user-experience, usability, and presentation-design improvements to the Te
 
     Follow [luma.instructions.md](../../instructions/luma.instructions.md) for `.luma` source. Keep each change small enough that the checks in the next step stay meaningful checkpoints, and commit or stash each green checkpoint so any regression is easy to roll back.
 5. **Verify each change against the running interface.** After each change, exercise the surface you touched — a clean rebuild is the first checkpoint, a clean run the second:
-    - Run the affected example: single-config `build/luma <file>`, multi-config `build/Release/luma <file>`; drive interaction with scripted stdin or the `Terminal.test_*` API when possible to confirm the improved behaviour, its feedback, and its accessibility.
+    - Run the affected example with `build/luma <file>`; drive interaction with scripted stdin or the `Terminal.test_*` API when possible to confirm the improved behaviour, its feedback, and its accessibility.
     - Re-run `python scripts/run_luma_examples.py` so every example — including the one you changed — still completes cleanly.
     - Rebuild and re-run `ctest --preset default` whenever a change reaches any C++ (for example a `Terminal` or `Console` stdlib tweak).
 6. **Update references if you moved anything.** If you renamed examples, helper functions, commands, or documented shortcuts, update imports, includes, example indexes, and documentation references so they match.

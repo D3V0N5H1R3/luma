@@ -1,10 +1,14 @@
 ; ═══════════════════════════════════════════════════════════════════
 ; Luma — Tree-sitter Override Queries
 ;
-; Overrides highlighting inside string interpolation expressions
-; so that `${expr}` content is highlighted as code, not string.
+; Names the syntax scopes that config.toml refers to. The `brackets`
+; entries use `not_in = ["string", "comment"]` so typing `"` inside a
+; string or a comment does not auto-insert a closing quote.
 ; ═══════════════════════════════════════════════════════════════════
 
-; Remove string highlighting from interpolation body so inner
-; expressions are highlighted normally by highlights.scm.
-(interpolation) @none
+(comment) @comment.inclusive
+
+[
+  (string)
+  (triple_string)
+] @string

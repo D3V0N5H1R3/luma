@@ -1,5 +1,7 @@
 // LSP feature tests — hover, tokens, formatting, editing, rename, code actions.
 
+#include <string>
+
 #include "analysis/source/source_location.hpp"
 #include "lsp_signature_label.hpp"
 #include "lsp_test_fixtures.hpp"
@@ -23,9 +25,10 @@ void test_hover_stdlib() {
     LspTestSession session;
 
     const std::string uri = "file:///test/hover.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    result = Math.floor(3.14)\n}\n");
+    session.open_document(
+        uri, "@main\nfunction void main() {\n    integer floored = Math.floor(3.14) ?? 0\n}\n");
     const auto* resp =
-        request_and_assert(session, "textDocument/hover", make_td_position(uri, 2, 13));
+        request_and_assert(session, "textDocument/hover", make_td_position(uri, 2, 22));
 
     const auto hover = get_hover_text(resp);
     if (!hover.empty()) {
@@ -53,10 +56,10 @@ void test_folding_range() {
 
     const std::string uri = "file:///test/fold.luma";
     session.open_document(uri, "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    if true {\n"
-                               "        x = 1\n"
-                               "        y = 2\n"
+                               "        integer x = 1\n"
+                               "        integer y = 2\n"
                                "    }\n"
                                "}\n");
     const auto id = session.request("textDocument/foldingRange", make_td_params(uri));
@@ -78,7 +81,7 @@ void test_rename() {
     const std::string uri = "file:///test/rename.luma";
     session.open_document(uri, k_main_with_usage);
     const std::string params = R"({"textDocument":{"uri":")" + uri +
-                               R"("},"position":{"line":2,"character":4},"newName":"value"})";
+                               R"("},"position":{"line":2,"character":12},"newName":"value"})";
     (void)request_and_assert(session, "textDocument/rename", params);
 }
 
@@ -88,9 +91,9 @@ void test_code_action() {
     LspTestSession session;
 
     const std::string uri = "file:///test/action.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    unused = 42\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    integer unused = 42\n}\n");
     const auto* resp =
-        request_and_assert(session, "textDocument/codeAction", make_range_params(uri, 2, 0, 2, 20));
+        request_and_assert(session, "textDocument/codeAction", make_range_params(uri, 2, 0, 2, 23));
     ASSERT_TRUE((*resp)["result"].is_array());
 }
 
@@ -100,7 +103,7 @@ void test_signature_help() {
     LspTestSession session;
 
     const std::string uri = "file:///test/sighelp.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    Math.floor(\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    Math.floor(\n}\n");
     (void)request_and_assert(session, "textDocument/signatureHelp", make_td_position(uri, 2, 15));
 }
 
@@ -111,7 +114,7 @@ void test_prepare_rename() {
 
     const std::string uri = "file:///test/prepren.luma";
     const auto* resp = session.request_and_run("textDocument/prepareRename", uri, k_main,
-                                               make_td_position(uri, 2, 4));
+                                               make_td_position(uri, 2, 12));
     assert_has_result(resp);
 }
 
@@ -121,7 +124,7 @@ void test_document_link() {
     LspTestSession session;
 
     const std::string uri = "file:///test/doclink.luma";
-    session.open_document(uri, "include \"other.luma\"\n\n@main\nfunction main() {\n}\n");
+    session.open_document(uri, "include \"other.luma\"\n\n@main\nfunction void main() {\n}\n");
     const auto* resp =
         request_and_assert(session, "textDocument/documentLink", make_td_params(uri));
     ASSERT_TRUE((*resp)["result"].is_array());
@@ -176,7 +179,7 @@ void test_formatting() {
     LspTestSession session;
 
     const std::string uri = "file:///test/format.luma";
-    session.open_document(uri, "function  foo() {\nlet x = 1   \n}\n");
+    session.open_document(uri, "function  void foo() {\ninteger x = 1   \n}\n");
     const auto id = session.request("textDocument/formatting",
                                     R"({"textDocument":{"uri":")" + uri +
                                         R"("},"options":{"tabSize":4,"insertSpaces":true}})");
@@ -193,7 +196,7 @@ void test_fix_all_code_action() {
 
     const std::string uri = "file:///test/fixall.luma";
     session.open_document(
-        uri, "function foo() {\n    let a: integer = 1\n    let b: integer = 2\n    return 0\n}\n");
+        uri, "function integer foo() {\n    integer a = 1\n    integer b = 2\n    return 0\n}\n");
     const auto id = session.request(
         "textDocument/codeAction",
         R"({"textDocument":{"uri":")" + uri +
@@ -212,7 +215,7 @@ void test_rename_rejects_keywords() {
     const std::string uri = "file:///test/rename_kw.luma";
     session.open_document(uri, k_main);
     const std::string params = R"({"textDocument":{"uri":")" + uri +
-                               R"("},"position":{"line":2,"character":4},"newName":"function"})";
+                               R"("},"position":{"line":2,"character":12},"newName":"function"})";
     const auto id = session.request("textDocument/rename", params);
     (void)session.run();
 
@@ -293,11 +296,11 @@ void test_partial_analysis_on_parse_error() {
     LspTestSession session;
 
     const std::string uri = "file:///test/partial.luma";
-    session.open_document(uri, "function valid_fn() -> integer {\n"
+    session.open_document(uri, "function integer valid_fn() {\n"
                                "    return 42\n"
                                "}\n"
                                "\n"
-                               "function broken_fn(\n"); // unterminated
+                               "function void broken_fn(\n"); // unterminated
     const auto id = session.request("textDocument/documentSymbol", make_td_params(uri));
     (void)session.run();
 
@@ -319,9 +322,9 @@ void test_loop_variable_type_inference() {
     LspTestSession session;
 
     const std::string uri = "file:///test/loop_type.luma";
-    session.open_document(uri, "function process(items: array<string>) -> integer {\n"
+    session.open_document(uri, "function integer process(array<string> items) {\n"
                                "    for item in items {\n"
-                               "        let x = item\n"
+                               "        string x = item\n"
                                "    }\n"
                                "    return 0\n"
                                "}\n");
@@ -346,10 +349,10 @@ void test_doc_comment_hover() {
     const std::string uri = "file:///test/doc_hover.luma";
     session.open_document(uri, "# Computes the square of a number.\n"
                                "# Returns the result.\n"
-                               "function square(x: integer) -> integer {\n"
+                               "function integer square(integer x) {\n"
                                "    return x * x\n"
                                "}\n");
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 2, 13));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 2, 21));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -369,11 +372,13 @@ void test_pipe_signature_help() {
     LspTestSession session;
 
     const std::string uri = "file:///test/pipe_sig.luma";
-    session.open_document(uri, "function foo() -> integer {\n"
-                               "    let x = 42 |> Math.abs()\n"
+    // The cursor sits inside `Math.maximum(` — the piped value fills parameter 0,
+    // so the explicit argument being typed is parameter 1.
+    session.open_document(uri, "function number foo() {\n"
+                               "    number x = 42 |> Math.maximum(7)\n"
                                "    return x\n"
                                "}\n");
-    const auto id = session.request("textDocument/signatureHelp", make_td_position(uri, 1, 29));
+    const auto id = session.request("textDocument/signatureHelp", make_td_position(uri, 1, 34));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -398,11 +403,11 @@ void test_code_action_unused_variable() {
     LspTestSession session;
 
     const std::string uri = "file:///test/action_unused.luma";
-    session.open_document(uri, "function compute() -> integer {\n"
-                               "    let unused_value: integer = 99\n"
+    session.open_document(uri, "function integer compute() {\n"
+                               "    integer unused_value = 99\n"
                                "    return 0\n"
                                "}\n");
-    const auto id = session.request("textDocument/codeAction", make_range_params(uri, 1, 0, 1, 35));
+    const auto id = session.request("textDocument/codeAction", make_range_params(uri, 1, 0, 1, 29));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -415,12 +420,12 @@ void test_code_action_type_error() {
     LspTestSession session;
 
     const std::string uri = "file:///test/action_type.luma";
-    session.open_document(uri, "function add(a: integer, b: integer) -> integer {\n"
+    session.open_document(uri, "function integer add(integer a, integer b) {\n"
                                "    return a + b\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    add(1, \"hello\")\n"
                                "}\n");
     const auto id = session.request("textDocument/codeAction", make_range_params(uri, 6, 0, 6, 20));
@@ -437,14 +442,14 @@ void test_folding_range_nested() {
 
     const std::string uri = "file:///test/fold_nested.luma";
     session.open_document(uri, "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    if true {\n"
                                "        if true {\n"
-                               "            x = 1\n"
+                               "            integer x = 1\n"
                                "        }\n"
                                "    }\n"
                                "    for i in [1, 2, 3] {\n"
-                               "        y = i\n"
+                               "        integer y = i\n"
                                "    }\n"
                                "}\n");
     const auto id = session.request("textDocument/foldingRange", make_td_params(uri));
@@ -467,7 +472,7 @@ void test_folding_range_comments() {
     session.open_document(uri, "# This is a block of comments\n"
                                "# describing the function below.\n"
                                "# It should be foldable.\n"
-                               "function greet() -> string {\n"
+                               "function string greet() {\n"
                                "    return \"hello\"\n"
                                "}\n");
     const auto id = session.request("textDocument/foldingRange", make_td_params(uri));
@@ -502,15 +507,15 @@ void test_hover_record() {
 
     const std::string uri = "file:///test/hover_record.luma";
     session.open_document(uri, "record Point {\n"
-                               "    x: integer\n"
-                               "    y: integer\n"
+                               "    integer x,\n"
+                               "    integer y\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    p = Point { x = 1, y = 2 }\n"
+                               "function void main() {\n"
+                               "    Point p = Point { x = 1, y = 2 }\n"
                                "}\n");
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 7, 8));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 7, 14));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -535,10 +540,10 @@ void test_hover_choice() {
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    c = Color.Red\n"
+                               "function void main() {\n"
+                               "    Color c = Color.Red\n"
                                "}\n");
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 8, 8));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 8, 14));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -557,7 +562,7 @@ void test_hover_local_variable() {
 
     const std::string uri = "file:///test/hover_local.luma";
     session.open_document(uri, k_main_with_usage);
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 3, 8));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 3, 16));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -577,12 +582,12 @@ void test_signature_help_user_function() {
     LspTestSession session;
 
     const std::string uri = "file:///test/sighelp_user.luma";
-    session.open_document(uri, "function add(a: integer, b: integer) -> integer {\n"
+    session.open_document(uri, "function integer add(integer a, integer b) {\n"
                                "    return a + b\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    add(1, \n"
                                "}\n");
     const auto id = session.request("textDocument/signatureHelp", make_td_position(uri, 6, 11));
@@ -617,30 +622,30 @@ void test_signature_help_parameter_label_utf16_offsets() {
     // must emit UTF-16 code-unit offsets into the signature label (LSP §3.17),
     // so the second parameter's start offset must not be inflated by the byte
     // count of the 'é' in the first parameter's name.
-    const std::string sig_label = "function greet(café: integer, b: integer) -> integer";
-    const std::string params_sig = "(café: integer, b: integer)";
+    const std::string sig_label = "function integer greet(integer café, integer b)";
+    const std::string params_sig = "(integer café, integer b)";
 
     const auto param_objects = luma::lsp::build_parameter_labels(sig_label, params_sig);
     ASSERT_EQ(param_objects.size(), static_cast<std::size_t>(2));
 
-    // Parameter 0: "café: integer" starts at UTF-16 offset 15 (right after the
-    // ASCII "function greet(") and spans 13 UTF-16 units — café(4) + ": integer"(9)
-    // — ending at offset 28. The buggy byte-offset code reported 29 because 'é'
-    // counts as 2 UTF-8 bytes but only 1 UTF-16 unit.
+    // Parameter 0: "integer café" starts at UTF-16 offset 23 (right after the
+    // ASCII "function integer greet(") and spans 12 UTF-16 units — "integer "(8)
+    // + café(4) — ending at offset 35. Byte-offset code would report 36 because
+    // 'é' counts as 2 UTF-8 bytes but only 1 UTF-16 unit.
     ASSERT_TRUE(param_objects[0].has("label"));
     const auto& label0 = param_objects[0]["label"].as_array();
     ASSERT_EQ(label0.size(), static_cast<std::size_t>(2));
-    ASSERT_EQ(label0[0].as_integer(), 15);
-    ASSERT_EQ(label0[1].as_integer(), 28);
+    ASSERT_EQ(label0[0].as_integer(), 23);
+    ASSERT_EQ(label0[1].as_integer(), 35);
 
-    // Parameter 1: "b: integer" starts at UTF-16 offset 30 ("café: integer, "
-    // is 15 units after the "(", so 15 + 15 = 30) — again the byte-based code
-    // would have shifted this right by 1 because of the 'é' in parameter 0.
+    // Parameter 1: "integer b" starts at UTF-16 offset 37 (after ", ") — again
+    // the byte-based code would have shifted this right by 1 because of the 'é'
+    // in parameter 0.
     ASSERT_TRUE(param_objects[1].has("label"));
     const auto& label1 = param_objects[1]["label"].as_array();
     ASSERT_EQ(label1.size(), static_cast<std::size_t>(2));
-    ASSERT_EQ(label1[0].as_integer(), 30);
-    ASSERT_EQ(label1[1].as_integer(), 40);
+    ASSERT_EQ(label1[0].as_integer(), 37);
+    ASSERT_EQ(label1[1].as_integer(), 46);
 }
 
 // ─── Signature help: lexical-context characterization ─────────────
@@ -654,7 +659,7 @@ void test_signature_help_skips_comment() {
     LspTestSession session;
 
     const std::string uri = "file:///test/sighelp_comment.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    Math.floor( # comment (\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    Math.floor( # comment (\n}\n");
     const auto id = session.request("textDocument/signatureHelp", make_td_position(uri, 2, 22));
     (void)session.run();
 
@@ -675,7 +680,7 @@ void test_signature_help_skips_string() {
     LspTestSession session;
 
     const std::string uri = "file:///test/sighelp_string.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    Math.floor(\"(\", \n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    Math.floor(\"(\", \n}\n");
     const auto id = session.request("textDocument/signatureHelp", make_td_position(uri, 2, 20));
     (void)session.run();
 
@@ -699,7 +704,8 @@ void test_signature_help_skips_triple_quoted_string() {
     LspTestSession session;
 
     const std::string uri = "file:///test/sighelp_triple_quote.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    Math.floor(\"\"\"a # b\"\"\", \n}\n");
+    session.open_document(uri,
+                          "@main\nfunction void main() {\n    Math.floor(\"\"\"a # b\"\"\", \n}\n");
     const auto id = session.request("textDocument/signatureHelp", make_td_position(uri, 2, 28));
     (void)session.run();
 
@@ -723,16 +729,16 @@ void test_rename_function() {
     LspTestSession session;
 
     const std::string uri = "file:///test/rename_fn.luma";
-    session.open_document(uri, "function greet() -> string {\n"
+    session.open_document(uri, "function string greet() {\n"
                                "    return \"hello\"\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
+                               "function void main() {\n"
                                "    greet()\n"
                                "}\n");
     const std::string params = R"({"textDocument":{"uri":")" + uri +
-                               R"("},"position":{"line":0,"character":9},"newName":"say_hello"})";
+                               R"("},"position":{"line":0,"character":16},"newName":"say_hello"})";
     const auto id = session.request("textDocument/rename", params);
     (void)session.run();
 
@@ -757,13 +763,13 @@ void test_rename_type() {
 
     const std::string uri = "file:///test/rename_type.luma";
     session.open_document(uri, "record Point {\n"
-                               "    x: integer\n"
-                               "    y: integer\n"
+                               "    integer x,\n"
+                               "    integer y\n"
                                "}\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    p = Point { x = 1, y = 2 }\n"
+                               "function void main() {\n"
+                               "    Point p = Point { x = 1, y = 2 }\n"
                                "}\n");
     const std::string params = R"({"textDocument":{"uri":")" + uri +
                                R"("},"position":{"line":0,"character":7},"newName":"Coordinate"})";
@@ -789,8 +795,8 @@ void test_semantic_tokens_modifiers() {
     LspTestSession session;
 
     const std::string uri = "file:///test/semtok_mod.luma";
-    session.open_document(uri, "function helper() -> integer {\n"
-                               "    let readonly_val: integer = 42\n"
+    session.open_document(uri, "function integer helper() {\n"
+                               "    integer readonly_val = 42\n"
                                "    return readonly_val\n"
                                "}\n");
     const auto id = session.request("textDocument/semanticTokens/full", make_td_params(uri));
@@ -814,11 +820,18 @@ void test_match_formatting() {
     LspTestSession session;
 
     const std::string uri = "file:///test/match_fmt.luma";
-    const std::string source = "match x {\n"
-                               "case 1\n"
+    const std::string source = "function integer pick(integer x) {\n"
+                               "match x {\n"
+                               "case 1 {\n"
                                "return 1\n"
-                               "case 2\n"
+                               "}\n"
+                               "case 2 {\n"
                                "return 2\n"
+                               "}\n"
+                               "else {\n"
+                               "return 0\n"
+                               "}\n"
+                               "}\n"
                                "}\n";
     session.open_document(uri, source);
     const auto id = session.request("textDocument/formatting",
@@ -840,6 +853,35 @@ void test_match_formatting() {
     ASSERT_NE(new_text, source);
 }
 
+// ─── Formatting edit ends at the end of the document ─────────────
+
+// Regression: the whole-document edit ended at {line_count + 1, 0}, a position
+// past the end of the document that strict clients reject.
+void test_formatting_edit_ends_at_document_end() {
+    const auto end_of_edit = [](const std::string& source) {
+        LspTestSession session;
+        const std::string uri = "file:///test/fmt_end.luma";
+        session.open_document(uri, source);
+        const auto id = session.request("textDocument/formatting",
+                                        R"({"textDocument":{"uri":")" + uri +
+                                            R"("},"options":{"tabSize":4,"insertSpaces":true}})");
+        (void)session.run();
+        const auto* resp = session.find_response(id);
+        assert_result_is_array(resp);
+        const auto& edits = (*resp)["result"].as_array();
+        ASSERT_EQ(edits.size(), static_cast<std::size_t>(1));
+        const auto& end = edits[0]["range"]["end"];
+        return std::to_string(end["line"].as_integer()) + ":" +
+               std::to_string(end["character"].as_integer());
+    };
+
+    // With a trailing newline the document ends at column 0 of the empty last line.
+    ASSERT_EQ(end_of_edit("integer x=1\n"), std::string("1:0"));
+    // Without one it ends after the last character, measured in UTF-16 units.
+    ASSERT_EQ(end_of_edit("integer x=1"), std::string("0:11"));
+    ASSERT_EQ(end_of_edit("integer y=2\nstring x=\"\xF0\x9F\x98\x80\""), std::string("1:13"));
+}
+
 // ─── Hover on reference type keyword ─────────────────────────────
 
 void test_hover_reference_type() {
@@ -847,7 +889,7 @@ void test_hover_reference_type() {
 
     const std::string uri = "file:///test/hover_ref_type.luma";
     session.open_document(uri, "function void main() {\n"
-                               "    reference<integer> r = 42\n"
+                               "    reference<integer> r = Reference.new(42)\n"
                                "}\n");
     const auto id = session.request("textDocument/hover", make_td_position(uri, 1, 6));
     (void)session.run();
@@ -869,9 +911,10 @@ void test_hover_socket_type() {
 
     const std::string uri = "file:///test/hover_socket.luma";
     session.open_document(uri, "function void main() {\n"
-                               "    socket s = Socket.connect(\"localhost\", 8080)\n"
+                               "    result<socket> s = Socket.connect(\"localhost\", 8080)\n"
                                "}\n");
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 1, 6));
+    // Position on the `socket` type keyword inside `result<socket>`.
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 1, 13));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -890,7 +933,7 @@ void test_hover_on_whitespace() {
     LspTestSession session;
 
     const std::string uri = "file:///test/hover_ws.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    x = 42\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    integer x = 42\n}\n");
     // Hover on line 1 character 0 — leading whitespace/empty area.
     const auto id = session.request("textDocument/hover", make_td_position(uri, 1, 0));
     (void)session.run();
@@ -907,7 +950,7 @@ void test_definition_nonexistent_symbol() {
     LspTestSession session;
 
     const std::string uri = "file:///test/def_noexist.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    nonexistent_symbol\n}\n");
+    session.open_document(uri, "@main\nfunction void main() {\n    nonexistent_symbol\n}\n");
     const auto id = session.request("textDocument/definition", make_td_position(uri, 2, 8));
     (void)session.run();
 
@@ -945,6 +988,7 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_doc_comment_hover);
     RUN(test_pipe_signature_help);
     RUN(test_match_formatting);
+    RUN(test_formatting_edit_ends_at_document_end);
     RUN(test_code_action_unused_variable);
     RUN(test_code_action_type_error);
     RUN(test_folding_range_nested);

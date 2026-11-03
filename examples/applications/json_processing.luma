@@ -12,7 +12,7 @@ record Person {
 }
 
 function string pretty_person(Person person) {
-    return "${person.name} (age ${person.age}) from ${person.city}"
+    return "${person.name} (age ${String.format_number(person.age, 0)}) from ${person.city}"
 }
 
 @main
@@ -25,7 +25,7 @@ function void main() {
     print(pretty_person(alice))
 
     # ── Serialize primitives ──
-    print("=== JSON Serialisation ===")
+    print("\n=== JSON Serialisation ===")
     print("integer : ${Json.serialize(42)}")
     print("string  : ${Json.serialize("hello")}")
     print("boolean : ${Json.serialize(true)}")
@@ -40,10 +40,12 @@ function void main() {
 
     print("Serialised : ${json}")
 
-    array<integer> restored = Json.deserialize(json) |> Result.unwrap()
-    number length = Array.length(restored)
+    result<array<integer>> restored = Json.deserialize(json)
 
-    print("Deserialised: ${length} elements")
+    match restored {
+        success(values) { print("Deserialised: ${Array.length(values)} elements") }
+        failure(error) { print("Deserialisation failed: ${error}") }
+    }
 
     # ── Pretty-print ──
     print("\n=== Pretty Print ===")
@@ -68,16 +70,14 @@ function void main() {
         ""
     ]
 
-    result<none> _ = samples |> Array.each((string sample) -> {
+    for sample in samples {
         string label = if Json.is_valid(sample) { "valid" } else { "invalid" }
-        string display = if String.length(sample) > 20 {
-            "${String.substring(sample, 0, 20)} .. ."
-        } else if String.length(sample) == 0 {
+        string display = if String.is_empty(sample) {
             "(empty)"
         } else {
-            sample
+            String.truncate(sample, 20)
         }
 
         print("  ${label}: ${display}")
-    })
+    }
 }

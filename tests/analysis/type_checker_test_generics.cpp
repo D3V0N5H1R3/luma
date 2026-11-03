@@ -1,6 +1,33 @@
 // Type checker unit tests — generics, recursive ADTs, concurrency, bounds checking.
 
+#include <algorithm>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "type_checker_test_helpers.hpp"
+
+using luma::Diagnostic;
+using luma::DiagnosticCode;
+using luma::test::check;
+using luma::test::check_warnings;
+using luma::test::fails;
+using luma::test::fails_with;
+using luma::test::fails_with_message;
+using luma::test::has_warnings;
+using luma::test::passes;
+
+namespace {
+
+// True if any diagnostic's message contains `fragment`.
+[[nodiscard]] bool any_message_contains(const std::vector<Diagnostic>& diagnostics,
+                                        std::string_view fragment) {
+    return std::ranges::any_of(diagnostics, [fragment](const Diagnostic& d) {
+        return d.message.find(fragment) != std::string::npos;
+    });
+}
+
+} // namespace
 
 // ─── Recursive ADTs ───
 
@@ -76,13 +103,41 @@ static void test_recursive_choice_match_no_clobber() {
                        "    Nil\n"
                        "    Cons(T head, List<T> tail)\n"
                        "}\n"
-                       "function<T> T head(List<T> lst) {\n"
+                       "function<T> T head(List<T> lst, T fallback) {\n"
                        "    return match lst {\n"
                        "        case List.Cons(h, _) { h }\n"
-                       "        else { 0 }\n"
+                       "        else { fallback }\n"
                        "    }\n"
                        "}\n"
-                       "integer x = head(List.Cons(1, List.Nil))\n"));
+                       "integer x = head(List.Cons(1, List.Nil), 0)\n"));
+}
+
+// A concrete value is not a `T`: returning one from a generic function would
+// store, say, an integer where the caller expects a string.
+static void test_generic_return_rejects_concrete_value() {
+    ASSERT_TRUE(fails("function<T> T broken(T value) {\n"
+                      "    return 0\n"
+                      "}\n"));
+    ASSERT_TRUE(fails("choice List<T> {\n"
+                      "    Nil\n"
+                      "    Cons(T head, List<T> tail)\n"
+                      "}\n"
+                      "function<T> T head(List<T> lst) {\n"
+                      "    return match lst {\n"
+                      "        case List.Cons(h, _) { h }\n"
+                      "        else { 0 }\n"
+                      "    }\n"
+                      "}\n"));
+    ASSERT_TRUE(fails("function<T> T pick(T value, boolean flag) {\n"
+                      "    return if flag { value } else { \"text\" }\n"
+                      "}\n"));
+}
+
+static void test_generic_return_accepts_type_parameter_value() {
+    ASSERT_TRUE(passes("function<T> T pick(T first, T second, boolean flag) {\n"
+                       "    return if flag { first } else { second }\n"
+                       "}\n"
+                       "string chosen = pick(\"a\", \"b\", true)\n"));
 }
 
 // Match expression must reject wrong number of bindings.
@@ -203,33 +258,13 @@ static void test_compatible_type_comparison_no_warn() {
     const auto warnings = check_warnings("boolean b = 42 == 3.14\n");
 
     // integer == number should NOT warn (numeric promotion).
-    bool has_incompatible = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("incompatible") != std::string::npos) {
-            has_incompatible = true;
-        }
-    }
-
-    ASSERT_FALSE(has_incompatible);
+    ASSERT_FALSE(any_message_contains(warnings, "incompatible"));
 }
 
 static void test_same_type_comparison_no_incompatible_warn() {
     const auto warnings = check_warnings("boolean b = \"a\" == \"b\"\n");
 
-    bool has_incompatible = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("incompatible") != std::string::npos) {
-            has_incompatible = true;
-        }
-    }
-
-    ASSERT_FALSE(has_incompatible);
+    ASSERT_FALSE(any_message_contains(warnings, "incompatible"));
 }
 
 // ─── Compile-time array bounds checking ───
@@ -239,10 +274,16 @@ static void test_array_literal_out_of_bounds() {
 }
 
 static void test_array_literal_negative_index() {
-    // Negative indices are always out of bounds for array literals.
-    // Note: -1 is parsed as unary minus on a literal, so the type checker
-    // may not catch this at compile time. Verify it at least doesn't crash.
-    (void)check("integer x = [1, 2, 3][-1]\n");
+    // -1 parses as unary minus applied to the literal 1; the compile-time bounds
+    // check sees through the negation, so a negative literal index is rejected.
+    ASSERT_TRUE(
+        fails_with_message("integer x = [1, 2, 3][-1]\n", "index -1 out of bounds for array"));
+}
+
+static void test_array_literal_computed_negative_index_left_to_runtime() {
+    // Only a (possibly negated) literal is checked statically; an arithmetic
+    // index is left to the VM's runtime bounds check.
+    ASSERT_TRUE(passes("integer x = [1, 2, 3][0 - 1]\n"));
 }
 
 static void test_array_literal_in_bounds() {
@@ -253,6 +294,11 @@ static void test_array_literal_in_bounds() {
 
 static void test_tuple_out_of_bounds() {
     ASSERT_TRUE(fails("integer x = (1, \"a\", true)[5]\n"));
+}
+
+static void test_tuple_negative_literal_index() {
+    ASSERT_TRUE(fails_with_message("integer x = (1, \"a\", true)[-1]\n",
+                                   "index -1 out of bounds for tuple of length 3"));
 }
 
 // ─── String interpolation function warning ───
@@ -268,17 +314,7 @@ static void test_string_interpolation_call_no_warn() {
     const auto warnings = check_warnings("function integer foo() { return 1 }\n"
                                          "string s = \"value is ${foo()}\"\n");
 
-    bool has_func_warn = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("function value") != std::string::npos) {
-            has_func_warn = true;
-        }
-    }
-
-    ASSERT_FALSE(has_func_warn);
+    ASSERT_FALSE(any_message_contains(warnings, "function value"));
 }
 
 // ─── Floating-point equality warning ───
@@ -286,35 +322,15 @@ static void test_string_interpolation_call_no_warn() {
 static void test_float_equality_warns() {
     const auto warnings = check_warnings("boolean b = 3.14 == 3.14\n");
 
-    bool has_float_warn = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("floating") != std::string::npos ||
-            msg.find("rounding") != std::string::npos) {
-            has_float_warn = true;
-        }
-    }
-
-    ASSERT_TRUE(has_float_warn);
+    ASSERT_TRUE(any_message_contains(warnings, "floating") ||
+                any_message_contains(warnings, "rounding"));
 }
 
 static void test_integer_equality_no_float_warn() {
     const auto warnings = check_warnings("boolean b = 42 == 42\n");
 
-    bool has_float_warn = false;
-
-    for (const auto& w : warnings) {
-        const std::string msg{w.message};
-
-        if (msg.find("floating") != std::string::npos ||
-            msg.find("rounding") != std::string::npos) {
-            has_float_warn = true;
-        }
-    }
-
-    ASSERT_FALSE(has_float_warn);
+    ASSERT_FALSE(any_message_contains(warnings, "floating") ||
+                 any_message_contains(warnings, "rounding"));
 }
 
 // ─── String interpolation namespace warning ───
@@ -371,21 +387,55 @@ static void test_mutable_array_index_assignment_ok() {
                        "items[0] = 10\n"));
 }
 
-// Field-vs-index traversal policy: assigning to the field of an indexed
-// element (a[i].x = …) mutates the stored element, not the array binding, so
-// it is allowed even when the array itself is immutable.  This is the
-// distinguishing case that separates the field-only walk (which must stop at
-// an index access) from the field-and-index walk used for a[i] = ….
-static void test_immutable_array_element_field_assignment_allowed() {
+// Assigning to the field of an indexed element (a[i].x = …) changes the
+// array's value, so it needs a `mutable` root exactly like a[i] = …: immutable
+// bindings share storage, so allowing the write would also change aliases.
+static void test_immutable_array_element_field_assignment_error() {
+    ASSERT_TRUE(fails_with("record Point { integer x, integer y }\n"
+                           "array<Point> ps = [Point { x = 1, y = 2 }]\n"
+                           "ps[0].x = 5\n",
+                           DiagnosticCode::ImmutableAssignment));
+}
+
+static void test_immutable_array_element_field_compound_assignment_error() {
+    ASSERT_TRUE(fails_with("record Point { integer x, integer y }\n"
+                           "array<Point> ps = [Point { x = 1, y = 2 }]\n"
+                           "ps[0].x += 5\n",
+                           DiagnosticCode::ImmutableAssignment));
+}
+
+static void test_immutable_dictionary_entry_field_assignment_error() {
+    ASSERT_TRUE(fails_with("record Point { integer x, integer y }\n"
+                           "dictionary<Point> named = { \"a\": Point { x = 1, y = 2 } }\n"
+                           "named[\"a\"].x = 5\n",
+                           DiagnosticCode::ImmutableAssignment));
+}
+
+static void test_mutable_array_element_field_assignment_ok() {
     ASSERT_TRUE(passes("record Point { integer x, integer y }\n"
-                       "array<Point> ps = [Point { x = 1, y = 2 }]\n"
+                       "mutable array<Point> ps = [Point { x = 1, y = 2 }]\n"
                        "ps[0].x = 5\n"));
 }
 
-static void test_immutable_array_element_field_compound_assignment_allowed() {
-    ASSERT_TRUE(passes("record Point { integer x, integer y }\n"
-                       "array<Point> ps = [Point { x = 1, y = 2 }]\n"
-                       "ps[0].x += 5\n"));
+// A write into a value that is not held in a variable could only be observed
+// through storage the temporary shares (e.g. a reference cell's contents), so
+// it is rejected rather than silently changing that storage.
+static void test_assignment_into_temporary_fails() {
+    ASSERT_TRUE(fails_with("function array<integer> pass_through(array<integer> values) {\n"
+                           "    return values\n"
+                           "}\n"
+                           "array<integer> original = [1, 2, 3]\n"
+                           "pass_through(original)[0] = 42\n",
+                           DiagnosticCode::ImmutableAssignment));
+    ASSERT_TRUE(fails_with("reference<array<integer>> cell = Reference.new([1, 2, 3])\n"
+                           "Reference.get(cell)[0] += 1\n",
+                           DiagnosticCode::ImmutableAssignment));
+    ASSERT_TRUE(fails_with("record Point { integer x, integer y }\n"
+                           "function Point origin() {\n"
+                           "    return Point { x = 0, y = 0 }\n"
+                           "}\n"
+                           "origin().x = 5\n",
+                           DiagnosticCode::ImmutableAssignment));
 }
 
 static void test_immutable_dictionary_assignment_error() {
@@ -604,21 +654,16 @@ static void test_spawn_outside_task_scope_warns() {
 }
 
 static void test_spawn_inside_task_scope_no_warn() {
-    auto warnings = check_warnings("function integer compute() { return 42 }\n"
-                                   "task_scope {\n"
-                                   "    task<integer> t = spawn compute()\n"
-                                   "    integer val = await t\n"
-                                   "}\n");
+    // spawn inside a task_scope is structured: no "spawn outside task_scope"
+    // error (it is a hard error, not a warning) and no warning either.
+    const std::string source{"function integer compute() { return 42 }\n"
+                             "task_scope {\n"
+                             "    task<integer> t = spawn compute()\n"
+                             "    integer val = await t\n"
+                             "}\n"};
 
-    bool found{false};
-
-    for (const auto& w : warnings) {
-        if (w.message.find("spawn outside task_scope") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_FALSE(found);
+    ASSERT_TRUE(passes(source));
+    ASSERT_FALSE(any_message_contains(check_warnings(source), "spawn outside task_scope"));
 }
 
 static void test_task_scope_result_type() {
@@ -644,72 +689,37 @@ static void test_task_scope_heterogeneous_spawn_rejected() {
 }
 
 static void test_task_scope_nested_no_warn() {
-    // spawn inside nested task_scope should not warn.
-    auto warnings = check_warnings("function integer compute() { return 42 }\n"
-                                   "task_scope {\n"
-                                   "    task_scope {\n"
-                                   "        task<integer> t = spawn compute()\n"
-                                   "        integer val = await t\n"
-                                   "    }\n"
-                                   "}\n");
+    // spawn inside nested task_scope is structured: no error and no warning.
+    const std::string source{"function integer compute() { return 42 }\n"
+                             "task_scope {\n"
+                             "    task_scope {\n"
+                             "        task<integer> t = spawn compute()\n"
+                             "        integer val = await t\n"
+                             "    }\n"
+                             "}\n"};
 
-    bool found{false};
-
-    for (const auto& w : warnings) {
-        if (w.message.find("spawn outside task_scope") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_FALSE(found);
+    ASSERT_TRUE(passes(source));
+    ASSERT_FALSE(any_message_contains(check_warnings(source), "spawn outside task_scope"));
 }
 
 // ─── Concurrency type checking — negative cases ───
 
 static void test_spawn_non_call_rejected() {
     // spawn must be applied to a function call, not an arbitrary expression.
-    auto errors = check("task<integer> t = spawn 42\n");
-
-    bool found{false};
-
-    for (const auto& e : errors) {
-        if (e.message.find("spawn requires a function call") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(
+        fails_with_message("task<integer> t = spawn 42\n", "spawn requires a function call"));
 }
 
 static void test_await_non_task_rejected() {
     // await must be applied to a task value, not an integer.
-    auto errors = check("integer v = await 42\n");
-
-    bool found{false};
-
-    for (const auto& e : errors) {
-        if (e.message.find("await requires a task value") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(fails_with_message("integer v = await 42\n", "await requires a task value"));
 }
 
 static void test_await_channel_rejected() {
     // A channel is not awaitable — await requires a task value.
-    auto errors = check("channel<integer> ch = Channel.new()\n"
-                        "integer v = await ch\n");
-
-    bool found{false};
-
-    for (const auto& e : errors) {
-        if (e.message.find("await requires a task value") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    ASSERT_TRUE(fails_with_message("channel<integer> ch = Channel.new()\n"
+                                   "integer v = await ch\n",
+                                   "await requires a task value"));
 }
 
 static void test_task_scope_result_type_mismatch() {
@@ -760,25 +770,15 @@ static void test_generic_nested_type_params() {
 // ─── Edge-case generics tests ───
 
 static void test_generic_constraint_violation_error_message() {
-    // Verify that a constraint violation produces an error mentioning the bound.
+    // Verify that a constraint violation produces an error naming the bound.
     const auto errors = check("interface Named { string name }\n"
                               "record Dog { integer age }\n"
                               "function<T: Named> string greet(T thing) {\n"
                               "    return thing.name\n"
                               "}\n"
                               "string s = greet(Dog { age = 5 })\n");
-    ASSERT_FALSE(errors.empty());
-    // The error should reference the failing constraint or the missing field.
-    bool found_constraint_msg{false};
-    for (const auto& d : errors) {
-        if (d.message.find("Named") != std::string::npos ||
-            d.message.find("name") != std::string::npos ||
-            d.message.find("satisfy") != std::string::npos ||
-            d.message.find("bound") != std::string::npos) {
-            found_constraint_msg = true;
-        }
-    }
-    ASSERT_TRUE(found_constraint_msg);
+
+    ASSERT_TRUE(any_message_contains(errors, "does not satisfy interface 'Named'"));
 }
 
 static void test_generic_no_type_args_when_required() {
@@ -894,6 +894,74 @@ static void test_generic_function_calls_generic_function() {
                        "array<integer> xs = wrap(identity(99))\n"));
 }
 
+// ─── Regression: inference through records, tuples, and function types ───
+
+static void test_generic_inference_through_record_rejects_wrong_result() {
+    ASSERT_TRUE(fails_with("record Box<T> {\n"
+                           "    T value\n"
+                           "}\n"
+                           "function<T> T unwrap(Box<T> b) {\n"
+                           "    return b.value\n"
+                           "}\n"
+                           "Box<string> b = Box<string> { value = \"hi\" }\n"
+                           "integer n = unwrap(b)\n",
+                           DiagnosticCode::TypeMismatch));
+}
+
+static void test_generic_inference_through_tuple_rejects_wrong_result() {
+    ASSERT_TRUE(fails_with("function<A, B> B second((A, B) pair) {\n"
+                           "    return pair.1\n"
+                           "}\n"
+                           "integer n = second((1, \"two\"))\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("function<A, B> B second((A, B) pair) {\n"
+                       "    return pair.1\n"
+                       "}\n"
+                       "string s = second((1, \"two\"))\n"));
+}
+
+static void test_generic_inference_through_function_type_rejects_wrong_result() {
+    ASSERT_TRUE(fails_with("function<T, U> U apply(T value, function(T) -> U f) {\n"
+                           "    return f(value)\n"
+                           "}\n"
+                           "integer n = apply(1, (integer x) -> \"text\")\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("function<T, U> U apply(T value, function(T) -> U f) {\n"
+                       "    return f(value)\n"
+                       "}\n"
+                       "string s = apply(1, (integer x) -> \"text\")\n"));
+}
+
+// ─── Regression: named arguments and pipes on generic calls ───
+
+static void test_generic_call_with_named_argument() {
+    ASSERT_TRUE(passes("function<T> T identity(T value) { return value }\n"
+                       "integer n = identity(value: 42)\n"));
+    ASSERT_TRUE(fails_with("function<T> T identity(T value) { return value }\n"
+                           "string s = identity(value: 42)\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(fails_with_message("function<T> T identity(T value) { return value }\n"
+                                   "integer n = identity(val: 42)\n",
+                                   "no parameter named 'val'"));
+}
+
+static void test_generic_call_named_argument_type_checked() {
+    ASSERT_TRUE(fails_with("function<T> T pick(T first, T second) { return first }\n"
+                           "integer n = pick(1, second: \"two\")\n",
+                           DiagnosticCode::TypeMismatch));
+}
+
+static void test_generic_pipe_infers_from_piped_value() {
+    ASSERT_TRUE(fails_with("function<T> T identity(T value) { return value }\n"
+                           "string s = 42 |> identity()\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("function<T> T identity(T value) { return value }\n"
+                       "integer n = 42 |> identity()\n"));
+    ASSERT_TRUE(fails_with("function<T> T pick(T first, T second) { return first }\n"
+                           "integer n = 1 |> pick(\"two\")\n",
+                           DiagnosticCode::TypeMismatch));
+}
+
 int main() {
     // ─── Recursive ADTs ───
 
@@ -903,6 +971,8 @@ int main() {
     RUN(test_recursive_choice_generic_constructor_infers_type);
     RUN(test_recursive_choice_generic_assignability);
     RUN(test_recursive_choice_match_no_clobber);
+    RUN(test_generic_return_rejects_concrete_value);
+    RUN(test_generic_return_accepts_type_parameter_value);
     RUN(test_recursive_choice_match_expr_binding_count);
     RUN(test_namespace_qualified_choice_access);
     RUN(test_turbofish_generic_call);
@@ -935,8 +1005,10 @@ int main() {
 
     RUN(test_array_literal_out_of_bounds);
     RUN(test_array_literal_negative_index);
+    RUN(test_array_literal_computed_negative_index_left_to_runtime);
     RUN(test_array_literal_in_bounds);
     RUN(test_tuple_out_of_bounds);
+    RUN(test_tuple_negative_literal_index);
 
     // ─── String interpolation warnings ───
 
@@ -961,8 +1033,11 @@ int main() {
     RUN(test_mutable_record_field_assignment_ok);
     RUN(test_immutable_array_index_assignment_error);
     RUN(test_mutable_array_index_assignment_ok);
-    RUN(test_immutable_array_element_field_assignment_allowed);
-    RUN(test_immutable_array_element_field_compound_assignment_allowed);
+    RUN(test_immutable_array_element_field_assignment_error);
+    RUN(test_immutable_array_element_field_compound_assignment_error);
+    RUN(test_immutable_dictionary_entry_field_assignment_error);
+    RUN(test_mutable_array_element_field_assignment_ok);
+    RUN(test_assignment_into_temporary_fails);
     RUN(test_immutable_dictionary_assignment_error);
     RUN(test_mutable_dictionary_assignment_ok);
 
@@ -1042,5 +1117,14 @@ int main() {
     RUN(test_generic_function_returns_generic_record);
     RUN(test_generic_function_takes_generic_record);
     RUN(test_generic_function_calls_generic_function);
+
+    // ─── Regression: generic inference, named arguments, pipes ───
+
+    RUN(test_generic_inference_through_record_rejects_wrong_result);
+    RUN(test_generic_inference_through_tuple_rejects_wrong_result);
+    RUN(test_generic_inference_through_function_type_rejects_wrong_result);
+    RUN(test_generic_call_with_named_argument);
+    RUN(test_generic_call_named_argument_type_checked);
+    RUN(test_generic_pipe_infers_from_piped_value);
     return SUMMARY();
 }

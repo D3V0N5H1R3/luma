@@ -8,18 +8,18 @@ namespace luma::lsp::test_fixtures {
 namespace simple {
 
 inline constexpr const char* k_main = "@main\n"
-                                      "function main() {\n"
-                                      "    x = 42\n"
+                                      "function void main() {\n"
+                                      "    integer x = 42\n"
                                       "}\n";
 
 inline constexpr const char* k_main_with_usage = "@main\n"
-                                                 "function main() {\n"
-                                                 "    x = 42\n"
-                                                 "    y = x + 1\n"
+                                                 "function void main() {\n"
+                                                 "    integer x = 42\n"
+                                                 "    integer y = x + 1\n"
                                                  "}\n";
 
 inline constexpr const char* k_empty_main = "@main\n"
-                                            "function main() {\n"
+                                            "function void main() {\n"
                                             "}\n";
 
 } // namespace simple
@@ -27,18 +27,18 @@ inline constexpr const char* k_empty_main = "@main\n"
 namespace types {
 
 inline constexpr const char* k_record_point = "record Point {\n"
-                                              "    x: integer\n"
-                                              "    y: integer\n"
+                                              "    integer x,\n"
+                                              "    integer y\n"
                                               "}\n";
 
 inline constexpr const char* k_record_point_with_main = "record Point {\n"
-                                                        "    x: integer\n"
-                                                        "    y: integer\n"
+                                                        "    integer x,\n"
+                                                        "    integer y\n"
                                                         "}\n"
                                                         "\n"
                                                         "@main\n"
-                                                        "function main() {\n"
-                                                        "    p = Point { x = 1, y = 2 }\n"
+                                                        "function void main() {\n"
+                                                        "    Point p = Point { x = 1, y = 2 }\n"
                                                         "}\n";
 
 inline constexpr const char* k_choice_color = "choice Color {\n"
@@ -47,16 +47,15 @@ inline constexpr const char* k_choice_color = "choice Color {\n"
                                               "    Blue\n"
                                               "}\n";
 
+// Interfaces are satisfied structurally: Circle satisfies Shape because it has
+// every field Shape declares.
 inline constexpr const char* k_interface_shape_with_circle = "interface Shape {\n"
-                                                             "    area: function(): number\n"
+                                                             "    number area\n"
                                                              "}\n"
                                                              "\n"
                                                              "record Circle {\n"
-                                                             "    radius: number\n"
-                                                             "} implements Shape {\n"
-                                                             "    function area(): number {\n"
-                                                             "        return 3.14\n"
-                                                             "    }\n"
+                                                             "    number radius,\n"
+                                                             "    number area\n"
                                                              "}\n";
 
 } // namespace types
@@ -64,39 +63,39 @@ inline constexpr const char* k_interface_shape_with_circle = "interface Shape {\
 namespace functions {
 
 inline constexpr const char* k_function_with_params =
-    "function add(a: integer, b: integer) -> integer {\n"
+    "function integer add(integer a, integer b) {\n"
     "    return a + b\n"
     "}\n";
 
-inline constexpr const char* k_greet_function = "function greet(name: string) -> string {\n"
+inline constexpr const char* k_greet_function = "function string greet(string name) {\n"
                                                 "    return \"Hello, ${name}\"\n"
                                                 "}\n";
 
-inline constexpr const char* k_greet_with_main = "function greet(name: string) -> string {\n"
+inline constexpr const char* k_greet_with_main = "function string greet(string name) {\n"
                                                  "    return \"Hello, ${name}\"\n"
                                                  "}\n"
                                                  "\n"
                                                  "@main\n"
-                                                 "function main() {\n"
+                                                 "function void main() {\n"
                                                  "    greet(\"world\")\n"
                                                  "}\n";
 
-inline constexpr const char* k_helper_with_main = "function helper(): integer {\n"
+inline constexpr const char* k_helper_with_main = "function integer helper() {\n"
                                                   "    return 1\n"
                                                   "}\n"
                                                   "\n"
                                                   "@main\n"
-                                                  "function main() {\n"
-                                                  "    x = helper()\n"
+                                                  "function void main() {\n"
+                                                  "    integer x = helper()\n"
                                                   "}\n";
 
 inline constexpr const char* k_namespace_utils =
     "namespace Utils {\n"
-    "    function add(a: integer, b: integer) -> integer {\n"
+    "    function integer add(integer a, integer b) {\n"
     "        return a + b\n"
     "    }\n"
     "\n"
-    "    function sub(a: integer, b: integer) -> integer {\n"
+    "    function integer sub(integer a, integer b) {\n"
     "        return a - b\n"
     "    }\n"
     "}\n";

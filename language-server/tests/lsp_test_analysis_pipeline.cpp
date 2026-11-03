@@ -15,12 +15,12 @@ void test_include_missing_file() {
     session.open_document(uri, "include \"nonexistent.luma\"\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    x = 1\n"
+                               "function void main() {\n"
+                               "    integer x = 1\n"
                                "}\n");
 
     // Request hover to trigger analysis and wait for results.
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 4, 4));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 4, 12));
     (void)session.run();
 
     // The server must not crash; hover response should exist.
@@ -47,11 +47,11 @@ void test_include_absolute_path_rejected() {
     session.open_document(uri, "include \"/etc/passwd\"\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    x = 1\n"
+                               "function void main() {\n"
+                               "    integer x = 1\n"
                                "}\n");
 
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 4, 4));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 4, 12));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -74,11 +74,11 @@ void test_include_directory_traversal_rejected() {
     session.open_document(uri, "include \"../../../etc/secret.luma\"\n"
                                "\n"
                                "@main\n"
-                               "function main() {\n"
-                               "    x = 1\n"
+                               "function void main() {\n"
+                               "    integer x = 1\n"
                                "}\n");
 
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 4, 4));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 4, 12));
     (void)session.run();
 
     const auto* resp = session.find_response(id);
@@ -101,11 +101,11 @@ void test_lexer_error_recovery() {
     // Unterminated string literal — lexer should produce an error token
     // but the pipeline must not crash.
     session.open_document(uri, "@main\n"
-                               "function main() {\n"
-                               "    x = \"unterminated\n"
+                               "function void main() {\n"
+                               "    string x = \"unterminated\n"
                                "}\n");
 
-    const auto id = session.request("textDocument/hover", make_td_position(uri, 1, 9));
+    const auto id = session.request("textDocument/hover", make_td_position(uri, 1, 14));
     (void)session.run();
 
     // Server must respond — not crash or hang.
@@ -130,8 +130,8 @@ void test_parser_error_diagnostics() {
     // Missing closing brace — parser should report an error but still
     // collect symbols from the valid prefix.
     session.open_document(uri, "@main\n"
-                               "function main() {\n"
-                               "    x = 42\n");
+                               "function void main() {\n"
+                               "    integer x = 42\n");
 
     const auto id = session.request("textDocument/documentSymbol", make_td_params(uri));
     (void)session.run();
@@ -153,12 +153,12 @@ void test_symbols_survive_parse_errors() {
     // First function is valid, second has a syntax error.
     // Symbol collection should still find the valid function.
     session.open_document(uri,
-                          "function greet(name: string) -> string {\n"
+                          "function string greet(string name) {\n"
                           "    return \"Hello, ${name}\"\n"
                           "}\n"
                           "\n"
                           "@main\n"
-                          "function main() {\n"
+                          "function void main() {\n"
                           "    greet(\"world\")\n"); // missing closing brace
 
     const auto id = session.request("textDocument/documentSymbol", make_td_params(uri));
@@ -176,8 +176,8 @@ void test_analysis_cache_skips_unchanged() {
 
     const std::string uri = "file:///test/cache.luma";
     session.open_document(uri, "@main\n"
-                               "function main() {\n"
-                               "    x = 42\n"
+                               "function void main() {\n"
+                               "    integer x = 42\n"
                                "}\n");
 
     // Send a didChange with the exact same content.
@@ -185,11 +185,11 @@ void test_analysis_cache_skips_unchanged() {
         R"({"jsonrpc":"2.0","method":"textDocument/didChange","params":)"
         R"({"textDocument":{"uri":")" +
         uri +
-        R"(","version":2},"contentChanges":[{"text":"@main\nfunction main() {\n    x = 42\n}\n"}]}})");
+        R"(","version":2},"contentChanges":[{"text":"@main\nfunction void main() {\n    integer x = 42\n}\n"}]}})");
 
     // Two hover requests — second should be served from cache.
-    const auto id1 = session.request("textDocument/hover", make_td_position(uri, 2, 4));
-    const auto id2 = session.request("textDocument/hover", make_td_position(uri, 2, 4));
+    const auto id1 = session.request("textDocument/hover", make_td_position(uri, 2, 12));
+    const auto id2 = session.request("textDocument/hover", make_td_position(uri, 2, 12));
     (void)session.run();
 
     // Both requests must succeed — the cache must not corrupt results.

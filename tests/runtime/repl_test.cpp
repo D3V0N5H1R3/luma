@@ -2,14 +2,25 @@
 // completion list, history management, and error recovery.
 
 #include <algorithm>
+#include <cstddef>
+#include <filesystem>
+#include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <vector>
 
+#include "analysis/ast/declaration.hpp"
+#include "analysis/diagnostics/renderer.hpp"
 #include "analysis/errors/error.hpp"
 #include "analysis/lexer/token_type.hpp"
+#include "analysis/source/source_manager.hpp"
 #include "analysis/types/type_checker.hpp"
+#include "common/path_utils.hpp"
 #include "runtime/compiler/compiler_config.hpp"
+#include "runtime/compiler/compiler_limits.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/repl/line_editor.hpp"
 #include "runtime/repl/repl.hpp"
@@ -19,7 +30,27 @@
 #include "shared_eval.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::CompilerLimits;
+using luma::compute_brace_depth_delta;
+using luma::DiagnosticRenderer;
+using luma::EnvPtr;
+using luma::k_keywords;
+using luma::LineEditor;
+using luma::path_from_utf8;
+using luma::path_to_utf8;
+using luma::Program;
+using luma::run_eval;
+using luma::SourceManager;
+using luma::TypeChecker;
+using luma::Value;
+using luma::VM;
+using luma::test::CapturedStream;
+using luma::test::StdinRedirect;
+using luma::test::TempDir;
+using luma::test::TempFile;
+
+namespace exit_code = luma::exit_code;
+namespace repl_detail = luma::repl_detail;
 
 // ─── Helpers ───
 
@@ -420,21 +451,28 @@ static void test_history_caps_size_and_drops_oldest() {
 
 // Helper: run a line through the real REPL evaluation pipeline.  The production
 // functions report lex/parse/type/compile failures by returning std::nullopt
-// (and printing diagnostics); this adapter converts that into an exception so
-// the tests can assert on recovery.  Runtime errors propagate directly as
-// RuntimeError from compile_and_run.  A persistent TypeChecker and VM mirror a
-// real REPL session, so definitions from earlier lines stay visible.
-static Value repl_eval(TypeChecker& checker, VM& vm, const std::string& source) {
+// and printing diagnostics to std::cerr; this adapter captures those
+// diagnostics and throws them, prefixed with the failing phase ("lex/parse
+// error: " or "type/compile error: "), so the tests can pin the exact failure.
+// Runtime errors propagate directly as RuntimeError from compile_and_run.  A
+// persistent TypeChecker, VM and program list mirror a real REPL session, so
+// definitions from earlier successful lines stay visible.
+[[nodiscard]] static Value repl_eval(TypeChecker& checker, VM& vm, std::vector<Program>& programs,
+                                     const std::string& source) {
+    const CapturedStream diagnostics{std::cerr};
     auto program = repl_detail::lex_and_parse(source);
 
     if (!program) {
-        throw std::runtime_error{"lex/parse error"};
+        throw std::runtime_error{"lex/parse error: " + diagnostics.str()};
     }
 
-    auto value = repl_detail::compile_and_run(*program, checker, vm);
+    // These inputs include nothing, so a per-call include registry suffices.
+    repl_detail::ReplIncludeRegistry includes;
+    const auto value =
+        repl_detail::run_and_keep(std::move(*program), checker, vm, programs, includes);
 
     if (!value) {
-        throw std::runtime_error{"type/compile error"};
+        throw std::runtime_error{"type/compile error: " + diagnostics.str()};
     }
 
     return *value;
@@ -446,11 +484,13 @@ static void test_syntax_error_is_recoverable() {
 
     VM vm{env};
     TypeChecker checker;
+    std::vector<Program> programs;
 
-    ASSERT_THROWS(repl_eval(checker, vm, "integer x = )"));
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "integer x = )"),
+                               "lex/parse error: unexpected token ')'");
 
     // Environment is still functional after the error.
-    const auto result = repl_eval(checker, vm, "1 + 2");
+    const auto result = repl_eval(checker, vm, programs, "1 + 2");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 3);
@@ -458,18 +498,18 @@ static void test_syntax_error_is_recoverable() {
 
 static void test_runtime_error_is_recoverable() {
     // A runtime error (assertion failure thrown during VM execution, which
-    // propagates out of compile_and_run) must not break the session.  Each line
-    // is self-contained because the REPL type checker resets between inputs, so
-    // a value defined on one line is not visible to the next.
+    // propagates out of compile_and_run) must not break the session.
     const auto env = luma::test::make_std_env();
 
     VM vm{env};
     TypeChecker checker;
+    std::vector<Program> programs;
 
-    ASSERT_THROWS(repl_eval(checker, vm, "assert(false)"));
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "assert(false)"),
+                               "assertion failed");
 
     // The pipeline still evaluates correctly after the runtime error.
-    const auto result = repl_eval(checker, vm, "6 + 9");
+    const auto result = repl_eval(checker, vm, programs, "6 + 9");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 15);
@@ -477,35 +517,194 @@ static void test_runtime_error_is_recoverable() {
 
 static void test_pipeline_recovers_across_multiple_errors() {
     // A multi-line REPL session with interleaved successes and errors: the
-    // pipeline must keep evaluating correctly throughout.  Lines are
-    // self-contained because the REPL type checker resets between inputs, so a
-    // value defined on one line is not visible to the next.
+    // pipeline must keep evaluating correctly throughout, and definitions from
+    // the successful lines stay visible.
     const auto env = luma::test::make_std_env();
 
     VM vm{env};
     TypeChecker checker;
+    std::vector<Program> programs;
 
     // Line 1: a successful definition.
-    repl_eval(checker, vm, "integer a = 100");
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer a = 100").is_null());
 
-    // Line 2: parse error (caught and discarded).
-    try {
-        repl_eval(checker, vm, "!!!");
-    } catch (const std::exception&) {} // NOLINT(bugprone-empty-catch)
+    // Line 2: parse error.
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "!!!"),
+                               "lex/parse error: unexpected token");
 
     // Line 3: another successful definition.
-    repl_eval(checker, vm, "integer b = 200");
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer b = 200").is_null());
 
-    // Line 4: runtime error (caught and discarded).
-    try {
-        repl_eval(checker, vm, "assert(false)");
-    } catch (const std::exception&) {} // NOLINT(bugprone-empty-catch)
+    // Line 4: runtime error.
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "assert(false)"),
+                               "assertion failed");
 
-    // Line 5: the pipeline still evaluates a fresh expression correctly.
-    const auto result = repl_eval(checker, vm, "100 + 200");
+    // Line 5: both earlier definitions are still visible.
+    const auto result = repl_eval(checker, vm, programs, "a + b");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 300);
+}
+
+static void test_variable_persists_across_lines() {
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer x = 5").is_null());
+
+    const auto result = repl_eval(checker, vm, programs, "x + 1");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 6);
+}
+
+static void test_function_and_record_persist_across_lines() {
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_TRUE(
+        repl_eval(checker, vm, programs, "function integer square(integer n) { return n * n }")
+            .is_null());
+    // `y` is filled from the declaration's default on a later line.
+    ASSERT_TRUE(
+        repl_eval(checker, vm, programs, "record Point { integer x, integer y = 4 }").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "Point p = Point { x = 3 }").is_null());
+
+    const auto result = repl_eval(checker, vm, programs, "square(p.x) + p.y");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 13);
+}
+
+static void test_redefinition_with_same_type_replaces_earlier_line() {
+    // Redefining a name with the same type on a later line is allowed; code
+    // entered earlier sees the new value, since the VM keeps one global.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer limit = 10").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "function integer doubled() { return limit * 2 }")
+                    .is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer limit = 21").is_null());
+    // Redefining a function with the same signature is allowed too.
+    ASSERT_TRUE(
+        repl_eval(checker, vm, programs, "function integer doubled() { return limit * 2 + 0 }")
+            .is_null());
+
+    const auto result = repl_eval(checker, vm, programs, "doubled()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 42);
+}
+
+static void test_redefinition_with_different_type_rejected() {
+    // Regression: a redefinition with another type used to shadow in the type
+    // checker but overwrite the single runtime global, so `doubled()` — checked
+    // against `integer limit` — then multiplied a string.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "integer limit = 10").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "function integer doubled() { return limit * 2 }")
+                    .is_null());
+
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "string limit = \"ten\""),
+                               "cannot redefine 'limit' as 'string': an earlier input defined it "
+                               "as 'integer'");
+    ASSERT_THROWS_WITH_MESSAGE(
+        repl_eval(checker, vm, programs, "function string doubled() { return \"x\" }"),
+        "cannot redefine 'doubled'");
+
+    // The rejected lines changed nothing.
+    const auto result = repl_eval(checker, vm, programs, "doubled()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 20);
+}
+
+static void test_record_destructuring_redefinition_rejected() {
+    // `P { x } = p` redefines the global `x` just as `integer x = …` does, so a
+    // different type must be rejected there too.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "string x = \"hi\"").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "record P { integer x }").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "P p = P { x = 5 }").is_null());
+
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "P { x } = p"),
+                               "cannot redefine 'x' as 'integer': an earlier input defined it "
+                               "as 'string'");
+
+    const auto result = repl_eval(checker, vm, programs, "x");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_EQ(result.as_string(), std::string{"hi"});
+}
+
+static void test_rejected_line_defines_nothing() {
+    // A line that fails type checking never ran, so its names stay undefined.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "integer z = \"oops\""),
+                               "cannot assign to variable: expected 'integer', got 'string'");
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "z + 1"), "undefined variable 'z'");
+}
+
+static void test_runtime_error_keeps_definitions_that_ran() {
+    // The declaration ran before the assertion failed, so `a` exists in the VM
+    // and must stay visible to the type checker as well.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_THROWS_WITH_MESSAGE(repl_eval(checker, vm, programs, "integer a = 1; assert(false)"),
+                               "assertion failed");
+
+    const auto result = repl_eval(checker, vm, programs, "a + 1");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 2);
+}
+
+static void test_rejected_line_does_not_consume_unique() {
+    // A rejected line never ran, so a unique value it would have consumed is
+    // still available afterwards.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_TRUE(
+        repl_eval(checker, vm, programs, "function void consume(unique string _s) { }").is_null());
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "unique string x = \"hello\"").is_null());
+    ASSERT_THROWS_WITH_MESSAGE(
+        repl_eval(checker, vm, programs, "consume(x); integer bad = \"oops\""),
+        "cannot assign to variable: expected 'integer', got 'string'");
+
+    ASSERT_TRUE(repl_eval(checker, vm, programs, "consume(x)").is_null());
 }
 
 // ─── run_eval — stdin program evaluation (backs the editor Playground) ───
@@ -513,57 +712,55 @@ static void test_pipeline_recovers_across_multiple_errors() {
 // REPL pipeline (require_main = false), so bare top-level statements run. These
 // tests redirect std::cin to a string buffer and capture std::cout / std::cerr.
 
+// The exit code run_eval() returned and the stdout it produced.
+struct EvalCapture {
+    int code;
+    std::string out;
+};
+
 // Helper: feed `source` to run_eval() via a redirected stdin, capturing stdout.
-static int run_eval_capture(const std::string& source, std::string& out) {
+[[nodiscard]] static EvalCapture run_eval_capture(const std::string& source) {
     std::istringstream input{source};
-    StdinRedirect stdin_guard{input.rdbuf()};
-    CapturedStream captured_out{std::cout};
+    const StdinRedirect stdin_guard{input.rdbuf()};
+    const CapturedStream captured_out{std::cout};
 
     const int code = run_eval(/*sandbox=*/false);
-    out = captured_out.str();
 
-    return code;
+    return EvalCapture{.code = code, .out = captured_out.str()};
 }
 
 static void test_run_eval_executes_top_level_without_main() {
-    std::string out;
-    const int code = run_eval_capture("print(\"hi\")\n", out);
+    const auto [code, out] = run_eval_capture("print(\"hi\")\n");
 
     ASSERT_EQ(code, exit_code::success);
-    ASSERT_TRUE(out.find("hi") != std::string::npos);
+    ASSERT_NE(out.find("hi"), std::string::npos);
 }
 
 static void test_run_eval_runs_multiple_statements() {
-    std::string out;
-    const int code = run_eval_capture("mutable integer total = 0\n"
-                                      "for x in [1, 2, 3] {\n"
-                                      "    total = total + x\n"
-                                      "}\n"
-                                      "print(\"sum=${total}\")\n",
-                                      out);
+    const auto [code, out] = run_eval_capture("mutable integer total = 0\n"
+                                              "for x in [1, 2, 3] {\n"
+                                              "    total = total + x\n"
+                                              "}\n"
+                                              "print(\"sum=${total}\")\n");
 
     ASSERT_EQ(code, exit_code::success);
-    ASSERT_TRUE(out.find("sum=6") != std::string::npos);
+    ASSERT_NE(out.find("sum=6"), std::string::npos);
 }
 
 static void test_run_eval_reports_syntax_error() {
     // The parser writes a diagnostic to stderr; capture it so it does not
-    // pollute the test log, and assert on the syntax exit code.
-    CapturedStream captured_err{std::cerr};
+    // pollute the test log, and assert on it and on the syntax exit code.
+    const CapturedStream captured_err{std::cerr};
 
-    std::string out;
-    const int code = run_eval_capture("integer x = )", out);
-
-    ASSERT_EQ(code, exit_code::syntax_error);
+    ASSERT_EQ(run_eval_capture("integer x = )").code, exit_code::syntax_error);
+    ASSERT_NE(captured_err.str().find("unexpected token ')'"), std::string::npos);
 }
 
 static void test_run_eval_reports_runtime_error() {
-    CapturedStream captured_err{std::cerr};
+    const CapturedStream captured_err{std::cerr};
 
-    std::string out;
-    const int code = run_eval_capture("assert(false)", out);
-
-    ASSERT_EQ(code, exit_code::runtime_error);
+    ASSERT_EQ(run_eval_capture("assert(false)").code, exit_code::runtime_error);
+    ASSERT_NE(captured_err.str().find("assertion failed"), std::string::npos);
 }
 
 // ─── validate_file_path — pathological / OS-unresolvable input ───
@@ -590,6 +787,390 @@ static void test_validate_file_path_rejects_empty() {
 
 static void test_validate_file_path_rejects_non_luma_extension() {
     ASSERT_FALSE(repl_detail::validate_file_path("notes.txt"));
+}
+
+// ─── parse_repl_command (regression: ":file" with no argument and unknown
+// commands such as ":foo" fell through to the Luma parser) ───
+
+static void test_parse_repl_command_exact_matches() {
+    const auto quit = repl_detail::parse_repl_command(":q");
+    ASSERT_TRUE(quit.kind.has_value());
+    ASSERT_EQ(*quit.kind, repl_detail::ReplCommandKind::Quit);
+
+    const auto help = repl_detail::parse_repl_command("  :help  ");
+    ASSERT_TRUE(help.kind.has_value());
+    ASSERT_EQ(*help.kind, repl_detail::ReplCommandKind::Help);
+
+    // Extra whitespace around the argument is trimmed.
+    const auto file = repl_detail::parse_repl_command(":file   app.luma  ");
+    ASSERT_TRUE(file.kind.has_value());
+    ASSERT_EQ(*file.kind, repl_detail::ReplCommandKind::File);
+    ASSERT_EQ(file.argument, "app.luma");
+
+    const auto alias = repl_detail::parse_repl_command(":f\tapp.luma");
+    ASSERT_TRUE(alias.kind.has_value());
+    ASSERT_EQ(alias.argument, "app.luma");
+}
+
+static void test_parse_repl_command_missing_argument_is_usage() {
+    for (const auto* line : {":file", ":f", ":file   "}) {
+        const auto parsed = repl_detail::parse_repl_command(line);
+        ASSERT_FALSE(parsed.kind.has_value());
+        ASSERT_NE(parsed.error.find("Usage: :file <path>"), std::string::npos);
+    }
+}
+
+static void test_parse_repl_command_unknown_and_extra_argument() {
+    const auto unknown = repl_detail::parse_repl_command(":foo");
+    ASSERT_FALSE(unknown.kind.has_value());
+    ASSERT_NE(unknown.error.find("Unknown command: :foo"), std::string::npos);
+
+    // A command word must match exactly — ":filex" is not ":file".
+    const auto prefix = repl_detail::parse_repl_command(":filex app.luma");
+    ASSERT_FALSE(prefix.kind.has_value());
+    ASSERT_NE(prefix.error.find("Unknown command"), std::string::npos);
+
+    const auto extra = repl_detail::parse_repl_command(":quit now");
+    ASSERT_FALSE(extra.kind.has_value());
+    ASSERT_NE(extra.error.find("Usage: :quit"), std::string::npos);
+}
+
+// ─── include in REPL input and --eval (regression: silently ignored) ───
+
+namespace {
+
+// Switches the working directory to `dir` for the guard's lifetime.
+class ScopedCwd {
+public:
+    explicit ScopedCwd(const std::filesystem::path& dir)
+        : previous_{std::filesystem::current_path()} {
+        std::filesystem::current_path(dir);
+    }
+
+    ~ScopedCwd() noexcept {
+        std::error_code ec;
+        std::filesystem::current_path(previous_, ec);
+    }
+
+    ScopedCwd(const ScopedCwd&) = delete;
+    ScopedCwd& operator=(const ScopedCwd&) = delete;
+    ScopedCwd(ScopedCwd&&) = delete;
+    ScopedCwd& operator=(ScopedCwd&&) = delete;
+
+private:
+    std::filesystem::path previous_;
+};
+
+} // namespace
+
+static void test_repl_input_include_resolves_against_cwd() {
+    const TempDir dir;
+    const TempFile helper{dir.path() / "repl_inc_helper.luma",
+                          "function integer repl_inc_value() { return 42 }\n"};
+    const ScopedCwd cwd{dir.path()};
+
+    const auto env = luma::test::make_std_env();
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+    SourceManager source_manager;
+    repl_detail::ReplIncludeRegistry includes;
+
+    auto program = repl_detail::lex_and_parse("include \"repl_inc_helper.luma\"\n");
+    ASSERT_TRUE(program.has_value());
+    ASSERT_TRUE(repl_detail::resolve_input_includes(*program, source_manager, includes));
+    ASSERT_TRUE(repl_detail::run_and_keep(std::move(*program), checker, vm, programs, includes)
+                    .has_value());
+
+    // The included function is visible to later inputs.
+    const auto result = repl_eval(checker, vm, programs, "repl_inc_value() + 1");
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 43);
+}
+
+static void test_repl_input_include_missing_file_fails() {
+    const TempDir dir;
+    const ScopedCwd cwd{dir.path()};
+    const CapturedStream captured_err{std::cerr};
+
+    SourceManager source_manager;
+    repl_detail::ReplIncludeRegistry includes;
+    auto program = repl_detail::lex_and_parse("include \"repl_inc_missing.luma\"\n");
+    ASSERT_TRUE(program.has_value());
+    ASSERT_FALSE(repl_detail::resolve_input_includes(*program, source_manager, includes));
+    ASSERT_NE(captured_err.str().find("not found"), std::string::npos);
+}
+
+static void test_run_eval_resolves_include() {
+    const TempDir dir;
+    const TempFile helper{dir.path() / "eval_inc_helper.luma",
+                          "function string eval_inc_greeting() { return \"hello-include\" }\n"};
+    const ScopedCwd cwd{dir.path()};
+
+    const auto [code, out] = run_eval_capture("include \"eval_inc_helper.luma\"\n"
+                                              "print(eval_inc_greeting())\n");
+
+    ASSERT_EQ(code, exit_code::success);
+    ASSERT_NE(out.find("hello-include"), std::string::npos);
+}
+
+// ─── run_eval exit codes per failure category (regression: every rejected
+// program exited 2, including compile errors that should exit 4) ───
+
+static void test_run_eval_type_error_exits_2() {
+    const CapturedStream captured_err{std::cerr};
+
+    ASSERT_EQ(run_eval_capture("integer x = \"oops\"\n").code, exit_code::type_error);
+}
+
+static void test_run_eval_compile_error_exits_4() {
+    // An array literal longer than the bytecode operand allows type-checks but
+    // is rejected by the compiler.
+    std::string source = "array<integer> big = [";
+    for (std::size_t i = 0; i <= CompilerLimits::k_max_array_elements; ++i) {
+        source += i == 0 ? "0" : ",0";
+    }
+    source += "]\n";
+
+    const CapturedStream captured_err{std::cerr};
+
+    ASSERT_EQ(run_eval_capture(source).code, exit_code::compile_error);
+}
+
+static void test_run_eval_missing_include_exits_4() {
+    const TempDir dir;
+    const ScopedCwd cwd{dir.path()};
+    const CapturedStream captured_err{std::cerr};
+
+    ASSERT_EQ(run_eval_capture("include \"eval_inc_missing.luma\"\nprint(1)\n").code,
+              exit_code::compile_error);
+}
+
+// ─── :file reloads from disk (regression: a second :file ran stale text) ───
+
+static void test_load_repl_file_source_rereads_edited_file() {
+    const TempDir dir;
+    const auto path = dir.path() / "reload_me.luma";
+    const TempFile file{path, "function integer reload_value() { return 1 }\n"};
+
+    SourceManager source_manager;
+
+    const auto& first = repl_detail::load_repl_file_source(source_manager, path.string());
+    ASSERT_NE(first.text.find("return 1"), std::string::npos);
+
+    luma::test::write_file(path, "function integer reload_value() { return 2 }\n");
+
+    const auto& second = repl_detail::load_repl_file_source(source_manager, path.string());
+    ASSERT_NE(second.text.find("return 2"), std::string::npos);
+    ASSERT_NE(second.file_id, first.file_id);
+    // The reloaded file keeps its directory, so its relative includes still
+    // resolve next to it.
+    ASSERT_EQ(path_from_utf8(second.path).parent_path(), path_from_utf8(first.path).parent_path());
+
+    // Earlier text stays alive for diagnostics that point into it.
+    ASSERT_NE(source_manager.get_file(first.file_id)->text.find("return 1"), std::string::npos);
+}
+
+// ─── Include rollback (regression: a rejected input's included files stayed
+// registered, so the include-once rule skipped them for every later input and
+// their definitions never reached the session) ───
+
+namespace {
+
+// A REPL session's persistent state, as run_repl holds it.
+struct ReplSession {
+    EnvPtr env = luma::test::make_std_env();
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+    SourceManager source_manager;
+    repl_detail::ReplIncludeRegistry includes;
+
+    // Mirrors `:file <path>`: true when the file was loaded and kept.
+    [[nodiscard]] bool load_file(const std::filesystem::path& path) {
+        auto program = repl_detail::load_file_input(path_to_utf8(path), source_manager, includes);
+
+        return program &&
+               repl_detail::run_and_keep(std::move(*program), checker, vm, programs, includes)
+                   .has_value();
+    }
+
+    // Mirrors a typed input: true when it was evaluated and kept.
+    [[nodiscard]] bool input(const std::string& source) {
+        auto program = repl_detail::lex_and_parse(source);
+
+        return program && repl_detail::resolve_input_includes(*program, source_manager, includes) &&
+               repl_detail::run_and_keep(std::move(*program), checker, vm, programs, includes)
+                   .has_value();
+    }
+
+    [[nodiscard]] Value eval(const std::string& source) {
+        return repl_eval(checker, vm, programs, source);
+    }
+};
+
+} // namespace
+
+static void test_repl_file_include_rejected_then_fixed_is_reread() {
+    // The reported repro: `:file a.luma` fails to type-check in b.luma, b.luma
+    // is fixed, and the second `:file a.luma` reported "undefined variable
+    // 'helper'" because b.luma was skipped as already included.
+    const TempDir dir;
+    const TempFile a{dir.path() / "a.luma", "include \"b.luma\"\nprint(helper())\n"};
+    const TempFile b{dir.path() / "b.luma", "function integer helper() { return \"oops\" }\n"};
+
+    const CapturedStream captured_out{std::cout};
+    const CapturedStream captured_err{std::cerr};
+    ReplSession session;
+
+    ASSERT_FALSE(session.load_file(a.path()));
+
+    luma::test::write_file(b.path(), "function integer helper() { return 42 }\n");
+
+    ASSERT_TRUE(session.load_file(a.path()));
+    ASSERT_NE(captured_out.str().find("42"), std::string::npos);
+    ASSERT_EQ(session.eval("helper()").as_integer(), 42);
+}
+
+static void test_repl_typed_include_rejected_then_fixed_is_reread() {
+    const TempDir dir;
+    const TempFile b{dir.path() / "rb_helper.luma",
+                     "function integer rb_helper() { return \"oops\" }\n"};
+    const ScopedCwd cwd{dir.path()};
+
+    const CapturedStream captured_err{std::cerr};
+    ReplSession session;
+
+    ASSERT_FALSE(session.input("include \"rb_helper.luma\"\n"));
+
+    luma::test::write_file(b.path(), "function integer rb_helper() { return 7 }\n");
+
+    ASSERT_TRUE(session.input("include \"rb_helper.luma\"\n"));
+    ASSERT_EQ(session.eval("rb_helper()").as_integer(), 7);
+}
+
+static void test_repl_file_reload_rereads_included_files() {
+    // A `:file` reload re-reads the files it includes, like the file itself, so
+    // an edit to an included file takes effect.
+    const TempDir dir;
+    const TempFile a{dir.path() / "a.luma", "include \"b.luma\"\n"};
+    const TempFile b{dir.path() / "b.luma", "function integer helper() { return 1 }\n"};
+
+    const CapturedStream captured_out{std::cout};
+    ReplSession session;
+
+    ASSERT_TRUE(session.load_file(a.path()));
+    ASSERT_EQ(session.eval("helper()").as_integer(), 1);
+
+    luma::test::write_file(b.path(), "function integer helper() { return 2 }\n");
+
+    ASSERT_TRUE(session.load_file(a.path()));
+    ASSERT_EQ(session.eval("helper()").as_integer(), 2);
+}
+
+static void test_repl_include_once_within_input_and_across_kept_inputs() {
+    const TempDir dir;
+    const TempFile helper{dir.path() / "once_helper.luma",
+                          "function integer once_value() { return 3 }\n"};
+    const ScopedCwd cwd{dir.path()};
+
+    ReplSession session;
+
+    // Within one input the second include of the same file is skipped.
+    auto twice = repl_detail::lex_and_parse("include \"once_helper.luma\"\n"
+                                            "include \"once_helper.luma\"\n");
+    ASSERT_TRUE(twice.has_value());
+    ASSERT_TRUE(
+        repl_detail::resolve_input_includes(*twice, session.source_manager, session.includes));
+    ASSERT_EQ(twice->declarations.size(), 1U);
+    ASSERT_TRUE(repl_detail::run_and_keep(std::move(*twice), session.checker, session.vm,
+                                          session.programs, session.includes)
+                    .has_value());
+
+    // Once that input is kept, a later include of the file is skipped too.
+    auto again = repl_detail::lex_and_parse("include \"once_helper.luma\"\n");
+    ASSERT_TRUE(again.has_value());
+    ASSERT_TRUE(
+        repl_detail::resolve_input_includes(*again, session.source_manager, session.includes));
+    ASSERT_TRUE(again->declarations.empty());
+}
+
+static void test_repl_file_load_counts_file_and_includes_as_included() {
+    // A kept `:file` marks the file and its includes as included, so typing
+    // `include` for either afterwards adds nothing.
+    const TempDir dir;
+    const TempFile a{dir.path() / "a.luma", "include \"b.luma\"\n"};
+    const TempFile b{dir.path() / "b.luma", "function integer helper() { return 1 }\n"};
+    const ScopedCwd cwd{dir.path()};
+
+    ReplSession session;
+
+    ASSERT_TRUE(session.load_file(a.path()));
+
+    auto program = repl_detail::lex_and_parse("include \"a.luma\"\ninclude \"b.luma\"\n");
+    ASSERT_TRUE(program.has_value());
+    ASSERT_TRUE(
+        repl_detail::resolve_input_includes(*program, session.source_manager, session.includes));
+    ASSERT_TRUE(program->declarations.empty());
+}
+
+// ─── Runtime errors in typed input render with source (regression: they
+// rendered as "RuntimeError in <unknown>:1:N" plus "[unable to retrieve source
+// for file_id 0]", because typed input was not registered as a source) ───
+
+static void test_repl_runtime_error_renders_input_source() {
+    const CapturedStream captured_out{std::cout};
+    const CapturedStream captured_err{std::cerr};
+    ReplSession session;
+    const DiagnosticRenderer renderer{session.source_manager};
+
+    repl_detail::evaluate_input("array<integer> repl_xs = [1, 2]\n", session.source_manager,
+                                renderer, session.checker, session.vm, session.programs,
+                                session.includes);
+    repl_detail::evaluate_input("integer repl_bad = repl_xs[7]\n", session.source_manager, renderer,
+                                session.checker, session.vm, session.programs, session.includes);
+
+    const auto errors = captured_err.str();
+    ASSERT_NE(errors.find("<repl:2>:1:"), std::string::npos);
+    ASSERT_NE(errors.find("integer repl_bad = repl_xs[7]"), std::string::npos);
+    ASSERT_EQ(errors.find("<unknown>"), std::string::npos);
+    ASSERT_EQ(errors.find("unable to retrieve source"), std::string::npos);
+
+    // The input still counts as kept: the session keeps working.
+    ASSERT_EQ(session.eval("repl_xs[1]").as_integer(), 2);
+}
+
+// ─── Line-editor UTF-8 cursor helpers (regression: Backspace/arrows moved by
+// bytes, splitting multi-byte characters) ───
+
+static void test_line_editor_char_boundaries_are_utf8_aware() {
+    // "aé€😀" — 1 + 2 + 3 + 4 bytes.
+    const std::string buf = "a\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80";
+
+    ASSERT_EQ(repl_detail::next_char_boundary(buf, 0), 1U);
+    ASSERT_EQ(repl_detail::next_char_boundary(buf, 1), 3U);
+    ASSERT_EQ(repl_detail::next_char_boundary(buf, 3), 6U);
+    ASSERT_EQ(repl_detail::next_char_boundary(buf, 6), 10U);
+    ASSERT_EQ(repl_detail::next_char_boundary(buf, 10), 10U);
+
+    ASSERT_EQ(repl_detail::prev_char_boundary(buf, 10), 6U);
+    ASSERT_EQ(repl_detail::prev_char_boundary(buf, 6), 3U);
+    ASSERT_EQ(repl_detail::prev_char_boundary(buf, 3), 1U);
+    ASSERT_EQ(repl_detail::prev_char_boundary(buf, 1), 0U);
+    ASSERT_EQ(repl_detail::prev_char_boundary(buf, 0), 0U);
+
+    ASSERT_EQ(repl_detail::display_width(buf), 4U);
+    ASSERT_EQ(repl_detail::display_width(std::string_view{buf}.substr(3)), 2U);
+}
+
+static void test_line_editor_char_boundaries_with_invalid_bytes() {
+    // A stray continuation byte and a truncated lead are one column each.
+    const std::string buf = "x\x80y\xE2";
+
+    ASSERT_EQ(repl_detail::prev_char_boundary(buf, 2), 1U);
+    ASSERT_EQ(repl_detail::prev_char_boundary(buf, 4), 3U);
+    ASSERT_EQ(repl_detail::next_char_boundary(buf, 3), 4U);
+    ASSERT_EQ(repl_detail::display_width(buf), 4U);
 }
 
 int main() {
@@ -668,6 +1249,14 @@ int main() {
     RUN(test_syntax_error_is_recoverable);
     RUN(test_runtime_error_is_recoverable);
     RUN(test_pipeline_recovers_across_multiple_errors);
+    RUN(test_variable_persists_across_lines);
+    RUN(test_function_and_record_persist_across_lines);
+    RUN(test_redefinition_with_same_type_replaces_earlier_line);
+    RUN(test_redefinition_with_different_type_rejected);
+    RUN(test_record_destructuring_redefinition_rejected);
+    RUN(test_rejected_line_defines_nothing);
+    RUN(test_runtime_error_keeps_definitions_that_ran);
+    RUN(test_rejected_line_does_not_consume_unique);
 
     RUN(test_run_eval_executes_top_level_without_main);
     RUN(test_run_eval_runs_multiple_statements);
@@ -678,5 +1267,33 @@ int main() {
     RUN(test_validate_file_path_rejects_unresolvable_path);
     RUN(test_validate_file_path_rejects_empty);
     RUN(test_validate_file_path_rejects_non_luma_extension);
+
+    // REPL command parsing.
+    RUN(test_parse_repl_command_exact_matches);
+    RUN(test_parse_repl_command_missing_argument_is_usage);
+    RUN(test_parse_repl_command_unknown_and_extra_argument);
+
+    // include in REPL input / --eval.
+    RUN(test_repl_input_include_resolves_against_cwd);
+    RUN(test_repl_input_include_missing_file_fails);
+    RUN(test_run_eval_resolves_include);
+
+    // run_eval exit codes.
+    RUN(test_run_eval_type_error_exits_2);
+    RUN(test_run_eval_compile_error_exits_4);
+    RUN(test_run_eval_missing_include_exits_4);
+
+    // :file reload.
+    RUN(test_load_repl_file_source_rereads_edited_file);
+    RUN(test_repl_file_include_rejected_then_fixed_is_reread);
+    RUN(test_repl_typed_include_rejected_then_fixed_is_reread);
+    RUN(test_repl_file_reload_rereads_included_files);
+    RUN(test_repl_include_once_within_input_and_across_kept_inputs);
+    RUN(test_repl_file_load_counts_file_and_includes_as_included);
+    RUN(test_repl_runtime_error_renders_input_source);
+
+    // Line-editor UTF-8 cursor helpers.
+    RUN(test_line_editor_char_boundaries_are_utf8_aware);
+    RUN(test_line_editor_char_boundaries_with_invalid_bytes);
     return SUMMARY();
 }

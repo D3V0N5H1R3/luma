@@ -19,6 +19,8 @@ This document is the human-readable reference for how GitHub release asset names
 
 These six suffixes are the values stored in [`shared/platform-map.json`](shared/platform-map.json). The `os` and `arch` tokens are the canonical keys onto which each extension maps its native platform identifiers.
 
+Every release publishes all six. [`release.yml`](../.github/workflows/release.yml) builds each one natively — `macos-x86_64` on the `macos-15-intel` runner and `windows-aarch64` on `windows-11-arm` — and its publish job fails if any `{binary}-{suffix}` archive listed by `platform-map.json` is missing, so adding a platform to the map requires adding a matching build leg.
+
 | OS (`os`) | Arch (`arch`) | Suffix                 |
 | --------- | ------------- | ---------------------- |
 | `linux`   | `x86_64`      | `linux-x86_64.tar.gz`  |

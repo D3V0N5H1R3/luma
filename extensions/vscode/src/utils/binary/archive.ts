@@ -19,6 +19,19 @@ export function escapePowerShellLiteral(value: string): string {
     return value.replaceAll("'", "''");
 }
 
+/**
+ * Builds the PowerShell command that unpacks a `.zip` archive.
+ *
+ * `-LiteralPath` is required: `-Path` treats `[`, `]`, `*`, and `?` as
+ * wildcards, so a storage path containing brackets (e.g. a user name) would
+ * match nothing and the extraction would fail.
+ */
+export function buildExpandArchiveCommand(archive_path: string, dest_dir: string): string {
+    const safe_archive = escapePowerShellLiteral(archive_path);
+    const safe_dest = escapePowerShellLiteral(dest_dir);
+    return `Expand-Archive -LiteralPath '${safe_archive}' -DestinationPath '${safe_dest}' -Force`;
+}
+
 export async function extractArchive(archive_path: string, dest_dir: string): Promise<void> {
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
@@ -26,12 +39,10 @@ export async function extractArchive(archive_path: string, dest_dir: string): Pr
 
     if (archive_path.endsWith(".zip")) {
         if (isWindows()) {
-            const safe_archive = escapePowerShellLiteral(archive_path);
-            const safe_dest = escapePowerShellLiteral(dest_dir);
             await exec("powershell", [
                 "-NoProfile",
                 "-Command",
-                `Expand-Archive -Path '${safe_archive}' -DestinationPath '${safe_dest}' -Force`,
+                buildExpandArchiveCommand(archive_path, dest_dir),
             ]);
         } else {
             await exec("unzip", ["-o", archive_path, "-d", dest_dir]);

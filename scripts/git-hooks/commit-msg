@@ -4,42 +4,74 @@
 #
 #   <type>[optional scope][!]: <description>
 #
-# where <type> is one of: chore, docs, feat, fix, refactor, test. A subject
-# longer than 72 characters is warned about but not rejected. This mirrors the
-# documented policy; nothing else currently enforces it, so a malformed message
-# is caught here rather than in review.
+# where <type> is one of: chore, ci, docs, feat, fix, refactor, style, test. A
+# subject longer than 72 characters is warned about but not rejected. This
+# mirrors the documented policy; nothing else currently enforces it, so a
+# malformed message is caught here rather than in review.
+
+set -eu
 
 # Path to the file holding the proposed commit message.
 MSG_FILE="$1"
 
-# The subject is the first line that is neither blank nor a comment. git strips
-# comment (#) lines later, so ignore them here too; this also skips the leading
-# blank lines a commit template may carry.
-SUBJECT="$(grep -vE '^[[:space:]]*#' "$MSG_FILE" | grep -vE '^[[:space:]]*$' | head -n1)"
+# The comment prefix git strips from the message: core.commentString (git 2.45+)
+# or core.commentChar, defaulting to "#". With "auto", git picks a character at
+# commit time that cannot be recovered here, so fall back to the default.
+COMMENT="$(git config --get core.commentString 2>/dev/null || git config --get core.commentChar 2>/dev/null || true)"
+case "$COMMENT" in
+    "" | auto)
+        COMMENT='#'
+        ;;
+esac
+
+# The subject is the first line that is neither blank nor a comment, exactly as
+# git will record it: comment lines are those starting with the prefix in
+# column 0, everything below the scissors line of `git commit -v` is discarded,
+# and trailing whitespace (including a CR from a CRLF editor) is stripped.
+# ENVIRON is used instead of awk -v, which would interpret backslashes.
+SUBJECT="$(COMMENT="$COMMENT" awk '
+    BEGIN {
+        comment = ENVIRON["COMMENT"]
+        scissors = comment " ------------------------ >8 ------------------------"
+    }
+    { sub(/[[:space:]]+$/, "") }
+    $0 == scissors { exit }
+    index($0, comment) == 1 { next }
+    $0 == "" { next }
+    { print; exit }
+' "$MSG_FILE")"
 
 # Nothing to check — an empty message is rejected by git itself.
 if [ -z "$SUBJECT" ]; then
     exit 0
 fi
 
-# Let git's own generated messages through untouched: merges, reverts, and the
+# Let git's own generated messages through untouched: merges (git merge, git
+# pull, and GitHub pull-request merges), reverts and reapplies, and the
 # fixup!/squash!/amend! autosquash subjects produced by git commit --fixup etc.
+# Only these exact generated forms are exempt, so a hand-written subject cannot
+# bypass the check merely by starting with "Merge ".
 case "$SUBJECT" in
-    "Merge "* | "Revert "* | "fixup! "* | "squash! "* | "amend! "*)
+    "Merge branch '"* | "Merge branches '"* | "Merge remote-tracking branch '"* | \
+        "Merge tag '"* | "Merge commit '"* | "Merge pull request #"* | \
+        'Revert "'* | 'Reapply "'* | \
+        "fixup! "* | "squash! "* | "amend! "*)
         exit 0
         ;;
 esac
 
 # Conventional Commits subject: a known type, an optional (scope), an optional
-# breaking-change "!", then ": " and a non-empty description.
-TYPES='chore|docs|feat|fix|refactor|test'
-if ! printf '%s\n' "$SUBJECT" | grep -qE "^(${TYPES})(\([^)]+\))?!?: .+"; then
+# breaking-change "!", then ": " and a description that starts with a
+# non-whitespace character (so "feat:   " is not accepted as a description).
+TYPES='chore|ci|docs|feat|fix|refactor|style|test'
+if ! printf '%s\n' "$SUBJECT" | grep -qE "^(${TYPES})(\([^)]+\))?!?: [^[:space:]]"; then
     echo "Commit blocked: subject does not follow Conventional Commits." >&2
     echo "" >&2
-    echo "  Subject: ${SUBJECT}" >&2
+    # printf, not echo: dash's echo interprets backslashes in the subject.
+    printf '  Subject: %s\n' "$SUBJECT" >&2
     echo "" >&2
     echo "Expected:  <type>[optional scope][!]: <description>" >&2
-    echo "Types:     chore, docs, feat, fix, refactor, test" >&2
+    echo "Types:     chore, ci, docs, feat, fix, refactor, style, test" >&2
     echo "Examples:  feat: add match expression" >&2
     echo "           fix(lexer): handle string escape" >&2
     echo "           refactor!: drop legacy include resolver" >&2
@@ -51,8 +83,10 @@ fi
 # Subject length advisory (CONTRIBUTING.md: keep the first line under 72 chars).
 # This is a soft nudge, not a hard gate: the project's own history carries the
 # occasional longer subject, and the format check above is what truly matters,
-# so warn rather than block.
-SUBJECT_LENGTH="$(printf '%s' "$SUBJECT" | wc -m | tr -d '[:space:]')"
+# so warn rather than block. Characters are counted as UTF-8 code points by
+# dropping continuation bytes (0x80-0xBF) and counting the rest, because wc -m
+# counts bytes in the C locale that git hooks often run under.
+SUBJECT_LENGTH="$(printf '%s' "$SUBJECT" | LC_ALL=C tr -d '\200-\277' | wc -c | tr -d '[:space:]')"
 if [ "$SUBJECT_LENGTH" -gt 72 ]; then
     echo "Warning: commit subject is ${SUBJECT_LENGTH} characters (recommended limit: 72)." >&2
 fi

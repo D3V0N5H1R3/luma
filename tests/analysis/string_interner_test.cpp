@@ -1,9 +1,15 @@
 // Unit tests for StringInterner and InternedString.
 
+#include <cstddef>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+
 #include "runtime/compiler/string_interner.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using luma::InternedString;
+using luma::StringInterner;
 
 // ─── Basic intern and resolve ───
 

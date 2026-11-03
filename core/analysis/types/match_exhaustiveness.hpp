@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LUMA_TYPES_MATCH_EXHAUSTIVENESS_HPP
+#define LUMA_TYPES_MATCH_EXHAUSTIVENESS_HPP
 
 #include <string_view>
 #include <vector>
@@ -65,3 +66,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_MATCH_EXHAUSTIVENESS_HPP

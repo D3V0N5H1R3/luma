@@ -34,6 +34,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>
@@ -176,6 +177,24 @@ public:
         std::shared_ptr<DecimalValue>>;
 
     Value() = default;
+
+    Value(const Value&) = default;
+    Value(Value&&) noexcept = default;
+    Value& operator=(const Value&) = default;
+    Value& operator=(Value&&) noexcept = default;
+
+    // Iterative teardown.  Destroying the last reference to a compound value
+    // destroys its children, which destroy theirs, and so on — so dropping a
+    // long recursive structure (a million-node `choice List { Node(T, List) }`,
+    // a closure chain, nested results) recursed once per level and overflowed
+    // the native stack.  release_heap_iteratively() bounds that recursion: past
+    // a small depth it defers uniquely owned subtrees to a per-thread worklist
+    // drained by the outermost teardown.  Primitives and strings skip it.
+    ~Value() {
+        if (data_.index() >= k_first_heap_alternative) {
+            release_heap_iteratively();
+        }
+    }
 
     // Implicit constructors for primitive and string types — intentional
     // by design (§15 exception).  These are the natural Luma value types;
@@ -515,11 +534,31 @@ public:
     // returned Value shares no mutable state with the original.
     [[nodiscard]] Value deep_copy() const;
 
+    // Copy-on-write: if this array, dictionary, or record shares its storage
+    // with another Value, replace it with a shallow copy this Value owns
+    // exclusively, so an in-place write cannot be seen through an alias.
+    // Nested values stay shared; the write path makes each level exclusive
+    // in turn.  A no-op for every other type.
+    void make_exclusive();
+
     // ================================================================
     // Internal Storage
     // ================================================================
 
 private:
+    // Index of the first shared_ptr alternative in Variant: every alternative
+    // from here on is a heap object that may own further Values.
+    static constexpr std::size_t k_first_heap_alternative{5};
+    static_assert(std::is_same_v<std::variant_alternative_t<k_first_heap_alternative, Variant>,
+                                 std::shared_ptr<ArrayValue>>,
+                  "k_first_heap_alternative must index the first shared_ptr alternative");
+    static_assert(std::is_same_v<std::variant_alternative_t<k_first_heap_alternative - 1, Variant>,
+                                 std::string>,
+                  "every alternative before k_first_heap_alternative must be inline");
+
+    // Out-of-line slow path of ~Value (value.cpp).
+    void release_heap_iteratively() noexcept;
+
     Variant data_{NullValue{}};
 
     // ── Cached type discriminant ──

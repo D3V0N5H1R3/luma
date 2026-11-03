@@ -28,7 +28,8 @@
 //   CRTP dispatcher templates.
 // ─────────────────────────────────────────────────────────────────────────────
 
-#pragma once
+#ifndef LUMA_TYPES_TYPE_CHECKER_HPP
+#define LUMA_TYPES_TYPE_CHECKER_HPP
 
 #include <cstddef>
 #include <format>
@@ -37,6 +38,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -209,6 +211,17 @@ public:
     // need a @main entry point (e.g. luma --test).
     [[nodiscard]] std::vector<Diagnostic> check(const Program& program, bool require_main = true);
 
+    // Incremental checking for the REPL.  Each input is checked in a fresh
+    // scope nested inside those of every earlier *committed* input, so their
+    // variables, functions and types stay visible and redefining a name simply
+    // shadows it.  The symbol tables point into the input's AST, so call
+    // commit_incremental() only once that Program is kept alive; the next
+    // check_incremental() discards an uncommitted input.
+    [[nodiscard]] std::vector<Diagnostic> check_incremental(const Program& program);
+    void commit_incremental();
+    // Forgets every committed input (the REPL's :clear).
+    void reset_incremental();
+
     // Returns warnings emitted during the last check() call.
     [[nodiscard]] const std::vector<Diagnostic>& get_warnings() const;
 
@@ -227,6 +240,31 @@ private:
 
     void reset_state();
 
+    // Registers the stdlib types and builds the global scope (built-ins and
+    // stdlib namespaces).  Expects reset_state() to have run.
+    void initialize_global_scope();
+
+    // Registers and checks the program's declarations, then its top-level
+    // statements, in the current scope.
+    void check_program(const Program& program);
+
+    // Definitions of every committed REPL input (see check_incremental()).
+    struct IncrementalState {
+        std::shared_ptr<TypeScope> committed_scope;
+        SymbolTables committed_symbols;
+        StringSet committed_internal_members;
+        StringMap<std::vector<TypeParam>> committed_alias_params;
+        // Unique-variable ownership of each committed scope at commit time.
+        // The scopes are shared with later inputs, so an input that is never
+        // committed (e.g. rejected after consuming a unique) must not keep its
+        // mark.
+        std::vector<std::pair<std::shared_ptr<TypeScope>, TypeScope::OwnershipSnapshot>>
+            committed_ownership;
+        bool has_pending_input{false};
+    };
+
+    IncrementalState incremental_;
+
     // ====================================================================
     // Scope Management                          (impl: type_checker.cpp)
     // ====================================================================
@@ -241,9 +279,7 @@ private:
     // RAII scope guard for push_scope / pop_scope.
     [[nodiscard]] auto make_scope_guard() {
         push_scope();
-        return ScopeGuard{[this] {
-            pop_scope();
-        }};
+        return ScopeGuard{[this] { pop_scope(); }};
     }
 
     // Convenience accessor for the current scope.
@@ -313,7 +349,8 @@ private:
 
     void check_declaration(const Declaration& decl);
     void check_function(const FunctionDeclaration& func);
-    [[nodiscard]] bool definitely_returns(const std::vector<StatementPtr>& stmts) const;
+    [[nodiscard]] bool definitely_returns(const std::vector<StatementPtr>& stmts) const override;
+    [[nodiscard]] bool never_falls_through(const std::vector<StatementPtr>& stmts) const override;
     // NOTE: check_statement() delegates to StatementTypeChecker::check().
     void check_statement(const Statement& stmt) override;
 
@@ -378,12 +415,19 @@ private:
     resolve_user_named(const StringMap<const T*>& map, TypeInfo::Kind kind,
                        const TypeAnnotation& ann, bool cacheable);
 
-    // Emits a TypeError and returns true when `qualified_name` names a member
-    // marked `internal` that is being accessed from outside its owning
-    // namespace.  Shared by record, choice, interface, and type-alias
-    // resolution so every namespace member kind enforces internal access
-    // control consistently.
-    [[nodiscard]] bool reject_internal_access(const std::string& qualified_name);
+    // True when `qualified_name` names a member marked `internal` and the code
+    // being checked is outside its owning namespace.
+    [[nodiscard]] bool is_internal_access_denied(std::string_view qualified_name) const;
+
+    // Returns true when the annotation `ann` names a member marked `internal`
+    // that is being accessed from outside its owning namespace, emitting a
+    // TypeError unless this annotation node was already reported (see
+    // report_internal_type_access) or reporting is deferred.  Shared by
+    // record, choice, interface, and type-alias resolution so every namespace
+    // member kind enforces internal access control consistently.
+    [[nodiscard]] bool reject_internal_access(const TypeAnnotation& ann);
+
+    bool report_internal_type_access(const TypeAnnotation& ann, const SourceLocation& loc) override;
 
     // ─── is_assignable helpers ──────────────────────────────────────────
     // Returns std::nullopt when the kind is not a container handled here,
@@ -508,6 +552,17 @@ private:
     // External callers are not allowed to access these.
     StringSet internal_members_;
 
+    // Annotation nodes whose internal-access violation has been reported, so
+    // resolving the same annotation again (a declaration, then
+    // report_unknown_types, then each of its type arguments) reports it once.
+    // Cleared with the diagnostics; the AST outlives each check.
+    std::unordered_set<const TypeAnnotation*> internal_access_reported_;
+
+    // While positive, reject_internal_access() rejects silently: signatures
+    // resolved while registering functions are reported, with a location,
+    // when check_function() checks them.
+    int deferred_internal_access_reports_{0};
+
     // ====================================================================
     // Caches                          (used by type_checker_resolve.cpp)
     // ====================================================================
@@ -624,3 +679,5 @@ private:
 };
 
 } // namespace luma
+
+#endif // LUMA_TYPES_TYPE_CHECKER_HPP
