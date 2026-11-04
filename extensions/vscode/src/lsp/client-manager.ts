@@ -14,6 +14,7 @@ import { extractErrorMessage } from "../utils/util";
 import { reportError } from "../utils/report";
 import { ServerState, setStatus } from "./status";
 import { folderDocumentSelector } from "./selectors";
+import { installMinimatchCompat } from "./minimatch-compat";
 import {
     CONFIG_SECTION,
     CONFIG_KEYS,
@@ -21,6 +22,8 @@ import {
     IDS,
     folderLspClientId,
 } from "../utils/constants";
+
+installMinimatchCompat();
 
 // Re-exported so existing importers (extension.ts) keep a single entry point,
 // while the vscode-only status helpers live in ./status.ts — free of the
