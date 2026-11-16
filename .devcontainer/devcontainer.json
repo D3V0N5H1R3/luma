@@ -28,7 +28,7 @@
         "ghcr.io/devcontainers/features/node:2.1.1": {
             "version": "lts"
         },
-        "ghcr.io/devcontainers/features/rust:1.6.0": {
+        "ghcr.io/devcontainers/features/rust:1.6.1": {
             "profile": "default",
             "targets": "wasm32-wasip1"
         },
