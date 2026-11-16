@@ -32,7 +32,7 @@
             "profile": "default",
             "targets": "wasm32-wasip1"
         },
-        "ghcr.io/devcontainers/features/powershell:2.0.3": {
+        "ghcr.io/devcontainers/features/powershell:2.0.4": {
             "version": "lts",
             "modules": "PSScriptAnalyzer==1.25.0"
         }
